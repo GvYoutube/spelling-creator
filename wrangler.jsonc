@@ -1,5 +1,16 @@
 {
+	"$schema": "node_modules/wrangler/config-schema.json",
 	"name": "spelling-creator",
 	"main": "src/index.js",
 	"compatibility_date": "2026-05-28",
+	"observability": {
+		"enabled": true
+	},
+	
+	"kv_namespaces": [
+		{
+		"binding": "RATE_LIMIT_KV",
+		"id": "e3d5364c3c8f4637937bb07a17ffbb38"
+		}
+	]
 }
