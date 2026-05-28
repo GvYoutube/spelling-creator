@@ -1,12 +1,12 @@
 {
 	"$schema": "node_modules/wrangler/config-schema.json",
-	"name": "spelling-creator",
+	"name": "spelling-creator-cf",
 	"main": "src/index.js",
 	"compatibility_date": "2026-05-28",
 	"observability": {
 		"enabled": true
 	},
-	
+
 	"kv_namespaces": [
 		{
 		"binding": "RATE_LIMIT_KV",
