@@ -1,0 +1,17 @@
+{
+	"name": "spelling-creator-cf",
+	"version": "0.0.0",
+	"private": true,
+	"scripts": {
+		"deploy": "wrangler deploy",
+		"dev": "wrangler dev",
+		"start": "wrangler dev"
+	},
+	"devDependencies": {
+		"@cloudflare/vitest-pool-workers": "^0.12.4",
+		"wrangler": "^3.101.0"
+	},
+	"dependencies": {
+		"@google/genai": "^2.6.0"
+	}
+}
