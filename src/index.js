@@ -1,26 +1,21 @@
+import { env } from 'cloudflare:workers';
 import { GoogleGenAI } from '@google/genai';
 
-let ai; // lazy init
+const GEMINI_API_KEY = env.GEMINI_API_KEY;
+const ai = new GoogleGenAI({ apiKey: GEMINI_API_KEY });
 
 export default {
 	async fetch(request, env) {
-		// Bind checks
-		if (!env || !env.RATE_LIMIT_KV) {
-			return new Response('Server misconfiguration: RATE_LIMIT_KV not bound', { status: 500 });
-		}
-		if (!env.GEMINI_API_KEY) {
-			return new Response('Missing GEMINI_API_KEY secret', { status: 500 });
-		}
-
-		// lazy-init AI client with env secret
-		if (!ai) ai = new GoogleGenAI({ apiKey: env.GEMINI_API_KEY });
-
 		const LIMIT = 60;
 		const WINDOW = 60;
 		const ip = request.headers.get('cf-connecting-ip') || 'unknown';
 		const key = `rl:${ip}`;
 
-		// Rate limit token-bucket
+		// KV guard
+		if (!env || !env.RATE_LIMIT_KV) {
+			return new Response('Server misconfiguration: RATE_LIMIT_KV not bound', { status: 500 });
+		}
+
 		const now = Math.floor(Date.now() / 1000);
 		const entryRaw = await env.RATE_LIMIT_KV.get(key);
 		let entry = entryRaw ? JSON.parse(entryRaw) : { tokens: LIMIT, last: now };
@@ -40,7 +35,7 @@ export default {
 		entry.tokens -= 1;
 		await env.RATE_LIMIT_KV.put(key, JSON.stringify(entry), { expirationTtl: WINDOW * 2 });
 
-		// Parse subject
+		// Read subject from request JSON
 		let subject = '';
 		try {
 			const body = await request.json();
@@ -50,12 +45,14 @@ export default {
 		}
 		if (!subject) return new Response('Missing "subject" in request body', { status: 400 });
 
+		// Build a prompt to suggest a block of text based on the subject
 		const prompt = `Suggest a block of text about the following subject: "${subject}". Respond with only the block of text, no preamble or explanation.`;
 
+		// Call Gemini via GoogleGenAI instance
 		try {
 			const aiResponse = await ai.models.generateContent({
 				model: 'gemini-2.5-flash',
-				contents: [{ type: 'text', text: prompt }],
+				contents: prompt,
 			});
 
 			const text = aiResponse.text;
