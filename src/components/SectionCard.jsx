@@ -21,9 +21,14 @@ import ArrowUpwardIcon from "@mui/icons-material/ArrowUpward";
 import ArrowDownwardIcon from "@mui/icons-material/ArrowDownward";
 import ContentBlock from "./ContentBlock.jsx";
 import AiTextDialog from "./AiTextDialog.jsx";
+import AiQuestionDialog from "./AiQuestionDialog.jsx";
 import { newId } from "../lib/id.js";
 import { readImageFile } from "../lib/image.js";
-import { QUESTION_TYPE_LIST, createQuestionBlock } from "../lib/questions.js";
+import {
+  QUESTION_TYPE_LIST,
+  createQuestionBlock,
+  buildQuestionBlock,
+} from "../lib/questions.js";
 
 export default function SectionCard({
   section,
@@ -40,8 +45,15 @@ export default function SectionCard({
   const fileInputRef = useRef(null);
   const [questionMenuAnchor, setQuestionMenuAnchor] = useState(null);
   const [aiOpen, setAiOpen] = useState(false);
+  const [aiQuestionOpen, setAiQuestionOpen] = useState(false);
 
   const updateBlocks = (blocks) => onChange({ ...section, blocks });
+
+  // The section's existing text, used to ground AI question suggestions.
+  const sectionText = section.blocks
+    .filter((b) => b.type === "text" && b.text)
+    .map((b) => b.text)
+    .join("\n\n");
 
   const addTextBlock = () => {
     updateBlocks([...section.blocks, { id: newId(), type: "text", text: "" }]);
@@ -54,6 +66,13 @@ export default function SectionCard({
   const addQuestionBlock = (questionType) => {
     setQuestionMenuAnchor(null);
     updateBlocks([...section.blocks, createQuestionBlock(newId, questionType)]);
+  };
+
+  const addSuggestedQuestionBlock = (questionType, data) => {
+    updateBlocks([
+      ...section.blocks,
+      buildQuestionBlock(newId, questionType, data),
+    ]);
   };
 
   const handleImageFiles = async (files) => {
@@ -202,6 +221,14 @@ export default function SectionCard({
           >
             AI text
           </Button>
+          <Button
+            startIcon={<AutoAwesomeIcon />}
+            onClick={() => setAiQuestionOpen(true)}
+            variant="outlined"
+            size="small"
+          >
+            AI question
+          </Button>
           <input
             ref={fileInputRef}
             type="file"
@@ -240,6 +267,15 @@ export default function SectionCard({
           documentName={documentName}
           onInsert={addSuggestedTextBlock}
           onClose={() => setAiOpen(false)}
+        />
+
+        <AiQuestionDialog
+          open={aiQuestionOpen}
+          sectionTitle={section.name}
+          documentName={documentName}
+          sectionText={sectionText}
+          onInsert={addSuggestedQuestionBlock}
+          onClose={() => setAiQuestionOpen(false)}
         />
       </CardContent>
     </Card>

@@ -18,6 +18,8 @@ PDF printing.
 - **Question blocks** - add structured questions in five types (see below).
 - **AI text suggestions** - generate a block of lesson text from a section's
   title with one click (see below).
+- **AI question suggestions** - generate a structured question of any type from
+  a section's title and existing text (see below).
 - **Reorder / delete** sections and blocks with inline controls.
 - **Export DOCX** - downloads a formatted `.docx`.
 - **Print PDF** - builds the docx, converts it to HTML with mammoth, then renders
@@ -58,6 +60,23 @@ lesson text about that section's title. The flow:
 
 This feature requires two environment variables (see **Getting started**). The
 Worker itself lives in a separate repository; this app only talks to its endpoint.
+
+## AI question suggestions
+
+Press **AI question** on any section to open a dialog that suggests a structured
+question block. It uses the same Turnstile-verified Worker as the text
+suggester, just in a different mode. The flow:
+
+1. Pick a question type (the same five types as the **Add question** menu).
+2. The section title is used as the subject; the section's existing text is sent
+   as context so the question is answerable from the lesson.
+3. Turnstile verifies the request, then the verified token, subject, type, and
+   context are POSTed to the Worker with `mode: "question"`.
+4. The Worker asks the model for JSON matching that question type (prompt,
+   options, answer, etc.) and returns it.
+5. The suggestion is inserted as a new, fully editable question block of that
+   type, with option indexes mapped back onto option ids in
+   `src/lib/questions.js`.
 
 ## Getting started
 
@@ -101,11 +120,12 @@ src/
     SectionCard.jsx       a named section with its content blocks + add buttons
     ContentBlock.jsx      a single text, image, or question block
     AiTextDialog.jsx      Turnstile-verified "suggest text with AI" dialog
+    AiQuestionDialog.jsx  Turnstile-verified "suggest a question with AI" dialog
   lib/
     docxExport.js         build + download the .docx (text, images, questions)
     pdfExport.js          docx -> html (mammoth) -> pdf (html2pdf.js)
-    questions.js          question type definitions, colours, block factory
-    aiSuggest.js          calls the spelling-creator-cf Worker for suggested text
+    questions.js          question type definitions, colours, block factories
+    aiSuggest.js          calls the spelling-creator-cf Worker for text + questions
     turnstile.js          Cloudflare Turnstile loader + site key
     image.js              file reading, sizing, data-url helpers
     storage.js            localStorage auto-save
