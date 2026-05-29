@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import AppBar from "@mui/material/AppBar";
 import Toolbar from "@mui/material/Toolbar";
 import Typography from "@mui/material/Typography";
@@ -29,8 +29,11 @@ import VisibilityIcon from "@mui/icons-material/Visibility";
 import CloudUploadIcon from "@mui/icons-material/CloudUpload";
 import CallSplitIcon from "@mui/icons-material/CallSplit";
 import SpellcheckIcon from "@mui/icons-material/Spellcheck";
+import GroupsIcon from "@mui/icons-material/Groups";
+import Badge from "@mui/material/Badge";
 import SectionCard from "../components/SectionCard.jsx";
 import NavActions from "../components/NavActions.jsx";
+import CollaborateDialog from "../components/CollaborateDialog.jsx";
 import { newId } from "../lib/id.js";
 import {
   loadDocument,
@@ -50,6 +53,7 @@ import {
   EDIT_REQUEST_KEY,
 } from "../lib/lessons.js";
 import { useAuth } from "../lib/auth.jsx";
+import { useCollaboration } from "../lib/collab.js";
 
 function createInitialDoc() {
   return loadDocument() || { title: "Put your topic here...", sections: [] };
@@ -85,8 +89,36 @@ export default function EditorPage() {
   const [pendingEdit, setPendingEdit] = useState(null); // { id, title, doc } | null
   const [editLoading, setEditLoading] = useState(false);
 
-  const { enabled: authEnabled, accessToken } = useAuth();
+  const { enabled: authEnabled, accessToken, user } = useAuth();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+
+  // Real-time collaboration over PeerJS. The hook watches `doc` to broadcast
+  // local edits and calls setDoc with documents received from collaborators.
+  // Identity is shared as presence so collaborators see who's in the lesson.
+  const identity = useMemo(
+    () => ({
+      name:
+        user?.user_metadata?.full_name ||
+        user?.user_metadata?.name ||
+        (user?.email ? user.email.split("@")[0] : ""),
+      email: user?.email || "",
+    }),
+    [user],
+  );
+  const collab = useCollaboration({ doc, onRemoteDoc: setDoc, identity });
+  const [collabOpen, setCollabOpen] = useState(false);
+
+  // An invite link deep-links here with `?join=<code>`. Open the collaboration
+  // dialog (prefilled with the code) once when we arrive that way.
+  const joinCode = searchParams.get("join") || "";
+  const joinHandledRef = useRef(false);
+  useEffect(() => {
+    if (joinCode && !joinHandledRef.current) {
+      joinHandledRef.current = true;
+      setCollabOpen(true);
+    }
+  }, [joinCode]);
 
   // Refs mirror the latest doc/editingId so the one-shot "load for editing"
   // effect below can read current values without re-subscribing to every edit.
@@ -473,6 +505,23 @@ export default function EditorPage() {
                 {editingId ? "Update lesson" : "Publish to hub"}
               </Button>
             )}
+            <Tooltip title="Collaborate live on this lesson">
+              <Badge
+                color="success"
+                badgeContent={collab.active ? collab.participants.length : 0}
+                overlap="circular"
+              >
+                <Button
+                  color="inherit"
+                  variant={collab.active ? "contained" : "outlined"}
+                  startIcon={<GroupsIcon />}
+                  onClick={() => setCollabOpen(true)}
+                  sx={collab.active ? undefined : inheritBorder}
+                >
+                  Collaborate
+                </Button>
+              </Badge>
+            </Tooltip>
             <NavActions current="editor" />
           </Stack>
         </Toolbar>
@@ -659,6 +708,13 @@ export default function EditorPage() {
           </Button>
         </DialogActions>
       </Dialog>
+
+      <CollaborateDialog
+        open={collabOpen}
+        onClose={() => setCollabOpen(false)}
+        collab={collab}
+        initialJoinCode={joinCode}
+      />
 
       <Backdrop open={editLoading} sx={{ zIndex: (t) => t.zIndex.modal + 1 }}>
         <CircularProgress color="inherit" />
