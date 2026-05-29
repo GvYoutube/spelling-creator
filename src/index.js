@@ -147,11 +147,9 @@ export default {
 		// Build a prompt to suggest a block of text based on the subject. Include
 		// the overall lesson title (when we have one) so the model can pitch the
 		// content to fit the wider document.
-		const contextBlock = documentName
-			? `\n\nThis text is part of a lesson titled "${documentName}".`
-			: '';
+		const contextBlock = documentName ? `\n\nThis text is part of a lesson titled "${documentName}".` : '';
 
-		const prompt = `Suggest a block of text about the following subject: "${subject}".${contextBlock}\n\nWrite any unusual or important words in ALL CAPITALS so they stand out as spelling words.\n\nRespond with only the block of text, no preamble or explanation.`;
+		const prompt = `Suggest a block of text about the following subject: "${subject}".${contextBlock}\n\nWrite any unusual or important words, including proper nouns, in ALL CAPITALS so they stand out as spelling words.\n\nRespond with only the block of text, no preamble or explanation.`;
 
 		// Call Gemini via GoogleGenAI instance
 		try {
