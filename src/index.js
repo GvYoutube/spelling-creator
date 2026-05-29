@@ -88,10 +88,12 @@ export default {
 		// Read subject + Turnstile token from request JSON
 		let subject = '';
 		let token = '';
+		let documentName = '';
 		try {
 			const body = await request.json();
 			subject = body.subject || '';
 			token = body.token || '';
+			documentName = body.documentName || '';
 		} catch (e) {
 			return new Response('Invalid JSON body', { status: 400 });
 		}
@@ -109,8 +111,14 @@ export default {
 			return new Response(turnstile.reason, { status: turnstile.status });
 		}
 
-		// Build a prompt to suggest a block of text based on the subject
-		const prompt = `Suggest a block of text about the following subject: "${subject}". Respond with only the block of text, no preamble or explanation.`;
+		// Build a prompt to suggest a block of text based on the subject. Include
+		// the overall lesson title (when we have one) so the model can pitch the
+		// content to fit the wider document.
+		const contextBlock = documentName
+			? `\n\nThis text is part of a lesson titled "${documentName}".`
+			: '';
+
+		const prompt = `Suggest a block of text about the following subject: "${subject}".${contextBlock}\n\nRespond with only the block of text, no preamble or explanation.`;
 
 		// Call Gemini via GoogleGenAI instance
 		try {
