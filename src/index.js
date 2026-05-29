@@ -14,8 +14,9 @@ const profanityFilter = new Filter();
 const TURNSTILE_SITEVERIFY_URL = 'https://challenges.cloudflare.com/turnstile/v0/siteverify';
 
 // Structured-output schemas for the question suggester, one per question type.
-// They mirror the block shapes the editor builds in src/lib/questions.js: the
-// frontend turns option indexes back into option ids when inserting the block.
+// They mirror the block shapes the editor builds in src/lib/questions.js:
+// buildQuestionBlock maps this JSON onto the editable block (e.g. wrapping each
+// "multiple" answer string in an { id, text } row).
 const QUESTION_SCHEMAS = {
 	number: {
 		type: Type.OBJECT,
@@ -26,19 +27,17 @@ const QUESTION_SCHEMAS = {
 		type: Type.OBJECT,
 		properties: {
 			prompt: { type: Type.STRING },
-			options: { type: Type.ARRAY, items: { type: Type.STRING } },
-			correctIndex: { type: Type.INTEGER },
+			answer: { type: Type.STRING },
 		},
-		required: ['prompt', 'options', 'correctIndex'],
+		required: ['prompt', 'answer'],
 	},
 	multiple: {
 		type: Type.OBJECT,
 		properties: {
 			prompt: { type: Type.STRING },
-			options: { type: Type.ARRAY, items: { type: Type.STRING } },
-			correctIndexes: { type: Type.ARRAY, items: { type: Type.INTEGER } },
+			answers: { type: Type.ARRAY, items: { type: Type.STRING } },
 		},
-		required: ['prompt', 'options', 'correctIndexes'],
+		required: ['prompt', 'answers'],
 	},
 	open: {
 		type: Type.OBJECT,
@@ -56,8 +55,8 @@ const QUESTION_SCHEMAS = {
 // the model must follow so its JSON matches the schema above.
 const QUESTION_LABELS = {
 	number: 'number-answer',
-	single: 'single-choice',
-	multiple: 'multiple-choice',
+	single: 'single-answer',
+	multiple: 'multiple-answer',
 	open: 'open-ended',
 	background: 'background-knowledge',
 };
@@ -65,9 +64,9 @@ const QUESTION_LABELS = {
 const QUESTION_INSTRUCTIONS = {
 	number: 'The question must have a single numeric answer. Put that number in the "answer" field.',
 	single:
-		'Provide 3 or 4 answer options in "options", with exactly one correct. Put the zero-based position of the correct option in "correctIndex".',
+		'The question must have a single short typed answer (a word or brief phrase). Do not provide answer options. Put the correct answer in "answer".',
 	multiple:
-		'Provide 4 or 5 answer options in "options", with two or more correct. Put the zero-based positions of every correct option in "correctIndexes".',
+		'The question must have several distinct correct answers that a student would type. Do not provide answer options. Put each accepted answer as a separate string in "answers".',
 	open: 'Write a question that invites a free, written response. Do not provide answer options.',
 	background: 'Put the question in "prompt", and a short paragraph of the prior knowledge a student needs to answer it in "background".',
 };
