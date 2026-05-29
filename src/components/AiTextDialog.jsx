@@ -102,7 +102,7 @@ export default function AiTextDialog({ open, sectionTitle, documentName, onInser
           <DialogContentText>
             {subject
               ? <>Generate a block of text for the section <strong>“{subject}”</strong>.</>
-              : "Give this section a name first — that's what the text will be about."}
+              : "Give this section a name first, that's what the text will be about."}
           </DialogContentText>
           <Box ref={widgetRef} sx={{ minHeight: 65 }} />
           {error && <Alert severity="error">{error}</Alert>}

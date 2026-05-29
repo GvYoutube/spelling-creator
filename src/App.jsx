@@ -121,7 +121,7 @@ export default function App() {
         <Toolbar>
           <SpellcheckIcon sx={{ mr: 1.5 }} />
           <Typography variant="h6" sx={{ flexGrow: 1 }}>
-            S2C Lesson Maker
+            Spelling Lesson Maker
           </Typography>
           <Stack direction="row" spacing={1}>
             <Button

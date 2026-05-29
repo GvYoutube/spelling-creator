@@ -12,14 +12,52 @@ PDF printing.
 
 ## Features
 
-- **Document title** – name the whole lesson.
+- **Document title** - name the whole lesson.
 - **Add sections** with the floating **+** button; each new section is named in a dialog.
-- **Text and image blocks** inside any section — add, caption, reorder, or delete them.
+- **Text and image blocks** inside any section. Add, caption, reorder, or delete them.
+- **Question blocks** - add structured questions in five types (see below).
+- **AI text suggestions** - generate a block of lesson text from a section's
+  title with one click (see below).
 - **Reorder / delete** sections and blocks with inline controls.
-- **Export DOCX** – downloads a formatted `.docx`.
-- **Print PDF** – builds the docx, converts it to HTML with mammoth, then renders
+- **Export DOCX** - downloads a formatted `.docx`.
+- **Print PDF** - builds the docx, converts it to HTML with mammoth, then renders
   a PDF with html2pdf.js so the printout mirrors the Word document.
-- **Auto-save** – your work is kept in `localStorage` between reloads.
+- **Auto-save** - your work is kept in `localStorage` between reloads.
+
+## Question blocks
+
+Each section can hold **question blocks** alongside text and images. Pick a type
+from the **Add question** menu; every type is colour-coded so it's easy to scan
+the lesson at a glance. The types, their shape, and their colours live in one
+place, `src/lib/questions.js`, so the editor and both exporters stay in sync.
+
+| Type                     | Colour | What it captures                                                          |
+| ------------------------ | ------ | ------------------------------------------------------------------------- |
+| **Number answer**        | purple | A single numeric answer.                                                  |
+| **Single answer**        | green  | A list of options with exactly one correct choice.                        |
+| **Multiple answers**     | orange | A list of options with any number of correct choices.                     |
+| **Open ended**           | pink   | A free written response with a configurable number of blank answer lines. |
+| **Background knowledge** | blue   | A prompt plus the prior knowledge a student needs to answer it.           |
+
+Questions are rendered into the DOCX (and therefore the printed PDF) with their
+prompt, options, answer markers, and blank lines, so the exported lesson is ready
+to print and use.
+
+## AI text suggestions
+
+Press **AI text** on any section to open a dialog that generates a block of
+lesson text about that section's title. The flow:
+
+1. The section title is used as the subject — there's no separate prompt to fill in.
+2. A [Cloudflare Turnstile](https://www.cloudflare.com/products/turnstile/) widget
+   verifies the request is coming from a real browser on our domain.
+3. The verified token, subject, and document title are POSTed to a companion
+   Cloudflare Worker (`spelling-creator-cf`), which re-checks the token
+   server-side before doing any AI work and returns the generated text.
+4. The text is inserted as a new text block in the section, ready to edit.
+
+This feature requires two environment variables (see **Getting started**). The
+Worker itself lives in a separate repository; this app only talks to its endpoint.
 
 ## Getting started
 
@@ -29,6 +67,19 @@ pnpm dev      # start the dev server (http://localhost:5173)
 pnpm build    # production build into dist/
 pnpm preview  # preview the production build
 ```
+
+### Environment variables
+
+The AI text feature needs two variables in a `.env` file at the project root
+(Vite exposes `VITE_`-prefixed vars to the client):
+
+```bash
+VITE_API_URL=https://your-worker.example.workers.dev   # spelling-creator-cf endpoint
+VITE_TURNSTILE_SITE_KEY=0x...                           # Cloudflare Turnstile site key
+```
+
+Without these, the rest of the app works fine; only the **AI text** dialog is
+disabled (it surfaces a configuration error).
 
 ## How the export pipeline works
 
@@ -44,13 +95,18 @@ pnpm preview  # preview the production build
 ```
 src/
   App.jsx                 app shell: title, toolbar, section list, + button
+  main.jsx                React entry point
   theme.js                MUI theme
   components/
-    SectionCard.jsx       a named section with its content blocks
-    ContentBlock.jsx      a single text or image block
+    SectionCard.jsx       a named section with its content blocks + add buttons
+    ContentBlock.jsx      a single text, image, or question block
+    AiTextDialog.jsx      Turnstile-verified "suggest text with AI" dialog
   lib/
-    docxExport.js         build + download the .docx
+    docxExport.js         build + download the .docx (text, images, questions)
     pdfExport.js          docx -> html (mammoth) -> pdf (html2pdf.js)
+    questions.js          question type definitions, colours, block factory
+    aiSuggest.js          calls the spelling-creator-cf Worker for suggested text
+    turnstile.js          Cloudflare Turnstile loader + site key
     image.js              file reading, sizing, data-url helpers
     storage.js            localStorage auto-save
     id.js                 id generation

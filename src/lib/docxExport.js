@@ -245,7 +245,7 @@ export function buildDocument(doc) {
   }
 
   return new Document({
-    creator: "S2C Lesson Maker",
+    creator: "Spelling Lesson Maker",
     title: doc.title || "Untitled Lesson",
     styles: {
       default: {

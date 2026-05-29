@@ -54,14 +54,21 @@ export async function exportPdf(doc) {
   const container = window.document.createElement("div");
   container.className = "s2c-pdf-root";
   container.innerHTML = `<style>${PRINT_STYLES}</style>${html}`;
-  container.style.width = "794px"; // ~A4 width at 96dpi
+  // Size the content box to the printable width html2pdf renders into:
+  // pageSize.inner.width = A4 (210mm) minus the 10mm L/R page margins set
+  // below = 190mm ≈ 718px at 96dpi. `border-box` keeps the padding *inside*
+  // that width instead of adding to it, otherwise the box (794 + 2×40 = 874px)
+  // overflows html2pdf's 718px container, gets clipped on the right by the
+  // overlay's `overflow: hidden`, and every line is cut off / shifted right.
+  container.style.boxSizing = "border-box";
+  container.style.width = "718px";
   container.style.padding = "40px";
   container.style.background = "#ffffff";
 
   // html2pdf renders by cloning the element we pass to `.from()` (cloneNode
   // copies inline styles) and re-hosting that clone inside its own on-screen,
   // opacity:0 overlay container. So the off-screen positioning has to live on
-  // a *wrapper* — never on `container` itself. If `container` carried
+  // a *wrapper*, never on `container` itself. If `container` carried
   // `position: absolute; left: -10000px`, the clone would inherit it, drop out
   // of flow inside html2pdf's container (collapsing it to ~0 height) and shift
   // off-screen, so html2canvas would capture an empty box → a blank PDF.

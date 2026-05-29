@@ -15,7 +15,7 @@ export function saveDocument(doc) {
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(doc));
   } catch {
-    // Quota errors (large images) are non-fatal — the in-memory doc still works.
+    // Quota errors (large images) are non-fatal, the in-memory doc still works.
   }
 }
 
