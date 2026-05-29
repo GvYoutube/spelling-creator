@@ -28,7 +28,27 @@ PDF printing.
   a PDF with html2pdf.js so the printout mirrors the Word document.
 - **Save to Google Docs** - signs in with Google (OAuth2) and uploads the docx to
   the user's Drive, converting it to a native Google Doc (see below).
+- **Lesson hub** - browse lessons other users have published, preview any of them,
+  and publish your own once signed in (see below).
+- **Accounts** - passwordless magic-link sign-in (Supabase Auth) on a dedicated
+  login page; required only to publish to the hub (see below).
 - **Auto-save** - your work is kept in `localStorage` between reloads.
+
+## Pages & routing
+
+The app is a single-page app with three client-side routes (hash-based, so deep
+links work on any static host without server rewrites):
+
+| Route     | Page         | What it does                                                       |
+| --------- | ------------ | ------------------------------------------------------------------ |
+| `/`       | **Editor**   | The lesson builder (the original app). "Publish to hub" lives here. |
+| `/#/hub`  | **Lesson hub** | Public gallery of published lessons; click one to preview it.     |
+| `/#/login`| **Sign in**  | Magic-link sign-in / account status.                                |
+
+Every page's header carries a shared nav (a **Lesson hub** link and an account
+control that shows **Sign in** or the signed-in account menu). Routing is set up
+in `src/main.jsx` (`HashRouter` + `AuthProvider`) and the route table is in
+`src/App.jsx`.
 
 ## Question blocks
 
@@ -135,6 +155,73 @@ served from (e.g. `http://localhost:5173` and the production URL) under
 **Authorised JavaScript origins**, and the Google Drive API must be enabled for
 the project.
 
+## Lesson hub & accounts
+
+The **Lesson hub** (`/#/hub`) is a public gallery of lessons users have shared.
+Anyone can browse and preview; publishing requires a signed-in account.
+
+**Where the data lives.** Lessons are stored in **Supabase Postgres**, but — like
+the AI and Pixabay features — the browser never talks to the database directly.
+All lesson reads/writes go through the companion `spelling-creator-cf` Worker,
+which holds the privileged Supabase credentials server-side. The only thing the
+browser does directly with Supabase is **authentication**.
+
+**How sign-in works.** The login page (`/#/login`) uses
+[Supabase Auth](https://supabase.com/docs/guides/auth) magic links: enter an
+email, receive a one-time link, and the Supabase JS client (in `src/lib/supabase.js`)
+exchanges the callback for a session. We use the **PKCE** flow so the callback
+returns a `?code=` in the query string rather than tokens in the URL hash, which
+avoids colliding with the hash-based router. The session JWT is what authorises a
+publish: the app sends it to the Worker as a `Bearer` token, and the Worker
+verifies it (and derives the author) before inserting the row.
+
+```
+ Browser ──magic link / session (Supabase JS)──▶ Supabase Auth
+ Browser ──GET /lessons, GET /lessons/:id───────▶ Worker ──▶ Supabase Postgres   (public reads)
+ Browser ──POST /lessons  (Bearer JWT)──────────▶ Worker ──verify JWT──▶ Postgres (publish)
+```
+
+### Worker endpoints (contract)
+
+These live in the separate `spelling-creator-cf` repo. The frontend
+(`src/lib/lessons.js`) expects them at paths under `VITE_API_URL`:
+
+| Method & path        | Auth                | Response                                                                 |
+| -------------------- | ------------------- | ------------------------------------------------------------------------ |
+| `GET /lessons`       | none (public)       | `{ "lessons": [{ id, title, author, sectionCount, createdAt }] }` (newest first) |
+| `GET /lessons/:id`   | none (public)       | `{ "lesson": { id, title, author, createdAt, doc } }`                    |
+| `POST /lessons`      | `Bearer <Supabase JWT>` | `{ "lesson": { id, title, author, createdAt } }`                     |
+
+- `doc` is the editor document shape used throughout the app:
+  `{ title, sections: [{ id, name, blocks: [...] }] }`. Store it as `jsonb`.
+- `POST /lessons` body is `{ title, doc }`. The Worker should **verify the JWT**
+  (e.g. validate the HS256 signature with the Supabase JWT secret, or call
+  `GET {SUPABASE_URL}/auth/v1/user` with the token), reject if invalid, take the
+  author from the verified user (never trust a client-supplied author), and
+  insert with the service-role key.
+- On 4xx/5xx, return a short **plain-text** reason — the frontend surfaces it
+  directly (matching the existing AI/Pixabay error convention).
+
+### Supabase schema
+
+```sql
+create table public.lessons (
+  id           uuid primary key default gen_random_uuid(),
+  author_id    uuid not null references auth.users (id) on delete cascade,
+  author       text,                       -- display name / email, denormalised for listing
+  title        text not null,
+  doc          jsonb not null,             -- the editor document { title, sections }
+  created_at   timestamptz not null default now()
+);
+
+-- The Worker connects with the service-role key, which bypasses RLS. RLS is
+-- still worth enabling as defence-in-depth in case the anon key is ever used:
+alter table public.lessons enable row level security;
+create policy "lessons are public to read"
+  on public.lessons for select using (true);
+-- (No insert policy for anon/auth roles: only the service-role Worker writes.)
+```
+
 ## Getting started
 
 ```bash
@@ -150,15 +237,26 @@ The AI text feature needs two variables in a `.env` file at the project root
 (Vite exposes `VITE_`-prefixed vars to the client):
 
 ```bash
-VITE_API_URL=https://your-worker.example.workers.dev   # spelling-creator-cf endpoint
+VITE_API_URL=https://your-worker.example.workers.dev   # spelling-creator-cf endpoint (AI, Pixabay, lesson hub)
 VITE_TURNSTILE_SITE_KEY=0x...                           # Cloudflare Turnstile site key
 VITE_GOOGLE_CLIENT_ID=...apps.googleusercontent.com     # OAuth client for Save to Google Docs
+VITE_SUPABASE_URL=https://xxxx.supabase.co              # Supabase project URL (magic-link sign-in)
+VITE_SUPABASE_ANON_KEY=eyJ...                           # Supabase anon (public) key
 ```
 
-Without `VITE_API_URL` / `VITE_TURNSTILE_SITE_KEY` the rest of the app works
-fine; only the **AI text** dialog is disabled (it surfaces a configuration
-error). Without `VITE_GOOGLE_CLIENT_ID` the **Save to Google Docs** button is
-hidden.
+The app degrades gracefully when a feature is unconfigured:
+
+- Without `VITE_API_URL` / `VITE_TURNSTILE_SITE_KEY` the **AI text** dialog is
+  disabled, and without `VITE_API_URL` the **Lesson hub** shows a "not
+  configured" notice.
+- Without `VITE_GOOGLE_CLIENT_ID` the **Save to Google Docs** button is hidden.
+- Without `VITE_SUPABASE_URL` / `VITE_SUPABASE_ANON_KEY` sign-in is disabled
+  (the login page explains this) and the **Publish to hub** button is hidden;
+  browsing the hub still works.
+
+The Supabase **anon key** is designed to be shipped to the browser. Keep the
+**service-role key** and **JWT secret** on the Worker only — never in `VITE_*`
+vars, which are bundled into the client.
 
 ## How the export pipeline works
 
@@ -173,10 +271,15 @@ hidden.
 
 ```
 src/
-  App.jsx                 app shell: title, toolbar, section list, + button
-  main.jsx                React entry point
+  App.jsx                 route table (editor / hub / login)
+  main.jsx                React entry point: HashRouter + AuthProvider + theme
   theme.js                MUI theme
+  pages/
+    EditorPage.jsx        the lesson builder (toolbar, section list, + button, publish)
+    HubPage.jsx           public gallery of published lessons + preview dialog
+    LoginPage.jsx         magic-link sign-in / account status
   components/
+    NavActions.jsx        shared header nav: hub link + account (sign in / out) menu
     SectionCard.jsx       a named section with its content blocks + add buttons
     ContentBlock.jsx      a single text, image, or question block
     AiTextDialog.jsx      Turnstile-verified "suggest text with AI" dialog
@@ -185,9 +288,13 @@ src/
   lib/
     docxExport.js         build + download the .docx (text, images, questions)
     pdfExport.js          docx -> html (mammoth) -> pdf (html2pdf.js)
+    htmlPreview.js        docx -> html (mammoth) for in-app preview / hub viewer
     questions.js          question type definitions, colours, block factories
     aiSuggest.js          calls the spelling-creator-cf Worker for text + questions
     pixabay.js            calls the spelling-creator-cf Worker to search + fetch images
+    lessons.js            calls the Worker to list / fetch / publish hub lessons
+    supabase.js           Supabase client (auth only) + supabaseEnabled flag
+    auth.jsx              AuthProvider + useAuth (session, magic link, sign out)
     googleDrive.js        OAuth2 + upload the docx to Drive as a Google Doc
     turnstile.js          Cloudflare Turnstile loader + site key
     image.js              file reading, sizing, data-url helpers
