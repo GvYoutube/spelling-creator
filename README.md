@@ -204,15 +204,23 @@ These live in the separate `spelling-creator-cf` repo. The frontend
 
 ### Supabase schema
 
+The canonical, ready-to-run schema lives in the Worker repo at
+`spelling-creator-cf/schema.sql`; this is the same thing for reference:
+
 ```sql
 create table public.lessons (
-  id           uuid primary key default gen_random_uuid(),
-  author_id    uuid not null references auth.users (id) on delete cascade,
-  author       text,                       -- display name / email, denormalised for listing
-  title        text not null,
-  doc          jsonb not null,             -- the editor document { title, sections }
-  created_at   timestamptz not null default now()
+  id            uuid primary key default gen_random_uuid(),
+  author_id     uuid not null references auth.users (id) on delete cascade,
+  author        text,                       -- display name / email, denormalised for listing
+  title         text not null,
+  doc           jsonb not null,             -- the editor document { title, sections }
+  -- Maintained by Postgres so the public listing can return a section count
+  -- without the Worker downloading every (image-laden) doc.
+  section_count int generated always as (jsonb_array_length(doc -> 'sections')) stored,
+  created_at    timestamptz not null default now()
 );
+
+create index lessons_created_at_idx on public.lessons (created_at desc);
 
 -- The Worker connects with the service-role key, which bypasses RLS. RLS is
 -- still worth enabling as defence-in-depth in case the anon key is ever used:
