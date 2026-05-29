@@ -55,6 +55,12 @@ export default function SectionCard({
     .map((b) => b.text)
     .join("\n\n");
 
+  // Prompts of the questions already in this section, sent to the AI so a newly
+  // suggested question doesn't repeat one the user already has.
+  const existingQuestions = section.blocks
+    .filter((b) => b.type === "question" && b.prompt)
+    .map((b) => b.prompt);
+
   const addTextBlock = () => {
     updateBlocks([...section.blocks, { id: newId(), type: "text", text: "" }]);
   };
@@ -274,6 +280,7 @@ export default function SectionCard({
           sectionTitle={section.name}
           documentName={documentName}
           sectionText={sectionText}
+          existingQuestions={existingQuestions}
           onInsert={addSuggestedQuestionBlock}
           onClose={() => setAiQuestionOpen(false)}
         />

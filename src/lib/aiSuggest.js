@@ -56,6 +56,7 @@ export async function suggestText(subject, token, context = {}) {
  * @param {string} [context.questionType]  One of the question type keys (default "single").
  * @param {string} [context.documentName]  Title of the overall lesson/document.
  * @param {string} [context.sectionText]   Existing section text to ground the question in.
+ * @param {string[]} [context.existingQuestions]  Prompts of questions already in the section, so the model can avoid repeats.
  * @returns {Promise<object>} The suggested question data (shape depends on type).
  */
 export async function suggestQuestion(subject, token, context = {}) {
@@ -78,6 +79,9 @@ export async function suggestQuestion(subject, token, context = {}) {
         questionType: context.questionType || "single",
         documentName: context.documentName || "",
         sectionText: context.sectionText || "",
+        existingQuestions: Array.isArray(context.existingQuestions)
+          ? context.existingQuestions
+          : [],
       }),
     });
   } catch (e) {

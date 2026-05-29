@@ -24,12 +24,15 @@ import { TURNSTILE_SITE_KEY, whenTurnstileReady } from "../lib/turnstile.js";
  * a Cloudflare Turnstile widget and sends the verified token with the request
  * so the Worker can confirm the call came from our domain. The section's
  * existing text is sent as context so the question is grounded in the lesson.
+ * The prompts of any questions already in the section are sent too, so the model
+ * can avoid repeating one the user already has.
  */
 export default function AiQuestionDialog({
   open,
   sectionTitle,
   documentName,
   sectionText,
+  existingQuestions,
   onInsert,
   onClose,
 }) {
@@ -97,6 +100,7 @@ export default function AiQuestionDialog({
         questionType,
         documentName,
         sectionText,
+        existingQuestions,
       });
       onInsert(questionType, data);
       onClose();
