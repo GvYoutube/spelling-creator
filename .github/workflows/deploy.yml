@@ -3,13 +3,10 @@ name: Deploy to GitHub Pages
 on:
   push:
     paths:
-      - "**.html"
-      - "**.js"
-      - "**.jsx"
-      - "**.ts"
-      - "**.tsx"
-      - "**.json"
-      - "src/**"
+      - "apps/web/**"
+      - "pnpm-lock.yaml"
+      - "pnpm-workspace.yaml"
+      - ".github/workflows/deploy.yml"
     branches:
       - main
   workflow_dispatch:
@@ -61,14 +58,14 @@ jobs:
 
       - name: Inject env vars
         run: |
-          echo "VITE_API_URL=${{ secrets.VITE_API_URL }}" >> .env
-          echo "VITE_TURNSTILE_SITE_KEY=${{ secrets.VITE_TURNSTILE_SITE_KEY }}" >> .env
-          echo "VITE_GOOGLE_CLIENT_ID=${{ secrets.VITE_GOOGLE_CLIENT_ID }}" >> .env
-          echo "VITE_SUPABASE_URL=${{ secrets.VITE_SUPABASE_URL }}" >> .env
-          echo "VITE_SUPABASE_ANON_KEY=${{ secrets.VITE_SUPABASE_ANON_KEY }}" >> .env
+          echo "VITE_API_URL=${{ secrets.VITE_API_URL }}" >> apps/web/.env
+          echo "VITE_TURNSTILE_SITE_KEY=${{ secrets.VITE_TURNSTILE_SITE_KEY }}" >> apps/web/.env
+          echo "VITE_GOOGLE_CLIENT_ID=${{ secrets.VITE_GOOGLE_CLIENT_ID }}" >> apps/web/.env
+          echo "VITE_SUPABASE_URL=${{ secrets.VITE_SUPABASE_URL }}" >> apps/web/.env
+          echo "VITE_SUPABASE_ANON_KEY=${{ secrets.VITE_SUPABASE_ANON_KEY }}" >> apps/web/.env
 
       - name: Build
-        run: pnpm run build
+        run: pnpm --filter @spelling-creator/web build
 
       - name: Setup GitHub Pages
         uses: actions/configure-pages@v5
@@ -76,7 +73,7 @@ jobs:
       - name: Upload dist artifact
         uses: actions/upload-pages-artifact@v3
         with:
-          path: dist
+          path: apps/web/dist
 
       - name: Deploy to GitHub Pages
         id: deployment

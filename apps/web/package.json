@@ -1,5 +1,5 @@
 {
-  "name": "spelling-creator",
+  "name": "@spelling-creator/web",
   "private": true,
   "scripts": {
     "dev": "vite",
