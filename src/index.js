@@ -4,6 +4,56 @@ import { GoogleGenAI } from '@google/genai';
 const GEMINI_API_KEY = env.GEMINI_API_KEY;
 const ai = new GoogleGenAI({ apiKey: GEMINI_API_KEY });
 
+const TURNSTILE_SITEVERIFY_URL = 'https://challenges.cloudflare.com/turnstile/v0/siteverify';
+
+/**
+ * Verify a Cloudflare Turnstile token server-side.
+ *
+ * Returns { ok: true } only when Cloudflare confirms the token is valid AND the
+ * `hostname` Cloudflare reports the challenge was solved on is in the allow-list.
+ * The hostname comes from the verified siteverify response — it is bound by
+ * Cloudflare to where the widget ran, so unlike the Origin/Referer headers it
+ * cannot be forged by the client. This is what proves the request came from our
+ * own domain. On any failure returns { ok: false, status, reason }.
+ */
+async function verifyTurnstile(token, secret, allowedHostnames, remoteIp) {
+	if (!secret) {
+		return { ok: false, status: 500, reason: 'Server misconfiguration: TURNSTILE_SECRET_KEY not set' };
+	}
+	if (!allowedHostnames || allowedHostnames.length === 0) {
+		return { ok: false, status: 500, reason: 'Server misconfiguration: ALLOWED_HOSTNAMES not set' };
+	}
+	if (!token) {
+		return { ok: false, status: 403, reason: 'Missing Turnstile token' };
+	}
+
+	const form = new URLSearchParams();
+	form.set('secret', secret);
+	form.set('response', token);
+	if (remoteIp && remoteIp !== 'unknown') form.set('remoteip', remoteIp);
+
+	let outcome;
+	try {
+		const resp = await fetch(TURNSTILE_SITEVERIFY_URL, {
+			method: 'POST',
+			headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+			body: form,
+		});
+		outcome = await resp.json();
+	} catch (e) {
+		return { ok: false, status: 502, reason: 'Turnstile verification unavailable' };
+	}
+
+	if (!outcome.success) {
+		return { ok: false, status: 403, reason: 'Turnstile verification failed' };
+	}
+	if (!allowedHostnames.includes(outcome.hostname)) {
+		return { ok: false, status: 403, reason: 'Request did not originate from an allowed domain' };
+	}
+
+	return { ok: true };
+}
+
 export default {
 	async fetch(request, env) {
 		const LIMIT = 60;
@@ -35,15 +85,29 @@ export default {
 		entry.tokens -= 1;
 		await env.RATE_LIMIT_KV.put(key, JSON.stringify(entry), { expirationTtl: WINDOW * 2 });
 
-		// Read subject from request JSON
+		// Read subject + Turnstile token from request JSON
 		let subject = '';
+		let token = '';
 		try {
 			const body = await request.json();
 			subject = body.subject || '';
+			token = body.token || '';
 		} catch (e) {
 			return new Response('Invalid JSON body', { status: 400 });
 		}
 		if (!subject) return new Response('Missing "subject" in request body', { status: 400 });
+
+		// Validate the request really came from our domain via Turnstile.
+		// This relies on the verified `hostname` from Cloudflare's siteverify
+		// response, not on spoofable Origin/Referer headers.
+		const allowedHostnames = (env.ALLOWED_HOSTNAMES || '')
+			.split(',')
+			.map((h) => h.trim())
+			.filter(Boolean);
+		const turnstile = await verifyTurnstile(token, env.TURNSTILE_SECRET_KEY, allowedHostnames, ip);
+		if (!turnstile.ok) {
+			return new Response(turnstile.reason, { status: turnstile.status });
+		}
 
 		// Build a prompt to suggest a block of text based on the subject
 		const prompt = `Suggest a block of text about the following subject: "${subject}". Respond with only the block of text, no preamble or explanation.`;

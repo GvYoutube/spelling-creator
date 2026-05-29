@@ -7,10 +7,14 @@
 		"enabled": true
 	},
 
+	"vars": {
+		"ALLOWED_HOSTNAMES": "gameoftheday.us"
+	},
+
 	"kv_namespaces": [
 		{
-		"binding": "RATE_LIMIT_KV",
-		"id": "e3d5364c3c8f4637937bb07a17ffbb38"
+			"binding": "RATE_LIMIT_KV",
+			"id": "e3d5364c3c8f4637937bb07a17ffbb38"
 		}
 	]
 }
