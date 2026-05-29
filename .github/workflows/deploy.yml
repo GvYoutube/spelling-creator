@@ -40,6 +40,11 @@ jobs:
       - name: Install dependencies
         run: pnpm install
 
+      - name: Debug env
+        run: |
+          test -n "${{ secrets.VITE_API_URL }}" && echo "api ok"
+          test -n "${{ secrets.VITE_TURNSTILE_SITE_KEY }}" && echo "turnstile ok"
+
       - name: Inject env vars
         run: |
           echo "VITE_API_URL=${{ secrets.VITE_API_URL }}" >> .env
