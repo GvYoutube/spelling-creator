@@ -40,6 +40,9 @@ jobs:
       - name: Install dependencies
         run: pnpm install
 
+      - name: Inject env vars
+        run: echo "VITE_API_URL=$VITE_API_URL\nVITE_TURNSTILE_SITE_KEY=$VITE_TURNSTILE_SITE_KEY" > .env
+
       - name: Build
         run: pnpm run build
 
