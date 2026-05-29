@@ -54,19 +54,23 @@ export async function exportPdf(doc) {
   const container = window.document.createElement("div");
   container.className = "s2c-pdf-root";
   container.innerHTML = `<style>${PRINT_STYLES}</style>${html}`;
-
-  // Render off-screen so html2canvas can measure layout without a flash.
-  // Must be `absolute` (not `fixed`): html2canvas clones the page into an
-  // iframe and cannot capture a fixed element offset off-screen, which yields
-  // a blank canvas/PDF. An absolutely-positioned element is captured by its
-  // bounding box regardless of where it sits.
-  container.style.position = "absolute";
-  container.style.left = "-10000px";
-  container.style.top = "0";
   container.style.width = "794px"; // ~A4 width at 96dpi
   container.style.padding = "40px";
   container.style.background = "#ffffff";
-  window.document.body.appendChild(container);
+
+  // html2pdf renders by cloning the element we pass to `.from()` (cloneNode
+  // copies inline styles) and re-hosting that clone inside its own on-screen,
+  // opacity:0 overlay container. So the off-screen positioning has to live on
+  // a *wrapper* — never on `container` itself. If `container` carried
+  // `position: absolute; left: -10000px`, the clone would inherit it, drop out
+  // of flow inside html2pdf's container (collapsing it to ~0 height) and shift
+  // off-screen, so html2canvas would capture an empty box → a blank PDF.
+  const offscreen = window.document.createElement("div");
+  offscreen.style.position = "absolute";
+  offscreen.style.left = "-10000px";
+  offscreen.style.top = "0";
+  offscreen.appendChild(container);
+  window.document.body.appendChild(offscreen);
 
   try {
     await html2pdf()
@@ -81,6 +85,6 @@ export async function exportPdf(doc) {
       .from(container)
       .save();
   } finally {
-    window.document.body.removeChild(container);
+    window.document.body.removeChild(offscreen);
   }
 }
