@@ -8,6 +8,7 @@
 //   GET  {API_URL}/lessons/:id      -> { lesson: Lesson }             (public)
 //   POST {API_URL}/lessons          -> { lesson: LessonSummary }      (auth: Bearer Supabase JWT)
 //   PUT  {API_URL}/lessons/:id      -> { lesson: LessonSummary }      (auth: Bearer; author only)
+//   DELETE {API_URL}/lessons/:id    -> { ok: true }                   (auth: Bearer; author only)
 //
 // LessonSummary: { id, authorId, title, author, sectionCount, createdAt }
 // Lesson:        LessonSummary & { doc }   where `doc` is the editor document
@@ -153,4 +154,31 @@ export async function updateLesson(id, doc, accessToken) {
 
   const data = await res.json().catch(() => ({}));
   return data.lesson || {};
+}
+
+/**
+ * Permanently delete a lesson the signed-in user previously published. Requires
+ * a Supabase session JWT; the Worker only deletes the row when the verified user
+ * is the lesson's author (otherwise it responds 403). This cannot be undone.
+ * @param {string} id           The id of the lesson to delete.
+ * @param {string} accessToken  Supabase session JWT.
+ * @returns {Promise<void>}
+ */
+export async function deleteLesson(id, accessToken) {
+  if (!API_URL) throw new Error("The lesson hub is not configured.");
+  if (!id) throw new Error("Missing lesson id.");
+  if (!accessToken) throw new Error("Please sign in before deleting.");
+
+  let res;
+  try {
+    res = await fetch(endpoint(`/${encodeURIComponent(id)}`), {
+      method: "DELETE",
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+      },
+    });
+  } catch {
+    throw new Error("Could not reach the lesson hub.");
+  }
+  if (!res.ok) throw await readError(res);
 }

@@ -21,10 +21,14 @@ import Dialog from "@mui/material/Dialog";
 import DialogTitle from "@mui/material/DialogTitle";
 import DialogContent from "@mui/material/DialogContent";
 import DialogActions from "@mui/material/DialogActions";
+import DialogContentText from "@mui/material/DialogContentText";
+import TextField from "@mui/material/TextField";
 import CircularProgress from "@mui/material/CircularProgress";
 import Alert from "@mui/material/Alert";
+import Snackbar from "@mui/material/Snackbar";
 import IconButton from "@mui/material/IconButton";
 import EditIcon from "@mui/icons-material/Edit";
+import DeleteOutlineIcon from "@mui/icons-material/DeleteOutline";
 import RefreshIcon from "@mui/icons-material/Refresh";
 import Tooltip from "@mui/material/Tooltip";
 import NavActions from "../components/NavActions.jsx";
@@ -32,6 +36,7 @@ import CommentsSection from "../components/CommentsSection.jsx";
 import {
   fetchPublishedLessons,
   fetchLesson,
+  deleteLesson,
   lessonHubEnabled,
   EDIT_REQUEST_KEY,
 } from "../lib/lessons.js";
@@ -50,7 +55,7 @@ function formatDate(value) {
 }
 
 export default function HubPage() {
-  const { user } = useAuth();
+  const { user, accessToken } = useAuth();
   const navigate = useNavigate();
 
   const [lessons, setLessons] = useState([]);
@@ -62,6 +67,16 @@ export default function HubPage() {
   const [viewHtml, setViewHtml] = useState("");
   const [viewLoading, setViewLoading] = useState(false);
   const [viewError, setViewError] = useState("");
+
+  // Delete-confirmation dialog. `deleting` holds the lesson summary being
+  // deleted (null when closed); the user must retype its title to confirm, which
+  // guards against an accidental, irreversible delete. `deleteText` is what they
+  // typed, `deleteBusy` disables the action while the request is in flight.
+  const [deleting, setDeleting] = useState(null);
+  const [deleteText, setDeleteText] = useState("");
+  const [deleteBusy, setDeleteBusy] = useState(false);
+  const [deleteError, setDeleteError] = useState("");
+  const [toast, setToast] = useState("");
 
   const load = async () => {
     setLoading(true);
@@ -108,6 +123,45 @@ export default function HubPage() {
       setViewError(err.message || "Could not open this lesson.");
     } finally {
       setViewLoading(false);
+    }
+  };
+
+  // Open the delete-confirmation dialog for one of the user's own lessons.
+  // stopPropagation keeps the card's preview click from also firing.
+  const askDelete = (e, summary) => {
+    e.stopPropagation();
+    setDeleting(summary);
+    setDeleteText("");
+    setDeleteError("");
+  };
+
+  const closeDelete = () => {
+    if (deleteBusy) return; // don't abandon an in-flight request
+    setDeleting(null);
+  };
+
+  // The title the user must type to confirm. Mirrors the fallback the card and
+  // backend use for an untitled lesson, so an "Untitled Lesson" card is
+  // confirmable by typing exactly that.
+  const deleteTarget = deleting ? deleting.title || "Untitled Lesson" : "";
+  const deleteConfirmed = deleteText.trim() === deleteTarget;
+
+  const confirmDelete = async () => {
+    if (!deleting || !deleteConfirmed) return;
+    setDeleteBusy(true);
+    setDeleteError("");
+    try {
+      await deleteLesson(deleting.id, accessToken);
+      // Drop it from the list locally so it disappears immediately, and close the
+      // preview if it happened to be open for the lesson we just removed.
+      setLessons((prev) => prev.filter((l) => l.id !== deleting.id));
+      setViewing((prev) => (prev && prev.id === deleting.id ? null : prev));
+      setToast(`Deleted “${deleteTarget}”.`);
+      setDeleting(null);
+    } catch (err) {
+      setDeleteError(err.message || "Could not delete this lesson.");
+    } finally {
+      setDeleteBusy(false);
     }
   };
 
@@ -199,23 +253,41 @@ export default function HubPage() {
                   sx={{ height: "100%", position: "relative" }}
                 >
                   {user && lesson.authorId && lesson.authorId === user.id && (
-                    <Tooltip title="Edit this lesson">
-                      <IconButton
-                        size="small"
-                        aria-label="edit lesson"
-                        onClick={(e) => editLesson(e, lesson)}
-                        sx={{
-                          position: "absolute",
-                          top: 4,
-                          right: 4,
-                          zIndex: 1,
-                          bgcolor: "background.paper",
-                          "&:hover": { bgcolor: "action.hover" },
-                        }}
-                      >
-                        <EditIcon fontSize="small" />
-                      </IconButton>
-                    </Tooltip>
+                    <Stack
+                      direction="row"
+                      spacing={0.5}
+                      sx={{ position: "absolute", top: 4, right: 4, zIndex: 1 }}
+                    >
+                      <Tooltip title="Edit this lesson">
+                        <IconButton
+                          size="small"
+                          aria-label="edit lesson"
+                          onClick={(e) => editLesson(e, lesson)}
+                          sx={{
+                            bgcolor: "background.paper",
+                            "&:hover": { bgcolor: "action.hover" },
+                          }}
+                        >
+                          <EditIcon fontSize="small" />
+                        </IconButton>
+                      </Tooltip>
+                      <Tooltip title="Delete this lesson">
+                        <IconButton
+                          size="small"
+                          aria-label="delete lesson"
+                          onClick={(e) => askDelete(e, lesson)}
+                          sx={{
+                            bgcolor: "background.paper",
+                            "&:hover": {
+                              bgcolor: "error.light",
+                              color: "error.contrastText",
+                            },
+                          }}
+                        >
+                          <DeleteOutlineIcon fontSize="small" />
+                        </IconButton>
+                      </Tooltip>
+                    </Stack>
                   )}
                   <CardActionArea
                     onClick={() => openLesson(lesson)}
@@ -299,6 +371,69 @@ export default function HubPage() {
           <Button onClick={() => setViewing(null)}>Close</Button>
         </DialogActions>
       </Dialog>
+
+      <Dialog
+        open={Boolean(deleting)}
+        onClose={closeDelete}
+        fullWidth
+        maxWidth="xs"
+      >
+        <DialogTitle>Delete this lesson?</DialogTitle>
+        <DialogContent>
+          <DialogContentText sx={{ mb: 2 }}>
+            This permanently deletes <strong>{deleteTarget}</strong> from the
+            hub. This can’t be undone. To confirm, type the lesson’s name below.
+          </DialogContentText>
+          <TextField
+            autoFocus
+            fullWidth
+            size="small"
+            label="Lesson name"
+            placeholder={deleteTarget}
+            value={deleteText}
+            onChange={(e) => setDeleteText(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && deleteConfirmed && !deleteBusy) {
+                confirmDelete();
+              }
+            }}
+            disabled={deleteBusy}
+          />
+          {deleteError && (
+            <Alert severity="error" sx={{ mt: 2 }}>
+              {deleteError}
+            </Alert>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={closeDelete} disabled={deleteBusy}>
+            Cancel
+          </Button>
+          <Button
+            color="error"
+            variant="contained"
+            onClick={confirmDelete}
+            disabled={!deleteConfirmed || deleteBusy}
+            startIcon={
+              deleteBusy ? (
+                <CircularProgress size={16} color="inherit" />
+              ) : (
+                <DeleteOutlineIcon />
+              )
+            }
+          >
+            Delete
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      <Snackbar
+        open={Boolean(toast)}
+        autoHideDuration={4000}
+        onClose={() => setToast("")}
+        message={toast}
+        anchorOrigin={{ vertical: "bottom", horizontal: "center" }}
+      />
     </Box>
   );
 }

@@ -280,7 +280,7 @@ function corsHeaders(request, allowedHostnames) {
 		if (allowed) {
 			headers.set('Access-Control-Allow-Origin', origin);
 			headers.set('Vary', 'Origin');
-			headers.set('Access-Control-Allow-Methods', 'GET, POST, PUT, OPTIONS');
+			headers.set('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
 			headers.set('Access-Control-Allow-Headers', 'Content-Type, Authorization');
 			headers.set('Access-Control-Max-Age', '86400');
 		}
@@ -519,6 +519,82 @@ async function handleLessons(request, env, url, cors) {
 			return textResponse('You can only edit lessons you published.', 403, cors);
 		}
 		return jsonResponse({ lesson: rowToLesson(rows[0], false) }, 200, cors);
+	}
+
+	// DELETE /lessons/:id — remove a lesson the signed-in user published. Requires
+	// a valid Supabase session JWT, and the verified user must be the lesson's
+	// author.
+	//
+	// A lesson may have comments, which carry a foreign key to it. schema.sql
+	// declares that FK `on delete cascade`, but a database created before that
+	// cascade was added wouldn't have it — there, deleting a lesson that still has
+	// comments would fail. So we do it in three ownership-gated steps that work
+	// regardless of the deployed constraint: (1) confirm the lesson is the caller's
+	// (filtering on id AND author_id — a non-owner matches nothing and gets 403),
+	// (2) clear its comments, (3) delete the lesson. Step 2 is a harmless no-op
+	// when the FK already cascades.
+	if (request.method === 'DELETE' && id) {
+		const auth = request.headers.get('Authorization') || '';
+		const token = auth.startsWith('Bearer ') ? auth.slice('Bearer '.length).trim() : '';
+		const user = await verifySupabaseUser(env, token);
+		if (!user) return textResponse('Please sign in before deleting.', 401, cors);
+
+		// (1) Ownership check. We must confirm the lesson is the caller's before
+		// touching its comments, since the comment delete below can't itself filter
+		// on the lesson's author.
+		let ownRes;
+		try {
+			ownRes = await fetch(
+				`${base}/rest/v1/lessons?id=eq.${encodeURIComponent(id)}&author_id=eq.${encodeURIComponent(user.id)}&select=id&limit=1`,
+				{ headers: supabaseHeaders(env) },
+			);
+		} catch (e) {
+			return textResponse('Could not reach the lesson store.', 502, cors);
+		}
+		if (!ownRes.ok) return textResponse('Could not delete the lesson.', 502, cors);
+		const ownRows = await ownRes.json().catch(() => []);
+		// No row matched id+author_id: the lesson doesn't exist, or it isn't the
+		// signed-in user's to delete. Either way, don't reveal which.
+		if (!Array.isArray(ownRows) || ownRows.length === 0) {
+			return textResponse('You can only delete lessons you published.', 403, cors);
+		}
+
+		// (2) Clear the lesson's comments so the lesson delete can't be blocked by
+		// the FK on a non-cascading database.
+		let commentsRes;
+		try {
+			commentsRes = await fetch(`${base}/rest/v1/comments?lesson_id=eq.${encodeURIComponent(id)}`, {
+				method: 'DELETE',
+				headers: supabaseHeaders(env),
+			});
+		} catch (e) {
+			return textResponse('Could not reach the lesson store.', 502, cors);
+		}
+		if (!commentsRes.ok) return textResponse('Could not delete the lesson.', 502, cors);
+
+		// (3) Delete the lesson itself (still filtered on author_id as defence in
+		// depth). return=representation lets us confirm a row was actually removed.
+		let res;
+		try {
+			res = await fetch(
+				`${base}/rest/v1/lessons?id=eq.${encodeURIComponent(id)}&author_id=eq.${encodeURIComponent(user.id)}&select=id`,
+				{
+					method: 'DELETE',
+					headers: {
+						...supabaseHeaders(env),
+						Prefer: 'return=representation',
+					},
+				},
+			);
+		} catch (e) {
+			return textResponse('Could not reach the lesson store.', 502, cors);
+		}
+		if (!res.ok) return textResponse('Could not delete the lesson.', 502, cors);
+		const rows = await res.json().catch(() => []);
+		if (!Array.isArray(rows) || rows.length === 0) {
+			return textResponse('You can only delete lessons you published.', 403, cors);
+		}
+		return jsonResponse({ ok: true }, 200, cors);
 	}
 
 	return textResponse('Method not allowed.', 405, cors);
