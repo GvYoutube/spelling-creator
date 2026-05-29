@@ -24,6 +24,8 @@ PDF printing.
 - **Export DOCX** - downloads a formatted `.docx`.
 - **Print PDF** - builds the docx, converts it to HTML with mammoth, then renders
   a PDF with html2pdf.js so the printout mirrors the Word document.
+- **Save to Google Docs** - signs in with Google (OAuth2) and uploads the docx to
+  the user's Drive, converting it to a native Google Doc (see below).
 - **Auto-save** - your work is kept in `localStorage` between reloads.
 
 ## Question blocks
@@ -78,6 +80,28 @@ suggester, just in a different mode. The flow:
    type, with option indexes mapped back onto option ids in
    `src/lib/questions.js`.
 
+## Save to Google Docs
+
+Press **Save to Google Docs** in the toolbar to upload the current lesson straight
+to the signed-in user's Google Drive as an editable Google Doc. The flow is
+entirely client-side:
+
+1. [Google Identity Services](https://developers.google.com/identity/oauth2/web/guides/overview)
+   issues a short-lived OAuth2 access token, prompting the user to sign in and
+   consent the first time.
+2. The app builds the same docx as **Export DOCX**, then uploads it to the Drive
+   `files` endpoint as `multipart/related`, asking Drive to store it as
+   `application/vnd.google-apps.document` so it is converted to a Google Doc.
+3. On success a toast offers an **Open** link to the new doc.
+
+The app requests only the [`drive.file`](https://developers.google.com/drive/api/guides/api-specific-auth)
+scope, so it can touch only the files it creates — never the user's existing
+Drive contents. The button is hidden unless `VITE_GOOGLE_CLIENT_ID` is set (see
+**Environment variables**). The OAuth client must list every origin the app is
+served from (e.g. `http://localhost:5173` and the production URL) under
+**Authorised JavaScript origins**, and the Google Drive API must be enabled for
+the project.
+
 ## Getting started
 
 ```bash
@@ -95,10 +119,13 @@ The AI text feature needs two variables in a `.env` file at the project root
 ```bash
 VITE_API_URL=https://your-worker.example.workers.dev   # spelling-creator-cf endpoint
 VITE_TURNSTILE_SITE_KEY=0x...                           # Cloudflare Turnstile site key
+VITE_GOOGLE_CLIENT_ID=...apps.googleusercontent.com     # OAuth client for Save to Google Docs
 ```
 
-Without these, the rest of the app works fine; only the **AI text** dialog is
-disabled (it surfaces a configuration error).
+Without `VITE_API_URL` / `VITE_TURNSTILE_SITE_KEY` the rest of the app works
+fine; only the **AI text** dialog is disabled (it surfaces a configuration
+error). Without `VITE_GOOGLE_CLIENT_ID` the **Save to Google Docs** button is
+hidden.
 
 ## How the export pipeline works
 
@@ -126,6 +153,7 @@ src/
     pdfExport.js          docx -> html (mammoth) -> pdf (html2pdf.js)
     questions.js          question type definitions, colours, block factories
     aiSuggest.js          calls the spelling-creator-cf Worker for text + questions
+    googleDrive.js        OAuth2 + upload the docx to Drive as a Google Doc
     turnstile.js          Cloudflare Turnstile loader + site key
     image.js              file reading, sizing, data-url helpers
     storage.js            localStorage auto-save

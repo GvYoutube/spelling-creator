@@ -20,12 +20,14 @@ import Tooltip from "@mui/material/Tooltip";
 import AddIcon from "@mui/icons-material/Add";
 import DescriptionIcon from "@mui/icons-material/Description";
 import PictureAsPdfIcon from "@mui/icons-material/PictureAsPdf";
+import AddToDriveIcon from "@mui/icons-material/AddToDrive";
 import SpellcheckIcon from "@mui/icons-material/Spellcheck";
 import SectionCard from "./components/SectionCard.jsx";
 import { newId } from "./lib/id.js";
 import { loadDocument, saveDocument } from "./lib/storage.js";
 import { exportDocx } from "./lib/docxExport.js";
 import { exportPdf } from "./lib/pdfExport.js";
+import { saveToGoogleDrive, googleDriveEnabled } from "./lib/googleDrive.js";
 
 function createInitialDoc() {
   return loadDocument() || { title: "Put your topic here...", sections: [] };
@@ -35,7 +37,7 @@ export default function App() {
   const [doc, setDoc] = useState(createInitialDoc);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [newSectionName, setNewSectionName] = useState("");
-  const [busy, setBusy] = useState(null); // 'docx' | 'pdf' | null
+  const [busy, setBusy] = useState(null); // 'docx' | 'pdf' | 'gdocs' | null
   const [toast, setToast] = useState(null); // { severity, message }
 
   useEffect(() => {
@@ -109,6 +111,35 @@ export default function App() {
     }
   };
 
+  const handleSaveToGoogle = async () => {
+    if (doc.sections.length === 0) {
+      setToast({
+        severity: "warning",
+        message: "Add at least one section before saving.",
+      });
+      return;
+    }
+    setBusy("gdocs");
+    try {
+      const file = await saveToGoogleDrive(doc);
+      setToast({
+        severity: "success",
+        message: "Saved to Google Drive as a Google Doc.",
+        link: file.webViewLink
+          ? { href: file.webViewLink, label: "Open" }
+          : null,
+      });
+    } catch (err) {
+      console.error(err);
+      setToast({
+        severity: "error",
+        message: `Could not save to Google: ${err.message || err}`,
+      });
+    } finally {
+      setBusy(null);
+    }
+  };
+
   const sectionCount = doc.sections.length;
   const blockCount = useMemo(
     () => doc.sections.reduce((sum, s) => sum + s.blocks.length, 0),
@@ -156,6 +187,24 @@ export default function App() {
             >
               Print PDF
             </Button>
+            {googleDriveEnabled && (
+              <Button
+                color="inherit"
+                variant="outlined"
+                startIcon={
+                  busy === "gdocs" ? (
+                    <CircularProgress size={16} color="inherit" />
+                  ) : (
+                    <AddToDriveIcon />
+                  )
+                }
+                onClick={handleSaveToGoogle}
+                disabled={busy !== null}
+                sx={{ borderColor: "rgba(255,255,255,0.6)" }}
+              >
+                Save to Google Docs
+              </Button>
+            )}
           </Stack>
         </Toolbar>
       </AppBar>
@@ -272,6 +321,19 @@ export default function App() {
             severity={toast.severity}
             onClose={() => setToast(null)}
             variant="filled"
+            action={
+              toast.link ? (
+                <Button
+                  color="inherit"
+                  size="small"
+                  href={toast.link.href}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  {toast.link.label}
+                </Button>
+              ) : undefined
+            }
           >
             {toast.message}
           </Alert>
