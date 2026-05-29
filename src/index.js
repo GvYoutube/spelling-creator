@@ -151,7 +151,7 @@ export default {
 			? `\n\nThis text is part of a lesson titled "${documentName}".`
 			: '';
 
-		const prompt = `Suggest a block of text about the following subject: "${subject}".${contextBlock}\n\nRespond with only the block of text, no preamble or explanation.`;
+		const prompt = `Suggest a block of text about the following subject: "${subject}".${contextBlock}\n\nWrite any unusual or important words in ALL CAPITALS so they stand out as spelling words.\n\nRespond with only the block of text, no preamble or explanation.`;
 
 		// Call Gemini via GoogleGenAI instance
 		try {
