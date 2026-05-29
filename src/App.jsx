@@ -185,6 +185,7 @@ export default function App() {
             <SectionCard
               key={section.id}
               section={section}
+              documentName={doc.title}
               index={i}
               onChange={(next) => updateSection(section.id, next)}
               onDelete={() => deleteSection(section.id)}

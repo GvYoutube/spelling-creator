@@ -27,6 +27,7 @@ import { QUESTION_TYPE_LIST, createQuestionBlock } from "../lib/questions.js";
 
 export default function SectionCard({
   section,
+  documentName,
   index,
   onChange,
   onDelete,
@@ -236,6 +237,7 @@ export default function SectionCard({
         <AiTextDialog
           open={aiOpen}
           defaultSubject={section.name}
+          documentName={documentName}
           onInsert={addSuggestedTextBlock}
           onClose={() => setAiOpen(false)}
         />

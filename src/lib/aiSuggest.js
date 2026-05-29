@@ -10,9 +10,11 @@ const API_URL = import.meta.env.VITE_API_URL;
  * Ask the Worker for a block of text about `subject`.
  * @param {string} subject  Topic to write about.
  * @param {string} token    Turnstile token from the widget's callback.
+ * @param {object} [context]  Extra context to help the model.
+ * @param {string} [context.documentName]  Title of the overall lesson/document.
  * @returns {Promise<string>} The generated text.
  */
-export async function suggestText(subject, token) {
+export async function suggestText(subject, token, context = {}) {
   if (!API_URL) {
     throw new Error("VITE_API_URL is not configured.");
   }
@@ -25,7 +27,11 @@ export async function suggestText(subject, token) {
     res = await fetch(API_URL, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ subject, token }),
+      body: JSON.stringify({
+        subject,
+        token,
+        documentName: context.documentName || "",
+      }),
     });
   } catch (e) {
     throw new Error("Could not reach the suggestion service.");

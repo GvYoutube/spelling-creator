@@ -18,7 +18,7 @@ import { TURNSTILE_SITE_KEY, whenTurnstileReady } from "../lib/turnstile.js";
  * Cloudflare Turnstile widget; the verified token it produces is sent with the
  * request so the Worker can confirm the call came from our domain.
  */
-export default function AiTextDialog({ open, defaultSubject, onInsert, onClose }) {
+export default function AiTextDialog({ open, defaultSubject, documentName, onInsert, onClose }) {
   const [subject, setSubject] = useState("");
   const [token, setToken] = useState("");
   const [busy, setBusy] = useState(false);
@@ -78,7 +78,7 @@ export default function AiTextDialog({ open, defaultSubject, onInsert, onClose }
     setBusy(true);
     setError("");
     try {
-      const text = await suggestText(trimmed, token);
+      const text = await suggestText(trimmed, token, { documentName });
       onInsert(text);
       onClose();
     } catch (e) {
