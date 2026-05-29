@@ -110,10 +110,10 @@ export default function SectionCard({
     e.target.value = ""; // allow re-selecting the same file
   };
 
-  const addSearchedImage = ({ src, width, height }) => {
+  const addSearchedImage = ({ src, width, height, caption = "" }) => {
     updateBlocks([
       ...section.blocks,
-      { id: newId(), type: "image", src, width, height, caption: "" },
+      { id: newId(), type: "image", src, width, height, caption },
     ]);
   };
 

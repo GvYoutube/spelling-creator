@@ -128,6 +128,10 @@ export default function ImageSearchDialog({ open, onInsert, onClose }) {
         src: dataUrl,
         width: hit.webformatWidth,
         height: hit.webformatHeight,
+        // Pre-fill the caption with attribution (appreciated by Pixabay).
+        caption: hit.user
+          ? `Image by ${hit.user} from Pixabay`
+          : "Image from Pixabay",
       });
       onClose();
     } catch (e) {

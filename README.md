@@ -105,7 +105,8 @@ The flow:
    Pixabay's caching requirement and keeps request counts well under the limit.
 3. Click a result; the app calls the Worker again with `mode: "imageFetch"`,
    which downloads that image and returns it as a data URL.
-4. The image is inserted as a new, captionable image block.
+4. The image is inserted as a new image block, with its caption pre-filled with
+   attribution (`Image by {photographer} from Pixabay`) — editable like any other.
 
 Each Worker call consumes its single-use Turnstile token, so the widget is reset
 to mint a fresh one between searching and inserting. This feature needs the same
