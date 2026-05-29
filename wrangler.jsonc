@@ -8,7 +8,8 @@
 	},
 
 	"vars": {
-		"ALLOWED_HOSTNAMES": "gameoftheday.us"
+		"ALLOWED_HOSTNAMES": "gameoftheday.us",
+		"SUPABASE_URL": "https://hfkgrqihawgosalltjpy.supabase.co"
 	},
 
 	"kv_namespaces": [
