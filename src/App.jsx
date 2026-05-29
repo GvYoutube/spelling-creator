@@ -21,12 +21,14 @@ import AddIcon from "@mui/icons-material/Add";
 import DescriptionIcon from "@mui/icons-material/Description";
 import PictureAsPdfIcon from "@mui/icons-material/PictureAsPdf";
 import AddToDriveIcon from "@mui/icons-material/AddToDrive";
+import VisibilityIcon from "@mui/icons-material/Visibility";
 import SpellcheckIcon from "@mui/icons-material/Spellcheck";
 import SectionCard from "./components/SectionCard.jsx";
 import { newId } from "./lib/id.js";
 import { loadDocument, saveDocument } from "./lib/storage.js";
 import { exportDocx } from "./lib/docxExport.js";
 import { exportPdf } from "./lib/pdfExport.js";
+import { previewHtml, PREVIEW_STYLES } from "./lib/htmlPreview.js";
 import { saveToGoogleDrive, googleDriveEnabled } from "./lib/googleDrive.js";
 
 function createInitialDoc() {
@@ -37,8 +39,9 @@ export default function App() {
   const [doc, setDoc] = useState(createInitialDoc);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [newSectionName, setNewSectionName] = useState("");
-  const [busy, setBusy] = useState(null); // 'docx' | 'pdf' | 'gdocs' | null
+  const [busy, setBusy] = useState(null); // 'docx' | 'pdf' | 'gdocs' | 'preview' | null
   const [toast, setToast] = useState(null); // { severity, message }
+  const [previewContent, setPreviewContent] = useState(null); // HTML string | null
 
   useEffect(() => {
     saveDocument(doc);
@@ -140,6 +143,29 @@ export default function App() {
     }
   };
 
+  const handlePreview = async () => {
+    if (doc.sections.length === 0) {
+      setToast({
+        severity: "warning",
+        message: "Add at least one section before previewing.",
+      });
+      return;
+    }
+    setBusy("preview");
+    try {
+      const html = await previewHtml(doc);
+      setPreviewContent(html);
+    } catch (err) {
+      console.error(err);
+      setToast({
+        severity: "error",
+        message: `Preview failed: ${err.message || err}`,
+      });
+    } finally {
+      setBusy(null);
+    }
+  };
+
   const sectionCount = doc.sections.length;
   const blockCount = useMemo(
     () => doc.sections.reduce((sum, s) => sum + s.blocks.length, 0),
@@ -155,6 +181,22 @@ export default function App() {
             Spelling Lesson Maker
           </Typography>
           <Stack direction="row" spacing={1}>
+            <Button
+              color="inherit"
+              variant="outlined"
+              startIcon={
+                busy === "preview" ? (
+                  <CircularProgress size={16} color="inherit" />
+                ) : (
+                  <VisibilityIcon />
+                )
+              }
+              onClick={handlePreview}
+              disabled={busy !== null}
+              sx={{ borderColor: "rgba(255,255,255,0.6)" }}
+            >
+              Preview
+            </Button>
             <Button
               color="inherit"
               variant="outlined"
@@ -307,6 +349,28 @@ export default function App() {
           <Button variant="contained" onClick={confirmAddSection}>
             Add
           </Button>
+        </DialogActions>
+      </Dialog>
+
+      <Dialog
+        open={Boolean(previewContent)}
+        onClose={() => setPreviewContent(null)}
+        fullWidth
+        maxWidth="md"
+        scroll="paper"
+      >
+        <DialogTitle>Preview</DialogTitle>
+        <DialogContent dividers>
+          <Box
+            className="s2c-preview-root"
+            sx={{ bgcolor: "#fff", color: "#1a1a1a", p: 2 }}
+            dangerouslySetInnerHTML={{
+              __html: `<style>${PREVIEW_STYLES}</style>${previewContent || ""}`,
+            }}
+          />
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setPreviewContent(null)}>Close</Button>
         </DialogActions>
       </Dialog>
 
