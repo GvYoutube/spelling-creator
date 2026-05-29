@@ -833,8 +833,16 @@ export default {
 			}
 		}
 
-		// Text mode: suggest a block of text about the subject.
-		const prompt = `Suggest a block of text about the following subject: "${subject}".${contextBlock}\n\nWrite any unusual or important words, including proper nouns, in ALL CAPITALS so they stand out as spelling words.\n\nRespond with only the block of text, no preamble or explanation.`;
+		// Text mode: suggest a block of text about the subject. When we know the
+		// document title, the soft `contextBlock` aside above is too easy for the
+		// model to ignore — it tends to write a standalone summary of the subject
+		// and never mention the document. Replace it here with a hard instruction
+		// that forces the model to ground the text in, and explicitly reference,
+		// the document title so the block reads as part of that specific lesson.
+		const documentBlock = documentName
+			? `\n\nThis text is a section of a lesson titled "${documentName}". You MUST treat "${documentName}" as the overarching topic: write the section as part of that lesson, keep it consistent with and relevant to "${documentName}", and explicitly reference the lesson's subject in the text. Do not write a generic, standalone summary of "${subject}" that ignores the lesson title.`
+			: '';
+		const prompt = `Suggest a block of text about the following subject: "${subject}".${documentBlock}\n\nWrite any unusual or important words, including proper nouns, in ALL CAPITALS so they stand out as spelling words.\n\nRespond with only the block of text, no preamble or explanation.`;
 
 		try {
 			const aiResponse = await ai.models.generateContent({
