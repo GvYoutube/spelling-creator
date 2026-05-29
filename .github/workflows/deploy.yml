@@ -8,7 +8,7 @@ on:
       - "pnpm-workspace.yaml"
       - ".github/workflows/deploy.yml"
     branches:
-      - main
+      - master
   workflow_dispatch:
 
 permissions:
