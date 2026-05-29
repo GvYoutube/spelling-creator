@@ -30,3 +30,30 @@ create policy "lessons are public to read"
   on public.lessons for select using (true);
 -- (No insert/update/delete policy for anon/authenticated roles: only the
 -- service-role Worker writes.)
+
+
+-- Comments on published lessons. Reads are public (anyone browsing the hub sees
+-- them); writes go through the Worker's POST /lessons/:id/comments, which verifies
+-- a Supabase session JWT and rejects the comment outright if it contains profanity
+-- (glin-profanity) before it ever reaches this table.
+create table if not exists public.comments (
+  id          uuid primary key default gen_random_uuid(),
+  lesson_id   uuid not null references public.lessons (id) on delete cascade,
+  author_id   uuid not null references auth.users (id) on delete cascade,
+  author      text,                       -- display name / email, denormalised for listing
+  body        text not null,
+  created_at  timestamptz not null default now()
+);
+
+-- Comments are listed per lesson, oldest-first; index the lookup + sort key.
+create index if not exists comments_lesson_id_idx on public.comments (lesson_id, created_at);
+
+-- Same posture as lessons: service-role Worker is the only writer; enable RLS as
+-- defence-in-depth and allow public reads.
+alter table public.comments enable row level security;
+
+drop policy if exists "comments are public to read" on public.comments;
+create policy "comments are public to read"
+  on public.comments for select using (true);
+-- (No insert/update/delete policy for anon/authenticated roles: only the
+-- service-role Worker writes.)

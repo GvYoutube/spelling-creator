@@ -1,8 +1,15 @@
 import { env } from 'cloudflare:workers';
 import { GoogleGenAI, Type } from '@google/genai';
+import { Filter } from 'glin-profanity';
 
 const GEMINI_API_KEY = env.GEMINI_API_KEY;
 const ai = new GoogleGenAI({ apiKey: GEMINI_API_KEY });
+
+// Shared profanity filter for moderating lesson comments. Built once (it compiles
+// its word list into a regex) and reused across requests. `checkProfanity(text)`
+// returns { containsProfanity, profaneWords }; we reject a comment outright when
+// containsProfanity is true rather than censoring individual words.
+const profanityFilter = new Filter();
 
 const TURNSTILE_SITEVERIFY_URL = 'https://challenges.cloudflare.com/turnstile/v0/siteverify';
 
@@ -462,6 +469,129 @@ async function handleLessons(request, env, url, cors) {
 	return textResponse('Method not allowed.', 405, cors);
 }
 
+// The longest comment we accept. Comments are short discussion, not documents.
+const MAX_COMMENT_LENGTH = 2000;
+
+/**
+ * Map a Supabase `comments` row to the camelCase shape the frontend expects.
+ */
+function rowToComment(row) {
+	return {
+		id: row.id,
+		author: row.author,
+		body: row.body,
+		createdAt: row.created_at,
+	};
+}
+
+/**
+ * Comment endpoints for a single published lesson, backed by Supabase Postgres.
+ *
+ *   GET  /lessons/:id/comments   public  -> { comments: Comment[] }   (oldest first)
+ *   POST /lessons/:id/comments   Bearer  -> { comment: Comment }      (verified JWT)
+ *
+ * POST is moderated: the comment text is run through glin-profanity, and if it
+ * contains any profanity the whole comment is rejected (422) — nothing is stored
+ * and nothing is censored-and-kept. The author is derived from the verified user,
+ * never from the request body. Errors are short plain-text reasons so the frontend
+ * can surface res.text(), matching the rest of the API.
+ */
+async function handleComments(request, env, lessonId, cors) {
+	if (!env.SUPABASE_URL || !env.SUPABASE_SERVICE_ROLE_KEY) {
+		return textResponse('Server misconfiguration: Supabase is not configured', 500, cors);
+	}
+	if (!lessonId) return textResponse('Missing lesson id.', 400, cors);
+
+	const base = env.SUPABASE_URL.replace(/\/$/, '');
+
+	// GET — public listing of a lesson's comments, oldest first so the thread
+	// reads top to bottom.
+	if (request.method === 'GET') {
+		const query = `lesson_id=eq.${encodeURIComponent(lessonId)}&select=id,author,body,created_at&order=created_at.asc`;
+		let res;
+		try {
+			res = await fetch(`${base}/rest/v1/comments?${query}`, { headers: supabaseHeaders(env) });
+		} catch (e) {
+			return textResponse('Could not reach the comment store.', 502, cors);
+		}
+		if (!res.ok) return textResponse('Could not load comments.', 502, cors);
+		const rows = await res.json().catch(() => []);
+		const comments = (Array.isArray(rows) ? rows : []).map(rowToComment);
+		return jsonResponse({ comments }, 200, cors);
+	}
+
+	// POST — add a comment. Requires a valid Supabase session JWT.
+	if (request.method === 'POST') {
+		const auth = request.headers.get('Authorization') || '';
+		const token = auth.startsWith('Bearer ') ? auth.slice('Bearer '.length).trim() : '';
+		const user = await verifySupabaseUser(env, token);
+		if (!user) return textResponse('Please sign in before commenting.', 401, cors);
+
+		let body;
+		try {
+			body = await request.json();
+		} catch (e) {
+			return textResponse('Invalid JSON body', 400, cors);
+		}
+		const text = (body && typeof body.body === 'string' ? body.body : '').trim();
+		if (!text) return textResponse('Write something before posting.', 400, cors);
+		if (text.length > MAX_COMMENT_LENGTH) {
+			return textResponse(`Comments are limited to ${MAX_COMMENT_LENGTH} characters.`, 400, cors);
+		}
+
+		// Moderation: block the entire comment if it contains profanity. Done
+		// server-side so it can't be bypassed by a crafted client request.
+		if (profanityFilter.checkProfanity(text).containsProfanity) {
+			return textResponse('This comment contains language that isn’t allowed. Please revise it and try again.', 422, cors);
+		}
+
+		// The lesson must exist; the FK would reject an orphan comment anyway, but
+		// checking first lets us return a clear 404 instead of a generic store error.
+		let lessonRes;
+		try {
+			lessonRes = await fetch(`${base}/rest/v1/lessons?id=eq.${encodeURIComponent(lessonId)}&select=id&limit=1`, {
+				headers: supabaseHeaders(env),
+			});
+		} catch (e) {
+			return textResponse('Could not reach the comment store.', 502, cors);
+		}
+		const lessonRows = lessonRes.ok ? await lessonRes.json().catch(() => []) : [];
+		if (!Array.isArray(lessonRows) || lessonRows.length === 0) {
+			return textResponse('Lesson not found.', 404, cors);
+		}
+
+		const insert = {
+			lesson_id: lessonId,
+			author_id: user.id,
+			author: authorFromUser(user),
+			body: text,
+		};
+
+		let res;
+		try {
+			res = await fetch(`${base}/rest/v1/comments?select=id,author,body,created_at`, {
+				method: 'POST',
+				headers: {
+					...supabaseHeaders(env),
+					'Content-Type': 'application/json',
+					Prefer: 'return=representation',
+				},
+				body: JSON.stringify(insert),
+			});
+		} catch (e) {
+			return textResponse('Could not reach the comment store.', 502, cors);
+		}
+		if (!res.ok) return textResponse('Could not post the comment.', 502, cors);
+		const rows = await res.json().catch(() => []);
+		if (!Array.isArray(rows) || rows.length === 0) {
+			return textResponse('Could not post the comment.', 502, cors);
+		}
+		return jsonResponse({ comment: rowToComment(rows[0]) }, 201, cors);
+	}
+
+	return textResponse('Method not allowed.', 405, cors);
+}
+
 export default {
 	async fetch(request, env) {
 		const LIMIT = 60;
@@ -486,6 +616,12 @@ export default {
 		const url = new URL(request.url);
 		const path = url.pathname.replace(/\/$/, '');
 		if (path === '/lessons' || path.startsWith('/lessons/')) {
+			// /lessons/:id/comments is its own (also Supabase-backed) handler;
+			// everything else under /lessons is the lesson collection/item.
+			const commentsMatch = path.match(/^\/lessons\/([^/]+)\/comments$/);
+			if (commentsMatch) {
+				return handleComments(request, env, decodeURIComponent(commentsMatch[1]), cors);
+			}
 			return handleLessons(request, env, url, cors);
 		}
 

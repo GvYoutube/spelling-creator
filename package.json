@@ -12,6 +12,7 @@
 		"wrangler": "^3.101.0"
 	},
 	"dependencies": {
-		"@google/genai": "^2.6.0"
+		"@google/genai": "^2.6.0",
+		"glin-profanity": "^3.3.0"
 	}
 }
