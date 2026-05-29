@@ -20,6 +20,10 @@ import CircularProgress from "@mui/material/CircularProgress";
 import Tooltip from "@mui/material/Tooltip";
 import Chip from "@mui/material/Chip";
 import Backdrop from "@mui/material/Backdrop";
+import Menu from "@mui/material/Menu";
+import MenuItem from "@mui/material/MenuItem";
+import ListItemIcon from "@mui/material/ListItemIcon";
+import ListItemText from "@mui/material/ListItemText";
 import AddIcon from "@mui/icons-material/Add";
 import SaveIcon from "@mui/icons-material/Save";
 import DescriptionIcon from "@mui/icons-material/Description";
@@ -30,6 +34,8 @@ import CloudUploadIcon from "@mui/icons-material/CloudUpload";
 import CallSplitIcon from "@mui/icons-material/CallSplit";
 import SpellcheckIcon from "@mui/icons-material/Spellcheck";
 import GroupsIcon from "@mui/icons-material/Groups";
+import IosShareIcon from "@mui/icons-material/IosShare";
+import ArrowDropDownIcon from "@mui/icons-material/ArrowDropDown";
 import Badge from "@mui/material/Badge";
 import SectionCard from "../components/SectionCard.jsx";
 import NavActions from "../components/NavActions.jsx";
@@ -76,6 +82,7 @@ export default function EditorPage() {
   const [busy, setBusy] = useState(null); // 'docx' | 'pdf' | 'gdocs' | 'preview' | 'publish' | null
   const [toast, setToast] = useState(null); // { severity, message }
   const [previewContent, setPreviewContent] = useState(null); // HTML string | null
+  const [exportAnchor, setExportAnchor] = useState(null); // export dropdown anchor el | null
 
   // Hub-editing state. `editingId` is the id of a published lesson currently
   // loaded for editing (so "Publish" becomes "Update"); null when authoring a
@@ -439,52 +446,62 @@ export default function EditorPage() {
               color="inherit"
               variant="outlined"
               startIcon={
-                busy === "docx" ? (
+                busy === "docx" || busy === "pdf" || busy === "gdocs" ? (
                   <CircularProgress size={16} color="inherit" />
                 ) : (
-                  <DescriptionIcon />
+                  <IosShareIcon />
                 )
               }
-              onClick={() => handleExport("docx")}
+              endIcon={<ArrowDropDownIcon />}
+              onClick={(e) => setExportAnchor(e.currentTarget)}
               disabled={busy !== null}
               sx={inheritBorder}
             >
-              Export DOCX
+              Export
             </Button>
-            <Button
-              color="inherit"
-              variant="outlined"
-              startIcon={
-                busy === "pdf" ? (
-                  <CircularProgress size={16} color="inherit" />
-                ) : (
-                  <PictureAsPdfIcon />
-                )
-              }
-              onClick={() => handleExport("pdf")}
-              disabled={busy !== null}
-              sx={inheritBorder}
+            <Menu
+              anchorEl={exportAnchor}
+              open={Boolean(exportAnchor)}
+              onClose={() => setExportAnchor(null)}
+              anchorOrigin={{ vertical: "bottom", horizontal: "right" }}
+              transformOrigin={{ vertical: "top", horizontal: "right" }}
             >
-              Print PDF
-            </Button>
-            {googleDriveEnabled && (
-              <Button
-                color="inherit"
-                variant="outlined"
-                startIcon={
-                  busy === "gdocs" ? (
-                    <CircularProgress size={16} color="inherit" />
-                  ) : (
-                    <AddToDriveIcon />
-                  )
-                }
-                onClick={handleSaveToGoogle}
-                disabled={busy !== null}
-                sx={inheritBorder}
+              <MenuItem
+                onClick={() => {
+                  setExportAnchor(null);
+                  handleExport("docx");
+                }}
               >
-                Save to Google Docs
-              </Button>
-            )}
+                <ListItemIcon>
+                  <DescriptionIcon fontSize="small" />
+                </ListItemIcon>
+                <ListItemText>Export DOCX</ListItemText>
+              </MenuItem>
+              <MenuItem
+                onClick={() => {
+                  setExportAnchor(null);
+                  handleExport("pdf");
+                }}
+              >
+                <ListItemIcon>
+                  <PictureAsPdfIcon fontSize="small" />
+                </ListItemIcon>
+                <ListItemText>Print PDF</ListItemText>
+              </MenuItem>
+              {googleDriveEnabled && (
+                <MenuItem
+                  onClick={() => {
+                    setExportAnchor(null);
+                    handleSaveToGoogle();
+                  }}
+                >
+                  <ListItemIcon>
+                    <AddToDriveIcon fontSize="small" />
+                  </ListItemIcon>
+                  <ListItemText>Save to Google Docs</ListItemText>
+                </MenuItem>
+              )}
+            </Menu>
             {lessonHubEnabled && authEnabled && (
               <Button
                 color="inherit"
