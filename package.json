@@ -12,12 +12,5 @@
     "build": "pnpm --filter @spelling-creator/web build",
     "preview": "pnpm --filter @spelling-creator/web preview",
     "deploy": "pnpm --filter @spelling-creator/api deploy"
-  },
-  "devEngines": {
-    "packageManager": {
-      "name": "pnpm",
-      "version": "^11.1.3",
-      "onFail": "download"
-    }
   }
 }
