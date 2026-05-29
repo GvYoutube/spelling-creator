@@ -80,7 +80,16 @@ lesson text about that section's title. The flow:
 3. The verified token, subject, and document title are POSTed to a companion
    Cloudflare Worker (`spelling-creator-cf`), which re-checks the token
    server-side before doing any AI work and returns the generated text.
-4. The text is inserted as a new text block in the section, ready to edit.
+4. The generated text is shown for review; pressing **Insert** adds it as a new
+   text block in the section, ready to edit.
+
+The Worker caches text suggestions, so asking about the same subject again
+returns the same answer instantly without a billable AI call. A **signed-in**
+user who doesn't like a suggestion can **thumbs-down** it: that calls the
+Worker's `POST /ai-text/dislike` (gated by a Supabase JWT, like publishing),
+which evicts the cached answer so the next try is written fresh. After a
+dislike the dialog offers an immediate **Generate fresh** from the now-cleared
+cache. Sign-in is required because the action mutates the shared server cache.
 
 This feature requires two environment variables (see **Getting started**). The
 Worker itself lives in a separate repository; this app only talks to its endpoint.
@@ -199,6 +208,7 @@ These live in the separate `spelling-creator-cf` repo. The frontend
 | `POST /lessons`      | `Bearer <Supabase JWT>` | `{ "lesson": { id, title, author, createdAt } }`                     |
 | `GET /lessons/:id/comments`  | none (public)       | `{ "comments": [{ id, author, body, createdAt }] }` (oldest first) |
 | `POST /lessons/:id/comments` | `Bearer <Supabase JWT>` | `{ "comment": { id, author, body, createdAt } }`               |
+| `POST /ai-text/dislike`      | `Bearer <Supabase JWT>` | `{ "ok": true }` — evicts the cached text for `{ subject, documentName }` |
 
 - `doc` is the editor document shape used throughout the app:
   `{ title, sections: [{ id, name, blocks: [...] }] }`. Store it as `jsonb`.
@@ -213,6 +223,10 @@ These live in the separate `spelling-creator-cf` repo. The frontend
   profanity is found it **rejects the whole comment with `422`** (nothing is
   stored). Otherwise it inserts the row with the service-role key. The check runs
   on the Worker so it can't be bypassed by a crafted client request.
+- `POST /ai-text/dislike` body is `{ subject, documentName }`. The Worker
+  verifies the JWT the same way (sign-in required), then rebuilds the cache key
+  for that text suggestion and deletes it, so the next request for the same
+  subject is regenerated instead of served from cache.
 - On 4xx/5xx, return a short **plain-text** reason — the frontend surfaces it
   directly (matching the existing AI/Pixabay error convention).
 

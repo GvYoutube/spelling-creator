@@ -8,9 +8,14 @@ import Button from "@mui/material/Button";
 import Box from "@mui/material/Box";
 import Stack from "@mui/material/Stack";
 import Alert from "@mui/material/Alert";
+import Tooltip from "@mui/material/Tooltip";
+import IconButton from "@mui/material/IconButton";
+import Typography from "@mui/material/Typography";
 import CircularProgress from "@mui/material/CircularProgress";
 import AutoAwesomeIcon from "@mui/icons-material/AutoAwesome";
-import { suggestText } from "../lib/aiSuggest.js";
+import ThumbDownAltOutlinedIcon from "@mui/icons-material/ThumbDownAltOutlined";
+import { suggestText, dislikeText } from "../lib/aiSuggest.js";
+import { useAuth } from "../lib/auth.jsx";
 import { TURNSTILE_SITE_KEY, whenTurnstileReady } from "../lib/turnstile.js";
 
 /**
@@ -19,14 +24,28 @@ import { TURNSTILE_SITE_KEY, whenTurnstileReady } from "../lib/turnstile.js";
  * fill in here. It renders a Cloudflare Turnstile widget; the verified token it
  * produces is sent with the request so the Worker can confirm the call came
  * from our domain.
+ *
+ * The generated text is shown for review before it is inserted. A signed-in
+ * user can "thumbs down" a suggestion: that evicts it from the Worker's cache
+ * (see lib/aiSuggest.dislikeText) so the same subject regenerates a fresh
+ * answer instead of serving the disliked one. Disliking then offers an
+ * immediate regenerate from the freshly-cleared cache.
  */
 export default function AiTextDialog({ open, sectionTitle, documentName, onInsert, onClose }) {
+  const { user, accessToken } = useAuth();
   const [token, setToken] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  // The generated text awaiting review, and whether it has been disliked
+  // (cache evicted) so the UI can offer a fresh regenerate.
+  const [result, setResult] = useState("");
+  const [disliked, setDisliked] = useState(false);
+  const [dislikeBusy, setDislikeBusy] = useState(false);
   const widgetRef = useRef(null);
+  const widgetIdRef = useRef(null);
 
   const subject = (sectionTitle || "").trim();
+  const working = busy || dislikeBusy;
 
   // Reset the form each time the dialog opens.
   useEffect(() => {
@@ -34,6 +53,9 @@ export default function AiTextDialog({ open, sectionTitle, documentName, onInser
       setToken("");
       setError("");
       setBusy(false);
+      setResult("");
+      setDisliked(false);
+      setDislikeBusy(false);
     }
   }, [open]);
 
@@ -45,13 +67,12 @@ export default function AiTextDialog({ open, sectionTitle, documentName, onInser
       return;
     }
 
-    let widgetId;
     let cancelled = false;
 
     whenTurnstileReady()
       .then((turnstile) => {
         if (cancelled || !widgetRef.current) return;
-        widgetId = turnstile.render(widgetRef.current, {
+        widgetIdRef.current = turnstile.render(widgetRef.current, {
           sitekey: TURNSTILE_SITE_KEY,
           callback: (t) => setToken(t),
           "expired-callback": () => setToken(""),
@@ -65,11 +86,21 @@ export default function AiTextDialog({ open, sectionTitle, documentName, onInser
 
     return () => {
       cancelled = true;
-      if (widgetId != null && window.turnstile) {
-        window.turnstile.remove(widgetId);
+      if (widgetIdRef.current != null && window.turnstile) {
+        window.turnstile.remove(widgetIdRef.current);
+        widgetIdRef.current = null;
       }
     };
   }, [open]);
+
+  // The Turnstile token is single-use, so refresh the widget after each AI call
+  // to have a fresh one ready for a possible regenerate.
+  const refreshChallenge = () => {
+    setToken("");
+    if (widgetIdRef.current != null && window.turnstile) {
+      window.turnstile.reset(widgetIdRef.current);
+    }
+  };
 
   const handleGenerate = async () => {
     if (!subject) {
@@ -80,22 +111,46 @@ export default function AiTextDialog({ open, sectionTitle, documentName, onInser
     setError("");
     try {
       const text = await suggestText(subject, token, { documentName });
-      onInsert(text);
-      onClose();
+      setResult(text);
+      setDisliked(false);
     } catch (e) {
       setError(e.message || "Something went wrong.");
-      // Token is single-use; force a fresh challenge before retrying.
-      setToken("");
-      if (widgetRef.current && window.turnstile) {
-        window.turnstile.reset(widgetRef.current);
-      }
     } finally {
+      // Spend the token either way: it is consumed once submitted.
+      refreshChallenge();
       setBusy(false);
     }
   };
 
+  const handleDislike = async () => {
+    setDislikeBusy(true);
+    setError("");
+    try {
+      await dislikeText(subject, accessToken, { documentName });
+      setDisliked(true);
+    } catch (e) {
+      setError(e.message || "Could not remove that suggestion.");
+    } finally {
+      setDislikeBusy(false);
+    }
+  };
+
+  const handleInsert = () => {
+    onInsert(result);
+    onClose();
+  };
+
+  // Why the thumbs-down is unavailable, if it is — drives the tooltip and the
+  // disabled state. Signing in is required because the action mutates the
+  // shared server cache on behalf of an account.
+  const dislikeReason = !user
+    ? "Sign in to remove this suggestion from the cache"
+    : disliked
+      ? "Removed from the cache"
+      : "Not a good suggestion? Remove it from the cache";
+
   return (
-    <Dialog open={open} onClose={busy ? undefined : onClose} fullWidth maxWidth="xs">
+    <Dialog open={open} onClose={working ? undefined : onClose} fullWidth maxWidth="xs">
       <DialogTitle>Suggest text with AI</DialogTitle>
       <DialogContent>
         <Stack spacing={2} sx={{ mt: 0.5 }}>
@@ -104,28 +159,89 @@ export default function AiTextDialog({ open, sectionTitle, documentName, onInser
               ? <>Generate a block of text for the section <strong>“{subject}”</strong>.</>
               : "Give this section a name first, that's what the text will be about."}
           </DialogContentText>
+
+          {result && (
+            <Box>
+              <Box
+                sx={{
+                  p: 1.5,
+                  borderRadius: 1,
+                  border: 1,
+                  borderColor: "divider",
+                  bgcolor: "action.hover",
+                  maxHeight: 220,
+                  overflowY: "auto",
+                  whiteSpace: "pre-wrap",
+                  typography: "body2",
+                }}
+              >
+                {result}
+              </Box>
+              <Stack direction="row" spacing={1} alignItems="center" sx={{ mt: 1 }}>
+                <Tooltip title={dislikeReason}>
+                  {/* span so the tooltip still shows while the button is disabled */}
+                  <span>
+                    <IconButton
+                      size="small"
+                      color={disliked ? "error" : "default"}
+                      onClick={handleDislike}
+                      disabled={!user || disliked || working}
+                      aria-label="Remove this suggestion from the cache"
+                    >
+                      {dislikeBusy ? (
+                        <CircularProgress size={18} color="inherit" />
+                      ) : (
+                        <ThumbDownAltOutlinedIcon fontSize="small" />
+                      )}
+                    </IconButton>
+                  </span>
+                </Tooltip>
+                <Typography variant="caption" color="text.secondary">
+                  {disliked
+                    ? "Removed from the cache — generate a fresh one below."
+                    : "Don’t like it? Remove it so the next try is freshly written."}
+                </Typography>
+              </Stack>
+            </Box>
+          )}
+
+          {/* The widget powers the initial generate and any regenerate. */}
           <Box ref={widgetRef} sx={{ minHeight: 65 }} />
           {error && <Alert severity="error">{error}</Alert>}
         </Stack>
       </DialogContent>
       <DialogActions>
-        <Button onClick={onClose} disabled={busy}>
+        <Button onClick={onClose} disabled={working}>
           Cancel
         </Button>
-        <Button
-          variant="contained"
-          onClick={handleGenerate}
-          disabled={busy || !token || !subject}
-          startIcon={
-            busy ? (
-              <CircularProgress size={16} color="inherit" />
-            ) : (
-              <AutoAwesomeIcon />
-            )
-          }
-        >
-          {busy ? "Generating…" : "Generate"}
-        </Button>
+        {/* Insert is available once there is a reviewed suggestion. After a
+            dislike it is demoted to "Insert anyway" in favour of regenerating. */}
+        {result && (
+          <Button
+            variant={disliked ? "outlined" : "contained"}
+            onClick={handleInsert}
+            disabled={working}
+          >
+            {disliked ? "Insert anyway" : "Insert"}
+          </Button>
+        )}
+        {/* Generate the first suggestion, or a fresh one after a dislike. */}
+        {(!result || disliked) && (
+          <Button
+            variant="contained"
+            onClick={handleGenerate}
+            disabled={working || !token || !subject}
+            startIcon={
+              busy ? (
+                <CircularProgress size={16} color="inherit" />
+              ) : (
+                <AutoAwesomeIcon />
+              )
+            }
+          >
+            {busy ? "Generating…" : result ? "Generate fresh" : "Generate"}
+          </Button>
+        )}
       </DialogActions>
     </Dialog>
   );

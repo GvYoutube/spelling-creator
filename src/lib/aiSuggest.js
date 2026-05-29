@@ -49,6 +49,51 @@ export async function suggestText(subject, token, context = {}) {
 }
 
 /**
+ * "Thumbs down" a suggested block of text: ask the Worker to evict it from its
+ * cache so the next request for the same subject regenerates a fresh answer.
+ *
+ * Unlike `suggestText`, this is gated by a signed-in Supabase session (sent as
+ * a Bearer credential the Worker verifies) rather than a Turnstile token — it
+ * mutates server state on behalf of an account, so it requires sign-in.
+ *
+ * @param {string} subject      The same subject the text was generated for.
+ * @param {string} accessToken  Supabase session JWT (from the auth context).
+ * @param {object} [context]    Extra context that shaped the text.
+ * @param {string} [context.documentName]  Title of the overall lesson/document.
+ * @returns {Promise<void>}
+ */
+export async function dislikeText(subject, accessToken, context = {}) {
+  if (!API_URL) {
+    throw new Error("VITE_API_URL is not configured.");
+  }
+  if (!accessToken) {
+    throw new Error("Please sign in to give feedback.");
+  }
+
+  let res;
+  try {
+    res = await fetch(`${API_URL.replace(/\/$/, "")}/ai-text/dislike`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${accessToken}`,
+      },
+      body: JSON.stringify({
+        subject,
+        documentName: context.documentName || "",
+      }),
+    });
+  } catch (e) {
+    throw new Error("Could not reach the suggestion service.");
+  }
+
+  if (!res.ok) {
+    const detail = await res.text().catch(() => "");
+    throw new Error(detail || `Request failed (${res.status}).`);
+  }
+}
+
+/**
  * Ask the Worker to suggest a quiz question about `subject`.
  * @param {string} subject  Topic for the question (the section title).
  * @param {string} token    Turnstile token from the widget's callback.
