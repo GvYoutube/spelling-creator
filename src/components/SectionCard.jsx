@@ -236,7 +236,7 @@ export default function SectionCard({
 
         <AiTextDialog
           open={aiOpen}
-          defaultSubject={section.name}
+          sectionTitle={section.name}
           documentName={documentName}
           onInsert={addSuggestedTextBlock}
           onClose={() => setAiOpen(false)}
