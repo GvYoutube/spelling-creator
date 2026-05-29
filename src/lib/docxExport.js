@@ -111,37 +111,35 @@ function questionBlockParagraphs(block) {
         ],
       }),
     );
-  } else if (
-    block.questionType === "single" ||
-    block.questionType === "multiple"
-  ) {
-    const options = block.options || [];
-    const correct =
-      block.questionType === "single"
-        ? new Set(block.correctId ? [block.correctId] : [])
-        : new Set(block.correctIds || []);
-    options.forEach((opt, i) => {
-      const isCorrect = correct.has(opt.id);
-      const marker = block.questionType === "single" ? "○" : "☐";
-      const letter = String.fromCharCode(97 + i);
+  } else if (block.questionType === "single") {
+    paragraphs.push(
+      new Paragraph({
+        spacing: { after: 120 },
+        children: [
+          new TextRun({ text: "Answer: ", italics: true, size: 24 }),
+          new TextRun({ text: block.answer || "____________", size: 24 }),
+        ],
+      }),
+    );
+  } else if (block.questionType === "multiple") {
+    const answers = (block.answers || [])
+      .map((a) => (a.text || "").trim())
+      .filter(Boolean);
+    paragraphs.push(
+      new Paragraph({
+        spacing: { after: answers.length ? 40 : 120 },
+        children: [
+          new TextRun({ text: "Answers:", italics: true, size: 24 }),
+          ...(answers.length ? [] : [new TextRun({ text: " ____________", size: 24 })]),
+        ],
+      }),
+    );
+    answers.forEach((text) => {
       paragraphs.push(
         new Paragraph({
           spacing: { after: 40 },
           indent: { left: 360 },
-          children: [
-            new TextRun({ text: `${marker} ${letter}) `, size: 24 }),
-            new TextRun({ text: opt.text || "(empty)", size: 24 }),
-            ...(isCorrect
-              ? [
-                  new TextRun({
-                    text: "  ✓",
-                    bold: true,
-                    color: "2f9e44",
-                    size: 24,
-                  }),
-                ]
-              : []),
-          ],
+          children: [new TextRun({ text: `• ${text}`, size: 24 })],
         }),
       );
     });

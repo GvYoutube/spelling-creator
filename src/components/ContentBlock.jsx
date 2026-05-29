@@ -6,8 +6,6 @@ import Tooltip from "@mui/material/Tooltip";
 import Paper from "@mui/material/Paper";
 import Chip from "@mui/material/Chip";
 import Button from "@mui/material/Button";
-import Radio from "@mui/material/Radio";
-import Checkbox from "@mui/material/Checkbox";
 import Typography from "@mui/material/Typography";
 import DeleteOutlineIcon from "@mui/icons-material/DeleteOutline";
 import ArrowUpwardIcon from "@mui/icons-material/ArrowUpward";
@@ -116,81 +114,19 @@ export default function ContentBlock({
 
 function QuestionBlock({ block, onChange, controls }) {
   const meta = questionMeta(block.questionType);
-  const options = block.options || [];
+  const answers = block.answers || [];
 
-  const setOption = (id, text) =>
+  const setAnswer = (id, text) =>
     onChange({
       ...block,
-      options: options.map((o) => (o.id === id ? { ...o, text } : o)),
+      answers: answers.map((a) => (a.id === id ? { ...a, text } : a)),
     });
 
-  const addOption = () =>
-    onChange({ ...block, options: [...options, { id: newId(), text: "" }] });
+  const addAnswer = () =>
+    onChange({ ...block, answers: [...answers, { id: newId(), text: "" }] });
 
-  const removeOption = (id) => {
-    const next = options.filter((o) => o.id !== id);
-    if (block.questionType === "single") {
-      onChange({
-        ...block,
-        options: next,
-        correctId: block.correctId === id ? null : block.correctId,
-      });
-    } else {
-      onChange({
-        ...block,
-        options: next,
-        correctIds: (block.correctIds || []).filter((cid) => cid !== id),
-      });
-    }
-  };
-
-  const setSingleCorrect = (id) => onChange({ ...block, correctId: id });
-
-  const toggleMultiCorrect = (id) => {
-    const current = block.correctIds || [];
-    const next = current.includes(id)
-      ? current.filter((cid) => cid !== id)
-      : [...current, id];
-    onChange({ ...block, correctIds: next });
-  };
-
-  const optionEditor = (selector) => (
-    <Stack spacing={1} sx={{ mt: 1.5 }}>
-      {options.map((opt, i) => (
-        <Stack key={opt.id} direction="row" alignItems="center" spacing={0.5}>
-          {selector(opt)}
-          <TextField
-            fullWidth
-            size="small"
-            placeholder={`Option ${i + 1}`}
-            value={opt.text}
-            onChange={(e) => setOption(opt.id, e.target.value)}
-          />
-          <Tooltip title="Remove option">
-            <span>
-              <IconButton
-                size="small"
-                onClick={() => removeOption(opt.id)}
-                disabled={options.length <= 1}
-              >
-                <DeleteOutlineIcon fontSize="small" />
-              </IconButton>
-            </span>
-          </Tooltip>
-        </Stack>
-      ))}
-      <Box>
-        <Button size="small" startIcon={<AddIcon />} onClick={addOption}>
-          Add option
-        </Button>
-      </Box>
-      <Typography variant="caption" color="text.secondary">
-        {block.questionType === "single"
-          ? "Select the radio next to the correct answer."
-          : "Tick every correct answer."}
-      </Typography>
-    </Stack>
-  );
+  const removeAnswer = (id) =>
+    onChange({ ...block, answers: answers.filter((a) => a.id !== id) });
 
   return (
     <Paper
@@ -230,23 +166,57 @@ function QuestionBlock({ block, onChange, controls }) {
             />
           )}
 
-          {block.questionType === "single" &&
-            optionEditor((opt) => (
-              <Radio
-                size="small"
-                checked={block.correctId === opt.id}
-                onChange={() => setSingleCorrect(opt.id)}
-              />
-            ))}
+          {block.questionType === "single" && (
+            <TextField
+              fullWidth
+              size="small"
+              label="Answer"
+              placeholder="The correct answer…"
+              value={block.answer ?? ""}
+              onChange={(e) => onChange({ ...block, answer: e.target.value })}
+              sx={{ mt: 1.5 }}
+            />
+          )}
 
-          {block.questionType === "multiple" &&
-            optionEditor((opt) => (
-              <Checkbox
-                size="small"
-                checked={(block.correctIds || []).includes(opt.id)}
-                onChange={() => toggleMultiCorrect(opt.id)}
-              />
-            ))}
+          {block.questionType === "multiple" && (
+            <Stack spacing={1} sx={{ mt: 1.5 }}>
+              {answers.map((ans, i) => (
+                <Stack
+                  key={ans.id}
+                  direction="row"
+                  alignItems="center"
+                  spacing={0.5}
+                >
+                  <TextField
+                    fullWidth
+                    size="small"
+                    placeholder={`Answer ${i + 1}`}
+                    value={ans.text}
+                    onChange={(e) => setAnswer(ans.id, e.target.value)}
+                  />
+                  <Tooltip title="Remove answer">
+                    <span>
+                      <IconButton
+                        size="small"
+                        onClick={() => removeAnswer(ans.id)}
+                        disabled={answers.length <= 1}
+                      >
+                        <DeleteOutlineIcon fontSize="small" />
+                      </IconButton>
+                    </span>
+                  </Tooltip>
+                </Stack>
+              ))}
+              <Box>
+                <Button size="small" startIcon={<AddIcon />} onClick={addAnswer}>
+                  Add answer
+                </Button>
+              </Box>
+              <Typography variant="caption" color="text.secondary">
+                Type every accepted answer.
+              </Typography>
+            </Stack>
+          )}
 
           {block.questionType === "open" && (
             <TextField

@@ -14,14 +14,14 @@ export const QUESTION_TYPES = {
     key: "single",
     label: "Single answer",
     short: "Single",
-    description: "One correct option",
+    description: "One typed answer",
     color: "#2f9e44", // green
   },
   multiple: {
     key: "multiple",
     label: "Multiple answers",
     short: "Multiple",
-    description: "Several correct options",
+    description: "Several accepted answers",
     color: "#e8590c", // orange
   },
   open: {
@@ -54,23 +54,9 @@ export function createQuestionBlock(newId, questionType) {
     case "number":
       return { ...base, answer: "" };
     case "single":
-      return {
-        ...base,
-        options: [
-          { id: newId(), text: "" },
-          { id: newId(), text: "" },
-        ],
-        correctId: null,
-      };
+      return { ...base, answer: "" };
     case "multiple":
-      return {
-        ...base,
-        options: [
-          { id: newId(), text: "" },
-          { id: newId(), text: "" },
-        ],
-        correctIds: [],
-      };
+      return { ...base, answers: [{ id: newId(), text: "" }] };
     case "open":
       return { ...base, answerLines: 3 };
     case "background":
@@ -82,26 +68,22 @@ export function createQuestionBlock(newId, questionType) {
 
 // Build a question block from an AI suggestion (see lib/aiSuggest.js). `data`
 // is the JSON the Worker returns for the given type; this maps it onto the same
-// block shape `createQuestionBlock` produces, turning option indexes back into
-// option ids. Anything missing falls back to sensible blanks so the resulting
-// block is always editable, even if the model returns a partial answer.
+// block shape `createQuestionBlock` produces. Anything missing falls back to
+// sensible blanks so the resulting block is always editable, even if the model
+// returns a partial answer.
 export function buildQuestionBlock(newId, questionType, data = {}) {
   const prompt = typeof data.prompt === "string" ? data.prompt : "";
   const base = { id: newId(), type: "question", questionType, prompt };
   switch (questionType) {
     case "number":
       return { ...base, answer: data.answer != null ? String(data.answer) : "" };
-    case "single": {
-      const options = toOptions(newId, data.options);
-      const idx = Number.isInteger(data.correctIndex) ? data.correctIndex : -1;
-      return { ...base, options, correctId: options[idx]?.id ?? null };
-    }
-    case "multiple": {
-      const options = toOptions(newId, data.options);
-      const idxs = Array.isArray(data.correctIndexes) ? data.correctIndexes : [];
-      const correctIds = idxs.map((i) => options[i]?.id).filter(Boolean);
-      return { ...base, options, correctIds };
-    }
+    case "single":
+      return {
+        ...base,
+        answer: typeof data.answer === "string" ? data.answer : "",
+      };
+    case "multiple":
+      return { ...base, answers: toAnswers(newId, data.answers) };
     case "open":
       return { ...base, answerLines: 3 };
     case "background":
@@ -114,11 +96,11 @@ export function buildQuestionBlock(newId, questionType, data = {}) {
   }
 }
 
-// Turn an array of option strings into option objects, guaranteeing at least
-// two editable rows so an AI-suggested block matches a hand-made one.
-function toOptions(newId, raw) {
+// Turn an array of answer strings into answer objects, guaranteeing at least
+// one editable row so an AI-suggested block matches a hand-made one.
+function toAnswers(newId, raw) {
   const list = Array.isArray(raw) ? raw.filter((t) => typeof t === "string") : [];
-  const options = list.map((text) => ({ id: newId(), text }));
-  while (options.length < 2) options.push({ id: newId(), text: "" });
-  return options;
+  const answers = list.map((text) => ({ id: newId(), text }));
+  if (answers.length === 0) answers.push({ id: newId(), text: "" });
+  return answers;
 }
