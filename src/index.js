@@ -280,7 +280,7 @@ function corsHeaders(request, allowedHostnames) {
 		if (allowed) {
 			headers.set('Access-Control-Allow-Origin', origin);
 			headers.set('Vary', 'Origin');
-			headers.set('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+			headers.set('Access-Control-Allow-Methods', 'GET, POST, PUT, OPTIONS');
 			headers.set('Access-Control-Allow-Headers', 'Content-Type, Authorization');
 			headers.set('Access-Control-Max-Age', '86400');
 		}
@@ -352,6 +352,10 @@ function authorFromUser(user) {
 function rowToLesson(row, withDoc) {
 	const lesson = {
 		id: row.id,
+		// The author's Supabase user id — the frontend compares it with the
+		// signed-in user to decide whether to offer an "Edit" action. (The author
+		// display name lives separately in `author`.)
+		authorId: row.author_id,
 		title: row.title,
 		author: row.author,
 		sectionCount: row.section_count ?? 0,
@@ -384,7 +388,7 @@ async function handleLessons(request, env, url, cors) {
 
 	// GET /lessons/:id — one published lesson, including its full editor doc.
 	if (request.method === 'GET' && id) {
-		const query = `id=eq.${encodeURIComponent(id)}&select=id,title,author,section_count,created_at,doc&limit=1`;
+		const query = `id=eq.${encodeURIComponent(id)}&select=id,author_id,title,author,section_count,created_at,doc&limit=1`;
 		let res;
 		try {
 			res = await fetch(`${base}/rest/v1/lessons?${query}`, { headers: supabaseHeaders(env) });
@@ -403,7 +407,7 @@ async function handleLessons(request, env, url, cors) {
 	// holding base64 image data) is deliberately excluded; section_count gives the
 	// summary its count without shipping every block.
 	if (request.method === 'GET') {
-		const query = 'select=id,title,author,section_count,created_at&order=created_at.desc';
+		const query = 'select=id,author_id,title,author,section_count,created_at&order=created_at.desc';
 		let res;
 		try {
 			res = await fetch(`${base}/rest/v1/lessons?${query}`, { headers: supabaseHeaders(env) });
@@ -445,7 +449,7 @@ async function handleLessons(request, env, url, cors) {
 
 		let res;
 		try {
-			res = await fetch(`${base}/rest/v1/lessons?select=id,title,author,section_count,created_at`, {
+			res = await fetch(`${base}/rest/v1/lessons?select=id,author_id,title,author,section_count,created_at`, {
 				method: 'POST',
 				headers: {
 					...supabaseHeaders(env),
@@ -463,6 +467,58 @@ async function handleLessons(request, env, url, cors) {
 			return textResponse('Could not publish the lesson.', 502, cors);
 		}
 		return jsonResponse({ lesson: rowToLesson(rows[0], false) }, 201, cors);
+	}
+
+	// PUT /lessons/:id — update a lesson the signed-in user already published.
+	// Requires a valid Supabase session JWT, and the verified user must be the
+	// lesson's author: the PATCH is filtered on both id AND author_id, so a
+	// request from anyone other than the author matches no rows and is rejected
+	// with 403. Only the title and doc are mutable; author and created_at stay put.
+	if (request.method === 'PUT' && id) {
+		const auth = request.headers.get('Authorization') || '';
+		const token = auth.startsWith('Bearer ') ? auth.slice('Bearer '.length).trim() : '';
+		const user = await verifySupabaseUser(env, token);
+		if (!user) return textResponse('Please sign in before editing.', 401, cors);
+
+		let body;
+		try {
+			body = await request.json();
+		} catch (e) {
+			return textResponse('Invalid JSON body', 400, cors);
+		}
+		const doc = body && body.doc;
+		if (!doc || typeof doc !== 'object' || !Array.isArray(doc.sections) || doc.sections.length === 0) {
+			return textResponse('Add at least one section before saving.', 400, cors);
+		}
+		const title = (body.title || doc.title || 'Untitled Lesson').toString().slice(0, 300);
+
+		let res;
+		try {
+			res = await fetch(
+				`${base}/rest/v1/lessons?id=eq.${encodeURIComponent(id)}&author_id=eq.${encodeURIComponent(
+					user.id,
+				)}&select=id,author_id,title,author,section_count,created_at`,
+				{
+					method: 'PATCH',
+					headers: {
+						...supabaseHeaders(env),
+						'Content-Type': 'application/json',
+						Prefer: 'return=representation',
+					},
+					body: JSON.stringify({ title, doc }),
+				},
+			);
+		} catch (e) {
+			return textResponse('Could not reach the lesson store.', 502, cors);
+		}
+		if (!res.ok) return textResponse('Could not save the lesson.', 502, cors);
+		const rows = await res.json().catch(() => []);
+		// No row matched id+author_id: the lesson doesn't exist, or it isn't the
+		// signed-in user's to edit. Either way, don't reveal which.
+		if (!Array.isArray(rows) || rows.length === 0) {
+			return textResponse('You can only edit lessons you published.', 403, cors);
+		}
+		return jsonResponse({ lesson: rowToLesson(rows[0], false) }, 200, cors);
 	}
 
 	return textResponse('Method not allowed.', 405, cors);
