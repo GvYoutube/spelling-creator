@@ -27,11 +27,17 @@ import PictureAsPdfIcon from "@mui/icons-material/PictureAsPdf";
 import AddToDriveIcon from "@mui/icons-material/AddToDrive";
 import VisibilityIcon from "@mui/icons-material/Visibility";
 import CloudUploadIcon from "@mui/icons-material/CloudUpload";
+import CallSplitIcon from "@mui/icons-material/CallSplit";
 import SpellcheckIcon from "@mui/icons-material/Spellcheck";
 import SectionCard from "../components/SectionCard.jsx";
 import NavActions from "../components/NavActions.jsx";
 import { newId } from "../lib/id.js";
-import { loadDocument, saveDocument } from "../lib/storage.js";
+import {
+  loadDocument,
+  saveDocument,
+  loadEditingId,
+  saveEditingId,
+} from "../lib/storage.js";
 import { exportDocx } from "../lib/docxExport.js";
 import { exportPdf } from "../lib/pdfExport.js";
 import { previewHtml, PREVIEW_STYLES } from "../lib/htmlPreview.js";
@@ -69,10 +75,13 @@ export default function EditorPage() {
 
   // Hub-editing state. `editingId` is the id of a published lesson currently
   // loaded for editing (so "Publish" becomes "Update"); null when authoring a
-  // fresh lesson. `pendingEdit` holds a fetched lesson awaiting the user's
-  // confirmation to overwrite their in-progress work; `editLoading` covers the
-  // fetch of the lesson to edit.
-  const [editingId, setEditingId] = useState(null);
+  // fresh lesson. It's persisted to localStorage (see effect below) so the
+  // status survives reloads and tab closes until the user overwrites it (by
+  // opening another published lesson) or forks into a new lesson.
+  // `pendingEdit` holds a fetched lesson awaiting the user's confirmation to
+  // overwrite their in-progress work; `editLoading` covers the fetch of the
+  // lesson to edit.
+  const [editingId, setEditingId] = useState(loadEditingId);
   const [pendingEdit, setPendingEdit] = useState(null); // { id, title, doc } | null
   const [editLoading, setEditLoading] = useState(false);
 
@@ -97,6 +106,11 @@ export default function EditorPage() {
   useEffect(() => {
     saveDocument(doc);
   }, [doc]);
+
+  // Persist the editing-published status so it survives reloads/tab closes.
+  useEffect(() => {
+    saveEditingId(editingId);
+  }, [editingId]);
 
   // Adopt a fetched lesson into the editor: replace the working doc (this is the
   // step that overwrites the auto-saved draft) and enter edit mode for it.
@@ -345,6 +359,19 @@ export default function EditorPage() {
     }
   };
 
+  // Detach the working doc from the published lesson it was loaded from, so the
+  // next "Publish" creates a new lesson instead of updating the original. This
+  // is the explicit way to leave the editing-published status (the status
+  // otherwise persists across reloads).
+  const handleFork = () => {
+    setEditingId(null);
+    setToast({
+      severity: "info",
+      message:
+        "Forked into a new lesson — publishing will create a separate copy in the hub.",
+    });
+  };
+
   const sectionCount = doc.sections.length;
   const blockCount = useMemo(
     () => doc.sections.reduce((sum, s) => sum + s.blocks.length, 0),
@@ -470,17 +497,34 @@ export default function EditorPage() {
             {blockCount === 1 ? "" : "s"}
           </Typography>
           {editingId && (
-            <Tooltip title="You're editing a lesson you published. Updating overwrites it in the hub. Remove this to publish a new lesson instead.">
-              <Chip
-                size="small"
-                color="primary"
-                variant="outlined"
-                icon={<CloudUploadIcon />}
-                label="Editing a published lesson"
-                onDelete={() => setEditingId(null)}
-                sx={{ mt: 1.5 }}
-              />
-            </Tooltip>
+            <Stack
+              direction="row"
+              spacing={1}
+              alignItems="center"
+              flexWrap="wrap"
+              useFlexGap
+              sx={{ mt: 1.5 }}
+            >
+              <Tooltip title="You're editing a lesson you published. Updating overwrites it in the hub. This status is saved until you update it or fork into a new lesson.">
+                <Chip
+                  size="small"
+                  color="primary"
+                  variant="outlined"
+                  icon={<CloudUploadIcon />}
+                  label="Editing a published lesson"
+                />
+              </Tooltip>
+              <Tooltip title="Detach from the published lesson and start a new one. Publishing will then create a separate copy instead of overwriting the original.">
+                <Button
+                  size="small"
+                  variant="text"
+                  startIcon={<CallSplitIcon />}
+                  onClick={handleFork}
+                >
+                  Fork from published lesson
+                </Button>
+              </Tooltip>
+            </Stack>
           )}
         </Paper>
 
