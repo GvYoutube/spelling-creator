@@ -14,6 +14,7 @@ import MenuItem from "@mui/material/MenuItem";
 import ListItemText from "@mui/material/ListItemText";
 import TextFieldsIcon from "@mui/icons-material/TextFields";
 import ImageIcon from "@mui/icons-material/Image";
+import ImageSearchIcon from "@mui/icons-material/ImageSearch";
 import QuizIcon from "@mui/icons-material/Quiz";
 import AutoAwesomeIcon from "@mui/icons-material/AutoAwesome";
 import DeleteOutlineIcon from "@mui/icons-material/DeleteOutline";
@@ -22,6 +23,7 @@ import ArrowDownwardIcon from "@mui/icons-material/ArrowDownward";
 import ContentBlock from "./ContentBlock.jsx";
 import AiTextDialog from "./AiTextDialog.jsx";
 import AiQuestionDialog from "./AiQuestionDialog.jsx";
+import ImageSearchDialog from "./ImageSearchDialog.jsx";
 import { newId } from "../lib/id.js";
 import { readImageFile } from "../lib/image.js";
 import {
@@ -46,6 +48,7 @@ export default function SectionCard({
   const [questionMenuAnchor, setQuestionMenuAnchor] = useState(null);
   const [aiOpen, setAiOpen] = useState(false);
   const [aiQuestionOpen, setAiQuestionOpen] = useState(false);
+  const [imageSearchOpen, setImageSearchOpen] = useState(false);
 
   const updateBlocks = (blocks) => onChange({ ...section, blocks });
 
@@ -105,6 +108,13 @@ export default function SectionCard({
   const onPickImages = (e) => {
     if (e.target.files?.length) handleImageFiles(e.target.files);
     e.target.value = ""; // allow re-selecting the same file
+  };
+
+  const addSearchedImage = ({ src, width, height }) => {
+    updateBlocks([
+      ...section.blocks,
+      { id: newId(), type: "image", src, width, height, caption: "" },
+    ]);
   };
 
   const updateBlock = (blockId, next) =>
@@ -194,7 +204,7 @@ export default function SectionCard({
           </Stack>
         )}
 
-        <Stack direction="row" spacing={1}>
+        <Stack direction="row" spacing={1} useFlexGap flexWrap="wrap">
           <Button
             startIcon={<TextFieldsIcon />}
             onClick={addTextBlock}
@@ -210,6 +220,14 @@ export default function SectionCard({
             size="small"
           >
             Add image
+          </Button>
+          <Button
+            startIcon={<ImageSearchIcon />}
+            onClick={() => setImageSearchOpen(true)}
+            variant="outlined"
+            size="small"
+          >
+            Search images
           </Button>
           <Button
             startIcon={<QuizIcon />}
@@ -283,6 +301,12 @@ export default function SectionCard({
           existingQuestions={existingQuestions}
           onInsert={addSuggestedQuestionBlock}
           onClose={() => setAiQuestionOpen(false)}
+        />
+
+        <ImageSearchDialog
+          open={imageSearchOpen}
+          onInsert={addSearchedImage}
+          onClose={() => setImageSearchOpen(false)}
         />
       </CardContent>
     </Card>

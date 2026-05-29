@@ -15,6 +15,8 @@ PDF printing.
 - **Document title** - name the whole lesson.
 - **Add sections** with the floating **+** button; each new section is named in a dialog.
 - **Text and image blocks** inside any section. Add, caption, reorder, or delete them.
+- **Search images** - find free Pixabay images from within a section and insert
+  one with a click (see below).
 - **Question blocks** - add structured questions in five types (see below).
 - **AI text suggestions** - generate a block of lesson text from a section's
   title with one click (see below).
@@ -79,6 +81,36 @@ suggester, just in a different mode. The flow:
 5. The suggestion is inserted as a new, fully editable question block of that
    type, with option indexes mapped back onto option ids in
    `src/lib/questions.js`.
+
+## Search images
+
+Press **Search images** on any section to open a dialog that searches
+[Pixabay](https://pixabay.com) for free images and inserts the one you pick as
+an image block. Like the AI features, it goes through the companion
+`spelling-creator-cf` Worker rather than calling Pixabay directly, which:
+
+- keeps the Pixabay API key server-side (it is never shipped to the browser),
+- lets the Worker enforce Pixabay's **100 requests/minute** limit centrally, and
+- works around Pixabay's image CDN sending no CORS headers — the browser can't
+  read an image's bytes itself, so the Worker downloads the chosen image and
+  returns it as a data URL that drops straight into the DOCX/PDF export.
+
+The flow:
+
+1. Type a search term; a [Cloudflare Turnstile](https://www.cloudflare.com/products/turnstile/)
+   token (the same widget as the AI dialogs) is sent with the request.
+2. The Worker verifies the token, calls the Pixabay API with `mode:
+   "imageSearch"`, and returns normalised hits (preview/webformat URLs, size,
+   tags). It edge-caches the Pixabay response for 24 hours, which both satisfies
+   Pixabay's caching requirement and keeps request counts well under the limit.
+3. Click a result; the app calls the Worker again with `mode: "imageFetch"`,
+   which downloads that image and returns it as a data URL.
+4. The image is inserted as a new, captionable image block.
+
+Each Worker call consumes its single-use Turnstile token, so the widget is reset
+to mint a fresh one between searching and inserting. This feature needs the same
+`VITE_API_URL` / `VITE_TURNSTILE_SITE_KEY` as the AI features, plus a
+`PIXABAY_API_KEY` secret **on the Worker** (`wrangler secret put PIXABAY_API_KEY`).
 
 ## Save to Google Docs
 
@@ -148,11 +180,13 @@ src/
     ContentBlock.jsx      a single text, image, or question block
     AiTextDialog.jsx      Turnstile-verified "suggest text with AI" dialog
     AiQuestionDialog.jsx  Turnstile-verified "suggest a question with AI" dialog
+    ImageSearchDialog.jsx Turnstile-verified "search Pixabay images" dialog
   lib/
     docxExport.js         build + download the .docx (text, images, questions)
     pdfExport.js          docx -> html (mammoth) -> pdf (html2pdf.js)
     questions.js          question type definitions, colours, block factories
     aiSuggest.js          calls the spelling-creator-cf Worker for text + questions
+    pixabay.js            calls the spelling-creator-cf Worker to search + fetch images
     googleDrive.js        OAuth2 + upload the docx to Drive as a Google Doc
     turnstile.js          Cloudflare Turnstile loader + site key
     image.js              file reading, sizing, data-url helpers
