@@ -1,0 +1,29 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+out/
+
+# Logs
+*.log
+logs/
+
+# Env / secrets
+.env
+.env.*
+!.env.example
+.dev.vars
+.dev.vars.*
+!.dev.vars.example
+
+# Cloudflare Wrangler local state
+.wrangler/
+
+# Caches
+.cache/
+*.tsbuildinfo
+.eslintcache
+
+# OS
+.DS_Store

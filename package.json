@@ -1,0 +1,23 @@
+{
+  "name": "spelling-creator-monorepo",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "author": "playforge-coding",
+  "license": "AGPL-3.0-only",
+  "packageManager": "pnpm@11.1.3",
+  "scripts": {
+    "dev:web": "pnpm --filter @spelling-creator/web dev",
+    "dev:api": "pnpm --filter @spelling-creator/api dev",
+    "build": "pnpm --filter @spelling-creator/web build",
+    "preview": "pnpm --filter @spelling-creator/web preview",
+    "deploy": "pnpm --filter @spelling-creator/api deploy"
+  },
+  "devEngines": {
+    "packageManager": {
+      "name": "pnpm",
+      "version": "^11.1.3",
+      "onFail": "download"
+    }
+  }
+}
