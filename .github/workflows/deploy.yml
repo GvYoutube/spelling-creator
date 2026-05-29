@@ -55,6 +55,7 @@ jobs:
         run: |
           test -n "${{ secrets.VITE_API_URL }}" && echo "api ok"
           test -n "${{ secrets.VITE_TURNSTILE_SITE_KEY }}" && echo "turnstile ok"
+          test -n "${{ secrets.VITE_GOOGLE_CLIENT_ID }}" && echo "google cloud ok"
 
       - name: Inject env vars
         run: |
