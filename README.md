@@ -168,7 +168,10 @@ the project.
 
 The **Lesson hub** (`/#/hub`) is a public gallery of lessons users have shared.
 Anyone can browse and preview; publishing **and commenting** require a signed-in
-account. Comments appear beneath each lesson in its preview dialog and are
+account. Signed-in users see an **Edit** action on lessons they published — it
+opens the lesson back in the editor (warning first before it replaces any
+in-progress work), and saving sends a `PUT` that the Worker accepts only from the
+lesson's author. Comments appear beneath each lesson in its preview dialog and are
 **moderated server-side**: a comment containing profanity (detected with
 [`glin-profanity`](https://www.npmjs.com/package/glin-profanity)) is blocked
 entirely by the Worker — it is never stored, and the user is shown why.
@@ -192,6 +195,7 @@ verifies it (and derives the author) before inserting the row.
  Browser ──magic link / session (Supabase JS)──▶ Supabase Auth
  Browser ──GET /lessons, GET /lessons/:id───────▶ Worker ──▶ Supabase Postgres   (public reads)
  Browser ──POST /lessons  (Bearer JWT)──────────▶ Worker ──verify JWT──▶ Postgres (publish)
+ Browser ──PUT  /lessons/:id (Bearer JWT)────────▶ Worker ──verify JWT + author──▶ Postgres (edit own)
  Browser ──GET /lessons/:id/comments────────────▶ Worker ──▶ Supabase Postgres   (public reads)
  Browser ──POST /lessons/:id/comments (Bearer)──▶ Worker ──verify JWT, profanity check──▶ Postgres
 ```
@@ -203,9 +207,10 @@ These live in the separate `spelling-creator-cf` repo. The frontend
 
 | Method & path        | Auth                | Response                                                                 |
 | -------------------- | ------------------- | ------------------------------------------------------------------------ |
-| `GET /lessons`       | none (public)       | `{ "lessons": [{ id, title, author, sectionCount, createdAt }] }` (newest first) |
-| `GET /lessons/:id`   | none (public)       | `{ "lesson": { id, title, author, createdAt, doc } }`                    |
-| `POST /lessons`      | `Bearer <Supabase JWT>` | `{ "lesson": { id, title, author, createdAt } }`                     |
+| `GET /lessons`       | none (public)       | `{ "lessons": [{ id, authorId, title, author, sectionCount, createdAt }] }` (newest first) |
+| `GET /lessons/:id`   | none (public)       | `{ "lesson": { id, authorId, title, author, createdAt, doc } }`          |
+| `POST /lessons`      | `Bearer <Supabase JWT>` | `{ "lesson": { id, authorId, title, author, createdAt } }`           |
+| `PUT /lessons/:id`   | `Bearer <Supabase JWT>` | `{ "lesson": { id, authorId, title, author, createdAt } }` (author only; else `403`) |
 | `GET /lessons/:id/comments`  | none (public)       | `{ "comments": [{ id, author, body, createdAt }] }` (oldest first) |
 | `POST /lessons/:id/comments` | `Bearer <Supabase JWT>` | `{ "comment": { id, author, body, createdAt } }`               |
 | `POST /ai-text/dislike`      | `Bearer <Supabase JWT>` | `{ "ok": true }` — evicts the cached text for `{ subject, documentName }` |
@@ -216,7 +221,15 @@ These live in the separate `spelling-creator-cf` repo. The frontend
   (e.g. validate the HS256 signature with the Supabase JWT secret, or call
   `GET {SUPABASE_URL}/auth/v1/user` with the token), reject if invalid, take the
   author from the verified user (never trust a client-supplied author), and
-  insert with the service-role key.
+  insert with the service-role key. The response includes `authorId` (the
+  publisher's Supabase user id) so the hub can tell which lessons belong to the
+  signed-in user and offer an **Edit** action on them.
+- `PUT /lessons/:id` body is `{ title, doc }`. The Worker verifies the JWT the
+  same way, then updates the row **only if the verified user is its author** (the
+  update is filtered on both `id` and `author_id`, so a non-author's request
+  matches no rows and is rejected with `403`). `author` and `created_at` are left
+  unchanged. This backs the editor's "Update lesson" button when editing a lesson
+  loaded from the hub.
 - `POST /lessons/:id/comments` body is `{ body }`. The Worker verifies the JWT
   the same way, derives the author from the verified user, then runs the text
   through [`glin-profanity`](https://www.npmjs.com/package/glin-profanity); if any

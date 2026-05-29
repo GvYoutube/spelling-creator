@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import AppBar from "@mui/material/AppBar";
 import Toolbar from "@mui/material/Toolbar";
@@ -18,7 +18,10 @@ import Snackbar from "@mui/material/Snackbar";
 import Alert from "@mui/material/Alert";
 import CircularProgress from "@mui/material/CircularProgress";
 import Tooltip from "@mui/material/Tooltip";
+import Chip from "@mui/material/Chip";
+import Backdrop from "@mui/material/Backdrop";
 import AddIcon from "@mui/icons-material/Add";
+import SaveIcon from "@mui/icons-material/Save";
 import DescriptionIcon from "@mui/icons-material/Description";
 import PictureAsPdfIcon from "@mui/icons-material/PictureAsPdf";
 import AddToDriveIcon from "@mui/icons-material/AddToDrive";
@@ -33,11 +36,25 @@ import { exportDocx } from "../lib/docxExport.js";
 import { exportPdf } from "../lib/pdfExport.js";
 import { previewHtml, PREVIEW_STYLES } from "../lib/htmlPreview.js";
 import { saveToGoogleDrive, googleDriveEnabled } from "../lib/googleDrive.js";
-import { publishLesson, lessonHubEnabled } from "../lib/lessons.js";
+import {
+  publishLesson,
+  updateLesson,
+  fetchLesson,
+  lessonHubEnabled,
+  EDIT_REQUEST_KEY,
+} from "../lib/lessons.js";
 import { useAuth } from "../lib/auth.jsx";
 
 function createInitialDoc() {
   return loadDocument() || { title: "Put your topic here...", sections: [] };
+}
+
+// Whether a document holds work worth protecting from being clobbered. The
+// starter doc has no sections; once the user has added one, replacing the doc
+// (e.g. by opening a published lesson to edit) is destructive and warrants a
+// warning.
+function docHasContent(d) {
+  return Boolean(d && Array.isArray(d.sections) && d.sections.length > 0);
 }
 
 const inheritBorder = { borderColor: "rgba(255,255,255,0.6)" };
@@ -50,12 +67,89 @@ export default function EditorPage() {
   const [toast, setToast] = useState(null); // { severity, message }
   const [previewContent, setPreviewContent] = useState(null); // HTML string | null
 
+  // Hub-editing state. `editingId` is the id of a published lesson currently
+  // loaded for editing (so "Publish" becomes "Update"); null when authoring a
+  // fresh lesson. `pendingEdit` holds a fetched lesson awaiting the user's
+  // confirmation to overwrite their in-progress work; `editLoading` covers the
+  // fetch of the lesson to edit.
+  const [editingId, setEditingId] = useState(null);
+  const [pendingEdit, setPendingEdit] = useState(null); // { id, title, doc } | null
+  const [editLoading, setEditLoading] = useState(false);
+
   const { enabled: authEnabled, accessToken } = useAuth();
   const navigate = useNavigate();
+
+  // Refs mirror the latest doc/editingId so the one-shot "load for editing"
+  // effect below can read current values without re-subscribing to every edit.
+  // `editRequestedRef` makes that effect process the hub's edit request at most
+  // once for this component instance (it survives React StrictMode's dev-only
+  // double-invoke, since the same instance is reused).
+  const docRef = useRef(doc);
+  const editingIdRef = useRef(editingId);
+  const editRequestedRef = useRef(false);
+  useEffect(() => {
+    docRef.current = doc;
+  }, [doc]);
+  useEffect(() => {
+    editingIdRef.current = editingId;
+  }, [editingId]);
 
   useEffect(() => {
     saveDocument(doc);
   }, [doc]);
+
+  // Adopt a fetched lesson into the editor: replace the working doc (this is the
+  // step that overwrites the auto-saved draft) and enter edit mode for it.
+  const applyEdit = ({ id, doc: nextDoc }) => {
+    setDoc(nextDoc);
+    setEditingId(id);
+    setPendingEdit(null);
+    setToast({
+      severity: "info",
+      message: "Loaded your published lesson — edit and press Update to save it.",
+    });
+  };
+
+  // The hub asks us to edit one of the user's lessons by stashing its id in
+  // sessionStorage (see HubPage) and navigating here. Consume that request once
+  // on mount: read and clear the key, fetch the full lesson, then either load it
+  // straight away (when there's no in-progress work to lose) or ask before
+  // clobbering the current draft. A one-shot ref guards against StrictMode's
+  // dev-only double-mount; clearing the key also stops a reload from reloading it.
+  useEffect(() => {
+    if (editRequestedRef.current) return;
+    let editLessonId = null;
+    try {
+      editLessonId = sessionStorage.getItem(EDIT_REQUEST_KEY);
+    } catch {
+      /* sessionStorage unavailable — nothing to load */
+    }
+    if (!editLessonId) return;
+    editRequestedRef.current = true;
+    try {
+      sessionStorage.removeItem(EDIT_REQUEST_KEY);
+    } catch {
+      /* ignore */
+    }
+
+    setEditLoading(true);
+    fetchLesson(editLessonId)
+      .then((lesson) => {
+        const incoming = { id: lesson.id, title: lesson.title, doc: lesson.doc };
+        if (editingIdRef.current === lesson.id || !docHasContent(docRef.current)) {
+          applyEdit(incoming);
+        } else {
+          setPendingEdit(incoming);
+        }
+      })
+      .catch((err) => {
+        setToast({
+          severity: "error",
+          message: err.message || "Could not open that lesson for editing.",
+        });
+      })
+      .finally(() => setEditLoading(false));
+  }, []);
 
   const setTitle = (title) => setDoc((d) => ({ ...d, title }));
 
@@ -196,7 +290,10 @@ export default function EditorPage() {
     }
     setBusy("publish");
     try {
-      await publishLesson(doc, accessToken);
+      const lesson = await publishLesson(doc, accessToken);
+      // Enter edit mode for the lesson we just created, so a further "Publish"
+      // updates this row instead of creating a duplicate.
+      if (lesson?.id) setEditingId(lesson.id);
       setToast({
         severity: "success",
         message: "Lesson published to the hub.",
@@ -207,6 +304,41 @@ export default function EditorPage() {
       setToast({
         severity: "error",
         message: `Could not publish: ${err.message || err}`,
+      });
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const handleUpdate = async () => {
+    if (doc.sections.length === 0) {
+      setToast({
+        severity: "warning",
+        message: "Add at least one section before saving.",
+      });
+      return;
+    }
+    if (!accessToken) {
+      setToast({
+        severity: "info",
+        message: "Please sign in to update your published lesson.",
+      });
+      navigate("/login");
+      return;
+    }
+    setBusy("publish");
+    try {
+      await updateLesson(editingId, doc, accessToken);
+      setToast({
+        severity: "success",
+        message: "Lesson updated in the hub.",
+        route: { to: "/hub", label: "View hub" },
+      });
+    } catch (err) {
+      console.error(err);
+      setToast({
+        severity: "error",
+        message: `Could not update: ${err.message || err}`,
       });
     } finally {
       setBusy(null);
@@ -301,15 +433,17 @@ export default function EditorPage() {
                 startIcon={
                   busy === "publish" ? (
                     <CircularProgress size={16} color="inherit" />
+                  ) : editingId ? (
+                    <SaveIcon />
                   ) : (
                     <CloudUploadIcon />
                   )
                 }
-                onClick={handlePublish}
+                onClick={editingId ? handleUpdate : handlePublish}
                 disabled={busy !== null}
                 sx={inheritBorder}
               >
-                Publish to hub
+                {editingId ? "Update lesson" : "Publish to hub"}
               </Button>
             )}
             <NavActions current="editor" />
@@ -335,6 +469,19 @@ export default function EditorPage() {
             content block
             {blockCount === 1 ? "" : "s"}
           </Typography>
+          {editingId && (
+            <Tooltip title="You're editing a lesson you published. Updating overwrites it in the hub. Remove this to publish a new lesson instead.">
+              <Chip
+                size="small"
+                color="primary"
+                variant="outlined"
+                icon={<CloudUploadIcon />}
+                label="Editing a published lesson"
+                onDelete={() => setEditingId(null)}
+                sx={{ mt: 1.5 }}
+              />
+            </Tooltip>
+          )}
         </Paper>
 
         <Stack spacing={3}>
@@ -439,6 +586,39 @@ export default function EditorPage() {
           <Button onClick={() => setPreviewContent(null)}>Close</Button>
         </DialogActions>
       </Dialog>
+
+      {/* Overwrite warning: opening a published lesson for editing replaces the
+          working doc (and its auto-saved draft). Confirm before discarding it. */}
+      <Dialog
+        open={Boolean(pendingEdit)}
+        onClose={() => setPendingEdit(null)}
+        fullWidth
+        maxWidth="xs"
+      >
+        <DialogTitle>Replace your current work?</DialogTitle>
+        <DialogContent>
+          <Typography variant="body2">
+            Opening{" "}
+            <strong>{pendingEdit?.title || "this lesson"}</strong> for editing
+            will replace the lesson you’re working on now. Your in-progress work
+            is auto-saved in this browser, and replacing it can’t be undone.
+          </Typography>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setPendingEdit(null)}>Keep my work</Button>
+          <Button
+            color="error"
+            variant="contained"
+            onClick={() => applyEdit(pendingEdit)}
+          >
+            Replace and edit
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      <Backdrop open={editLoading} sx={{ zIndex: (t) => t.zIndex.modal + 1 }}>
+        <CircularProgress color="inherit" />
+      </Backdrop>
 
       <Snackbar
         open={Boolean(toast)}

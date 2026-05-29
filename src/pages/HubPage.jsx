@@ -4,7 +4,7 @@
 // preview pipeline the editor uses, so the hub view matches the export exactly.
 
 import { useEffect, useState } from "react";
-import { Link as RouterLink } from "react-router-dom";
+import { Link as RouterLink, useNavigate } from "react-router-dom";
 import AppBar from "@mui/material/AppBar";
 import Toolbar from "@mui/material/Toolbar";
 import Typography from "@mui/material/Typography";
@@ -26,9 +26,16 @@ import Alert from "@mui/material/Alert";
 import IconButton from "@mui/material/IconButton";
 import EditIcon from "@mui/icons-material/Edit";
 import RefreshIcon from "@mui/icons-material/Refresh";
+import Tooltip from "@mui/material/Tooltip";
 import NavActions from "../components/NavActions.jsx";
 import CommentsSection from "../components/CommentsSection.jsx";
-import { fetchPublishedLessons, fetchLesson, lessonHubEnabled } from "../lib/lessons.js";
+import {
+  fetchPublishedLessons,
+  fetchLesson,
+  lessonHubEnabled,
+  EDIT_REQUEST_KEY,
+} from "../lib/lessons.js";
+import { useAuth } from "../lib/auth.jsx";
 import { previewHtml, PREVIEW_STYLES } from "../lib/htmlPreview.js";
 
 function formatDate(value) {
@@ -43,6 +50,9 @@ function formatDate(value) {
 }
 
 export default function HubPage() {
+  const { user } = useAuth();
+  const navigate = useNavigate();
+
   const [lessons, setLessons] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -69,6 +79,21 @@ export default function HubPage() {
     if (lessonHubEnabled) load();
     else setLoading(false);
   }, []);
+
+  // Send the user to the editor to edit one of their own lessons. The editor
+  // fetches the full lesson and warns before replacing any in-progress work, so
+  // we only hand it which lesson to load (via sessionStorage, consumed once on
+  // the editor's mount). stopPropagation keeps the card's preview click from
+  // also firing.
+  const editLesson = (e, summary) => {
+    e.stopPropagation();
+    try {
+      sessionStorage.setItem(EDIT_REQUEST_KEY, summary.id);
+    } catch {
+      /* ignore — navigation below still works, the editor just won't preload */
+    }
+    navigate("/");
+  };
 
   const openLesson = async (summary) => {
     setViewing(summary);
@@ -169,13 +194,40 @@ export default function HubPage() {
           <Grid container spacing={2}>
             {lessons.map((lesson) => (
               <Grid key={lesson.id} size={{ xs: 12, sm: 6, md: 4 }}>
-                <Card variant="outlined" sx={{ height: "100%" }}>
+                <Card
+                  variant="outlined"
+                  sx={{ height: "100%", position: "relative" }}
+                >
+                  {user && lesson.authorId && lesson.authorId === user.id && (
+                    <Tooltip title="Edit this lesson">
+                      <IconButton
+                        size="small"
+                        aria-label="edit lesson"
+                        onClick={(e) => editLesson(e, lesson)}
+                        sx={{
+                          position: "absolute",
+                          top: 4,
+                          right: 4,
+                          zIndex: 1,
+                          bgcolor: "background.paper",
+                          "&:hover": { bgcolor: "action.hover" },
+                        }}
+                      >
+                        <EditIcon fontSize="small" />
+                      </IconButton>
+                    </Tooltip>
+                  )}
                   <CardActionArea
                     onClick={() => openLesson(lesson)}
                     sx={{ height: "100%", alignItems: "stretch" }}
                   >
                     <CardContent>
-                      <Typography variant="h6" gutterBottom noWrap>
+                      <Typography
+                        variant="h6"
+                        gutterBottom
+                        noWrap
+                        sx={{ pr: 4 }}
+                      >
                         {lesson.title || "Untitled Lesson"}
                       </Typography>
                       <Typography variant="body2" color="text.secondary">
@@ -236,6 +288,14 @@ export default function HubPage() {
           )}
         </DialogContent>
         <DialogActions>
+          {user && viewing?.authorId && viewing.authorId === user.id && (
+            <Button
+              startIcon={<EditIcon />}
+              onClick={(e) => editLesson(e, viewing)}
+            >
+              Edit
+            </Button>
+          )}
           <Button onClick={() => setViewing(null)}>Close</Button>
         </DialogActions>
       </Dialog>
