@@ -27,6 +27,7 @@ import IconButton from "@mui/material/IconButton";
 import EditIcon from "@mui/icons-material/Edit";
 import RefreshIcon from "@mui/icons-material/Refresh";
 import NavActions from "../components/NavActions.jsx";
+import CommentsSection from "../components/CommentsSection.jsx";
 import { fetchPublishedLessons, fetchLesson, lessonHubEnabled } from "../lib/lessons.js";
 import { previewHtml, PREVIEW_STYLES } from "../lib/htmlPreview.js";
 
@@ -226,6 +227,12 @@ export default function HubPage() {
                 __html: `<style>${PREVIEW_STYLES}</style>${viewHtml}`,
               }}
             />
+          )}
+          {/* Comments live below the preview; they load independently of the
+              lesson doc, so show them whenever a lesson is open and its doc
+              didn't fail to load. */}
+          {!viewLoading && !viewError && viewing && (
+            <CommentsSection lessonId={viewing.id} />
           )}
         </DialogContent>
         <DialogActions>

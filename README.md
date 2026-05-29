@@ -158,7 +158,11 @@ the project.
 ## Lesson hub & accounts
 
 The **Lesson hub** (`/#/hub`) is a public gallery of lessons users have shared.
-Anyone can browse and preview; publishing requires a signed-in account.
+Anyone can browse and preview; publishing **and commenting** require a signed-in
+account. Comments appear beneath each lesson in its preview dialog and are
+**moderated server-side**: a comment containing profanity (detected with
+[`glin-profanity`](https://www.npmjs.com/package/glin-profanity)) is blocked
+entirely by the Worker — it is never stored, and the user is shown why.
 
 **Where the data lives.** Lessons are stored in **Supabase Postgres**, but — like
 the AI and Pixabay features — the browser never talks to the database directly.
@@ -179,6 +183,8 @@ verifies it (and derives the author) before inserting the row.
  Browser ──magic link / session (Supabase JS)──▶ Supabase Auth
  Browser ──GET /lessons, GET /lessons/:id───────▶ Worker ──▶ Supabase Postgres   (public reads)
  Browser ──POST /lessons  (Bearer JWT)──────────▶ Worker ──verify JWT──▶ Postgres (publish)
+ Browser ──GET /lessons/:id/comments────────────▶ Worker ──▶ Supabase Postgres   (public reads)
+ Browser ──POST /lessons/:id/comments (Bearer)──▶ Worker ──verify JWT, profanity check──▶ Postgres
 ```
 
 ### Worker endpoints (contract)
@@ -191,6 +197,8 @@ These live in the separate `spelling-creator-cf` repo. The frontend
 | `GET /lessons`       | none (public)       | `{ "lessons": [{ id, title, author, sectionCount, createdAt }] }` (newest first) |
 | `GET /lessons/:id`   | none (public)       | `{ "lesson": { id, title, author, createdAt, doc } }`                    |
 | `POST /lessons`      | `Bearer <Supabase JWT>` | `{ "lesson": { id, title, author, createdAt } }`                     |
+| `GET /lessons/:id/comments`  | none (public)       | `{ "comments": [{ id, author, body, createdAt }] }` (oldest first) |
+| `POST /lessons/:id/comments` | `Bearer <Supabase JWT>` | `{ "comment": { id, author, body, createdAt } }`               |
 
 - `doc` is the editor document shape used throughout the app:
   `{ title, sections: [{ id, name, blocks: [...] }] }`. Store it as `jsonb`.
@@ -199,6 +207,12 @@ These live in the separate `spelling-creator-cf` repo. The frontend
   `GET {SUPABASE_URL}/auth/v1/user` with the token), reject if invalid, take the
   author from the verified user (never trust a client-supplied author), and
   insert with the service-role key.
+- `POST /lessons/:id/comments` body is `{ body }`. The Worker verifies the JWT
+  the same way, derives the author from the verified user, then runs the text
+  through [`glin-profanity`](https://www.npmjs.com/package/glin-profanity); if any
+  profanity is found it **rejects the whole comment with `422`** (nothing is
+  stored). Otherwise it inserts the row with the service-role key. The check runs
+  on the Worker so it can't be bypassed by a crafted client request.
 - On 4xx/5xx, return a short **plain-text** reason — the frontend surfaces it
   directly (matching the existing AI/Pixabay error convention).
 
@@ -228,6 +242,21 @@ alter table public.lessons enable row level security;
 create policy "lessons are public to read"
   on public.lessons for select using (true);
 -- (No insert policy for anon/auth roles: only the service-role Worker writes.)
+
+-- Comments on a lesson. Public to read; written only by the service-role Worker
+-- after it verifies the JWT and the profanity check passes.
+create table public.comments (
+  id          uuid primary key default gen_random_uuid(),
+  lesson_id   uuid not null references public.lessons (id) on delete cascade,
+  author_id   uuid not null references auth.users (id) on delete cascade,
+  author      text,
+  body        text not null,
+  created_at  timestamptz not null default now()
+);
+create index comments_lesson_id_idx on public.comments (lesson_id, created_at);
+alter table public.comments enable row level security;
+create policy "comments are public to read"
+  on public.comments for select using (true);
 ```
 
 ## Getting started
@@ -288,6 +317,7 @@ src/
     LoginPage.jsx         magic-link sign-in / account status
   components/
     NavActions.jsx        shared header nav: hub link + account (sign in / out) menu
+    CommentsSection.jsx   lesson comments list + post box (shown in the hub preview)
     SectionCard.jsx       a named section with its content blocks + add buttons
     ContentBlock.jsx      a single text, image, or question block
     AiTextDialog.jsx      Turnstile-verified "suggest text with AI" dialog
@@ -301,6 +331,7 @@ src/
     aiSuggest.js          calls the spelling-creator-cf Worker for text + questions
     pixabay.js            calls the spelling-creator-cf Worker to search + fetch images
     lessons.js            calls the Worker to list / fetch / publish hub lessons
+    comments.js           calls the Worker to list / post lesson comments
     supabase.js           Supabase client (auth only) + supabaseEnabled flag
     auth.jsx              AuthProvider + useAuth (session, magic link, sign out)
     googleDrive.js        OAuth2 + upload the docx to Drive as a Google Doc
