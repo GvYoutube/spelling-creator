@@ -12,11 +12,22 @@ import {
   dataUrlToUint8Array,
   imageTypeFromDataUrl,
   fitWithin,
+  imageSizeScale,
 } from "./image.js";
 import { questionMeta } from "./questions.js";
 
 // Max image width inside the docx page (in px; docx maps px→EMU internally).
 const DOCX_MAX_IMAGE_WIDTH = 480;
+
+const ALIGNMENT_MAP = {
+  left: AlignmentType.LEFT,
+  center: AlignmentType.CENTER,
+  right: AlignmentType.RIGHT,
+};
+
+function imageAlignment(block) {
+  return ALIGNMENT_MAP[block.align] || AlignmentType.CENTER;
+}
 
 function textBlockParagraphs(block) {
   const lines = (block.text || "").split("\n");
@@ -31,15 +42,16 @@ function textBlockParagraphs(block) {
 
 function imageBlockParagraphs(block) {
   const paragraphs = [];
+  const alignment = imageAlignment(block);
   try {
     const { width, height } = fitWithin(
       block.width,
       block.height,
-      DOCX_MAX_IMAGE_WIDTH,
+      DOCX_MAX_IMAGE_WIDTH * imageSizeScale(block.size),
     );
     paragraphs.push(
       new Paragraph({
-        alignment: AlignmentType.CENTER,
+        alignment,
         spacing: { before: 120, after: 60 },
         children: [
           new ImageRun({
@@ -62,7 +74,7 @@ function imageBlockParagraphs(block) {
   if (block.caption) {
     paragraphs.push(
       new Paragraph({
-        alignment: AlignmentType.CENTER,
+        alignment,
         spacing: { after: 160 },
         children: [
           new TextRun({

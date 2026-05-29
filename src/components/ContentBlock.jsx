@@ -7,11 +7,22 @@ import Paper from "@mui/material/Paper";
 import Chip from "@mui/material/Chip";
 import Button from "@mui/material/Button";
 import Typography from "@mui/material/Typography";
+import ToggleButton from "@mui/material/ToggleButton";
+import ToggleButtonGroup from "@mui/material/ToggleButtonGroup";
 import DeleteOutlineIcon from "@mui/icons-material/DeleteOutline";
 import ArrowUpwardIcon from "@mui/icons-material/ArrowUpward";
 import ArrowDownwardIcon from "@mui/icons-material/ArrowDownward";
 import AddIcon from "@mui/icons-material/Add";
-import { fitWithin } from "../lib/image.js";
+import FormatAlignLeftIcon from "@mui/icons-material/FormatAlignLeft";
+import FormatAlignCenterIcon from "@mui/icons-material/FormatAlignCenter";
+import FormatAlignRightIcon from "@mui/icons-material/FormatAlignRight";
+import {
+  fitWithin,
+  imageSizeScale,
+  IMAGE_SIZES,
+  DEFAULT_IMAGE_SIZE,
+  DEFAULT_IMAGE_ALIGN,
+} from "../lib/image.js";
 import { newId } from "../lib/id.js";
 import { questionMeta } from "../lib/questions.js";
 
@@ -55,7 +66,16 @@ export default function ContentBlock({
   }
 
   if (block.type === "image") {
-    const preview = fitWithin(block.width, block.height, 360);
+    const align = block.align || DEFAULT_IMAGE_ALIGN;
+    const size = block.size || DEFAULT_IMAGE_SIZE;
+    const preview = fitWithin(block.width, block.height, 360 * imageSizeScale(size));
+    // The preview image is display:block, so margins decide its alignment.
+    const imgMargin =
+      align === "left"
+        ? "0 auto 0 0"
+        : align === "right"
+          ? "0 0 0 auto"
+          : "0 auto";
     return (
       <Paper variant="outlined" sx={{ p: 2 }}>
         <Stack
@@ -64,7 +84,7 @@ export default function ContentBlock({
           alignItems="flex-start"
           spacing={1}
         >
-          <Box sx={{ flexGrow: 1 }}>
+          <Box sx={{ flexGrow: 1, minWidth: 0 }}>
             <Box
               component="img"
               src={block.src}
@@ -77,9 +97,53 @@ export default function ContentBlock({
                 borderRadius: 1,
                 border: "1px solid",
                 borderColor: "divider",
+                margin: imgMargin,
                 mb: 1.5,
               }}
             />
+            <Stack
+              direction="row"
+              spacing={2}
+              alignItems="center"
+              useFlexGap
+              flexWrap="wrap"
+              sx={{ mb: 1.5 }}
+            >
+              <ToggleButtonGroup
+                size="small"
+                exclusive
+                value={align}
+                onChange={(e, value) =>
+                  value && onChange({ ...block, align: value })
+                }
+                aria-label="image alignment"
+              >
+                <ToggleButton value="left" aria-label="align left">
+                  <FormatAlignLeftIcon fontSize="small" />
+                </ToggleButton>
+                <ToggleButton value="center" aria-label="align center">
+                  <FormatAlignCenterIcon fontSize="small" />
+                </ToggleButton>
+                <ToggleButton value="right" aria-label="align right">
+                  <FormatAlignRightIcon fontSize="small" />
+                </ToggleButton>
+              </ToggleButtonGroup>
+              <ToggleButtonGroup
+                size="small"
+                exclusive
+                value={size}
+                onChange={(e, value) =>
+                  value && onChange({ ...block, size: value })
+                }
+                aria-label="image size"
+              >
+                {IMAGE_SIZES.map((s) => (
+                  <ToggleButton key={s.key} value={s.key}>
+                    {s.label}
+                  </ToggleButton>
+                ))}
+              </ToggleButtonGroup>
+            </Stack>
             <TextField
               fullWidth
               size="small"

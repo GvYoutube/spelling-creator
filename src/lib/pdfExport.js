@@ -1,7 +1,5 @@
-import { Packer } from "docx";
-import mammoth from "mammoth";
 import html2pdf from "html2pdf.js";
-import { buildDocument } from "./docxExport.js";
+import { docToHtml } from "./htmlPreview.js";
 
 // Print styles applied to the mammoth-generated HTML before rendering to PDF.
 const PRINT_STYLES = `
@@ -43,13 +41,10 @@ function safeFileName(title) {
 
 // Build the docx, convert to HTML (mammoth), then render to a PDF (html2pdf.js).
 export async function exportPdf(doc) {
-  const document = buildDocument(doc);
-  const blob = await Packer.toBlob(document);
-  const arrayBuffer = await blob.arrayBuffer();
-
-  // mammoth converts the docx into clean semantic HTML and inlines images as
-  // base64 data URIs by default, so the PDF mirrors the docx output.
-  const { value: html } = await mammoth.convertToHtml({ arrayBuffer });
+  // Shared with the preview: builds the docx, converts it to HTML via mammoth
+  // and re-applies each image's picked size + alignment, so the PDF mirrors the
+  // docx output.
+  const html = await docToHtml(doc);
 
   const container = window.document.createElement("div");
   container.className = "s2c-pdf-root";

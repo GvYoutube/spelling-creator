@@ -43,6 +43,25 @@ export function imageTypeFromDataUrl(dataUrl) {
   return "png";
 }
 
+// Selectable image sizes, expressed as a fraction of the available width. The
+// editor preview, the docx export and the PDF/preview HTML all scale from these
+// same numbers so a picked size looks consistent everywhere. "full" is the
+// default and matches the original (un-scaled) behaviour for older lessons.
+export const IMAGE_SIZES = [
+  { key: "small", label: "Small", scale: 0.4 },
+  { key: "medium", label: "Medium", scale: 0.65 },
+  { key: "large", label: "Large", scale: 0.85 },
+  { key: "full", label: "Full", scale: 1 },
+];
+
+export const DEFAULT_IMAGE_SIZE = "full";
+export const DEFAULT_IMAGE_ALIGN = "center";
+
+export function imageSizeScale(size) {
+  const found = IMAGE_SIZES.find((s) => s.key === size);
+  return found ? found.scale : 1; // unknown / missing → full width
+}
+
 // Fit an image inside a max width (in px) while preserving aspect ratio.
 export function fitWithin(width, height, maxWidth) {
   if (!width || !height) return { width: maxWidth, height: maxWidth };
