@@ -15,10 +15,12 @@ import ListItemText from "@mui/material/ListItemText";
 import TextFieldsIcon from "@mui/icons-material/TextFields";
 import ImageIcon from "@mui/icons-material/Image";
 import QuizIcon from "@mui/icons-material/Quiz";
+import AutoAwesomeIcon from "@mui/icons-material/AutoAwesome";
 import DeleteOutlineIcon from "@mui/icons-material/DeleteOutline";
 import ArrowUpwardIcon from "@mui/icons-material/ArrowUpward";
 import ArrowDownwardIcon from "@mui/icons-material/ArrowDownward";
 import ContentBlock from "./ContentBlock.jsx";
+import AiTextDialog from "./AiTextDialog.jsx";
 import { newId } from "../lib/id.js";
 import { readImageFile } from "../lib/image.js";
 import { QUESTION_TYPE_LIST, createQuestionBlock } from "../lib/questions.js";
@@ -36,11 +38,16 @@ export default function SectionCard({
 }) {
   const fileInputRef = useRef(null);
   const [questionMenuAnchor, setQuestionMenuAnchor] = useState(null);
+  const [aiOpen, setAiOpen] = useState(false);
 
   const updateBlocks = (blocks) => onChange({ ...section, blocks });
 
   const addTextBlock = () => {
     updateBlocks([...section.blocks, { id: newId(), type: "text", text: "" }]);
+  };
+
+  const addSuggestedTextBlock = (text) => {
+    updateBlocks([...section.blocks, { id: newId(), type: "text", text }]);
   };
 
   const addQuestionBlock = (questionType) => {
@@ -186,6 +193,14 @@ export default function SectionCard({
           >
             Add question
           </Button>
+          <Button
+            startIcon={<AutoAwesomeIcon />}
+            onClick={() => setAiOpen(true)}
+            variant="outlined"
+            size="small"
+          >
+            AI text
+          </Button>
           <input
             ref={fileInputRef}
             type="file"
@@ -217,6 +232,13 @@ export default function SectionCard({
             </MenuItem>
           ))}
         </Menu>
+
+        <AiTextDialog
+          open={aiOpen}
+          defaultSubject={section.name}
+          onInsert={addSuggestedTextBlock}
+          onClose={() => setAiOpen(false)}
+        />
       </CardContent>
     </Card>
   );
