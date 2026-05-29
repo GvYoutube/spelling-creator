@@ -19,6 +19,9 @@ jobs:
   build-and-deploy:
     runs-on: ubuntu-latest
 
+  environment:
+    name: github-pages
+
     env:
       CI: true
 
