@@ -41,7 +41,9 @@ jobs:
         run: pnpm install
 
       - name: Inject env vars
-        run: echo "VITE_API_URL=$VITE_API_URL\nVITE_TURNSTILE_SITE_KEY=$VITE_TURNSTILE_SITE_KEY" > .env
+        run: |
+          echo "VITE_API_URL=${{ secrets.VITE_API_URL }}" >> .env
+          echo "VITE_TURNSTILE_SITE_KEY=${{ secrets.VITE_TURNSTILE_SITE_KEY }}" >> .env
 
       - name: Build
         run: pnpm run build
