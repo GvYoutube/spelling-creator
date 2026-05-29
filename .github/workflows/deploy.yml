@@ -2,6 +2,14 @@ name: Deploy to GitHub Pages
 
 on:
   push:
+    paths:
+      - "**.html"
+      - "**.js"
+      - "**.jsx"
+      - "**.ts"
+      - "**.tsx"
+      - "**.json"
+      - "src/**"
     branches:
       - main
   workflow_dispatch:
