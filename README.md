@@ -1,6 +1,6 @@
 # Spelling Lesson Maker
 
-A web app for building and printing **Spelling** (also known as S2C) lessons.
+A web app for building and printing [**Spelling**](https://i-asc.org) (also known as S2C) lessons.
 Create a document, add named sections, and fill each section with text and
 images. Export the finished lesson as a Word document (`.docx`) or print it to
 PDF.
