@@ -19,6 +19,10 @@ import Paper from "@mui/material/Paper";
 import TextField from "@mui/material/TextField";
 import Alert from "@mui/material/Alert";
 import CircularProgress from "@mui/material/CircularProgress";
+import IconButton from "@mui/material/IconButton";
+import Tooltip from "@mui/material/Tooltip";
+import useMediaQuery from "@mui/material/useMediaQuery";
+import { useTheme } from "@mui/material/styles";
 import EditIcon from "@mui/icons-material/Edit";
 import MarkEmailReadIcon from "@mui/icons-material/MarkEmailRead";
 import NavActions from "../components/NavActions.jsx";
@@ -29,6 +33,8 @@ const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 export default function LoginPage() {
   const { enabled, user, loading, signInWithMagicLink, signOut } = useAuth();
   const navigate = useNavigate();
+  const theme = useTheme();
+  const isMobile = useMediaQuery(theme.breakpoints.down("md"));
 
   const [email, setEmail] = useState("");
   const [sending, setSending] = useState(false);
@@ -57,16 +63,34 @@ export default function LoginPage() {
     <Box sx={{ minHeight: "100vh" }}>
       <AppBar position="sticky" elevation={1}>
         <Toolbar>
-          <Button
-            color="inherit"
-            component={RouterLink}
-            to="/"
-            startIcon={<EditIcon />}
-            sx={{ mr: 1 }}
+          {isMobile ? (
+            <Tooltip title="Editor">
+              <IconButton
+                color="inherit"
+                component={RouterLink}
+                to="/"
+                aria-label="editor"
+                sx={{ mr: 0.5 }}
+              >
+                <EditIcon />
+              </IconButton>
+            </Tooltip>
+          ) : (
+            <Button
+              color="inherit"
+              component={RouterLink}
+              to="/"
+              startIcon={<EditIcon />}
+              sx={{ mr: 1 }}
+            >
+              Editor
+            </Button>
+          )}
+          <Typography
+            variant="h6"
+            noWrap
+            sx={{ flexGrow: 1, minWidth: 0, mr: 1 }}
           >
-            Editor
-          </Button>
-          <Typography variant="h6" sx={{ flexGrow: 1 }}>
             Sign in
           </Typography>
           <Stack direction="row" spacing={1} alignItems="center">

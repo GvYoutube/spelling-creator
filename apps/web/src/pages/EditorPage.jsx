@@ -18,13 +18,18 @@ import Snackbar from "@mui/material/Snackbar";
 import Alert from "@mui/material/Alert";
 import CircularProgress from "@mui/material/CircularProgress";
 import Tooltip from "@mui/material/Tooltip";
+import IconButton from "@mui/material/IconButton";
 import Chip from "@mui/material/Chip";
 import Backdrop from "@mui/material/Backdrop";
 import Menu from "@mui/material/Menu";
 import MenuItem from "@mui/material/MenuItem";
 import ListItemIcon from "@mui/material/ListItemIcon";
 import ListItemText from "@mui/material/ListItemText";
+import Divider from "@mui/material/Divider";
+import useMediaQuery from "@mui/material/useMediaQuery";
+import { useTheme } from "@mui/material/styles";
 import AddIcon from "@mui/icons-material/Add";
+import MoreVertIcon from "@mui/icons-material/MoreVert";
 import SaveIcon from "@mui/icons-material/Save";
 import DescriptionIcon from "@mui/icons-material/Description";
 import PictureAsPdfIcon from "@mui/icons-material/PictureAsPdf";
@@ -86,6 +91,7 @@ export default function EditorPage() {
   const [toast, setToast] = useState(null); // { severity, message }
   const [previewContent, setPreviewContent] = useState(null); // HTML string | null
   const [exportAnchor, setExportAnchor] = useState(null); // export dropdown anchor el | null
+  const [mobileMenuAnchor, setMobileMenuAnchor] = useState(null); // overflow menu anchor on small screens | null
 
   // Hub-editing state. `editingId` is the id of a published lesson currently
   // loaded for editing (so "Publish" becomes "Update"); null when authoring a
@@ -102,6 +108,13 @@ export default function EditorPage() {
   const { enabled: authEnabled, accessToken, user } = useAuth();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
+  const theme = useTheme();
+  // Below "md" the toolbar can't fit all the action buttons, so they collapse
+  // into a single overflow menu.
+  const isMobile = useMediaQuery(theme.breakpoints.down("md"));
+
+  const closeMobileMenu = () => setMobileMenuAnchor(null);
+  const showPublish = lessonHubEnabled && authEnabled;
 
   // Real-time collaboration over PeerJS. The hook watches `doc` to broadcast
   // local edits and calls setDoc with documents received from collaborators.
@@ -472,131 +485,258 @@ export default function EditorPage() {
     <Box sx={{ minHeight: "100vh", pb: 12 }}>
       <AppBar position="sticky" elevation={1}>
         <Toolbar>
-          <SpellcheckIcon sx={{ mr: 1.5 }} />
-          <Typography variant="h6" sx={{ flexGrow: 1 }}>
+          <SpellcheckIcon sx={{ mr: 1.5, flexShrink: 0 }} />
+          <Typography
+            variant="h6"
+            noWrap
+            sx={{ flexGrow: 1, minWidth: 0, mr: 1 }}
+          >
             Spelling Lesson Maker
           </Typography>
           <Stack direction="row" spacing={1} alignItems="center">
-            <Button
-              color="inherit"
-              variant="outlined"
-              startIcon={
-                busy === "preview" ? (
-                  <CircularProgress size={16} color="inherit" />
-                ) : (
-                  <VisibilityIcon />
-                )
-              }
-              onClick={handlePreview}
-              disabled={busy !== null}
-              sx={inheritBorder}
-            >
-              Preview
-            </Button>
-            <Button
-              color="inherit"
-              variant="outlined"
-              startIcon={
-                busy === "docx" || busy === "pdf" || busy === "gdocs" ? (
-                  <CircularProgress size={16} color="inherit" />
-                ) : (
-                  <IosShareIcon />
-                )
-              }
-              endIcon={<ArrowDropDownIcon />}
-              onClick={(e) => setExportAnchor(e.currentTarget)}
-              disabled={busy !== null}
-              sx={inheritBorder}
-            >
-              Export
-            </Button>
-            <Menu
-              anchorEl={exportAnchor}
-              open={Boolean(exportAnchor)}
-              onClose={() => setExportAnchor(null)}
-              anchorOrigin={{ vertical: "bottom", horizontal: "right" }}
-              transformOrigin={{ vertical: "top", horizontal: "right" }}
-            >
-              <MenuItem
-                onClick={() => {
-                  setExportAnchor(null);
-                  handleExport("docx");
-                }}
-              >
-                <ListItemIcon>
-                  <DescriptionIcon fontSize="small" />
-                </ListItemIcon>
-                <ListItemText>Export DOCX</ListItemText>
-              </MenuItem>
-              <MenuItem
-                onClick={() => {
-                  setExportAnchor(null);
-                  handleExport("pdf");
-                }}
-              >
-                <ListItemIcon>
-                  <PictureAsPdfIcon fontSize="small" />
-                </ListItemIcon>
-                <ListItemText>Print PDF</ListItemText>
-              </MenuItem>
-              {googleDriveEnabled && (
-                <MenuItem
-                  onClick={() => {
-                    setExportAnchor(null);
-                    handleSaveToGoogle();
-                  }}
+            {isMobile && (
+              <>
+                <Tooltip title="Lesson actions">
+                  <IconButton
+                    color="inherit"
+                    onClick={(e) => setMobileMenuAnchor(e.currentTarget)}
+                    aria-label="lesson actions"
+                  >
+                    <Badge
+                      color="success"
+                      badgeContent={
+                        collab.active ? collab.participants.length : 0
+                      }
+                      overlap="circular"
+                    >
+                      <MoreVertIcon />
+                    </Badge>
+                  </IconButton>
+                </Tooltip>
+                <Menu
+                  anchorEl={mobileMenuAnchor}
+                  open={Boolean(mobileMenuAnchor)}
+                  onClose={closeMobileMenu}
+                  anchorOrigin={{ vertical: "bottom", horizontal: "right" }}
+                  transformOrigin={{ vertical: "top", horizontal: "right" }}
                 >
-                  <ListItemIcon>
-                    <AddToDriveIcon fontSize="small" />
-                  </ListItemIcon>
-                  <ListItemText>Save to Google Docs</ListItemText>
-                </MenuItem>
-              )}
-            </Menu>
-            {lessonHubEnabled && authEnabled && (
-              <Button
-                color="inherit"
-                variant="outlined"
-                startIcon={
-                  busy === "publish" ? (
-                    <CircularProgress size={16} color="inherit" />
-                  ) : editingId ? (
-                    <SaveIcon />
-                  ) : (
-                    <CloudUploadIcon />
-                  )
-                }
-                onClick={editingId ? handleUpdate : handlePublish}
-                disabled={busy !== null}
-                sx={inheritBorder}
-              >
-                {editingId ? "Update lesson" : "Publish to hub"}
-              </Button>
+                  <MenuItem
+                    onClick={() => {
+                      closeMobileMenu();
+                      handlePreview();
+                    }}
+                    disabled={busy !== null}
+                  >
+                    <ListItemIcon>
+                      <VisibilityIcon fontSize="small" />
+                    </ListItemIcon>
+                    <ListItemText>Preview</ListItemText>
+                  </MenuItem>
+                  <Divider />
+                  <MenuItem
+                    onClick={() => {
+                      closeMobileMenu();
+                      handleExport("docx");
+                    }}
+                    disabled={busy !== null}
+                  >
+                    <ListItemIcon>
+                      <DescriptionIcon fontSize="small" />
+                    </ListItemIcon>
+                    <ListItemText>Export DOCX</ListItemText>
+                  </MenuItem>
+                  <MenuItem
+                    onClick={() => {
+                      closeMobileMenu();
+                      handleExport("pdf");
+                    }}
+                    disabled={busy !== null}
+                  >
+                    <ListItemIcon>
+                      <PictureAsPdfIcon fontSize="small" />
+                    </ListItemIcon>
+                    <ListItemText>Print PDF</ListItemText>
+                  </MenuItem>
+                  {googleDriveEnabled && (
+                    <MenuItem
+                      onClick={() => {
+                        closeMobileMenu();
+                        handleSaveToGoogle();
+                      }}
+                      disabled={busy !== null}
+                    >
+                      <ListItemIcon>
+                        <AddToDriveIcon fontSize="small" />
+                      </ListItemIcon>
+                      <ListItemText>Save to Google Docs</ListItemText>
+                    </MenuItem>
+                  )}
+                  {showPublish && <Divider />}
+                  {showPublish && (
+                    <MenuItem
+                      onClick={() => {
+                        closeMobileMenu();
+                        editingId ? handleUpdate() : handlePublish();
+                      }}
+                      disabled={busy !== null}
+                    >
+                      <ListItemIcon>
+                        {editingId ? (
+                          <SaveIcon fontSize="small" />
+                        ) : (
+                          <CloudUploadIcon fontSize="small" />
+                        )}
+                      </ListItemIcon>
+                      <ListItemText>
+                        {editingId ? "Update lesson" : "Publish to hub"}
+                      </ListItemText>
+                    </MenuItem>
+                  )}
+                  <Divider />
+                  <MenuItem
+                    onClick={() => {
+                      closeMobileMenu();
+                      setCollabOpen(true);
+                    }}
+                  >
+                    <ListItemIcon>
+                      <GroupsIcon fontSize="small" />
+                    </ListItemIcon>
+                    <ListItemText>
+                      {collab.active
+                        ? `Collaborating (${collab.participants.length})`
+                        : "Collaborate"}
+                    </ListItemText>
+                  </MenuItem>
+                </Menu>
+              </>
             )}
-            <Tooltip title="Collaborate live on this lesson">
-              <Badge
-                color="success"
-                badgeContent={collab.active ? collab.participants.length : 0}
-                overlap="circular"
-              >
+            {!isMobile && (
+              <>
                 <Button
                   color="inherit"
-                  variant={collab.active ? "contained" : "outlined"}
-                  startIcon={<GroupsIcon />}
-                  onClick={() => setCollabOpen(true)}
-                  sx={collab.active ? undefined : inheritBorder}
+                  variant="outlined"
+                  startIcon={
+                    busy === "preview" ? (
+                      <CircularProgress size={16} color="inherit" />
+                    ) : (
+                      <VisibilityIcon />
+                    )
+                  }
+                  onClick={handlePreview}
+                  disabled={busy !== null}
+                  sx={inheritBorder}
                 >
-                  Collaborate
+                  Preview
                 </Button>
-              </Badge>
-            </Tooltip>
+                <Button
+                  color="inherit"
+                  variant="outlined"
+                  startIcon={
+                    busy === "docx" || busy === "pdf" || busy === "gdocs" ? (
+                      <CircularProgress size={16} color="inherit" />
+                    ) : (
+                      <IosShareIcon />
+                    )
+                  }
+                  endIcon={<ArrowDropDownIcon />}
+                  onClick={(e) => setExportAnchor(e.currentTarget)}
+                  disabled={busy !== null}
+                  sx={inheritBorder}
+                >
+                  Export
+                </Button>
+                <Menu
+                  anchorEl={exportAnchor}
+                  open={Boolean(exportAnchor)}
+                  onClose={() => setExportAnchor(null)}
+                  anchorOrigin={{ vertical: "bottom", horizontal: "right" }}
+                  transformOrigin={{ vertical: "top", horizontal: "right" }}
+                >
+                  <MenuItem
+                    onClick={() => {
+                      setExportAnchor(null);
+                      handleExport("docx");
+                    }}
+                  >
+                    <ListItemIcon>
+                      <DescriptionIcon fontSize="small" />
+                    </ListItemIcon>
+                    <ListItemText>Export DOCX</ListItemText>
+                  </MenuItem>
+                  <MenuItem
+                    onClick={() => {
+                      setExportAnchor(null);
+                      handleExport("pdf");
+                    }}
+                  >
+                    <ListItemIcon>
+                      <PictureAsPdfIcon fontSize="small" />
+                    </ListItemIcon>
+                    <ListItemText>Print PDF</ListItemText>
+                  </MenuItem>
+                  {googleDriveEnabled && (
+                    <MenuItem
+                      onClick={() => {
+                        setExportAnchor(null);
+                        handleSaveToGoogle();
+                      }}
+                    >
+                      <ListItemIcon>
+                        <AddToDriveIcon fontSize="small" />
+                      </ListItemIcon>
+                      <ListItemText>Save to Google Docs</ListItemText>
+                    </MenuItem>
+                  )}
+                </Menu>
+                {lessonHubEnabled && authEnabled && (
+                  <Button
+                    color="inherit"
+                    variant="outlined"
+                    startIcon={
+                      busy === "publish" ? (
+                        <CircularProgress size={16} color="inherit" />
+                      ) : editingId ? (
+                        <SaveIcon />
+                      ) : (
+                        <CloudUploadIcon />
+                      )
+                    }
+                    onClick={editingId ? handleUpdate : handlePublish}
+                    disabled={busy !== null}
+                    sx={inheritBorder}
+                  >
+                    {editingId ? "Update lesson" : "Publish to hub"}
+                  </Button>
+                )}
+                <Tooltip title="Collaborate live on this lesson">
+                  <Badge
+                    color="success"
+                    badgeContent={
+                      collab.active ? collab.participants.length : 0
+                    }
+                    overlap="circular"
+                  >
+                    <Button
+                      color="inherit"
+                      variant={collab.active ? "contained" : "outlined"}
+                      startIcon={<GroupsIcon />}
+                      onClick={() => setCollabOpen(true)}
+                      sx={collab.active ? undefined : inheritBorder}
+                    >
+                      Collaborate
+                    </Button>
+                  </Badge>
+                </Tooltip>
+              </>
+            )}
             <NavActions current="editor" />
           </Stack>
         </Toolbar>
       </AppBar>
 
       <Container maxWidth="md" sx={{ pt: 3 }}>
-        <Paper elevation={2} sx={{ p: 3, mb: 3 }}>
+        <Paper elevation={2} sx={{ p: { xs: 2, sm: 3 }, mb: 3 }}>
           <Typography variant="overline" color="text.secondary">
             Document title
           </Typography>
@@ -693,7 +833,11 @@ export default function EditorPage() {
         <Fab
           color="primary"
           onClick={openAddDialog}
-          sx={{ position: "fixed", bottom: 32, right: 32 }}
+          sx={{
+            position: "fixed",
+            bottom: { xs: 16, sm: 32 },
+            right: { xs: 16, sm: 32 },
+          }}
           aria-label="add section"
         >
           <AddIcon />
@@ -735,6 +879,7 @@ export default function EditorPage() {
         fullWidth
         maxWidth="md"
         scroll="paper"
+        fullScreen={isMobile}
       >
         <DialogTitle>Preview</DialogTitle>
         <DialogContent dividers>

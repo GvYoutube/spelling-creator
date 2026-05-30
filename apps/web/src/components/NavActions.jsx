@@ -11,6 +11,8 @@ import MenuItem from "@mui/material/MenuItem";
 import ListItemText from "@mui/material/ListItemText";
 import Divider from "@mui/material/Divider";
 import Tooltip from "@mui/material/Tooltip";
+import useMediaQuery from "@mui/material/useMediaQuery";
+import { useTheme } from "@mui/material/styles";
 import CollectionsBookmarkIcon from "@mui/icons-material/CollectionsBookmark";
 import AccountCircleIcon from "@mui/icons-material/AccountCircle";
 import { useAuth } from "../lib/auth.jsx";
@@ -20,6 +22,11 @@ const inheritBorder = { borderColor: "rgba(255,255,255,0.6)" };
 export default function NavActions({ current }) {
   const { enabled, user, signOut } = useAuth();
   const navigate = useNavigate();
+  const theme = useTheme();
+  // On narrow screens the AppBar can't fit full text buttons, so the hub and
+  // sign-in links collapse to icon-only buttons (the account control is already
+  // an icon).
+  const compact = useMediaQuery(theme.breakpoints.down("md"));
   const [anchorEl, setAnchorEl] = useState(null);
   const menuOpen = Boolean(anchorEl);
 
@@ -30,18 +37,30 @@ export default function NavActions({ current }) {
 
   return (
     <>
-      {current !== "hub" && (
-        <Button
-          color="inherit"
-          variant="outlined"
-          component={RouterLink}
-          to="/hub"
-          startIcon={<CollectionsBookmarkIcon />}
-          sx={inheritBorder}
-        >
-          Lesson hub
-        </Button>
-      )}
+      {current !== "hub" &&
+        (compact ? (
+          <Tooltip title="Lesson hub">
+            <IconButton
+              color="inherit"
+              component={RouterLink}
+              to="/hub"
+              aria-label="lesson hub"
+            >
+              <CollectionsBookmarkIcon />
+            </IconButton>
+          </Tooltip>
+        ) : (
+          <Button
+            color="inherit"
+            variant="outlined"
+            component={RouterLink}
+            to="/hub"
+            startIcon={<CollectionsBookmarkIcon />}
+            sx={inheritBorder}
+          >
+            Lesson hub
+          </Button>
+        ))}
 
       {!enabled ? null : user ? (
         <>
@@ -73,7 +92,18 @@ export default function NavActions({ current }) {
           </Menu>
         </>
       ) : (
-        current !== "login" && (
+        current !== "login" &&
+        (compact ? (
+          <Tooltip title="Sign in">
+            <IconButton
+              color="inherit"
+              onClick={() => navigate("/login")}
+              aria-label="sign in"
+            >
+              <AccountCircleIcon />
+            </IconButton>
+          </Tooltip>
+        ) : (
           <Button
             color="inherit"
             variant="outlined"
@@ -83,7 +113,7 @@ export default function NavActions({ current }) {
           >
             Sign in
           </Button>
-        )
+        ))
       )}
     </>
   );

@@ -31,6 +31,8 @@ import EditIcon from "@mui/icons-material/Edit";
 import DeleteOutlineIcon from "@mui/icons-material/DeleteOutline";
 import RefreshIcon from "@mui/icons-material/Refresh";
 import Tooltip from "@mui/material/Tooltip";
+import useMediaQuery from "@mui/material/useMediaQuery";
+import { useTheme } from "@mui/material/styles";
 import NavActions from "../components/NavActions.jsx";
 import {
   fetchPublishedLessons,
@@ -55,6 +57,8 @@ export default function HubPage() {
   const { user, accessToken } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
+  const theme = useTheme();
+  const isMobile = useMediaQuery(theme.breakpoints.down("md"));
 
   const [lessons, setLessons] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -154,16 +158,34 @@ export default function HubPage() {
     <Box sx={{ minHeight: "100vh", pb: 8 }}>
       <AppBar position="sticky" elevation={1}>
         <Toolbar>
-          <Button
-            color="inherit"
-            component={RouterLink}
-            to="/"
-            startIcon={<EditIcon />}
-            sx={{ mr: 1 }}
+          {isMobile ? (
+            <Tooltip title="Editor">
+              <IconButton
+                color="inherit"
+                component={RouterLink}
+                to="/"
+                aria-label="editor"
+                sx={{ mr: 0.5 }}
+              >
+                <EditIcon />
+              </IconButton>
+            </Tooltip>
+          ) : (
+            <Button
+              color="inherit"
+              component={RouterLink}
+              to="/"
+              startIcon={<EditIcon />}
+              sx={{ mr: 1 }}
+            >
+              Editor
+            </Button>
+          )}
+          <Typography
+            variant="h6"
+            noWrap
+            sx={{ flexGrow: 1, minWidth: 0, mr: 1 }}
           >
-            Editor
-          </Button>
-          <Typography variant="h6" sx={{ flexGrow: 1 }}>
             Lesson hub
           </Typography>
           <Stack direction="row" spacing={1} alignItems="center">

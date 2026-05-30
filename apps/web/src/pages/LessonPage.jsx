@@ -23,12 +23,22 @@ import TextField from "@mui/material/TextField";
 import CircularProgress from "@mui/material/CircularProgress";
 import Alert from "@mui/material/Alert";
 import Snackbar from "@mui/material/Snackbar";
+import IconButton from "@mui/material/IconButton";
+import Menu from "@mui/material/Menu";
+import MenuItem from "@mui/material/MenuItem";
+import ListItemIcon from "@mui/material/ListItemIcon";
+import ListItemText from "@mui/material/ListItemText";
+import Divider from "@mui/material/Divider";
+import Tooltip from "@mui/material/Tooltip";
+import useMediaQuery from "@mui/material/useMediaQuery";
+import { useTheme } from "@mui/material/styles";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import EditIcon from "@mui/icons-material/Edit";
 import DeleteOutlineIcon from "@mui/icons-material/DeleteOutline";
 import PictureAsPdfIcon from "@mui/icons-material/PictureAsPdf";
 import DescriptionIcon from "@mui/icons-material/Description";
 import ForkRightIcon from "@mui/icons-material/ForkRight";
+import MoreVertIcon from "@mui/icons-material/MoreVert";
 import NavActions from "../components/NavActions.jsx";
 import CommentsSection from "../components/CommentsSection.jsx";
 import {
@@ -58,6 +68,11 @@ export default function LessonPage() {
   const { id } = useParams();
   const { user, accessToken } = useAuth();
   const navigate = useNavigate();
+  const theme = useTheme();
+  // Below "md" the toolbar's action buttons collapse into an overflow menu.
+  const isMobile = useMediaQuery(theme.breakpoints.down("md"));
+  const [mobileMenuAnchor, setMobileMenuAnchor] = useState(null);
+  const closeMobileMenu = () => setMobileMenuAnchor(null);
 
   const [lesson, setLesson] = useState(null);
   const [html, setHtml] = useState("");
@@ -181,25 +196,125 @@ export default function LessonPage() {
     <Box sx={{ minHeight: "100vh", pb: 8 }}>
       <AppBar position="sticky" elevation={1}>
         <Toolbar>
-          <Button
-            color="inherit"
-            component={RouterLink}
-            to="/hub"
-            startIcon={<ArrowBackIcon />}
-            sx={{ mr: 1 }}
-          >
-            Lesson hub
-          </Button>
+          {isMobile ? (
+            <Tooltip title="Lesson hub">
+              <IconButton
+                color="inherit"
+                component={RouterLink}
+                to="/hub"
+                aria-label="lesson hub"
+                sx={{ mr: 0.5 }}
+              >
+                <ArrowBackIcon />
+              </IconButton>
+            </Tooltip>
+          ) : (
+            <Button
+              color="inherit"
+              component={RouterLink}
+              to="/hub"
+              startIcon={<ArrowBackIcon />}
+              sx={{ mr: 1 }}
+            >
+              Lesson hub
+            </Button>
+          )}
           <Typography
             variant="h6"
             noWrap
-            sx={{ flexGrow: 1, minWidth: 0 }}
+            sx={{ flexGrow: 1, minWidth: 0, mr: 1 }}
             title={lesson?.title || ""}
           >
             {lesson?.title || "Lesson"}
           </Typography>
           <Stack direction="row" spacing={1} alignItems="center">
-            {lesson && (
+            {lesson && isMobile && (
+              <>
+                <Tooltip title="Lesson actions">
+                  <IconButton
+                    color="inherit"
+                    onClick={(e) => setMobileMenuAnchor(e.currentTarget)}
+                    aria-label="lesson actions"
+                  >
+                    <MoreVertIcon />
+                  </IconButton>
+                </Tooltip>
+                <Menu
+                  anchorEl={mobileMenuAnchor}
+                  open={Boolean(mobileMenuAnchor)}
+                  onClose={closeMobileMenu}
+                  anchorOrigin={{ vertical: "bottom", horizontal: "right" }}
+                  transformOrigin={{ vertical: "top", horizontal: "right" }}
+                >
+                  <MenuItem
+                    onClick={() => {
+                      closeMobileMenu();
+                      handleExport("pdf");
+                    }}
+                    disabled={Boolean(busy)}
+                  >
+                    <ListItemIcon>
+                      <PictureAsPdfIcon fontSize="small" />
+                    </ListItemIcon>
+                    <ListItemText>Print PDF</ListItemText>
+                  </MenuItem>
+                  <MenuItem
+                    onClick={() => {
+                      closeMobileMenu();
+                      handleExport("docx");
+                    }}
+                    disabled={Boolean(busy)}
+                  >
+                    <ListItemIcon>
+                      <DescriptionIcon fontSize="small" />
+                    </ListItemIcon>
+                    <ListItemText>Download Word</ListItemText>
+                  </MenuItem>
+                  <MenuItem
+                    onClick={() => {
+                      closeMobileMenu();
+                      forkLesson();
+                    }}
+                    disabled={Boolean(busy)}
+                  >
+                    <ListItemIcon>
+                      <ForkRightIcon fontSize="small" />
+                    </ListItemIcon>
+                    <ListItemText>Fork</ListItemText>
+                  </MenuItem>
+                  {isAuthor && <Divider />}
+                  {isAuthor && (
+                    <MenuItem
+                      onClick={() => {
+                        closeMobileMenu();
+                        editLesson();
+                      }}
+                    >
+                      <ListItemIcon>
+                        <EditIcon fontSize="small" />
+                      </ListItemIcon>
+                      <ListItemText>Edit</ListItemText>
+                    </MenuItem>
+                  )}
+                  {isAuthor && (
+                    <MenuItem
+                      onClick={() => {
+                        closeMobileMenu();
+                        setDeleteText("");
+                        setDeleteError("");
+                        setDeleteOpen(true);
+                      }}
+                    >
+                      <ListItemIcon>
+                        <DeleteOutlineIcon fontSize="small" />
+                      </ListItemIcon>
+                      <ListItemText>Delete</ListItemText>
+                    </MenuItem>
+                  )}
+                </Menu>
+              </>
+            )}
+            {lesson && !isMobile && (
               <>
                 <Button
                   color="inherit"
@@ -239,7 +354,7 @@ export default function LessonPage() {
                 </Button>
               </>
             )}
-            {isAuthor && (
+            {!isMobile && isAuthor && (
               <>
                 <Button
                   color="inherit"
@@ -315,7 +430,7 @@ export default function LessonPage() {
             <Paper variant="outlined" sx={{ overflow: "hidden" }}>
               <Box
                 className="s2c-preview-root"
-                sx={{ bgcolor: "#fff", color: "#1a1a1a", p: 3 }}
+                sx={{ bgcolor: "#fff", color: "#1a1a1a", p: { xs: 2, sm: 3 } }}
                 dangerouslySetInnerHTML={{
                   __html: `<style>${PREVIEW_STYLES}</style>${html}`,
                 }}
