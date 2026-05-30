@@ -68,7 +68,8 @@ const QUESTION_INSTRUCTIONS = {
 	multiple:
 		'The question must have several distinct correct answers, any one of which a student could type to be marked correct (the student only needs to give one). Do not provide answer options. Put each accepted answer as a separate string in "answers".',
 	open: 'Write a question that invites a free, written response. Do not provide answer options.',
-	background: 'Put the question in "prompt", and a short paragraph of the prior knowledge a student needs to answer it in "background".',
+	background:
+		'The question must test prior knowledge that is NOT explained anywhere in the lesson text — the student is expected to already know it. Do not ask about anything the lesson text covers. Put the question in "prompt", and a short paragraph of the prior knowledge a student needs to answer it in "background".',
 };
 
 // How long a cached AI answer lives in KV.
@@ -934,8 +935,14 @@ export default {
 
 		if (mode === 'question') {
 			// Ground the question in the section's existing text when we have it, so
-			// the suggested question is actually answerable from the lesson.
-			const sourceBlock = sectionText ? `\n\nBase the question on the following lesson text:\n"""\n${sectionText}\n"""` : '';
+			// the suggested question is actually answerable from the lesson. For
+			// background-knowledge questions the text is the opposite — it marks
+			// what the student should already know, so the question must avoid it.
+			const sourceBlock = sectionText
+				? questionType === 'background'
+					? `\n\nThe following is the lesson text. Do NOT base the question on it — the question must test prior knowledge the student needs but that this text does not explain:\n"""\n${sectionText}\n"""`
+					: `\n\nBase the question on the following lesson text:\n"""\n${sectionText}\n"""`
+				: '';
 			// List the questions already in the section so the model asks something
 			// new instead of repeating one the user already has.
 			const previousBlock = existingQuestions.length
