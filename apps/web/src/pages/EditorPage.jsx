@@ -42,6 +42,7 @@ import GroupsIcon from "@mui/icons-material/Groups";
 import IosShareIcon from "@mui/icons-material/IosShare";
 import ArrowDropDownIcon from "@mui/icons-material/ArrowDropDown";
 import HelpOutlineIcon from "@mui/icons-material/HelpOutline";
+import GitHubIcon from "@mui/icons-material/GitHub";
 import Badge from "@mui/material/Badge";
 import SectionCard from "../components/SectionCard.jsx";
 import NavActions from "../components/NavActions.jsx";
@@ -500,11 +501,42 @@ export default function EditorPage() {
     [doc.sections],
   );
 
+  const [anchorEl, setAnchorEl] = useState(null);
+  const menuOpen = Boolean(anchorEl);
+
   return (
     <Box sx={{ minHeight: "100vh", pb: 12 }}>
       <AppBar position="sticky" elevation={1}>
         <Toolbar>
-          <SpellcheckIcon sx={{ mr: 1.5, flexShrink: 0 }} />
+          <Tooltip title="Account">
+            <IconButton
+              color="inherit"
+              onClick={(e) => setAnchorEl(e.currentTarget)}
+              aria-label="logo"
+            >
+              <SpellcheckIcon sx={{ mr: 1.5, flexShrink: 0 }} />
+            </IconButton>
+          </Tooltip>
+          <Menu
+            anchorEl={anchorEl}
+            open={menuOpen}
+            onClose={() => setAnchorEl(null)}
+            anchorOrigin={{ vertical: "bottom", horizontal: "right" }}
+            transformOrigin={{ vertical: "top", horizontal: "right" }}
+          >
+            <MenuItem
+              onClick={() => {
+                setAnchorEl(null);
+                window.open(
+                  "https://github.com/playforge-coding/spelling-creator",
+                  "_blank",
+                );
+              }}
+            >
+              <GitHubIcon sx={{ mr: 1, fontSize: 20 }} />
+              GitHub
+            </MenuItem>
+          </Menu>
           <Typography
             variant="h6"
             noWrap
