@@ -7,6 +7,7 @@ import { useEffect, useState } from "react";
 import Dialog from "@mui/material/Dialog";
 import DialogTitle from "@mui/material/DialogTitle";
 import DialogContent from "@mui/material/DialogContent";
+import DialogContentText from "@mui/material/DialogContentText";
 import DialogActions from "@mui/material/DialogActions";
 import Button from "@mui/material/Button";
 import Box from "@mui/material/Box";
@@ -29,7 +30,10 @@ import CloseIcon from "@mui/icons-material/Close";
 import ContentCopyIcon from "@mui/icons-material/ContentCopy";
 import GroupAddIcon from "@mui/icons-material/GroupAdd";
 import LoginIcon from "@mui/icons-material/Login";
+import SendIcon from "@mui/icons-material/Send";
 import { colorForId } from "../lib/presence.js";
+import { useAuth } from "../lib/auth.jsx";
+import { sendLink } from "../lib/notifications.js";
 
 // Build a shareable invite link that deep-links into the editor with the host's
 // session code, so a recipient just clicks and lands on the join screen.
@@ -65,8 +69,10 @@ export default function CollaborateDialog({
     clearError,
   } = collab;
 
+  const { accessToken } = useAuth();
   const [joinCode, setJoinCode] = useState(initialJoinCode);
   const [copied, setCopied] = useState(null); // 'code' | 'link' | null
+  const [sendOpen, setSendOpen] = useState(false);
 
   // When opened from an invite link, prefill the code so the user just confirms.
   useEffect(() => {
@@ -173,14 +179,22 @@ export default function CollaborateDialog({
             </IconButton>
           </Tooltip>
         </Stack>
-        <Button
-          size="small"
-          startIcon={<ContentCopyIcon fontSize="small" />}
-          onClick={() => copy(inviteLink(myCode), "link")}
-          sx={{ mt: 0.5 }}
-        >
-          {copied === "link" ? "Invite link copied!" : "Copy invite link"}
-        </Button>
+        <Stack direction="row" spacing={1} flexWrap="wrap" sx={{ mt: 0.5 }}>
+          <Button
+            size="small"
+            startIcon={<ContentCopyIcon fontSize="small" />}
+            onClick={() => copy(inviteLink(myCode), "link")}
+          >
+            {copied === "link" ? "Invite link copied!" : "Copy invite link"}
+          </Button>
+          <Button
+            size="small"
+            startIcon={<SendIcon fontSize="small" />}
+            onClick={() => setSendOpen(true)}
+          >
+            Send link
+          </Button>
+        </Stack>
       </Box>
 
       {requests.length > 0 && (
@@ -311,30 +325,156 @@ export default function CollaborateDialog({
     );
 
   return (
+    <>
+      <Dialog open={open} onClose={onClose} fullWidth maxWidth="xs">
+        <DialogTitle>Collaborate on this lesson</DialogTitle>
+        <DialogContent dividers>
+          {error && (
+            <Alert severity="error" sx={{ mb: 2 }} onClose={clearError}>
+              {error}
+            </Alert>
+          )}
+          {connecting
+            ? renderConnecting()
+            : status === "hosting"
+              ? renderHost()
+              : status === "joined"
+                ? renderGuest()
+                : renderLanding()}
+        </DialogContent>
+        <DialogActions>
+          {inSession || connecting ? (
+            <Button color="error" onClick={leave}>
+              {role === "host" ? "End session" : "Leave"}
+            </Button>
+          ) : null}
+          <Button onClick={onClose}>Close</Button>
+        </DialogActions>
+      </Dialog>
+      <SendLinkDialog
+        open={sendOpen}
+        onClose={() => setSendOpen(false)}
+        accessToken={accessToken}
+        link={myCode ? inviteLink(myCode) : ""}
+      />
+    </>
+  );
+}
+
+// Sends the session's generated invite link to another user by email; it pops up
+// in that user's notifications. The link itself is fixed to the live session's
+// invite link — the sender only chooses the recipient and an optional message.
+function SendLinkDialog({ open, onClose, accessToken, link }) {
+  const [email, setEmail] = useState("");
+  const [message, setMessage] = useState("");
+  const [sending, setSending] = useState(false);
+  const [error, setError] = useState("");
+  const [sent, setSent] = useState(false);
+
+  // Reset the form on each open.
+  useEffect(() => {
+    if (open) {
+      setEmail("");
+      setMessage("");
+      setError("");
+      setSent(false);
+      setSending(false);
+    }
+  }, [open]);
+
+  const submit = async (e) => {
+    e.preventDefault();
+    if (sending) return;
+    setSending(true);
+    setError("");
+    try {
+      await sendLink(
+        { email: email.trim(), link, message: message.trim() },
+        accessToken,
+      );
+      setSent(true);
+    } catch (err) {
+      setError(err.message || "Could not send the link.");
+    } finally {
+      setSending(false);
+    }
+  };
+
+  return (
     <Dialog open={open} onClose={onClose} fullWidth maxWidth="xs">
-      <DialogTitle>Collaborate on this lesson</DialogTitle>
-      <DialogContent dividers>
-        {error && (
-          <Alert severity="error" sx={{ mb: 2 }} onClose={clearError}>
-            {error}
-          </Alert>
-        )}
-        {connecting
-          ? renderConnecting()
-          : status === "hosting"
-            ? renderHost()
-            : status === "joined"
-              ? renderGuest()
-              : renderLanding()}
-      </DialogContent>
-      <DialogActions>
-        {inSession || connecting ? (
-          <Button color="error" onClick={leave}>
-            {role === "host" ? "End session" : "Leave"}
-          </Button>
-        ) : null}
-        <Button onClick={onClose}>Close</Button>
-      </DialogActions>
+      <DialogTitle>Send the invite link</DialogTitle>
+      {sent ? (
+        <>
+          <DialogContent>
+            <Alert severity="success">
+              The invite link was sent. It will pop up in that user&apos;s
+              notifications.
+            </Alert>
+          </DialogContent>
+          <DialogActions>
+            <Button variant="contained" onClick={onClose}>
+              Done
+            </Button>
+          </DialogActions>
+        </>
+      ) : (
+        <Box component="form" onSubmit={submit}>
+          <DialogContent>
+            <DialogContentText sx={{ mb: 2 }}>
+              Enter the email of the person you want to invite. They&apos;ll see
+              this session&apos;s invite link in their notifications the next
+              time they&apos;re signed in.
+            </DialogContentText>
+            {error && (
+              <Alert severity="error" sx={{ mb: 2 }}>
+                {error}
+              </Alert>
+            )}
+            <Stack spacing={2}>
+              <TextField
+                autoFocus
+                fullWidth
+                required
+                type="email"
+                label="Recipient email"
+                placeholder="name@example.com"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                disabled={sending}
+              />
+              <TextField
+                fullWidth
+                multiline
+                minRows={2}
+                label="Message (optional)"
+                value={message}
+                onChange={(e) => setMessage(e.target.value)}
+                disabled={sending}
+                inputProps={{ maxLength: 1000 }}
+              />
+            </Stack>
+          </DialogContent>
+          <DialogActions>
+            <Button onClick={onClose} disabled={sending}>
+              Cancel
+            </Button>
+            <Button
+              type="submit"
+              variant="contained"
+              disabled={sending || !email.trim() || !link}
+              startIcon={
+                sending ? (
+                  <CircularProgress size={16} color="inherit" />
+                ) : (
+                  <SendIcon />
+                )
+              }
+            >
+              {sending ? "Sending…" : "Send link"}
+            </Button>
+          </DialogActions>
+        </Box>
+      )}
     </Dialog>
   );
 }
