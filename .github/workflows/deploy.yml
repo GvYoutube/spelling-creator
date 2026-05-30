@@ -55,6 +55,8 @@ jobs:
           test -n "${{ secrets.VITE_GOOGLE_CLIENT_ID }}" && echo "google cloud ok"
           test -n "${{ secrets.VITE_SUPABASE_URL }}" && echo "supabase url ok"
           test -n "${{ secrets.VITE_SUPABASE_ANON_KEY }}" && echo "supabase anon key ok"
+          test -n "${{ secrets.VITE_METERED_USER }}" && echo "metered username ok"
+          test -n "${{ secrets.VITE_METERED_PASS }}" && echo "metered password ok"
 
       - name: Inject env vars
         run: |
@@ -63,6 +65,8 @@ jobs:
           echo "VITE_GOOGLE_CLIENT_ID=${{ secrets.VITE_GOOGLE_CLIENT_ID }}" >> apps/web/.env
           echo "VITE_SUPABASE_URL=${{ secrets.VITE_SUPABASE_URL }}" >> apps/web/.env
           echo "VITE_SUPABASE_ANON_KEY=${{ secrets.VITE_SUPABASE_ANON_KEY }}" >> apps/web/.env
+          echo "VITE_METERED_USER=${{ secrets.VITE_METERED_USER }}" >> apps/web/.env
+          echo "VITE_METERED_PASS=${{ secrets.VITE_METERED_PASS }}" >> apps/web/.env
 
       - name: Build
         run: pnpm --filter @spelling-creator/web build

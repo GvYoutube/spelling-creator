@@ -174,7 +174,35 @@ export function useCollaboration({ doc, onRemoteDoc, identity }) {
     setStatus("connecting");
     setRole("host");
 
-    const peer = new Peer();
+    const peer = new Peer({
+      config: {
+        iceServers: [
+          {
+            urls: "stun:stun.relay.metered.ca:80",
+          },
+          {
+            urls: "turn:global.relay.metered.ca:80",
+            username: import.meta.env.VITE_METERED_USER,
+            credential: import.meta.env.VITE_METERED_PASS,
+          },
+          {
+            urls: "turn:global.relay.metered.ca:80?transport=tcp",
+            username: import.meta.env.VITE_METERED_USER,
+            credential: import.meta.env.VITE_METERED_PASS,
+          },
+          {
+            urls: "turn:global.relay.metered.ca:443",
+            username: import.meta.env.VITE_METERED_USER,
+            credential: import.meta.env.VITE_METERED_PASS,
+          },
+          {
+            urls: "turns:global.relay.metered.ca:443?transport=tcp",
+            username: import.meta.env.VITE_METERED_USER,
+            credential: import.meta.env.VITE_METERED_PASS,
+          },
+        ],
+      },
+    });
     peerRef.current = peer;
 
     peer.on("open", (id) => {
@@ -324,14 +352,17 @@ export function useCollaboration({ doc, onRemoteDoc, identity }) {
           } else if (msg.t === MSG.CURSOR) {
             applyCursor(msg.cursor);
           } else if (msg.t === MSG.PRESENCE) {
-            const list = Array.isArray(msg.participants) ? msg.participants : [];
+            const list = Array.isArray(msg.participants)
+              ? msg.participants
+              : [];
             setParticipants(list);
             // Drop cursors for anyone no longer in the lesson. Participant ids
             // are the same uids cursors are keyed by (host assigns both).
             const ids = new Set(list.map((p) => p.id));
             setSelections((prev) => {
               const next = {};
-              for (const k of Object.keys(prev)) if (ids.has(k)) next[k] = prev[k];
+              for (const k of Object.keys(prev))
+                if (ids.has(k)) next[k] = prev[k];
               return next;
             });
           } else if (msg.t === MSG.REMOVED) {
@@ -353,9 +384,10 @@ export function useCollaboration({ doc, onRemoteDoc, identity }) {
 
       peer.on("error", (err) => {
         // The most common cause is a bad/expired code (host peer not found).
-        const msg = err?.type === "peer-unavailable"
-          ? "No session found for that code. Check it and try again."
-          : err?.message || "Could not connect.";
+        const msg =
+          err?.type === "peer-unavailable"
+            ? "No session found for that code. Check it and try again."
+            : err?.message || "Could not connect.";
         setError(msg);
         setStatus("error");
       });
@@ -452,7 +484,8 @@ export function useCollaboration({ doc, onRemoteDoc, identity }) {
     }
   }, [doc, status, role]);
 
-  const active = status === "hosting" || status === "joined" || status === "connecting";
+  const active =
+    status === "hosting" || status === "joined" || status === "connecting";
 
   return {
     status,
