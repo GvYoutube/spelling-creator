@@ -41,17 +41,21 @@ import SpellcheckIcon from "@mui/icons-material/Spellcheck";
 import GroupsIcon from "@mui/icons-material/Groups";
 import IosShareIcon from "@mui/icons-material/IosShare";
 import ArrowDropDownIcon from "@mui/icons-material/ArrowDropDown";
+import HelpOutlineIcon from "@mui/icons-material/HelpOutline";
 import Badge from "@mui/material/Badge";
 import SectionCard from "../components/SectionCard.jsx";
 import NavActions from "../components/NavActions.jsx";
 import CollaborateDialog from "../components/CollaborateDialog.jsx";
 import CollabCursors from "../components/CollabCursors.jsx";
+import FirstLessonWizard from "../components/FirstLessonWizard.jsx";
 import { newId } from "../lib/id.js";
 import {
   loadDocument,
   saveDocument,
   loadEditingId,
   saveEditingId,
+  loadWizardSeen,
+  saveWizardSeen,
 } from "../lib/storage.js";
 import { exportDocx } from "../lib/docxExport.js";
 import { exportPdf } from "../lib/pdfExport.js";
@@ -135,6 +139,21 @@ export default function EditorPage() {
   );
   const collab = useCollaboration({ doc, onRemoteDoc: setDoc, identity });
   const [collabOpen, setCollabOpen] = useState(false);
+
+  // First-lesson wizard. Auto-shows once for newcomers (tracked by a
+  // localStorage flag); dismissing it sets the flag so it won't reappear. The
+  // help button reopens it on demand without touching the flag.
+  const [wizardOpen, setWizardOpen] = useState(false);
+  useEffect(() => {
+    if (!loadWizardSeen()) setWizardOpen(true);
+  }, []);
+
+  const closeWizard = () => {
+    setWizardOpen(false);
+    saveWizardSeen();
+  };
+
+  const openWizard = () => setWizardOpen(true);
 
   // While collaborating, share our text selection so others see our avatar
   // float over what we're editing (and we see theirs via CollabCursors).
@@ -730,6 +749,15 @@ export default function EditorPage() {
                 </Tooltip>
               </>
             )}
+            <Tooltip title="How to create a lesson">
+              <IconButton
+                color="inherit"
+                onClick={openWizard}
+                aria-label="how to create a lesson"
+              >
+                <HelpOutlineIcon />
+              </IconButton>
+            </Tooltip>
             <NavActions current="editor" />
           </Stack>
         </Toolbar>
@@ -927,6 +955,8 @@ export default function EditorPage() {
           </Button>
         </DialogActions>
       </Dialog>
+
+      <FirstLessonWizard open={wizardOpen} onClose={closeWizard} />
 
       <CollaborateDialog
         open={collabOpen}
