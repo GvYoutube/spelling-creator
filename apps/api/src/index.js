@@ -276,7 +276,33 @@ async function verifyTurnstile(token, secret, allowedHostnames, remoteIp) {
 	}
 
 	if (!outcome.success) {
-		return { ok: false, status: 403, reason: 'Turnstile verification failed' };
+		// The widget can show "Success!" client-side (it only checks the sitekey)
+		// while siteverify still rejects. The `error-codes` tell us why, so surface
+		// and log them instead of collapsing every cause into one opaque message.
+		const codes = Array.isArray(outcome['error-codes']) ? outcome['error-codes'] : [];
+		console.warn('Turnstile siteverify rejected token', { codes, hostname: outcome.hostname });
+
+		// A wrong/mismatched secret fails for EVERY token, regardless of how many
+		// times the user re-solves — it's a server config error, not the user's
+		// fault, so report it as a 500 with a precise, fixable reason.
+		if (codes.includes('invalid-input-secret') || codes.includes('bad-request')) {
+			return {
+				ok: false,
+				status: 500,
+				reason: 'Server misconfiguration: TURNSTILE_SECRET_KEY does not match the site key',
+			};
+		}
+		// The token was already used or has expired (single-use, ~300s lifetime).
+		// The widget often still shows a stale "Success!" here; ask for a fresh one.
+		if (codes.includes('timeout-or-duplicate') || codes.includes('invalid-input-response')) {
+			return {
+				ok: false,
+				status: 403,
+				reason: 'Verification expired — please re-verify and try again',
+			};
+		}
+		const detail = codes.length ? ` (${codes.join(', ')})` : '';
+		return { ok: false, status: 403, reason: `Turnstile verification failed${detail}` };
 	}
 	if (!allowedHostnames.includes(outcome.hostname)) {
 		return { ok: false, status: 403, reason: 'Request did not originate from an allowed domain' };
