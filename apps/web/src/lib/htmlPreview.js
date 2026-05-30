@@ -2,6 +2,7 @@ import { Packer } from "docx";
 import mammoth from "mammoth";
 import { buildDocument } from "./docxExport.js";
 import { imageSizeScale } from "./image.js";
+import { QUESTION_TYPES } from "./questions.js";
 
 // Styles applied to the mammoth-generated HTML shown in the preview dialog.
 // Mirrors the docx/PDF look so the preview reflects the final document.
@@ -72,6 +73,23 @@ function imageLayoutOptions(doc) {
   };
 }
 
+// mammoth discards the run colour we set on each question-type label, so the
+// colour coding that survives in the docx is lost in the HTML/PDF path. Each
+// label is emitted as `<strong>[Label] …`, so we re-wrap the bracketed label in
+// a coloured span to restore it (same idea as re-applying image layout above).
+function colorizeQuestionLabels(html) {
+  let result = html;
+  for (const { label, color } of Object.values(QUESTION_TYPES)) {
+    const bracketed = `[${label}]`;
+    const escaped = bracketed.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    result = result.replace(
+      new RegExp(`(<strong>)\\s*${escaped}`, "g"),
+      `$1<span style="color:${color}">${bracketed}</span>`,
+    );
+  }
+  return result;
+}
+
 // Build the docx in memory and convert it to HTML with mammoth, so the preview
 // and PDF match what the docx export produces. Returns an HTML string.
 export async function docToHtml(doc) {
@@ -82,7 +100,7 @@ export async function docToHtml(doc) {
     { arrayBuffer },
     imageLayoutOptions(doc),
   );
-  return html;
+  return colorizeQuestionLabels(html);
 }
 
 // Back-compat alias used by the preview dialog.
