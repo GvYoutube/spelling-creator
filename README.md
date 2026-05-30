@@ -5,10 +5,10 @@ Worker API.
 
 ## Packages
 
-| Path       | Package                  | Description                                                        |
-| ---------- | ------------------------ | ------------------------------------------------------------------ |
-| `apps/web` | `@spelling-creator/web`  | Vite + React frontend (MUI, Supabase, react-router). Deploys to GitHub Pages. |
-| `apps/api` | `@spelling-creator/api`  | Cloudflare Worker backend (Gemini, profanity filter, KV rate limiting). |
+| Path       | Package                 | Description                                                                   |
+| ---------- | ----------------------- | ----------------------------------------------------------------------------- |
+| `apps/web` | `@spelling-creator/web` | Vite + React frontend (MUI, Supabase, react-router). Deploys to GitHub Pages. |
+| `apps/api` | `@spelling-creator/api` | Cloudflare Worker backend (Gemini, profanity filter, KV rate limiting).       |
 
 See `apps/web/README.md` for full app documentation.
 
@@ -26,7 +26,7 @@ pnpm deploy             # deploy the Worker (wrangler deploy)
 
 Each app keeps its own environment file:
 
-- `apps/web/.env`  — `VITE_*` values consumed by Vite at build time.
-- `apps/api/.env`  — Worker secrets (e.g. `GEMINI_API_KEY`).
+- `apps/web/.env` — `VITE_*` values consumed by Vite at build time.
+- `apps/api/.env` — Worker secrets (e.g. `GEMINI_API_KEY`).
 
 Both are gitignored.

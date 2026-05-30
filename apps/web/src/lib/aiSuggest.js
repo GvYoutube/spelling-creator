@@ -34,7 +34,7 @@ export async function suggestText(subject, token, context = {}) {
       }),
     });
   } catch (e) {
-    throw new Error("Could not reach the suggestion service.");
+    throw new Error("Could not reach the suggestion service.", { cause: e });
   }
 
   if (!res.ok) {
@@ -84,7 +84,7 @@ export async function dislikeText(subject, accessToken, context = {}) {
       }),
     });
   } catch (e) {
-    throw new Error("Could not reach the suggestion service.");
+    throw new Error("Could not reach the suggestion service.", { cause: e });
   }
 
   if (!res.ok) {
@@ -130,7 +130,7 @@ export async function suggestQuestion(subject, token, context = {}) {
       }),
     });
   } catch (e) {
-    throw new Error("Could not reach the suggestion service.");
+    throw new Error("Could not reach the suggestion service.", { cause: e });
   }
 
   if (!res.ok) {

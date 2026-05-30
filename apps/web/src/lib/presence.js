@@ -6,10 +6,22 @@
 // by hashing their stable id, so the same person keeps the same colour across
 // their floating cursor and the roster avatar in CollaborateDialog.
 const PALETTE = [
-  "#e53935", "#8e24aa", "#3949ab", "#039be5",
-  "#00897b", "#7cb342", "#fb8c00", "#6d4c41",
-  "#d81b60", "#5e35b1", "#1e88e5", "#00acc1",
-  "#43a047", "#f4511e", "#546e7a", "#c0ca33",
+  "#e53935",
+  "#8e24aa",
+  "#3949ab",
+  "#039be5",
+  "#00897b",
+  "#7cb342",
+  "#fb8c00",
+  "#6d4c41",
+  "#d81b60",
+  "#5e35b1",
+  "#1e88e5",
+  "#00acc1",
+  "#43a047",
+  "#f4511e",
+  "#546e7a",
+  "#c0ca33",
 ];
 
 export function colorForId(id) {
@@ -22,13 +34,36 @@ export function colorForId(id) {
 // Properties copied onto the mirror element so it lays text out identically to
 // the real field. Based on the well-known textarea-caret-position technique.
 const MIRROR_PROPS = [
-  "direction", "boxSizing", "width", "height", "overflowX", "overflowY",
-  "borderTopWidth", "borderRightWidth", "borderBottomWidth", "borderLeftWidth",
-  "paddingTop", "paddingRight", "paddingBottom", "paddingLeft",
-  "fontStyle", "fontVariant", "fontWeight", "fontStretch", "fontSize",
-  "fontSizeAdjust", "lineHeight", "fontFamily",
-  "textAlign", "textTransform", "textIndent", "textDecoration",
-  "letterSpacing", "wordSpacing", "tabSize", "MozTabSize",
+  "direction",
+  "boxSizing",
+  "width",
+  "height",
+  "overflowX",
+  "overflowY",
+  "borderTopWidth",
+  "borderRightWidth",
+  "borderBottomWidth",
+  "borderLeftWidth",
+  "paddingTop",
+  "paddingRight",
+  "paddingBottom",
+  "paddingLeft",
+  "fontStyle",
+  "fontVariant",
+  "fontWeight",
+  "fontStretch",
+  "fontSize",
+  "fontSizeAdjust",
+  "lineHeight",
+  "fontFamily",
+  "textAlign",
+  "textTransform",
+  "textIndent",
+  "textDecoration",
+  "letterSpacing",
+  "wordSpacing",
+  "tabSize",
+  "MozTabSize",
 ];
 
 /**
@@ -77,7 +112,10 @@ export function getCaretCoordinates(element, index) {
   const coords = {
     left: span.offsetLeft + parseInt(computed.borderLeftWidth, 10),
     top: span.offsetTop + parseInt(computed.borderTopWidth, 10),
-    height: parseInt(computed.lineHeight, 10) || parseInt(computed.fontSize, 10) || 18,
+    height:
+      parseInt(computed.lineHeight, 10) ||
+      parseInt(computed.fontSize, 10) ||
+      18,
   };
   document.body.removeChild(div);
   return coords;

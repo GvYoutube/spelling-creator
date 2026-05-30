@@ -117,14 +117,24 @@ export default function AiQuestionDialog({
   };
 
   return (
-    <Dialog open={open} onClose={busy ? undefined : onClose} fullWidth maxWidth="xs">
+    <Dialog
+      open={open}
+      onClose={busy ? undefined : onClose}
+      fullWidth
+      maxWidth="xs"
+    >
       <DialogTitle>Suggest a question with AI</DialogTitle>
       <DialogContent>
         <Stack spacing={2} sx={{ mt: 0.5 }}>
           <DialogContentText>
-            {subject
-              ? <>Generate a question for the section <strong>“{subject}”</strong>.</>
-              : "Give this section a name first, that's what the question will be about."}
+            {subject ? (
+              <>
+                Generate a question for the section <strong>“{subject}”</strong>
+                .
+              </>
+            ) : (
+              "Give this section a name first, that's what the question will be about."
+            )}
           </DialogContentText>
           <TextField
             select

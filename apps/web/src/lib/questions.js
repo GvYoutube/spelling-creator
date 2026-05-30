@@ -76,7 +76,10 @@ export function buildQuestionBlock(newId, questionType, data = {}) {
   const base = { id: newId(), type: "question", questionType, prompt };
   switch (questionType) {
     case "number":
-      return { ...base, answer: data.answer != null ? String(data.answer) : "" };
+      return {
+        ...base,
+        answer: data.answer != null ? String(data.answer) : "",
+      };
     case "single":
       return {
         ...base,
@@ -100,7 +103,9 @@ export function buildQuestionBlock(newId, questionType, data = {}) {
 // Turn an array of answer strings into answer objects, guaranteeing at least
 // one editable row so an AI-suggested block matches a hand-made one.
 function toAnswers(newId, raw) {
-  const list = Array.isArray(raw) ? raw.filter((t) => typeof t === "string") : [];
+  const list = Array.isArray(raw)
+    ? raw.filter((t) => typeof t === "string")
+    : [];
   const answers = list.map((text) => ({ id: newId(), text }));
   if (answers.length === 0) answers.push({ id: newId(), text: "" });
   return answers;

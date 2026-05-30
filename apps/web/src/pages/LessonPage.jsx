@@ -5,11 +5,7 @@
 // export use, and shows the comments below. Authors get Edit/Delete here too.
 
 import { useEffect, useState } from "react";
-import {
-  Link as RouterLink,
-  useNavigate,
-  useParams,
-} from "react-router-dom";
+import { Link as RouterLink, useNavigate, useParams } from "react-router-dom";
 import AppBar from "@mui/material/AppBar";
 import Toolbar from "@mui/material/Toolbar";
 import Typography from "@mui/material/Typography";

@@ -68,7 +68,11 @@ export default function ContentBlock({
   if (block.type === "image") {
     const align = block.align || DEFAULT_IMAGE_ALIGN;
     const size = block.size || DEFAULT_IMAGE_SIZE;
-    const preview = fitWithin(block.width, block.height, 360 * imageSizeScale(size));
+    const preview = fitWithin(
+      block.width,
+      block.height,
+      360 * imageSizeScale(size),
+    );
     // The preview image is display:block, so margins decide its alignment.
     const imgMargin =
       align === "left"
@@ -292,7 +296,11 @@ function QuestionBlock({ block, onChange, controls }) {
                 </Stack>
               ))}
               <Box>
-                <Button size="small" startIcon={<AddIcon />} onClick={addAnswer}>
+                <Button
+                  size="small"
+                  startIcon={<AddIcon />}
+                  onClick={addAnswer}
+                >
                   Add answer
                 </Button>
               </Box>
@@ -348,7 +356,9 @@ function QuestionBlock({ block, onChange, controls }) {
                 onChange={(e) => onChange({ ...block, answer: e.target.value })}
                 sx={{ mt: 1.5 }}
                 slotProps={{
-                  htmlInput: { "data-collab-field": `block:${block.id}:answer` },
+                  htmlInput: {
+                    "data-collab-field": `block:${block.id}:answer`,
+                  },
                 }}
               />
             </>

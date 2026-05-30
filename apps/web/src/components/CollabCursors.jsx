@@ -48,7 +48,9 @@ export default function CollabCursors({ selections }) {
   const markers = [];
   for (const c of cursors) {
     if (now - (c.ts || 0) > STALE_MS) continue;
-    const el = document.querySelector(`[data-collab-field="${escapeField(c.field)}"]`);
+    const el = document.querySelector(
+      `[data-collab-field="${escapeField(c.field)}"]`,
+    );
     if (!el) continue;
 
     const index = typeof c.end === "number" ? c.end : 0;

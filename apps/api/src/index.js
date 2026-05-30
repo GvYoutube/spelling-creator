@@ -294,10 +294,10 @@ function corsHeaders(request, allowedHostnames) {
 	const headers = new Headers();
 	const origin = request.headers.get('Origin');
 	if (origin) {
-		let allowed = false;
+		let allowed;
 		try {
 			allowed = allowedHostnames.includes(new URL(origin).hostname);
-		} catch (e) {
+		} catch {
 			allowed = false;
 		}
 		if (allowed) {
@@ -599,16 +599,13 @@ async function handleLessons(request, env, url, cors) {
 		// depth). return=representation lets us confirm a row was actually removed.
 		let res;
 		try {
-			res = await fetch(
-				`${base}/rest/v1/lessons?id=eq.${encodeURIComponent(id)}&author_id=eq.${encodeURIComponent(user.id)}&select=id`,
-				{
-					method: 'DELETE',
-					headers: {
-						...supabaseHeaders(env),
-						Prefer: 'return=representation',
-					},
+			res = await fetch(`${base}/rest/v1/lessons?id=eq.${encodeURIComponent(id)}&author_id=eq.${encodeURIComponent(user.id)}&select=id`, {
+				method: 'DELETE',
+				headers: {
+					...supabaseHeaders(env),
+					Prefer: 'return=representation',
 				},
-			);
+			});
 		} catch (e) {
 			return textResponse('Could not reach the lesson store.', 502, cors);
 		}
@@ -842,39 +839,29 @@ export default {
 		// Read the request JSON. `mode` selects the suggester: "text" (default)
 		// generates a block of lesson text; "question" generates a structured
 		// quiz question of the requested `questionType`.
-		let mode = 'text';
-		let subject = '';
-		let token = '';
-		let documentName = '';
-		let questionType = 'single';
-		let sectionText = '';
-		let existingQuestions = [];
-		// Image-search fields (imageSearch / imageFetch modes).
-		let query = '';
-		let imageUrl = '';
-		let page = 1;
-		let perPage = 20;
+		let body;
 		try {
-			const body = await request.json();
-			mode = KNOWN_MODES.has(body.mode) ? body.mode : 'text';
-			subject = body.subject || '';
-			token = body.token || '';
-			documentName = body.documentName || '';
-			questionType = body.questionType || 'single';
-			sectionText = body.sectionText || '';
-			// Prompts of questions already in the section, so we can ask the model
-			// not to repeat them. Keep only non-empty strings and cap the count so a
-			// large section can't blow up the prompt.
-			existingQuestions = Array.isArray(body.existingQuestions)
-				? body.existingQuestions.filter((q) => typeof q === 'string' && q.trim()).slice(0, 50)
-				: [];
-			query = body.query || '';
-			imageUrl = body.url || '';
-			page = body.page || 1;
-			perPage = body.perPage || 20;
-		} catch (e) {
+			body = await request.json();
+		} catch {
 			return new Response('Invalid JSON body', { status: 400, headers: cors });
 		}
+		const mode = KNOWN_MODES.has(body.mode) ? body.mode : 'text';
+		const subject = body.subject || '';
+		const token = body.token || '';
+		const documentName = body.documentName || '';
+		const questionType = body.questionType || 'single';
+		const sectionText = body.sectionText || '';
+		// Prompts of questions already in the section, so we can ask the model
+		// not to repeat them. Keep only non-empty strings and cap the count so a
+		// large section can't blow up the prompt.
+		const existingQuestions = Array.isArray(body.existingQuestions)
+			? body.existingQuestions.filter((q) => typeof q === 'string' && q.trim()).slice(0, 50)
+			: [];
+		// Image-search fields (imageSearch / imageFetch modes).
+		const query = body.query || '';
+		const imageUrl = body.url || '';
+		const page = body.page || 1;
+		const perPage = body.perPage || 20;
 		// The AI suggesters need a subject; the image modes carry their own
 		// fields instead and are validated inside their handlers.
 		if ((mode === 'text' || mode === 'question') && !subject) {

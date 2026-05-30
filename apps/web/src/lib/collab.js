@@ -392,7 +392,6 @@ export function useCollaboration({ doc, onRemoteDoc, identity }) {
         setStatus("error");
       });
     },
-    // eslint-disable-next-line react-hooks/exhaustive-deps
     [applyRemote, applyCursor],
   );
 

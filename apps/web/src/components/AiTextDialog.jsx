@@ -31,7 +31,13 @@ import { TURNSTILE_SITE_KEY, whenTurnstileReady } from "../lib/turnstile.js";
  * answer instead of serving the disliked one. Disliking then offers an
  * immediate regenerate from the freshly-cleared cache.
  */
-export default function AiTextDialog({ open, sectionTitle, documentName, onInsert, onClose }) {
+export default function AiTextDialog({
+  open,
+  sectionTitle,
+  documentName,
+  onInsert,
+  onClose,
+}) {
   const { user, accessToken } = useAuth();
   const [token, setToken] = useState("");
   const [busy, setBusy] = useState(false);
@@ -150,14 +156,24 @@ export default function AiTextDialog({ open, sectionTitle, documentName, onInser
       : "Not a good suggestion? Remove it from the cache";
 
   return (
-    <Dialog open={open} onClose={working ? undefined : onClose} fullWidth maxWidth="xs">
+    <Dialog
+      open={open}
+      onClose={working ? undefined : onClose}
+      fullWidth
+      maxWidth="xs"
+    >
       <DialogTitle>Suggest text with AI</DialogTitle>
       <DialogContent>
         <Stack spacing={2} sx={{ mt: 0.5 }}>
           <DialogContentText>
-            {subject
-              ? <>Generate a block of text for the section <strong>“{subject}”</strong>.</>
-              : "Give this section a name first, that's what the text will be about."}
+            {subject ? (
+              <>
+                Generate a block of text for the section{" "}
+                <strong>“{subject}”</strong>.
+              </>
+            ) : (
+              "Give this section a name first, that's what the text will be about."
+            )}
           </DialogContentText>
 
           {result && (
@@ -177,7 +193,12 @@ export default function AiTextDialog({ open, sectionTitle, documentName, onInser
               >
                 {result}
               </Box>
-              <Stack direction="row" spacing={1} alignItems="center" sx={{ mt: 1 }}>
+              <Stack
+                direction="row"
+                spacing={1}
+                alignItems="center"
+                sx={{ mt: 1 }}
+              >
                 <Tooltip title={dislikeReason}>
                   {/* span so the tooltip still shows while the button is disabled */}
                   <span>

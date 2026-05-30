@@ -111,7 +111,7 @@ export default function CollaborateDialog({
 
       <Box>
         <Typography variant="subtitle2" gutterBottom>
-          Join someone's lesson
+          Join someone&apos;s lesson
         </Typography>
         <Stack direction="row" spacing={1} alignItems="flex-start">
           <TextField
@@ -135,7 +135,7 @@ export default function CollaborateDialog({
           </Button>
         </Stack>
         <Typography variant="caption" color="text.secondary">
-          Joining replaces your current draft with the host's lesson.
+          Joining replaces your current draft with the host&apos;s lesson.
         </Typography>
       </Box>
     </Stack>
@@ -215,7 +215,10 @@ export default function CollaborateDialog({
                 }
               >
                 <ListItemAvatar>
-                  <Avatar src={r.avatarUrl || undefined} sx={{ bgcolor: "warning.light" }}>
+                  <Avatar
+                    src={r.avatarUrl || undefined}
+                    sx={{ bgcolor: "warning.light" }}
+                  >
                     {initials(r)}
                   </Avatar>
                 </ListItemAvatar>
@@ -241,10 +244,15 @@ export default function CollaborateDialog({
       <Stack spacing={2.5} sx={{ pt: 1 }}>
         {admitted ? (
           <Alert severity="success" variant="outlined">
-            You're collaborating live. Your changes sync with everyone here.
+            You&apos;re collaborating live. Your changes sync with everyone
+            here.
           </Alert>
         ) : (
-          <Alert severity="info" variant="outlined" icon={<CircularProgress size={18} />}>
+          <Alert
+            severity="info"
+            variant="outlined"
+            icon={<CircularProgress size={18} />}
+          >
             Connected — waiting for the host to add you to the lesson.
           </Alert>
         )}
@@ -266,7 +274,10 @@ export default function CollaborateDialog({
               secondaryAction={
                 role === "host" && !p.host ? (
                   <Tooltip title="Remove from lesson">
-                    <IconButton edge="end" onClick={() => removeParticipant(p.id)}>
+                    <IconButton
+                      edge="end"
+                      onClick={() => removeParticipant(p.id)}
+                    >
                       <CloseIcon fontSize="small" />
                     </IconButton>
                   </Tooltip>
@@ -285,7 +296,14 @@ export default function CollaborateDialog({
                 primary={p.name || "Collaborator"}
                 secondary={p.email || undefined}
               />
-              {p.host && <Chip size="small" label="Host" color="primary" variant="outlined" />}
+              {p.host && (
+                <Chip
+                  size="small"
+                  label="Host"
+                  color="primary"
+                  variant="outlined"
+                />
+              )}
             </ListItem>
           ))}
         </List>

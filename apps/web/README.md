@@ -42,11 +42,11 @@ PDF printing.
 The app is a single-page app with three client-side routes (hash-based, so deep
 links work on any static host without server rewrites):
 
-| Route     | Page         | What it does                                                       |
-| --------- | ------------ | ------------------------------------------------------------------ |
-| `/`       | **Editor**   | The lesson builder (the original app). "Publish to hub" lives here. |
-| `/#/hub`  | **Lesson hub** | Public gallery of published lessons; click one to preview it.     |
-| `/#/login`| **Sign in**  | Magic-link sign-in / account status.                                |
+| Route      | Page           | What it does                                                        |
+| ---------- | -------------- | ------------------------------------------------------------------- |
+| `/`        | **Editor**     | The lesson builder (the original app). "Publish to hub" lives here. |
+| `/#/hub`   | **Lesson hub** | Public gallery of published lessons; click one to preview it.       |
+| `/#/login` | **Sign in**    | Magic-link sign-in / account status.                                |
 
 Every page's header carries a shared nav (a **Lesson hub** link and an account
 control that shows **Sign in** or the signed-in account menu). Routing is set up
@@ -132,7 +132,7 @@ The flow:
 1. Type a search term; a [Cloudflare Turnstile](https://www.cloudflare.com/products/turnstile/)
    token (the same widget as the AI dialogs) is sent with the request.
 2. The Worker verifies the token, calls the Pixabay API with `mode:
-   "imageSearch"`, and returns normalised hits (preview/webformat URLs, size,
+"imageSearch"`, and returns normalised hits (preview/webformat URLs, size,
    tags). It edge-caches the Pixabay response for 24 hours, which both satisfies
    Pixabay's caching requirement and keeps request counts well under the limit.
 3. Click a result; the app calls the Worker again with `mode: "imageFetch"`,
@@ -175,8 +175,8 @@ there is no collaboration backend, so it works on any static host. PeerJS's publ
 broker is used only for the initial signalling handshake — the lesson data then
 flows directly between browsers.
 
-**Host vs. guest.** Whoever opens the session is the *host* and the authority for
-the document; everyone else is a *guest*.
+**Host vs. guest.** Whoever opens the session is the _host_ and the authority for
+the document; everyone else is a _guest_.
 
 1. The host clicks **Start a collaboration session** and gets a short **session
    code** (their PeerJS peer id) plus a one-click **invite link**
@@ -185,7 +185,7 @@ the document; everyone else is a *guest*.
    does **not** yet make them a collaborator.
 3. The guest appears in the host's **Waiting to join** list. The host clicks
    **Add to lesson** — this is the gate the feature is built around: only after a
-   guest is *added* does the host send them the lesson and start syncing edits.
+   guest is _added_ does the host send them the lesson and start syncing edits.
    The host can decline a request or remove a collaborator at any time.
 4. Once added, edits sync **both ways**: the whole document is the unit of sync
    (last-write-wins), the host re-broadcasts each guest's change to the other
@@ -246,15 +246,15 @@ verifies it (and derives the author) before inserting the row.
 These live in the separate `spelling-creator-cf` repo. The frontend
 (`src/lib/lessons.js`) expects them at paths under `VITE_API_URL`:
 
-| Method & path        | Auth                | Response                                                                 |
-| -------------------- | ------------------- | ------------------------------------------------------------------------ |
-| `GET /lessons`       | none (public)       | `{ "lessons": [{ id, authorId, title, author, sectionCount, createdAt }] }` (newest first) |
-| `GET /lessons/:id`   | none (public)       | `{ "lesson": { id, authorId, title, author, createdAt, doc } }`          |
-| `POST /lessons`      | `Bearer <Supabase JWT>` | `{ "lesson": { id, authorId, title, author, createdAt } }`           |
-| `PUT /lessons/:id`   | `Bearer <Supabase JWT>` | `{ "lesson": { id, authorId, title, author, createdAt } }` (author only; else `403`) |
-| `GET /lessons/:id/comments`  | none (public)       | `{ "comments": [{ id, author, body, createdAt }] }` (oldest first) |
-| `POST /lessons/:id/comments` | `Bearer <Supabase JWT>` | `{ "comment": { id, author, body, createdAt } }`               |
-| `POST /ai-text/dislike`      | `Bearer <Supabase JWT>` | `{ "ok": true }` — evicts the cached text for `{ subject, documentName }` |
+| Method & path                | Auth                    | Response                                                                                   |
+| ---------------------------- | ----------------------- | ------------------------------------------------------------------------------------------ |
+| `GET /lessons`               | none (public)           | `{ "lessons": [{ id, authorId, title, author, sectionCount, createdAt }] }` (newest first) |
+| `GET /lessons/:id`           | none (public)           | `{ "lesson": { id, authorId, title, author, createdAt, doc } }`                            |
+| `POST /lessons`              | `Bearer <Supabase JWT>` | `{ "lesson": { id, authorId, title, author, createdAt } }`                                 |
+| `PUT /lessons/:id`           | `Bearer <Supabase JWT>` | `{ "lesson": { id, authorId, title, author, createdAt } }` (author only; else `403`)       |
+| `GET /lessons/:id/comments`  | none (public)           | `{ "comments": [{ id, author, body, createdAt }] }` (oldest first)                         |
+| `POST /lessons/:id/comments` | `Bearer <Supabase JWT>` | `{ "comment": { id, author, body, createdAt } }`                                           |
+| `POST /ai-text/dislike`      | `Bearer <Supabase JWT>` | `{ "ok": true }` — evicts the cached text for `{ subject, documentName }`                  |
 
 - `doc` is the editor document shape used throughout the app:
   `{ title, sections: [{ id, name, blocks: [...] }] }`. Store it as `jsonb`.

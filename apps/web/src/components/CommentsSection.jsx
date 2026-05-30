@@ -72,6 +72,8 @@ export default function CommentsSection({ lessonId }) {
     // Reset the in-progress draft state when switching lessons.
     setDraft("");
     setPostNotice(null);
+    // Intentionally re-run only when the lesson changes, not when `load` changes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [lessonId]);
 
   const submit = async (e) => {
@@ -134,7 +136,12 @@ export default function CommentsSection({ lessonId }) {
           )}
 
           {comments.map((c) => (
-            <Stack key={c.id} direction="row" spacing={1.5} alignItems="flex-start">
+            <Stack
+              key={c.id}
+              direction="row"
+              spacing={1.5}
+              alignItems="flex-start"
+            >
               <Avatar sx={{ width: 32, height: 32, fontSize: 14 }}>
                 {initial(c.author)}
               </Avatar>
@@ -193,7 +200,11 @@ export default function CommentsSection({ lessonId }) {
                   type="submit"
                   variant="contained"
                   disabled={posting || !draft.trim()}
-                  startIcon={posting ? <CircularProgress size={16} color="inherit" /> : null}
+                  startIcon={
+                    posting ? (
+                      <CircularProgress size={16} color="inherit" />
+                    ) : null
+                  }
                 >
                   {posting ? "Posting…" : "Post comment"}
                 </Button>

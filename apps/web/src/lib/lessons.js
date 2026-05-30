@@ -75,7 +75,9 @@ export async function fetchLesson(id) {
 
   let res;
   try {
-    res = await fetch(endpoint(`/${encodeURIComponent(id)}`), { method: "GET" });
+    res = await fetch(endpoint(`/${encodeURIComponent(id)}`), {
+      method: "GET",
+    });
   } catch {
     throw new Error("Could not reach the lesson hub.");
   }

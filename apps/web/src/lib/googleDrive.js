@@ -66,7 +66,9 @@ function whenGisReady(timeoutMs = 10000) {
         resolve(window.google.accounts.oauth2);
       } else if ((waited += 100) >= timeoutMs) {
         clearInterval(timer);
-        reject(new Error("Google sign-in failed to load. Check your connection."));
+        reject(
+          new Error("Google sign-in failed to load. Check your connection."),
+        );
       }
     }, 100);
   });
@@ -186,7 +188,9 @@ export async function saveToGoogleDrive(doc) {
   // Never allow two uploads at once — a second click while one is running would
   // double our request rate for no benefit.
   if (inFlight) {
-    throw new Error("A save is already in progress. Please wait for it to finish.");
+    throw new Error(
+      "A save is already in progress. Please wait for it to finish.",
+    );
   }
 
   // Throttle: refuse uploads fired closer together than MIN_INTERVAL_MS.

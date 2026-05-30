@@ -142,7 +142,9 @@ function questionBlockParagraphs(block) {
         spacing: { after: answers.length ? 40 : 120 },
         children: [
           new TextRun({ text: "Answers:", italics: true, size: 24 }),
-          ...(answers.length ? [] : [new TextRun({ text: " ____________", size: 24 })]),
+          ...(answers.length
+            ? []
+            : [new TextRun({ text: " ____________", size: 24 })]),
         ],
       }),
     );

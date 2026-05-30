@@ -49,7 +49,7 @@ export async function searchPixabayImages(query, token, opts = {}) {
       }),
     });
   } catch (e) {
-    throw new Error("Could not reach the image search service.");
+    throw new Error("Could not reach the image search service.", { cause: e });
   }
 
   if (!res.ok) {
@@ -88,7 +88,7 @@ export async function fetchPixabayImage(url, token) {
       body: JSON.stringify({ mode: "imageFetch", url, token }),
     });
   } catch (e) {
-    throw new Error("Could not download the selected image.");
+    throw new Error("Could not download the selected image.", { cause: e });
   }
 
   if (!res.ok) {

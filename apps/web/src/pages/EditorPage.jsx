@@ -116,9 +116,7 @@ export default function EditorPage() {
       // A profile picture if the auth provider gave us one — used for the
       // floating editing indicator and the collaborator roster.
       avatarUrl:
-        user?.user_metadata?.avatar_url ||
-        user?.user_metadata?.picture ||
-        "",
+        user?.user_metadata?.avatar_url || user?.user_metadata?.picture || "",
     }),
     [user],
   );
@@ -127,7 +125,10 @@ export default function EditorPage() {
 
   // While collaborating, share our text selection so others see our avatar
   // float over what we're editing (and we see theirs via CollabCursors).
-  useSelectionBroadcast({ active: collab.active, onSelect: collab.setLocalSelection });
+  useSelectionBroadcast({
+    active: collab.active,
+    onSelect: collab.setLocalSelection,
+  });
 
   // An invite link deep-links here with `?join=<code>`. Open the collaboration
   // dialog (prefilled with the code) once when we arrive that way.
@@ -189,7 +190,8 @@ export default function EditorPage() {
     setPendingEdit(null);
     setToast({
       severity: "info",
-      message: "Loaded your published lesson — edit and press Update to save it.",
+      message:
+        "Loaded your published lesson — edit and press Update to save it.",
     });
   };
 
@@ -762,9 +764,9 @@ export default function EditorPage() {
           <Typography variant="body2">
             {pendingEdit?.mode === "fork" ? "Forking" : "Opening"}{" "}
             <strong>{pendingEdit?.title || "this lesson"}</strong>
-            {pendingEdit?.mode === "fork" ? "" : " for editing"} will replace the
-            lesson you’re working on now. Your in-progress work is auto-saved in
-            this browser, and replacing it can’t be undone.
+            {pendingEdit?.mode === "fork" ? "" : " for editing"} will replace
+            the lesson you’re working on now. Your in-progress work is
+            auto-saved in this browser, and replacing it can’t be undone.
           </Typography>
         </DialogContent>
         <DialogActions>
@@ -774,7 +776,9 @@ export default function EditorPage() {
             variant="contained"
             onClick={() => applyEdit(pendingEdit)}
           >
-            {pendingEdit?.mode === "fork" ? "Replace and fork" : "Replace and edit"}
+            {pendingEdit?.mode === "fork"
+              ? "Replace and fork"
+              : "Replace and edit"}
           </Button>
         </DialogActions>
       </Dialog>

@@ -25,7 +25,8 @@ export function useSelectionBroadcast({ active, onSelect }) {
     const read = () => {
       raf = 0;
       const el = document.activeElement;
-      const field = el && el.getAttribute ? el.getAttribute("data-collab-field") : null;
+      const field =
+        el && el.getAttribute ? el.getAttribute("data-collab-field") : null;
       const tag = el && el.nodeName ? el.nodeName.toLowerCase() : "";
 
       if (field && (tag === "textarea" || tag === "input")) {

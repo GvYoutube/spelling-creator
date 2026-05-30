@@ -68,6 +68,9 @@ jobs:
           echo "VITE_METERED_USER=${{ secrets.VITE_METERED_USER }}" >> apps/web/.env
           echo "VITE_METERED_PASS=${{ secrets.VITE_METERED_PASS }}" >> apps/web/.env
 
+      - name: Lint
+        run: pnpm lint
+
       - name: Build
         run: pnpm --filter @spelling-creator/web build
 

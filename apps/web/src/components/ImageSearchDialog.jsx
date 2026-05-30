@@ -10,7 +10,6 @@ import Stack from "@mui/material/Stack";
 import Alert from "@mui/material/Alert";
 import Link from "@mui/material/Link";
 import TextField from "@mui/material/TextField";
-import IconButton from "@mui/material/IconButton";
 import ImageList from "@mui/material/ImageList";
 import ImageListItem from "@mui/material/ImageListItem";
 import Typography from "@mui/material/Typography";
@@ -210,7 +209,9 @@ export default function ImageSearchDialog({ open, onInsert, onClose }) {
                     overflow: "hidden",
                     border: "1px solid",
                     borderColor: "divider",
-                    "&:hover": { borderColor: busy ? "divider" : "primary.main" },
+                    "&:hover": {
+                      borderColor: busy ? "divider" : "primary.main",
+                    },
                   }}
                 >
                   <Box

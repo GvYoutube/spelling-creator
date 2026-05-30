@@ -89,7 +89,7 @@ export default function LoginPage() {
           ) : user ? (
             <Stack spacing={2} alignItems="center" textAlign="center">
               <MarkEmailReadIcon color="primary" sx={{ fontSize: 48 }} />
-              <Typography variant="h6">You're signed in</Typography>
+              <Typography variant="h6">You&apos;re signed in</Typography>
               <Typography
                 variant="body2"
                 color="text.secondary"
@@ -125,9 +125,9 @@ export default function LoginPage() {
           ) : (
             <Stack component="form" spacing={2} onSubmit={submit}>
               <Typography variant="body2" color="text.secondary">
-                Enter your email and we'll send you a one-time sign-in link — no
-                password needed. You only need an account to publish lessons to
-                the hub.
+                Enter your email and we&apos;ll send you a one-time sign-in link
+                — no password needed. You only need an account to publish
+                lessons to the hub.
               </Typography>
               {error && <Alert severity="error">{error}</Alert>}
               <TextField

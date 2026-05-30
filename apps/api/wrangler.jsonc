@@ -4,18 +4,18 @@
 	"main": "src/index.js",
 	"compatibility_date": "2026-05-28",
 	"observability": {
-		"enabled": true
+		"enabled": true,
 	},
 
 	"vars": {
 		"ALLOWED_HOSTNAMES": "gameoftheday.us",
-		"SUPABASE_URL": "https://hfkgrqihawgosalltjpy.supabase.co"
+		"SUPABASE_URL": "https://hfkgrqihawgosalltjpy.supabase.co",
 	},
 
 	"kv_namespaces": [
 		{
 			"binding": "RATE_LIMIT_KV",
-			"id": "e3d5364c3c8f4637937bb07a17ffbb38"
-		}
-	]
+			"id": "e3d5364c3c8f4637937bb07a17ffbb38",
+		},
+	],
 }
