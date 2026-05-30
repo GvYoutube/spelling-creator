@@ -29,6 +29,7 @@ import CloseIcon from "@mui/icons-material/Close";
 import ContentCopyIcon from "@mui/icons-material/ContentCopy";
 import GroupAddIcon from "@mui/icons-material/GroupAdd";
 import LoginIcon from "@mui/icons-material/Login";
+import { colorForId } from "../lib/presence.js";
 
 // Build a shareable invite link that deep-links into the editor with the host's
 // session code, so a recipient just clicks and lands on the join screen.
@@ -214,7 +215,9 @@ export default function CollaborateDialog({
                 }
               >
                 <ListItemAvatar>
-                  <Avatar sx={{ bgcolor: "warning.light" }}>{initials(r)}</Avatar>
+                  <Avatar src={r.avatarUrl || undefined} sx={{ bgcolor: "warning.light" }}>
+                    {initials(r)}
+                  </Avatar>
                 </ListItemAvatar>
                 <ListItemText
                   primary={r.name || "Someone"}
@@ -271,7 +274,10 @@ export default function CollaborateDialog({
               }
             >
               <ListItemAvatar>
-                <Avatar sx={{ bgcolor: p.host ? "primary.main" : "secondary.main" }}>
+                <Avatar
+                  src={p.avatarUrl || undefined}
+                  sx={{ bgcolor: p.host ? "primary.main" : colorForId(p.id) }}
+                >
                   {initials(p)}
                 </Avatar>
               </ListItemAvatar>

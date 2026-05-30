@@ -40,6 +40,7 @@ import Badge from "@mui/material/Badge";
 import SectionCard from "../components/SectionCard.jsx";
 import NavActions from "../components/NavActions.jsx";
 import CollaborateDialog from "../components/CollaborateDialog.jsx";
+import CollabCursors from "../components/CollabCursors.jsx";
 import { newId } from "../lib/id.js";
 import {
   loadDocument,
@@ -60,6 +61,7 @@ import {
 } from "../lib/lessons.js";
 import { useAuth } from "../lib/auth.jsx";
 import { useCollaboration } from "../lib/collab.js";
+import { useSelectionBroadcast } from "../lib/useSelectionBroadcast.js";
 
 function createInitialDoc() {
   return loadDocument() || { title: "Put your topic here...", sections: [] };
@@ -110,11 +112,21 @@ export default function EditorPage() {
         user?.user_metadata?.name ||
         (user?.email ? user.email.split("@")[0] : ""),
       email: user?.email || "",
+      // A profile picture if the auth provider gave us one — used for the
+      // floating editing indicator and the collaborator roster.
+      avatarUrl:
+        user?.user_metadata?.avatar_url ||
+        user?.user_metadata?.picture ||
+        "",
     }),
     [user],
   );
   const collab = useCollaboration({ doc, onRemoteDoc: setDoc, identity });
   const [collabOpen, setCollabOpen] = useState(false);
+
+  // While collaborating, share our text selection so others see our avatar
+  // float over what we're editing (and we see theirs via CollabCursors).
+  useSelectionBroadcast({ active: collab.active, onSelect: collab.setLocalSelection });
 
   // An invite link deep-links here with `?join=<code>`. Open the collaboration
   // dialog (prefilled with the code) once when we arrive that way.
@@ -555,7 +567,10 @@ export default function EditorPage() {
             placeholder="Untitled Lesson"
             value={doc.title}
             onChange={(e) => setTitle(e.target.value)}
-            slotProps={{ input: { sx: { fontSize: 28, fontWeight: 700 } } }}
+            slotProps={{
+              input: { sx: { fontSize: 28, fontWeight: 700 } },
+              htmlInput: { "data-collab-field": "doc:title" },
+            }}
           />
           <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
             {sectionCount} section{sectionCount === 1 ? "" : "s"} · {blockCount}{" "}
@@ -732,6 +747,9 @@ export default function EditorPage() {
         collab={collab}
         initialJoinCode={joinCode}
       />
+
+      {/* Floating avatars showing where each collaborator is editing. */}
+      <CollabCursors selections={collab.selections} />
 
       <Backdrop open={editLoading} sx={{ zIndex: (t) => t.zIndex.modal + 1 }}>
         <CircularProgress color="inherit" />

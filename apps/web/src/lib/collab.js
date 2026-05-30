@@ -22,6 +22,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import Peer from "peerjs";
 import { newId } from "./id.js";
+import { colorForId } from "./presence.js";
 
 // We identify peers by a UUID we generate ourselves and pass in the PeerJS
 // connection `metadata`, NOT by the PeerJS peer id. Per the PeerJS docs the peer
@@ -35,11 +36,13 @@ import { newId } from "./id.js";
 //   host  -> guest { t: 'removed' }                  request declined / removed
 //   any   -> any   { t: 'doc', doc }                 full document update
 //   host  -> guests{ t: 'presence', participants }   who is collaborating now
+//   any   -> any   { t: 'cursor', cursor }            where someone is editing
 const MSG = {
   ADMITTED: "admitted",
   REMOVED: "removed",
   DOC: "doc",
   PRESENCE: "presence",
+  CURSOR: "cursor",
 };
 
 // A short label for someone we don't have a name for yet (derived from their uid).
@@ -64,6 +67,10 @@ export function useCollaboration({ doc, onRemoteDoc, identity }) {
   const [participants, setParticipants] = useState([]); // [{ id, name, email }] admitted collaborators
   const [requests, setRequests] = useState([]); // host-only: [{ id, name, email }] awaiting admission
   const [error, setError] = useState(null);
+  // Live editing positions of the *other* collaborators, keyed by their id:
+  // { [uid]: { uid, name, email, avatarUrl, color, field, start, end, ts } }.
+  // Our own cursor is never stored here — we only render the people we receive.
+  const [selections, setSelections] = useState({});
 
   // Live objects kept in refs (not state) so re-renders don't churn connections.
   const peerRef = useRef(null);
@@ -71,6 +78,9 @@ export function useCollaboration({ doc, onRemoteDoc, identity }) {
   const connsRef = useRef(new Map());
   // Guest: the single DataConnection back to the host.
   const hostConnRef = useRef(null);
+  // Our own stable id for cursor presence: "host" when hosting, our join UUID
+  // when a guest. It matches the id the host assigns us in the roster.
+  const myCursorIdRef = useRef(null);
   // JSON of the last doc we sent or applied, to break broadcast echo loops.
   const lastSyncedRef = useRef(null);
   // Latest doc/identity/callback mirrored for use inside long-lived listeners.
@@ -100,13 +110,24 @@ export function useCollaboration({ doc, onRemoteDoc, identity }) {
     const admitted = [];
     const pending = [];
     for (const [id, rec] of connsRef.current) {
-      const entry = { id, name: rec.info.name, email: rec.info.email };
+      const entry = {
+        id,
+        name: rec.info.name,
+        email: rec.info.email,
+        avatarUrl: rec.info.avatarUrl || "",
+      };
       (rec.admitted ? admitted : pending).push(entry);
     }
     // The host is a participant too, listed first.
     const me = identityRef.current || {};
     const all = [
-      { id: "host", name: me.name || "You (host)", email: me.email || "", host: true },
+      {
+        id: "host",
+        name: me.name || "You (host)",
+        email: me.email || "",
+        avatarUrl: me.avatarUrl || "",
+        host: true,
+      },
       ...admitted,
     ];
     setParticipants(all);
@@ -124,6 +145,28 @@ export function useCollaboration({ doc, onRemoteDoc, identity }) {
     onRemoteDocRef.current?.(nextDoc);
   }, []);
 
+  // Record (or, when a peer leaves their field, clear) a collaborator's editing
+  // position. A cursor with no `field` means "I'm no longer editing".
+  const applyCursor = useCallback((cursor) => {
+    if (!cursor || !cursor.uid) return;
+    setSelections((prev) => {
+      const next = { ...prev };
+      if (!cursor.field) delete next[cursor.uid];
+      else next[cursor.uid] = cursor;
+      return next;
+    });
+  }, []);
+
+  // Forget a collaborator's cursor entirely (they left or were removed).
+  const forgetCursor = useCallback((uid) => {
+    setSelections((prev) => {
+      if (!(uid in prev)) return prev;
+      const next = { ...prev };
+      delete next[uid];
+      return next;
+    });
+  }, []);
+
   // ----- Host -------------------------------------------------------------
   const startHosting = useCallback(() => {
     if (peerRef.current) return;
@@ -137,6 +180,7 @@ export function useCollaboration({ doc, onRemoteDoc, identity }) {
     peer.on("open", (id) => {
       setMyCode(id);
       setStatus("hosting");
+      myCursorIdRef.current = "host";
       // Seed lastSynced with the current doc so we don't treat the first edit
       // as new vs. a null baseline (no functional harm either way).
       lastSyncedRef.current = JSON.stringify(docRef.current);
@@ -150,7 +194,11 @@ export function useCollaboration({ doc, onRemoteDoc, identity }) {
       // soon as they connect.
       const meta = conn.metadata || {};
       const uid = meta.uid || conn.peer;
-      const info = { name: meta.name || shortId(uid), email: meta.email || "" };
+      const info = {
+        name: meta.name || shortId(uid),
+        email: meta.email || "",
+        avatarUrl: meta.avatarUrl || "",
+      };
 
       conn.on("open", () => {
         connsRef.current.set(uid, { conn, info, admitted: false });
@@ -169,12 +217,23 @@ export function useCollaboration({ doc, onRemoteDoc, identity }) {
               send(other.conn, { t: MSG.DOC, doc: msg.doc });
             }
           }
+        } else if (msg.t === MSG.CURSOR && rec.admitted) {
+          // A collaborator moved their caret: show it, then relay to the rest.
+          // Stamp the sender's id from the connection so a peer can't spoof it.
+          const cursor = { ...msg.cursor, uid };
+          applyCursor(cursor);
+          for (const [pid, other] of connsRef.current) {
+            if (pid !== uid && other.admitted) {
+              send(other.conn, { t: MSG.CURSOR, cursor });
+            }
+          }
         }
-        // Edits from a not-yet-admitted guest are ignored by design.
+        // Messages from a not-yet-admitted guest are ignored by design.
       });
 
       const drop = () => {
         connsRef.current.delete(uid);
+        forgetCursor(uid);
         syncHostParticipants();
       };
       conn.on("close", drop);
@@ -185,7 +244,7 @@ export function useCollaboration({ doc, onRemoteDoc, identity }) {
       setError(err?.message || "Connection error.");
       setStatus("error");
     });
-  }, [applyRemote, syncHostParticipants]);
+  }, [applyRemote, applyCursor, forgetCursor, syncHostParticipants]);
 
   // Host: add a pending guest to the lesson. This is the "add the user" step —
   // it flips them to admitted, hands them the current doc, and starts syncing.
@@ -212,9 +271,10 @@ export function useCollaboration({ doc, onRemoteDoc, identity }) {
         /* ignore */
       }
       connsRef.current.delete(peerId);
+      forgetCursor(peerId);
       syncHostParticipants();
     },
-    [syncHostParticipants],
+    [forgetCursor, syncHostParticipants],
   );
 
   // ----- Guest ------------------------------------------------------------
@@ -233,6 +293,7 @@ export function useCollaboration({ doc, onRemoteDoc, identity }) {
       // Our own identifier for this session: a UUID we send in the connection
       // metadata so the host identifies us by it rather than by our peer id.
       const myUid = newId();
+      myCursorIdRef.current = myUid;
 
       const peer = new Peer();
       peerRef.current = peer;
@@ -241,7 +302,12 @@ export function useCollaboration({ doc, onRemoteDoc, identity }) {
         const me = identityRef.current || {};
         const conn = peer.connect(hostId, {
           reliable: true,
-          metadata: { uid: myUid, name: me.name || "", email: me.email || "" },
+          metadata: {
+            uid: myUid,
+            name: me.name || "",
+            email: me.email || "",
+            avatarUrl: me.avatarUrl || "",
+          },
         });
         hostConnRef.current = conn;
 
@@ -255,8 +321,19 @@ export function useCollaboration({ doc, onRemoteDoc, identity }) {
             applyRemote(msg.doc);
           } else if (msg.t === MSG.DOC) {
             applyRemote(msg.doc);
+          } else if (msg.t === MSG.CURSOR) {
+            applyCursor(msg.cursor);
           } else if (msg.t === MSG.PRESENCE) {
-            setParticipants(Array.isArray(msg.participants) ? msg.participants : []);
+            const list = Array.isArray(msg.participants) ? msg.participants : [];
+            setParticipants(list);
+            // Drop cursors for anyone no longer in the lesson. Participant ids
+            // are the same uids cursors are keyed by (host assigns both).
+            const ids = new Set(list.map((p) => p.id));
+            setSelections((prev) => {
+              const next = {};
+              for (const k of Object.keys(prev)) if (ids.has(k)) next[k] = prev[k];
+              return next;
+            });
           } else if (msg.t === MSG.REMOVED) {
             setError("The host removed you from the lesson.");
             cleanup();
@@ -284,7 +361,7 @@ export function useCollaboration({ doc, onRemoteDoc, identity }) {
       });
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [applyRemote],
+    [applyRemote, applyCursor],
   );
 
   // ----- Teardown ---------------------------------------------------------
@@ -310,6 +387,8 @@ export function useCollaboration({ doc, onRemoteDoc, identity }) {
     }
     peerRef.current = null;
     lastSyncedRef.current = null;
+    myCursorIdRef.current = null;
+    setSelections({});
   }
 
   const leave = useCallback(() => {
@@ -321,6 +400,37 @@ export function useCollaboration({ doc, onRemoteDoc, identity }) {
     setRequests([]);
     setError(null);
   }, []);
+
+  // Broadcast where we're editing (or that we've stopped, when `sel` is null).
+  // The cursor carries our identity so collaborators can label and colour it
+  // without a separate lookup. We never add it to our own `selections`.
+  const setLocalSelection = useCallback(
+    (sel) => {
+      const id = myCursorIdRef.current;
+      if (!id) return;
+      const me = identityRef.current || {};
+      const cursor = {
+        uid: id,
+        name: me.name || "",
+        email: me.email || "",
+        avatarUrl: me.avatarUrl || "",
+        color: colorForId(id),
+        field: sel && sel.field ? sel.field : null,
+        start: sel ? sel.start : null,
+        end: sel ? sel.end : null,
+        ts: Date.now(),
+      };
+      const msg = { t: MSG.CURSOR, cursor };
+      if (role === "host") {
+        for (const [, rec] of connsRef.current) {
+          if (rec.admitted) send(rec.conn, msg);
+        }
+      } else if (role === "guest") {
+        send(hostConnRef.current, msg);
+      }
+    },
+    [role],
+  );
 
   // Tear down the peer when the component using this hook unmounts.
   useEffect(() => () => cleanup(), []);
@@ -352,11 +462,13 @@ export function useCollaboration({ doc, onRemoteDoc, identity }) {
     requests,
     error,
     active,
+    selections,
     startHosting,
     joinSession,
     admit,
     removeParticipant,
     leave,
+    setLocalSelection,
     clearError: () => setError(null),
   };
 }

@@ -158,7 +158,10 @@ export default function SectionCard({
             placeholder="Section name"
             value={section.name}
             onChange={(e) => onChange({ ...section, name: e.target.value })}
-            slotProps={{ input: { sx: { fontSize: 20, fontWeight: 600 } } }}
+            slotProps={{
+              input: { sx: { fontSize: 20, fontWeight: 600 } },
+              htmlInput: { "data-collab-field": `section:${section.id}:name` },
+            }}
           />
           <Tooltip title="Move section up">
             <span>

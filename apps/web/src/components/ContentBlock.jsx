@@ -150,6 +150,9 @@ export default function ContentBlock({
               label="Caption (optional)"
               value={block.caption || ""}
               onChange={(e) => onChange({ ...block, caption: e.target.value })}
+              slotProps={{
+                htmlInput: { "data-collab-field": `block:${block.id}:caption` },
+              }}
             />
           </Box>
           {controls}
@@ -169,6 +172,9 @@ export default function ContentBlock({
           placeholder="Type lesson text here…"
           value={block.text || ""}
           onChange={(e) => onChange({ ...block, text: e.target.value })}
+          slotProps={{
+            htmlInput: { "data-collab-field": `block:${block.id}:text` },
+          }}
         />
         {controls}
       </Stack>
@@ -217,6 +223,9 @@ function QuestionBlock({ block, onChange, controls }) {
             placeholder="Type the question…"
             value={block.prompt || ""}
             onChange={(e) => onChange({ ...block, prompt: e.target.value })}
+            slotProps={{
+              htmlInput: { "data-collab-field": `block:${block.id}:prompt` },
+            }}
           />
 
           {block.questionType === "number" && (
@@ -227,6 +236,9 @@ function QuestionBlock({ block, onChange, controls }) {
               value={block.answer ?? ""}
               onChange={(e) => onChange({ ...block, answer: e.target.value })}
               sx={{ mt: 1.5, maxWidth: 200 }}
+              slotProps={{
+                htmlInput: { "data-collab-field": `block:${block.id}:answer` },
+              }}
             />
           )}
 
@@ -239,6 +251,9 @@ function QuestionBlock({ block, onChange, controls }) {
               value={block.answer ?? ""}
               onChange={(e) => onChange({ ...block, answer: e.target.value })}
               sx={{ mt: 1.5 }}
+              slotProps={{
+                htmlInput: { "data-collab-field": `block:${block.id}:answer` },
+              }}
             />
           )}
 
@@ -257,6 +272,11 @@ function QuestionBlock({ block, onChange, controls }) {
                     placeholder={`Answer ${i + 1}`}
                     value={ans.text}
                     onChange={(e) => setAnswer(ans.id, e.target.value)}
+                    slotProps={{
+                      htmlInput: {
+                        "data-collab-field": `block:${block.id}:answer:${ans.id}`,
+                      },
+                    }}
                   />
                   <Tooltip title="Remove answer">
                     <span>
@@ -311,6 +331,9 @@ function QuestionBlock({ block, onChange, controls }) {
                 onChange({ ...block, background: e.target.value })
               }
               sx={{ mt: 1.5 }}
+              slotProps={{
+                htmlInput: { "data-collab-field": `block:${block.id}:background` },
+              }}
             />
           )}
         </Box>
