@@ -297,7 +297,8 @@ function QuestionBlock({ block, onChange, controls }) {
                 </Button>
               </Box>
               <Typography variant="caption" color="text.secondary">
-                Type every accepted answer.
+                Type every accepted answer. The student only needs to give one
+                of them to be correct.
               </Typography>
             </Stack>
           )}

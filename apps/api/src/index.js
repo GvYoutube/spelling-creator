@@ -66,7 +66,7 @@ const QUESTION_INSTRUCTIONS = {
 	single:
 		'The question must have a single short typed answer (a word or brief phrase). Do not provide answer options. Put the correct answer in "answer".',
 	multiple:
-		'The question must have several distinct correct answers that a student would type. Do not provide answer options. Put each accepted answer as a separate string in "answers".',
+		'The question must have several distinct correct answers, any one of which a student could type to be marked correct (the student only needs to give one). Do not provide answer options. Put each accepted answer as a separate string in "answers".',
 	open: 'Write a question that invites a free, written response. Do not provide answer options.',
 	background: 'Put the question in "prompt", and a short paragraph of the prior knowledge a student needs to answer it in "background".',
 };
