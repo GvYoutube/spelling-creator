@@ -35,7 +35,8 @@ const STEPS = [
     body: (
       <>
         Start at the top of the page and type a title for your lesson — for
-        example <em>“The Life of Albert Einstein”</em>. You can change it any time.
+        example <em>“The Life of Albert Einstein”</em>. You can change it any
+        time.
       </>
     ),
   },
