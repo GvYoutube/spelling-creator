@@ -1,6 +1,7 @@
 // Right-hand AppBar cluster shared by every page: a link to the lesson hub and
 // an account control that reflects the Supabase auth state (sign in / sign out).
-// Rendered with `color="inherit"` so it sits naturally inside the coloured AppBar.
+// Signed-in users also get a notification bell. Rendered with `color="inherit"`
+// so it sits naturally inside the coloured AppBar.
 
 import { useState } from "react";
 import { Link as RouterLink, useNavigate } from "react-router-dom";
@@ -16,6 +17,7 @@ import { useTheme } from "@mui/material/styles";
 import CollectionsBookmarkIcon from "@mui/icons-material/CollectionsBookmark";
 import AccountCircleIcon from "@mui/icons-material/AccountCircle";
 import { useAuth } from "../lib/auth.jsx";
+import NotificationBell from "./NotificationBell.jsx";
 
 const inheritBorder = { borderColor: "rgba(255,255,255,0.6)" };
 
@@ -64,6 +66,7 @@ export default function NavActions({ current }) {
 
       {!enabled ? null : user ? (
         <>
+          <NotificationBell />
           <Tooltip title={user.email || "Account"}>
             <IconButton
               color="inherit"

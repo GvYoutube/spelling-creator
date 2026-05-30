@@ -57,3 +57,29 @@ create policy "comments are public to read"
   on public.comments for select using (true);
 -- (No insert/update/delete policy for anon/authenticated roles: only the
 -- service-role Worker writes.)
+
+
+-- Notifications delivered to a user. A notification reaches its recipient by their
+-- auth user id (`user_id`, e.g. "someone commented on your lesson") or by their
+-- email (`recipient_email`, used by "send link to user" so a link can be sent
+-- before that person's id is known). Reads and writes go through the Worker's
+-- /notifications endpoints (service role), which scope every query to the
+-- signed-in caller.
+create table if not exists public.notifications (
+  id              uuid primary key default gen_random_uuid(),
+  user_id         uuid references auth.users (id) on delete cascade,
+  recipient_email text,
+  type            text not null,            -- 'comment' | 'link'
+  title           text not null,
+  body            text,
+  link            text,
+  read            boolean not null default false,
+  created_at      timestamptz not null default now()
+);
+
+-- Notifications are fetched per recipient, newest-first; index both addressing keys.
+create index if not exists notifications_user_id_idx on public.notifications (user_id, created_at desc);
+create index if not exists notifications_recipient_email_idx on public.notifications (recipient_email, created_at desc);
+
+-- Only the service-role Worker reads/writes these, so no anon/authenticated policies.
+alter table public.notifications enable row level security;
