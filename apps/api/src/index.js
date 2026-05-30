@@ -5,6 +5,24 @@ import { Filter } from 'glin-profanity';
 const GEMINI_API_KEY = env.GEMINI_API_KEY;
 const ai = new GoogleGenAI({ apiKey: GEMINI_API_KEY });
 
+// Models to try, newest first. If a model is unavailable or errors (e.g. not yet
+// rolled out to this key), we fall back to the next one in order.
+const GEMINI_MODELS = ['gemini-3.5-flash', 'gemini-3-flash', 'gemini-2.5-flash'];
+
+// Run generateContent against GEMINI_MODELS in order, returning the first success.
+// Throws the last error only if every model fails.
+async function generateContentWithFallback(request) {
+	let lastErr;
+	for (const model of GEMINI_MODELS) {
+		try {
+			return await ai.models.generateContent({ ...request, model });
+		} catch (err) {
+			lastErr = err;
+		}
+	}
+	throw lastErr;
+}
+
 // Shared profanity filter for moderating lesson comments. Built once (it compiles
 // its word list into a regex) and reused across requests. `checkProfanity(text)`
 // returns { containsProfanity, profaneWords }; we reject a comment outright when
@@ -953,8 +971,7 @@ export default {
 			const prompt = `Suggest one ${QUESTION_LABELS[questionType]} quiz question for a school lesson about the subject "${subject}".${contextBlock}${sourceBlock}${previousBlock}\n\n${QUESTION_INSTRUCTIONS[questionType]}`;
 
 			try {
-				const aiResponse = await ai.models.generateContent({
-					model: 'gemini-2.5-flash',
+				const aiResponse = await generateContentWithFallback({
 					contents: prompt,
 					config: {
 						responseMimeType: 'application/json',
@@ -984,8 +1001,7 @@ export default {
 		const prompt = `Suggest a block of text about the following subject: "${subject}".${documentBlock}\n\nWrite any unusual or important words, including proper nouns, in ALL CAPITALS so they stand out as spelling words.\n\nRespond with only the block of text, no preamble or explanation.`;
 
 		try {
-			const aiResponse = await ai.models.generateContent({
-				model: 'gemini-2.5-flash',
+			const aiResponse = await generateContentWithFallback({
 				contents: prompt,
 			});
 
