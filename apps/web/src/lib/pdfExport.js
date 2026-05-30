@@ -50,9 +50,9 @@ export async function exportPdf(doc) {
   container.className = "s2c-pdf-root";
   container.innerHTML = `<style>${PRINT_STYLES}</style>${html}`;
   // Size the content box to the printable width html2pdf renders into:
-  // pageSize.inner.width = A4 (210mm) minus the 10mm L/R page margins set
-  // below = 190mm ≈ 718px at 96dpi. `border-box` keeps the padding *inside*
-  // that width instead of adding to it, otherwise the box (794 + 2×40 = 874px)
+  // pageSize.inner.width = the A4-in-px page (794px) minus the 38px L/R page
+  // margins set below = 718px. `border-box` keeps the padding *inside* that
+  // width instead of adding to it, otherwise the box (718 + 2×40 = 798px)
   // overflows html2pdf's 718px container, gets clipped on the right by the
   // overlay's `overflow: hidden`, and every line is cut off / shifted right.
   container.style.boxSizing = "border-box";
@@ -77,11 +77,21 @@ export async function exportPdf(doc) {
   try {
     await html2pdf()
       .set({
-        margin: [10, 10, 10, 10],
+        // Pixel units (not mm) on purpose. html2pdf places page breaks using a
+        // page height it derives by rounding mm→px (floor(277mm) = 1046px), but
+        // it slices the rendered canvas at a *separately* computed height
+        // (floor(canvas.width × inner ratio) = 1046.5px). That ½px-per-page
+        // mismatch makes the top sliver of each page's first line bleed onto the
+        // bottom of the previous page — text cut off at the page edge — and it
+        // grows with page count. Driving jsPDF in px with an integer A4 format
+        // (794×1123px @96dpi) and integer 38px (~10mm) margins makes both
+        // computations use the identical integer inner height (1047px), so the
+        // break positions and the slice positions line up exactly.
+        margin: [38, 38, 38, 38],
         filename: safeFileName(doc.title),
         image: { type: "jpeg", quality: 0.95 },
         html2canvas: { scale: 2, useCORS: true, backgroundColor: "#ffffff" },
-        jsPDF: { unit: "mm", format: "a4", orientation: "portrait" },
+        jsPDF: { unit: "px", format: [794, 1123], orientation: "portrait" },
         pagebreak: { mode: ["avoid-all", "css", "legacy"] },
       })
       .from(container)
