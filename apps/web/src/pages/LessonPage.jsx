@@ -26,9 +26,12 @@ import DialogContentText from "@mui/material/DialogContentText";
 import TextField from "@mui/material/TextField";
 import CircularProgress from "@mui/material/CircularProgress";
 import Alert from "@mui/material/Alert";
+import Snackbar from "@mui/material/Snackbar";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import EditIcon from "@mui/icons-material/Edit";
 import DeleteOutlineIcon from "@mui/icons-material/DeleteOutline";
+import PictureAsPdfIcon from "@mui/icons-material/PictureAsPdf";
+import DescriptionIcon from "@mui/icons-material/Description";
 import NavActions from "../components/NavActions.jsx";
 import CommentsSection from "../components/CommentsSection.jsx";
 import {
@@ -39,6 +42,8 @@ import {
 } from "../lib/lessons.js";
 import { useAuth } from "../lib/auth.jsx";
 import { previewHtml, PREVIEW_STYLES } from "../lib/htmlPreview.js";
+import { exportDocx } from "../lib/docxExport.js";
+import { exportPdf } from "../lib/pdfExport.js";
 
 function formatDate(value) {
   if (!value) return "";
@@ -60,6 +65,10 @@ export default function LessonPage() {
   const [html, setHtml] = useState("");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+
+  // Which export is in flight ('docx' | 'pdf' | null), plus a feedback toast.
+  const [busy, setBusy] = useState(null);
+  const [toast, setToast] = useState("");
 
   // Delete-confirmation dialog. The user must retype the lesson's title to
   // confirm, guarding against an accidental, irreversible delete.
@@ -107,6 +116,26 @@ export default function LessonPage() {
       /* ignore — navigation below still works, the editor just won't preload */
     }
     navigate("/");
+  };
+
+  // Export the lesson document — same pipeline the editor uses. 'docx' downloads
+  // a Word file; 'pdf' opens the print dialog to save as PDF.
+  const handleExport = async (kind) => {
+    if (!lesson) return;
+    setBusy(kind);
+    try {
+      if (kind === "docx") {
+        await exportDocx(lesson.doc);
+        setToast("Word document downloaded.");
+      } else {
+        await exportPdf(lesson.doc);
+        setToast("PDF generated for printing.");
+      }
+    } catch (err) {
+      setToast(`Export failed: ${err.message || err}`);
+    } finally {
+      setBusy(null);
+    }
   };
 
   // The title the user must type to confirm. Mirrors the fallback the hub and
@@ -158,6 +187,38 @@ export default function LessonPage() {
             {lesson?.title || "Lesson"}
           </Typography>
           <Stack direction="row" spacing={1} alignItems="center">
+            {lesson && (
+              <>
+                <Button
+                  color="inherit"
+                  startIcon={
+                    busy === "pdf" ? (
+                      <CircularProgress size={16} color="inherit" />
+                    ) : (
+                      <PictureAsPdfIcon />
+                    )
+                  }
+                  onClick={() => handleExport("pdf")}
+                  disabled={Boolean(busy)}
+                >
+                  Print PDF
+                </Button>
+                <Button
+                  color="inherit"
+                  startIcon={
+                    busy === "docx" ? (
+                      <CircularProgress size={16} color="inherit" />
+                    ) : (
+                      <DescriptionIcon />
+                    )
+                  }
+                  onClick={() => handleExport("docx")}
+                  disabled={Boolean(busy)}
+                >
+                  Download Word
+                </Button>
+              </>
+            )}
             {isAuthor && (
               <>
                 <Button
@@ -297,6 +358,14 @@ export default function LessonPage() {
           </Button>
         </DialogActions>
       </Dialog>
+
+      <Snackbar
+        open={Boolean(toast)}
+        autoHideDuration={4000}
+        onClose={() => setToast("")}
+        message={toast}
+        anchorOrigin={{ vertical: "bottom", horizontal: "center" }}
+      />
     </Box>
   );
 }
