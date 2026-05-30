@@ -95,28 +95,41 @@ export default function NavActions({ current }) {
           </Menu>
         </>
       ) : (
-        current !== "login" &&
-        (compact ? (
-          <Tooltip title="Sign in">
+        <>
+          <Tooltip title="Account">
             <IconButton
               color="inherit"
-              onClick={() => navigate("/login")}
-              aria-label="sign in"
+              onClick={(e) => setAnchorEl(e.currentTarget)}
+              aria-label="account menu"
             >
               <AccountCircleIcon />
             </IconButton>
           </Tooltip>
-        ) : (
-          <Button
-            color="inherit"
-            variant="outlined"
-            onClick={() => navigate("/login")}
-            startIcon={<AccountCircleIcon />}
-            sx={inheritBorder}
+          <Menu
+            anchorEl={anchorEl}
+            open={menuOpen}
+            onClose={() => setAnchorEl(null)}
+            anchorOrigin={{ vertical: "bottom", horizontal: "right" }}
+            transformOrigin={{ vertical: "top", horizontal: "right" }}
           >
-            Sign in
-          </Button>
-        ))
+            <MenuItem disabled>
+              <ListItemText
+                primary="Signed out"
+                secondary=""
+                secondaryTypographyProps={{ sx: { wordBreak: "break-all" } }}
+              />
+            </MenuItem>
+            <Divider />
+            <MenuItem
+              onClick={() => {
+                setAnchorEl(null);
+                navigate("/login");
+              }}
+            >
+              Sign in
+            </MenuItem>
+          </Menu>
+        </>
       )}
     </>
   );

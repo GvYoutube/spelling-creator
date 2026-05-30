@@ -532,6 +532,15 @@ export default function EditorPage() {
                     </Badge>
                   </IconButton>
                 </Tooltip>
+                <Tooltip title="How to create a lesson">
+                  <IconButton
+                    color="inherit"
+                    onClick={openWizard}
+                    aria-label="how to create a lesson"
+                  >
+                    <HelpOutlineIcon />
+                  </IconButton>
+                </Tooltip>
                 <Menu
                   anchorEl={mobileMenuAnchor}
                   open={Boolean(mobileMenuAnchor)}
@@ -632,6 +641,15 @@ export default function EditorPage() {
             )}
             {!isMobile && (
               <>
+                <Tooltip title="How to create a lesson">
+                  <IconButton
+                    color="inherit"
+                    onClick={openWizard}
+                    aria-label="how to create a lesson"
+                  >
+                    <HelpOutlineIcon />
+                  </IconButton>
+                </Tooltip>
                 <Button
                   color="inherit"
                   variant="outlined"
@@ -749,15 +767,6 @@ export default function EditorPage() {
                 </Tooltip>
               </>
             )}
-            <Tooltip title="How to create a lesson">
-              <IconButton
-                color="inherit"
-                onClick={openWizard}
-                aria-label="how to create a lesson"
-              >
-                <HelpOutlineIcon />
-              </IconButton>
-            </Tooltip>
             <NavActions current="editor" />
           </Stack>
         </Toolbar>
