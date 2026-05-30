@@ -1,10 +1,14 @@
 // Lesson hub — a public, read-only gallery of lessons other users have
 // published. Summaries come from the Worker (GET /lessons); clicking a card
-// fetches the full lesson and renders its document with the same docx→HTML
-// preview pipeline the editor uses, so the hub view matches the export exactly.
+// navigates to that lesson's own page (/hub/:id), where the full document is
+// fetched and rendered. Each lesson therefore has a shareable URL.
 
 import { useEffect, useState } from "react";
-import { Link as RouterLink, useNavigate } from "react-router-dom";
+import {
+  Link as RouterLink,
+  useNavigate,
+  useLocation,
+} from "react-router-dom";
 import AppBar from "@mui/material/AppBar";
 import Toolbar from "@mui/material/Toolbar";
 import Typography from "@mui/material/Typography";
@@ -32,16 +36,13 @@ import DeleteOutlineIcon from "@mui/icons-material/DeleteOutline";
 import RefreshIcon from "@mui/icons-material/Refresh";
 import Tooltip from "@mui/material/Tooltip";
 import NavActions from "../components/NavActions.jsx";
-import CommentsSection from "../components/CommentsSection.jsx";
 import {
   fetchPublishedLessons,
-  fetchLesson,
   deleteLesson,
   lessonHubEnabled,
   EDIT_REQUEST_KEY,
 } from "../lib/lessons.js";
 import { useAuth } from "../lib/auth.jsx";
-import { previewHtml, PREVIEW_STYLES } from "../lib/htmlPreview.js";
 
 function formatDate(value) {
   if (!value) return "";
@@ -57,16 +58,11 @@ function formatDate(value) {
 export default function HubPage() {
   const { user, accessToken } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
 
   const [lessons, setLessons] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-
-  // The lesson currently open in the viewer dialog, plus its rendered HTML.
-  const [viewing, setViewing] = useState(null); // summary { id, title, ... } | null
-  const [viewHtml, setViewHtml] = useState("");
-  const [viewLoading, setViewLoading] = useState(false);
-  const [viewError, setViewError] = useState("");
 
   // Delete-confirmation dialog. `deleting` holds the lesson summary being
   // deleted (null when closed); the user must retype its title to confirm, which
@@ -95,6 +91,17 @@ export default function HubPage() {
     else setLoading(false);
   }, []);
 
+  // The lesson page hands us a one-shot toast (e.g. after a delete) via router
+  // state when it navigates back here. Show it once, then clear the state so it
+  // doesn't reappear on refresh or back-navigation.
+  useEffect(() => {
+    const deletedTitle = location.state?.deletedTitle;
+    if (deletedTitle) {
+      setToast(`Deleted “${deletedTitle}”.`);
+      navigate(location.pathname, { replace: true, state: null });
+    }
+  }, [location, navigate]);
+
   // Send the user to the editor to edit one of their own lessons. The editor
   // fetches the full lesson and warns before replacing any in-progress work, so
   // we only hand it which lesson to load (via sessionStorage, consumed once on
@@ -108,22 +115,6 @@ export default function HubPage() {
       /* ignore — navigation below still works, the editor just won't preload */
     }
     navigate("/");
-  };
-
-  const openLesson = async (summary) => {
-    setViewing(summary);
-    setViewHtml("");
-    setViewError("");
-    setViewLoading(true);
-    try {
-      const lesson = await fetchLesson(summary.id);
-      const html = await previewHtml(lesson.doc);
-      setViewHtml(html);
-    } catch (err) {
-      setViewError(err.message || "Could not open this lesson.");
-    } finally {
-      setViewLoading(false);
-    }
   };
 
   // Open the delete-confirmation dialog for one of the user's own lessons.
@@ -152,10 +143,8 @@ export default function HubPage() {
     setDeleteError("");
     try {
       await deleteLesson(deleting.id, accessToken);
-      // Drop it from the list locally so it disappears immediately, and close the
-      // preview if it happened to be open for the lesson we just removed.
+      // Drop it from the list locally so it disappears immediately.
       setLessons((prev) => prev.filter((l) => l.id !== deleting.id));
-      setViewing((prev) => (prev && prev.id === deleting.id ? null : prev));
       setToast(`Deleted “${deleteTarget}”.`);
       setDeleting(null);
     } catch (err) {
@@ -290,7 +279,8 @@ export default function HubPage() {
                     </Stack>
                   )}
                   <CardActionArea
-                    onClick={() => openLesson(lesson)}
+                    component={RouterLink}
+                    to={`/hub/${lesson.id}`}
                     sx={{ height: "100%", alignItems: "stretch" }}
                   >
                     <CardContent>
@@ -325,52 +315,6 @@ export default function HubPage() {
           </Grid>
         )}
       </Container>
-
-      <Dialog
-        open={Boolean(viewing)}
-        onClose={() => setViewing(null)}
-        fullWidth
-        maxWidth="md"
-        scroll="paper"
-      >
-        <DialogTitle>{viewing?.title || "Lesson"}</DialogTitle>
-        <DialogContent dividers>
-          {viewLoading && (
-            <Box sx={{ display: "flex", justifyContent: "center", py: 6 }}>
-              <CircularProgress />
-            </Box>
-          )}
-          {!viewLoading && viewError && (
-            <Alert severity="error">{viewError}</Alert>
-          )}
-          {!viewLoading && !viewError && (
-            <Box
-              className="s2c-preview-root"
-              sx={{ bgcolor: "#fff", color: "#1a1a1a", p: 2 }}
-              dangerouslySetInnerHTML={{
-                __html: `<style>${PREVIEW_STYLES}</style>${viewHtml}`,
-              }}
-            />
-          )}
-          {/* Comments live below the preview; they load independently of the
-              lesson doc, so show them whenever a lesson is open and its doc
-              didn't fail to load. */}
-          {!viewLoading && !viewError && viewing && (
-            <CommentsSection lessonId={viewing.id} />
-          )}
-        </DialogContent>
-        <DialogActions>
-          {user && viewing?.authorId && viewing.authorId === user.id && (
-            <Button
-              startIcon={<EditIcon />}
-              onClick={(e) => editLesson(e, viewing)}
-            >
-              Edit
-            </Button>
-          )}
-          <Button onClick={() => setViewing(null)}>Close</Button>
-        </DialogActions>
-      </Dialog>
 
       <Dialog
         open={Boolean(deleting)}
