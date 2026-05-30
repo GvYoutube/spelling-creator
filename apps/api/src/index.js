@@ -64,8 +64,12 @@ const QUESTION_SCHEMAS = {
 	},
 	background: {
 		type: Type.OBJECT,
-		properties: { prompt: { type: Type.STRING }, background: { type: Type.STRING } },
-		required: ['prompt', 'background'],
+		properties: {
+			prompt: { type: Type.STRING },
+			background: { type: Type.STRING },
+			answer: { type: Type.STRING },
+		},
+		required: ['prompt', 'background', 'answer'],
 	},
 };
 
@@ -87,7 +91,7 @@ const QUESTION_INSTRUCTIONS = {
 		'The question must have several distinct correct answers, any one of which a student could type to be marked correct (the student only needs to give one). Do not provide answer options. Put each accepted answer as a separate string in "answers".',
 	open: 'Write a question that invites a free, written response. Do not provide answer options.',
 	background:
-		'The question must test prior knowledge that is NOT explained anywhere in the lesson text — the student is expected to already know it. Do not ask about anything the lesson text covers. Put the question in "prompt", and a short paragraph of the prior knowledge a student needs to answer it in "background".',
+		'The question must test prior knowledge that is NOT explained anywhere in the lesson text — the student is expected to already know it. Do not ask about anything the lesson text covers. Put the question in "prompt", a short paragraph of the prior knowledge a student needs to answer it in "background", and the correct answer (a word or brief phrase) in "answer".',
 };
 
 // How long a cached AI answer lives in KV.

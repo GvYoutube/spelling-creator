@@ -321,21 +321,37 @@ function QuestionBlock({ block, onChange, controls }) {
           )}
 
           {block.questionType === "background" && (
-            <TextField
-              fullWidth
-              multiline
-              minRows={2}
-              label="Background knowledge"
-              placeholder="Knowledge the student needs to answer this…"
-              value={block.background || ""}
-              onChange={(e) =>
-                onChange({ ...block, background: e.target.value })
-              }
-              sx={{ mt: 1.5 }}
-              slotProps={{
-                htmlInput: { "data-collab-field": `block:${block.id}:background` },
-              }}
-            />
+            <>
+              <TextField
+                fullWidth
+                multiline
+                minRows={2}
+                label="Background knowledge"
+                placeholder="Knowledge the student needs to answer this…"
+                value={block.background || ""}
+                onChange={(e) =>
+                  onChange({ ...block, background: e.target.value })
+                }
+                sx={{ mt: 1.5 }}
+                slotProps={{
+                  htmlInput: {
+                    "data-collab-field": `block:${block.id}:background`,
+                  },
+                }}
+              />
+              <TextField
+                fullWidth
+                size="small"
+                label="Answer"
+                placeholder="The correct answer…"
+                value={block.answer ?? ""}
+                onChange={(e) => onChange({ ...block, answer: e.target.value })}
+                sx={{ mt: 1.5 }}
+                slotProps={{
+                  htmlInput: { "data-collab-field": `block:${block.id}:answer` },
+                }}
+              />
+            </>
           )}
         </Box>
         {controls}

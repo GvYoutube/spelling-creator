@@ -196,6 +196,15 @@ function questionBlockParagraphs(block) {
         }),
       );
     }
+    paragraphs.push(
+      new Paragraph({
+        spacing: { after: 120 },
+        children: [
+          new TextRun({ text: "Answer: ", italics: true, size: 24 }),
+          new TextRun({ text: block.answer || "____________", size: 24 }),
+        ],
+      }),
+    );
   }
 
   return paragraphs;
