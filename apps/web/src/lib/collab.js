@@ -23,6 +23,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import Peer from "peerjs";
 import { newId } from "./id.js";
 import { colorForId } from "./presence.js";
+import iceServers from "./iceServers.json";
 
 // We identify peers by a UUID we generate ourselves and pass in the PeerJS
 // connection `metadata`, NOT by the PeerJS peer id. Per the PeerJS docs the peer
@@ -176,39 +177,7 @@ export function useCollaboration({ doc, onRemoteDoc, identity }) {
 
     const peer = new Peer({
       config: {
-        iceServers: [
-          { urls: "stun:stun.relay.metered.ca:80" },
-          { urls: "stun:stun.l.google.com:19302" },
-          { urls: "stun:stun.l.google.com:5349" },
-          { urls: "stun:stun1.l.google.com:3478" },
-          { urls: "stun:stun1.l.google.com:5349" },
-          { urls: "stun:stun2.l.google.com:19302" },
-          { urls: "stun:stun2.l.google.com:5349" },
-          { urls: "stun:stun3.l.google.com:3478" },
-          { urls: "stun:stun3.l.google.com:5349" },
-          { urls: "stun:stun4.l.google.com:19302" },
-          { urls: "stun:stun4.l.google.com:5349" },
-          {
-            urls: "turn:global.relay.metered.ca:80",
-            username: import.meta.env.VITE_METERED_USER,
-            credential: import.meta.env.VITE_METERED_PASS,
-          },
-          {
-            urls: "turn:global.relay.metered.ca:80?transport=tcp",
-            username: import.meta.env.VITE_METERED_USER,
-            credential: import.meta.env.VITE_METERED_PASS,
-          },
-          {
-            urls: "turn:global.relay.metered.ca:443",
-            username: import.meta.env.VITE_METERED_USER,
-            credential: import.meta.env.VITE_METERED_PASS,
-          },
-          {
-            urls: "turns:global.relay.metered.ca:443?transport=tcp",
-            username: import.meta.env.VITE_METERED_USER,
-            credential: import.meta.env.VITE_METERED_PASS,
-          },
-        ],
+        iceServers: iceServers,
       },
     });
     peerRef.current = peer;
