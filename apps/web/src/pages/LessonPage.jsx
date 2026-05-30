@@ -32,6 +32,7 @@ import EditIcon from "@mui/icons-material/Edit";
 import DeleteOutlineIcon from "@mui/icons-material/DeleteOutline";
 import PictureAsPdfIcon from "@mui/icons-material/PictureAsPdf";
 import DescriptionIcon from "@mui/icons-material/Description";
+import ForkRightIcon from "@mui/icons-material/ForkRight";
 import NavActions from "../components/NavActions.jsx";
 import CommentsSection from "../components/CommentsSection.jsx";
 import {
@@ -39,6 +40,7 @@ import {
   deleteLesson,
   lessonHubEnabled,
   EDIT_REQUEST_KEY,
+  FORK_REQUEST_KEY,
 } from "../lib/lessons.js";
 import { useAuth } from "../lib/auth.jsx";
 import { previewHtml, PREVIEW_STYLES } from "../lib/htmlPreview.js";
@@ -114,6 +116,20 @@ export default function LessonPage() {
       sessionStorage.setItem(EDIT_REQUEST_KEY, id);
     } catch {
       /* ignore — navigation below still works, the editor just won't preload */
+    }
+    navigate("/");
+  };
+
+  // Fork this lesson: hand the editor the lesson id (via sessionStorage, consumed
+  // once on the editor's mount) and head there. The editor loads the document as
+  // a fresh, unattached draft, so anyone can copy a lesson and publish their own
+  // version — they're never editing the original, so no special permission is
+  // needed.
+  const forkLesson = () => {
+    try {
+      sessionStorage.setItem(FORK_REQUEST_KEY, id);
+    } catch {
+      /* ignore — the editor just won't preload if storage is unavailable */
     }
     navigate("/");
   };
@@ -216,6 +232,14 @@ export default function LessonPage() {
                   disabled={Boolean(busy)}
                 >
                   Download Word
+                </Button>
+                <Button
+                  color="inherit"
+                  startIcon={<ForkRightIcon />}
+                  onClick={forkLesson}
+                  disabled={Boolean(busy)}
+                >
+                  Fork
                 </Button>
               </>
             )}

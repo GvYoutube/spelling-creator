@@ -23,6 +23,13 @@ const API_URL = import.meta.env.VITE_API_URL;
 // clears it once on mount (see HubPage.editLesson / EditorPage's load effect).
 export const EDIT_REQUEST_KEY = "s2c-lesson-maker:edit-lesson-id";
 
+// sessionStorage key the lesson page uses to hand the editor the id of a lesson
+// to fork: the editor loads its document as a fresh, unattached draft (no
+// editingId), so publishing creates a new lesson rather than touching the
+// original. Unlike editing, forking needs no special permission — the original
+// row is never modified. Consumed and cleared once on the editor's mount.
+export const FORK_REQUEST_KEY = "s2c-lesson-maker:fork-lesson-id";
+
 // Whether the hub can reach a backend at all. Browsing needs only this; the
 // publish step additionally needs a signed-in Supabase session.
 export const lessonHubEnabled = Boolean(API_URL);

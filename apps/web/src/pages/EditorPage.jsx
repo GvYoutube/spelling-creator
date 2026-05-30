@@ -58,6 +58,7 @@ import {
   fetchLesson,
   lessonHubEnabled,
   EDIT_REQUEST_KEY,
+  FORK_REQUEST_KEY,
 } from "../lib/lessons.js";
 import { useAuth } from "../lib/auth.jsx";
 import { useCollaboration } from "../lib/collab.js";
@@ -164,8 +165,25 @@ export default function EditorPage() {
   }, [editingId]);
 
   // Adopt a fetched lesson into the editor: replace the working doc (this is the
-  // step that overwrites the auto-saved draft) and enter edit mode for it.
-  const applyEdit = ({ id, doc: nextDoc }) => {
+  // step that overwrites the auto-saved draft). For an edit, enter edit mode so
+  // "Publish" becomes "Update" on the original row. For a fork, load it as a
+  // fresh, unattached draft (editingId stays null) titled "… (copy)", so
+  // publishing creates a separate lesson and the original is left untouched.
+  const applyEdit = ({ id, doc: nextDoc, mode }) => {
+    if (mode === "fork") {
+      setDoc({
+        ...nextDoc,
+        title: `${nextDoc.title || "Untitled Lesson"} (copy)`,
+      });
+      setEditingId(null);
+      setPendingEdit(null);
+      setToast({
+        severity: "info",
+        message:
+          "Forked into a new lesson — edit freely, then Publish to add your copy to the hub.",
+      });
+      return;
+    }
     setDoc(nextDoc);
     setEditingId(id);
     setPendingEdit(null);
@@ -175,33 +193,50 @@ export default function EditorPage() {
     });
   };
 
-  // The hub asks us to edit one of the user's lessons by stashing its id in
-  // sessionStorage (see HubPage) and navigating here. Consume that request once
-  // on mount: read and clear the key, fetch the full lesson, then either load it
-  // straight away (when there's no in-progress work to lose) or ask before
-  // clobbering the current draft. A one-shot ref guards against StrictMode's
-  // dev-only double-mount; clearing the key also stops a reload from reloading it.
+  // The hub asks us to edit one of the user's lessons — and the lesson page asks
+  // us to fork any lesson — by stashing its id in sessionStorage (see
+  // HubPage/LessonPage) and navigating here. Consume that request once on mount:
+  // read and clear the key, fetch the full lesson, then either load it straight
+  // away (when there's no in-progress work to lose) or ask before clobbering the
+  // current draft. A one-shot ref guards against StrictMode's dev-only
+  // double-mount; clearing the key also stops a reload from reloading it.
   useEffect(() => {
     if (editRequestedRef.current) return;
-    let editLessonId = null;
+    let lessonId = null;
+    let mode = "edit";
     try {
-      editLessonId = sessionStorage.getItem(EDIT_REQUEST_KEY);
+      lessonId = sessionStorage.getItem(EDIT_REQUEST_KEY);
+      if (!lessonId) {
+        lessonId = sessionStorage.getItem(FORK_REQUEST_KEY);
+        mode = "fork";
+      }
     } catch {
       /* sessionStorage unavailable — nothing to load */
     }
-    if (!editLessonId) return;
+    if (!lessonId) return;
     editRequestedRef.current = true;
     try {
       sessionStorage.removeItem(EDIT_REQUEST_KEY);
+      sessionStorage.removeItem(FORK_REQUEST_KEY);
     } catch {
       /* ignore */
     }
 
     setEditLoading(true);
-    fetchLesson(editLessonId)
+    fetchLesson(lessonId)
       .then((lesson) => {
-        const incoming = { id: lesson.id, title: lesson.title, doc: lesson.doc };
-        if (editingIdRef.current === lesson.id || !docHasContent(docRef.current)) {
+        const incoming = {
+          id: lesson.id,
+          title: lesson.title,
+          doc: lesson.doc,
+          mode,
+        };
+        // Edit can adopt straight away when re-opening the same lesson; either
+        // mode adopts when there's no in-progress work to lose. Otherwise warn.
+        if (
+          (mode === "edit" && editingIdRef.current === lesson.id) ||
+          !docHasContent(docRef.current)
+        ) {
           applyEdit(incoming);
         } else {
           setPendingEdit(incoming);
@@ -210,7 +245,9 @@ export default function EditorPage() {
       .catch((err) => {
         setToast({
           severity: "error",
-          message: err.message || "Could not open that lesson for editing.",
+          message:
+            err.message ||
+            `Could not open that lesson for ${mode === "fork" ? "forking" : "editing"}.`,
         });
       })
       .finally(() => setEditLoading(false));
@@ -723,10 +760,11 @@ export default function EditorPage() {
         <DialogTitle>Replace your current work?</DialogTitle>
         <DialogContent>
           <Typography variant="body2">
-            Opening{" "}
-            <strong>{pendingEdit?.title || "this lesson"}</strong> for editing
-            will replace the lesson you’re working on now. Your in-progress work
-            is auto-saved in this browser, and replacing it can’t be undone.
+            {pendingEdit?.mode === "fork" ? "Forking" : "Opening"}{" "}
+            <strong>{pendingEdit?.title || "this lesson"}</strong>
+            {pendingEdit?.mode === "fork" ? "" : " for editing"} will replace the
+            lesson you’re working on now. Your in-progress work is auto-saved in
+            this browser, and replacing it can’t be undone.
           </Typography>
         </DialogContent>
         <DialogActions>
@@ -736,7 +774,7 @@ export default function EditorPage() {
             variant="contained"
             onClick={() => applyEdit(pendingEdit)}
           >
-            Replace and edit
+            {pendingEdit?.mode === "fork" ? "Replace and fork" : "Replace and edit"}
           </Button>
         </DialogActions>
       </Dialog>
