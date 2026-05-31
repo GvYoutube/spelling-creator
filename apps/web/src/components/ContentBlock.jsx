@@ -16,6 +16,7 @@ import AddIcon from "@mui/icons-material/Add";
 import FormatAlignLeftIcon from "@mui/icons-material/FormatAlignLeft";
 import FormatAlignCenterIcon from "@mui/icons-material/FormatAlignCenter";
 import FormatAlignRightIcon from "@mui/icons-material/FormatAlignRight";
+import AutoFixHighIcon from "@mui/icons-material/AutoFixHigh";
 import {
   fitWithin,
   imageSizeScale,
@@ -25,6 +26,7 @@ import {
 } from "../lib/image.js";
 import { newId } from "../lib/id.js";
 import { questionMeta } from "../lib/questions.js";
+import { SPELLING_COLOR } from "../lib/spelling.js";
 
 export default function ContentBlock({
   block,
@@ -34,6 +36,7 @@ export default function ContentBlock({
   onMoveDown,
   isFirst,
   isLast,
+  capitalizedWords = [],
 }) {
   const controls = (
     <Stack direction="row" spacing={0.5} sx={{ flexShrink: 0 }}>
@@ -62,6 +65,21 @@ export default function ContentBlock({
   if (block.type === "question") {
     return (
       <QuestionBlock block={block} onChange={onChange} controls={controls} />
+    );
+  }
+
+  if (block.type === "spelling") {
+    return (
+      <SpellingBlock
+        block={block}
+        onChange={onChange}
+        onDelete={onDelete}
+        onMoveUp={onMoveUp}
+        onMoveDown={onMoveDown}
+        isFirst={isFirst}
+        isLast={isLast}
+        capitalizedWords={capitalizedWords}
+      />
     );
   }
 
@@ -181,6 +199,142 @@ export default function ContentBlock({
           }}
         />
         {controls}
+      </Stack>
+    </Paper>
+  );
+}
+
+function SpellingBlock({
+  block,
+  onChange,
+  onDelete,
+  onMoveUp,
+  onMoveDown,
+  isFirst,
+  isLast,
+  capitalizedWords = [],
+}) {
+  const words = block.words || [];
+
+  const setWord = (id, text) =>
+    onChange({
+      ...block,
+      words: words.map((w) => (w.id === id ? { ...w, text } : w)),
+    });
+
+  const addWord = () =>
+    onChange({ ...block, words: [...words, { id: newId(), text: "" }] });
+
+  const removeWord = (id) =>
+    onChange({ ...block, words: words.filter((w) => w.id !== id) });
+
+  // Replace the list with every capitalized word found in the lesson's text.
+  // Falls back to a single empty row if the lesson has none yet, so the block
+  // never collapses to zero editable rows.
+  const fillCapitalized = () =>
+    onChange({
+      ...block,
+      words: capitalizedWords.length
+        ? capitalizedWords.map((text) => ({ id: newId(), text }))
+        : [{ id: newId(), text: "" }],
+    });
+
+  return (
+    <Paper
+      variant="outlined"
+      sx={{ p: 2, borderLeft: `5px solid ${SPELLING_COLOR}` }}
+    >
+      <Stack direction="row" alignItems="flex-start" spacing={1}>
+        <Box sx={{ flexGrow: 1 }}>
+          <Chip
+            label="Spelling words"
+            size="small"
+            sx={{
+              bgcolor: SPELLING_COLOR,
+              color: "#fff",
+              fontWeight: 600,
+              mb: 1.5,
+            }}
+          />
+          <Stack spacing={1}>
+            {words.map((w, i) => (
+              <Stack
+                key={w.id}
+                direction="row"
+                alignItems="center"
+                spacing={0.5}
+              >
+                <TextField
+                  fullWidth
+                  size="small"
+                  placeholder={`Word ${i + 1}`}
+                  value={w.text}
+                  onChange={(e) => setWord(w.id, e.target.value)}
+                  slotProps={{
+                    htmlInput: {
+                      "data-collab-field": `block:${block.id}:word:${w.id}`,
+                    },
+                  }}
+                />
+                <Tooltip title="Remove word">
+                  <span>
+                    <IconButton
+                      size="small"
+                      onClick={() => removeWord(w.id)}
+                      disabled={words.length <= 1}
+                    >
+                      <DeleteOutlineIcon fontSize="small" />
+                    </IconButton>
+                  </span>
+                </Tooltip>
+              </Stack>
+            ))}
+            <Box>
+              <Button size="small" startIcon={<AddIcon />} onClick={addWord}>
+                Add word
+              </Button>
+            </Box>
+          </Stack>
+        </Box>
+        <Stack direction="row" spacing={0.5} sx={{ flexShrink: 0 }}>
+          <Tooltip title="Move up">
+            <span>
+              <IconButton size="small" onClick={onMoveUp} disabled={isFirst}>
+                <ArrowUpwardIcon fontSize="small" />
+              </IconButton>
+            </span>
+          </Tooltip>
+          <Tooltip title="Move down">
+            <span>
+              <IconButton size="small" onClick={onMoveDown} disabled={isLast}>
+                <ArrowDownwardIcon fontSize="small" />
+              </IconButton>
+            </span>
+          </Tooltip>
+          <Tooltip
+            title={
+              capitalizedWords.length
+                ? "Fill in every capitalized word from the lesson text"
+                : "No capitalized words in the lesson text yet"
+            }
+          >
+            <span>
+              <IconButton
+                size="small"
+                color="primary"
+                onClick={fillCapitalized}
+                disabled={!capitalizedWords.length}
+              >
+                <AutoFixHighIcon fontSize="small" />
+              </IconButton>
+            </span>
+          </Tooltip>
+          <Tooltip title="Delete block">
+            <IconButton size="small" color="error" onClick={onDelete}>
+              <DeleteOutlineIcon fontSize="small" />
+            </IconButton>
+          </Tooltip>
+        </Stack>
       </Stack>
     </Paper>
   );

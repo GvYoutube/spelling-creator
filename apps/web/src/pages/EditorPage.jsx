@@ -50,6 +50,7 @@ import CollaborateDialog from "../components/CollaborateDialog.jsx";
 import CollabCursors from "../components/CollabCursors.jsx";
 import FirstLessonWizard from "../components/FirstLessonWizard.jsx";
 import { newId } from "../lib/id.js";
+import { extractCapitalizedWords } from "../lib/spelling.js";
 import {
   loadDocument,
   saveDocument,
@@ -507,6 +508,10 @@ export default function EditorPage() {
     [doc.sections],
   );
 
+  // Every capitalized word across the lesson's text blocks. Feeds the spelling
+  // block's "fill" button, so it can populate the list from the passage.
+  const capitalizedWords = useMemo(() => extractCapitalizedWords(doc), [doc]);
+
   const [anchorEl, setAnchorEl] = useState(null);
   const menuOpen = Boolean(anchorEl);
 
@@ -877,6 +882,7 @@ export default function EditorPage() {
               isFirst={i === 0}
               isLast={i === sectionCount - 1}
               onError={(message) => setToast({ severity: "error", message })}
+              capitalizedWords={capitalizedWords}
             />
           ))}
         </Stack>

@@ -15,6 +15,7 @@ import {
   imageSizeScale,
 } from "./image.js";
 import { questionMeta } from "./questions.js";
+import { SPELLING_COLOR } from "./spelling.js";
 
 // Max image width inside the docx page (in px; docx maps px→EMU internally).
 const DOCX_MAX_IMAGE_WIDTH = 480;
@@ -212,6 +213,49 @@ function questionBlockParagraphs(block) {
   return paragraphs;
 }
 
+function spellingBlockParagraphs(block) {
+  const color = SPELLING_COLOR.replace("#", "");
+  const words = (block.words || [])
+    .map((w) => (w.text || "").trim())
+    .filter(Boolean);
+
+  const paragraphs = [
+    new Paragraph({
+      spacing: { before: 160, after: words.length ? 40 : 120 },
+      children: [
+        new TextRun({ text: "Spelling words", bold: true, color, size: 26 }),
+      ],
+    }),
+  ];
+
+  if (!words.length) {
+    paragraphs.push(
+      new Paragraph({
+        spacing: { after: 120 },
+        children: [
+          new TextRun({
+            text: "(no spelling words yet)",
+            italics: true,
+            size: 24,
+          }),
+        ],
+      }),
+    );
+    return paragraphs;
+  }
+
+  words.forEach((word, i) => {
+    paragraphs.push(
+      new Paragraph({
+        spacing: { after: 40 },
+        indent: { left: 360 },
+        children: [new TextRun({ text: `${i + 1}. ${word}`, size: 24 })],
+      }),
+    );
+  });
+  return paragraphs;
+}
+
 function sectionParagraphs(section) {
   const paragraphs = [
     new Paragraph({
@@ -240,6 +284,8 @@ function sectionParagraphs(section) {
       paragraphs.push(...imageBlockParagraphs(block));
     } else if (block.type === "question") {
       paragraphs.push(...questionBlockParagraphs(block));
+    } else if (block.type === "spelling") {
+      paragraphs.push(...spellingBlockParagraphs(block));
     }
   }
   if (section.blocks.length === 0) {

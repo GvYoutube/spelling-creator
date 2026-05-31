@@ -16,6 +16,7 @@ import TextFieldsIcon from "@mui/icons-material/TextFields";
 import ImageIcon from "@mui/icons-material/Image";
 import ImageSearchIcon from "@mui/icons-material/ImageSearch";
 import QuizIcon from "@mui/icons-material/Quiz";
+import SpellcheckIcon from "@mui/icons-material/Spellcheck";
 import AutoAwesomeIcon from "@mui/icons-material/AutoAwesome";
 import DeleteOutlineIcon from "@mui/icons-material/DeleteOutline";
 import ArrowUpwardIcon from "@mui/icons-material/ArrowUpward";
@@ -31,6 +32,7 @@ import {
   createQuestionBlock,
   buildQuestionBlock,
 } from "../lib/questions.js";
+import { createSpellingBlock } from "../lib/spelling.js";
 
 export default function SectionCard({
   section,
@@ -43,6 +45,7 @@ export default function SectionCard({
   isFirst,
   isLast,
   onError,
+  capitalizedWords = [],
 }) {
   const fileInputRef = useRef(null);
   const [questionMenuAnchor, setQuestionMenuAnchor] = useState(null);
@@ -75,6 +78,10 @@ export default function SectionCard({
   const addQuestionBlock = (questionType) => {
     setQuestionMenuAnchor(null);
     updateBlocks([...section.blocks, createQuestionBlock(newId, questionType)]);
+  };
+
+  const addSpellingBlock = () => {
+    updateBlocks([...section.blocks, createSpellingBlock(newId)]);
   };
 
   const addSuggestedQuestionBlock = (questionType, data) => {
@@ -202,6 +209,7 @@ export default function SectionCard({
                 onMoveDown={() => moveBlock(i, i + 1)}
                 isFirst={i === 0}
                 isLast={i === section.blocks.length - 1}
+                capitalizedWords={capitalizedWords}
               />
             ))}
           </Stack>
@@ -239,6 +247,14 @@ export default function SectionCard({
             size="small"
           >
             Add question
+          </Button>
+          <Button
+            startIcon={<SpellcheckIcon />}
+            onClick={addSpellingBlock}
+            variant="outlined"
+            size="small"
+          >
+            Spelling words
           </Button>
           <Button
             startIcon={<AutoAwesomeIcon />}
