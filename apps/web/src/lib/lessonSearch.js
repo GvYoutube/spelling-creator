@@ -16,6 +16,7 @@ import Fuse from "fuse.js";
 // is kept fairly tight so results stay relevant rather than matching almost
 // everything.
 const FUSE_OPTIONS = {
+  useTokenSearch: true,
   includeScore: false,
   ignoreLocation: true,
   threshold: 0.4,
