@@ -414,6 +414,83 @@ function rowToLesson(row, withDoc) {
 	return lesson;
 }
 
+// ---------------------------------------------------------------------------
+// Algolia search index
+//
+// The hub's search box queries Algolia directly from the browser with a public
+// search-only key; this Worker is the only writer, keeping the index in step
+// with Supabase. Publishing/updating a lesson upserts its record, deleting a
+// lesson removes it. Only title + author are searched (see the reindex settings
+// below), so the record carries just those plus the fields a hub card renders.
+//
+// All index writes are best-effort: they run after the Supabase write has
+// already succeeded and are wrapped so an Algolia hiccup never fails the user's
+// publish/edit/delete — at worst the index lags until the next write or a
+// reindex. When ALGOLIA_APP_ID / ALGOLIA_ADMIN_KEY aren't set, indexing is
+// skipped entirely and the rest of the hub keeps working.
+
+function algoliaConfig(env) {
+	const appId = env.ALGOLIA_APP_ID;
+	const adminKey = env.ALGOLIA_ADMIN_KEY;
+	if (!appId || !adminKey) return null;
+	return { appId, adminKey, index: env.ALGOLIA_INDEX_NAME || 'lessons' };
+}
+
+function algoliaHeaders(cfg) {
+	return {
+		'X-Algolia-Application-Id': cfg.appId,
+		'X-Algolia-API-Key': cfg.adminKey,
+		'Content-Type': 'application/json',
+	};
+}
+
+// Build the Algolia record for a lesson summary. objectID is the lesson id so
+// upserts and deletes address the same record. `createdAtTs` is a numeric mirror
+// of createdAt used for custom ranking (newest first) since Algolia can't sort
+// on an ISO string.
+function algoliaRecord(lesson) {
+	return {
+		objectID: lesson.id,
+		title: lesson.title || 'Untitled Lesson',
+		author: lesson.author || 'Anonymous',
+		authorId: lesson.authorId,
+		sectionCount: lesson.sectionCount ?? 0,
+		createdAt: lesson.createdAt,
+		createdAtTs: lesson.createdAt ? Date.parse(lesson.createdAt) || 0 : 0,
+	};
+}
+
+// Upsert a lesson's record. Best-effort: logs and swallows any failure.
+async function algoliaIndexLesson(env, lesson) {
+	const cfg = algoliaConfig(env);
+	if (!cfg) return;
+	const rec = algoliaRecord(lesson);
+	try {
+		const res = await fetch(
+			`https://${cfg.appId}.algolia.net/1/indexes/${encodeURIComponent(cfg.index)}/${encodeURIComponent(rec.objectID)}`,
+			{ method: 'PUT', headers: algoliaHeaders(cfg), body: JSON.stringify(rec) },
+		);
+		if (!res.ok) console.warn('Algolia index failed', res.status, await res.text().catch(() => ''));
+	} catch (e) {
+		console.warn('Algolia index error', e);
+	}
+}
+
+// Remove a lesson's record. Best-effort, same contract as the upsert above.
+async function algoliaDeleteLesson(env, id) {
+	const cfg = algoliaConfig(env);
+	if (!cfg) return;
+	try {
+		const res = await fetch(`https://${cfg.appId}.algolia.net/1/indexes/${encodeURIComponent(cfg.index)}/${encodeURIComponent(id)}`, {
+			method: 'DELETE',
+			headers: algoliaHeaders(cfg),
+		});
+		if (!res.ok) console.warn('Algolia delete failed', res.status, await res.text().catch(() => ''));
+	} catch (e) {
+		console.warn('Algolia delete error', e);
+	}
+}
+
 /**
  * Lesson-hub endpoints, backed by Supabase Postgres via its REST API. The
  * browser never touches the database directly — it calls these Worker routes,
@@ -515,7 +592,9 @@ async function handleLessons(request, env, url, cors) {
 		if (!Array.isArray(rows) || rows.length === 0) {
 			return textResponse('Could not publish the lesson.', 502, cors);
 		}
-		return jsonResponse({ lesson: rowToLesson(rows[0], false) }, 201, cors);
+		const published = rowToLesson(rows[0], false);
+		await algoliaIndexLesson(env, published); // best-effort; never blocks the response on Algolia
+		return jsonResponse({ lesson: published }, 201, cors);
 	}
 
 	// PUT /lessons/:id — update a lesson the signed-in user already published.
@@ -567,7 +646,9 @@ async function handleLessons(request, env, url, cors) {
 		if (!Array.isArray(rows) || rows.length === 0) {
 			return textResponse('You can only edit lessons you published.', 403, cors);
 		}
-		return jsonResponse({ lesson: rowToLesson(rows[0], false) }, 200, cors);
+		const updated = rowToLesson(rows[0], false);
+		await algoliaIndexLesson(env, updated); // keep the search record's title in step
+		return jsonResponse({ lesson: updated }, 200, cors);
 	}
 
 	// DELETE /lessons/:id — remove a lesson the signed-in user published. Requires
@@ -640,6 +721,7 @@ async function handleLessons(request, env, url, cors) {
 		if (!Array.isArray(rows) || rows.length === 0) {
 			return textResponse('You can only delete lessons you published.', 403, cors);
 		}
+		await algoliaDeleteLesson(env, id); // drop it from search too
 		return jsonResponse({ ok: true }, 200, cors);
 	}
 

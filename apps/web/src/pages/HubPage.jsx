@@ -2,6 +2,10 @@
 // published. Summaries come from the Worker (GET /lessons); clicking a card
 // navigates to that lesson's own page (/hub/:id), where the full document is
 // fetched and rendered. Each lesson therefore has a shareable URL.
+//
+// The search box (when Algolia is configured) queries the search index the
+// Worker keeps in sync. An empty box shows the full newest-first listing; typing
+// swaps the grid for matching hits, rendered with the very same cards.
 
 import { useEffect, useState } from "react";
 import { Link as RouterLink, useNavigate, useLocation } from "react-router-dom";
@@ -23,6 +27,7 @@ import DialogContent from "@mui/material/DialogContent";
 import DialogActions from "@mui/material/DialogActions";
 import DialogContentText from "@mui/material/DialogContentText";
 import TextField from "@mui/material/TextField";
+import InputAdornment from "@mui/material/InputAdornment";
 import CircularProgress from "@mui/material/CircularProgress";
 import Alert from "@mui/material/Alert";
 import Snackbar from "@mui/material/Snackbar";
@@ -30,6 +35,8 @@ import IconButton from "@mui/material/IconButton";
 import EditIcon from "@mui/icons-material/Edit";
 import DeleteOutlineIcon from "@mui/icons-material/DeleteOutline";
 import RefreshIcon from "@mui/icons-material/Refresh";
+import SearchIcon from "@mui/icons-material/Search";
+import ClearIcon from "@mui/icons-material/Clear";
 import Tooltip from "@mui/material/Tooltip";
 import useMediaQuery from "@mui/material/useMediaQuery";
 import { useTheme } from "@mui/material/styles";
@@ -40,6 +47,7 @@ import {
   lessonHubEnabled,
   EDIT_REQUEST_KEY,
 } from "../lib/lessons.js";
+import { algoliaEnabled, searchLessons } from "../lib/algolia.js";
 import { useAuth } from "../lib/auth.jsx";
 
 function formatDate(value) {
@@ -63,6 +71,18 @@ export default function HubPage() {
   const [lessons, setLessons] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+
+  // Search box (only shown when Algolia is configured). `query` is the raw input;
+  // a non-empty trimmed value switches the grid from the full listing to the
+  // Algolia hits in `searchResults`. `searching`/`searchError` track that
+  // separate request so they don't clobber the listing's own loading/error.
+  const [query, setQuery] = useState("");
+  const [searchResults, setSearchResults] = useState([]);
+  const [searching, setSearching] = useState(false);
+  const [searchError, setSearchError] = useState("");
+
+  const trimmedQuery = query.trim();
+  const isSearching = algoliaEnabled && trimmedQuery.length > 0;
 
   // Delete-confirmation dialog. `deleting` holds the lesson summary being
   // deleted (null when closed); the user must retype its title to confirm, which
@@ -90,6 +110,39 @@ export default function HubPage() {
     if (lessonHubEnabled) load();
     else setLoading(false);
   }, []);
+
+  // Debounced live search. Each keystroke (after a 300ms pause) queries Algolia;
+  // an empty box clears the results so the full listing shows again. The `active`
+  // flag drops the response from a superseded query so a slow earlier request
+  // can't overwrite a newer one's results.
+  useEffect(() => {
+    if (!algoliaEnabled || !trimmedQuery) {
+      setSearchResults([]);
+      setSearchError("");
+      setSearching(false);
+      return;
+    }
+    let active = true;
+    setSearching(true);
+    setSearchError("");
+    const t = setTimeout(async () => {
+      try {
+        const results = await searchLessons(trimmedQuery);
+        if (!active) return;
+        setSearchResults(results);
+      } catch (err) {
+        if (!active) return;
+        setSearchError(err.message || "Search failed.");
+        setSearchResults([]);
+      } finally {
+        if (active) setSearching(false);
+      }
+    }, 300);
+    return () => {
+      active = false;
+      clearTimeout(t);
+    };
+  }, [trimmedQuery]);
 
   // The lesson page hands us a one-shot toast (e.g. after a delete) via router
   // state when it navigates back here. Show it once, then clear the state so it
@@ -137,14 +190,23 @@ export default function HubPage() {
   const deleteTarget = deleting ? deleting.title || "Untitled Lesson" : "";
   const deleteConfirmed = deleteText.trim() === deleteTarget;
 
+  // When the user is searching, the grid below shows the Algolia hits with their
+  // own loading/error; otherwise it shows the full listing. The card markup is
+  // identical either way, so we just pick which source/flags to render.
+  const displayed = isSearching ? searchResults : lessons;
+  const displayLoading = isSearching ? searching : loading;
+  const displayError = isSearching ? searchError : error;
+
   const confirmDelete = async () => {
     if (!deleting || !deleteConfirmed) return;
     setDeleteBusy(true);
     setDeleteError("");
     try {
       await deleteLesson(deleting.id, accessToken);
-      // Drop it from the list locally so it disappears immediately.
+      // Drop it from the listing (and any visible search hits) locally so it
+      // disappears immediately.
       setLessons((prev) => prev.filter((l) => l.id !== deleting.id));
+      setSearchResults((prev) => prev.filter((l) => l.id !== deleting.id));
       setToast(`Deleted “${deleteTarget}”.`);
       setDeleting(null);
     } catch (err) {
@@ -211,127 +273,188 @@ export default function HubPage() {
           )}
         </Stack>
 
+        {lessonHubEnabled && algoliaEnabled && (
+          <TextField
+            fullWidth
+            size="small"
+            placeholder="Search lessons by title or author…"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            sx={{ mb: 2 }}
+            InputProps={{
+              startAdornment: (
+                <InputAdornment position="start">
+                  <SearchIcon fontSize="small" color="action" />
+                </InputAdornment>
+              ),
+              endAdornment: query ? (
+                <InputAdornment position="end">
+                  {searching ? (
+                    <CircularProgress size={18} />
+                  ) : (
+                    <IconButton
+                      size="small"
+                      aria-label="clear search"
+                      onClick={() => setQuery("")}
+                    >
+                      <ClearIcon fontSize="small" />
+                    </IconButton>
+                  )}
+                </InputAdornment>
+              ) : null,
+            }}
+          />
+        )}
+
         {!lessonHubEnabled && (
           <Alert severity="info">
             The lesson hub is not configured (VITE_API_URL is missing).
           </Alert>
         )}
 
-        {lessonHubEnabled && error && (
+        {lessonHubEnabled && displayError && (
           <Alert
             severity="error"
             action={
-              <Button color="inherit" size="small" onClick={load}>
-                Retry
-              </Button>
+              // The listing can be retried with the refresh button; a failed
+              // search just re-runs as the user keeps typing, so no Retry there.
+              isSearching ? undefined : (
+                <Button color="inherit" size="small" onClick={load}>
+                  Retry
+                </Button>
+              )
             }
           >
-            {error}
+            {displayError}
           </Alert>
         )}
 
-        {lessonHubEnabled && loading && (
+        {lessonHubEnabled && displayLoading && (
           <Box sx={{ display: "flex", justifyContent: "center", py: 8 }}>
             <CircularProgress />
           </Box>
         )}
 
-        {lessonHubEnabled && !loading && !error && lessons.length === 0 && (
-          <Paper
-            variant="outlined"
-            sx={{ p: 6, textAlign: "center", borderStyle: "dashed" }}
-          >
-            <Typography variant="h6" gutterBottom>
-              No lessons yet
-            </Typography>
-            <Typography variant="body2" color="text.secondary">
-              Be the first to publish — build a lesson in the editor and press{" "}
-              <strong>Publish to hub</strong>.
-            </Typography>
-          </Paper>
-        )}
+        {lessonHubEnabled &&
+          !displayLoading &&
+          !displayError &&
+          displayed.length === 0 &&
+          (isSearching ? (
+            <Paper
+              variant="outlined"
+              sx={{ p: 6, textAlign: "center", borderStyle: "dashed" }}
+            >
+              <Typography variant="h6" gutterBottom>
+                No lessons match “{trimmedQuery}”
+              </Typography>
+              <Typography variant="body2" color="text.secondary">
+                Try a different title or author.
+              </Typography>
+            </Paper>
+          ) : (
+            <Paper
+              variant="outlined"
+              sx={{ p: 6, textAlign: "center", borderStyle: "dashed" }}
+            >
+              <Typography variant="h6" gutterBottom>
+                No lessons yet
+              </Typography>
+              <Typography variant="body2" color="text.secondary">
+                Be the first to publish — build a lesson in the editor and press{" "}
+                <strong>Publish to hub</strong>.
+              </Typography>
+            </Paper>
+          ))}
 
-        {lessonHubEnabled && !loading && !error && lessons.length > 0 && (
-          <Grid container spacing={2}>
-            {lessons.map((lesson) => (
-              <Grid key={lesson.id} size={{ xs: 12, sm: 6, md: 4 }}>
-                <Card
-                  variant="outlined"
-                  sx={{ height: "100%", position: "relative" }}
-                >
-                  {user && lesson.authorId && lesson.authorId === user.id && (
-                    <Stack
-                      direction="row"
-                      spacing={0.5}
-                      sx={{ position: "absolute", top: 4, right: 4, zIndex: 1 }}
-                    >
-                      <Tooltip title="Edit this lesson">
-                        <IconButton
-                          size="small"
-                          aria-label="edit lesson"
-                          onClick={(e) => editLesson(e, lesson)}
-                          sx={{
-                            bgcolor: "background.paper",
-                            "&:hover": { bgcolor: "action.hover" },
-                          }}
-                        >
-                          <EditIcon fontSize="small" />
-                        </IconButton>
-                      </Tooltip>
-                      <Tooltip title="Delete this lesson">
-                        <IconButton
-                          size="small"
-                          aria-label="delete lesson"
-                          onClick={(e) => askDelete(e, lesson)}
-                          sx={{
-                            bgcolor: "background.paper",
-                            "&:hover": {
-                              bgcolor: "error.light",
-                              color: "error.contrastText",
-                            },
-                          }}
-                        >
-                          <DeleteOutlineIcon fontSize="small" />
-                        </IconButton>
-                      </Tooltip>
-                    </Stack>
-                  )}
-                  <CardActionArea
-                    component={RouterLink}
-                    to={`/hub/${lesson.id}`}
-                    sx={{ height: "100%", alignItems: "stretch" }}
+        {lessonHubEnabled &&
+          !displayLoading &&
+          !displayError &&
+          displayed.length > 0 && (
+            <Grid container spacing={2}>
+              {displayed.map((lesson) => (
+                <Grid key={lesson.id} size={{ xs: 12, sm: 6, md: 4 }}>
+                  <Card
+                    variant="outlined"
+                    sx={{ height: "100%", position: "relative" }}
                   >
-                    <CardContent>
-                      <Typography
-                        variant="h6"
-                        gutterBottom
-                        noWrap
-                        sx={{ pr: 4 }}
+                    {user && lesson.authorId && lesson.authorId === user.id && (
+                      <Stack
+                        direction="row"
+                        spacing={0.5}
+                        sx={{
+                          position: "absolute",
+                          top: 4,
+                          right: 4,
+                          zIndex: 1,
+                        }}
                       >
-                        {lesson.title || "Untitled Lesson"}
-                      </Typography>
-                      <Typography variant="body2" color="text.secondary">
-                        {lesson.author || "Anonymous"}
-                      </Typography>
-                      <Typography
-                        variant="caption"
-                        color="text.secondary"
-                        sx={{ display: "block", mt: 1 }}
-                      >
-                        {typeof lesson.sectionCount === "number"
-                          ? `${lesson.sectionCount} section${lesson.sectionCount === 1 ? "" : "s"}`
-                          : ""}
-                        {lesson.createdAt
-                          ? ` · ${formatDate(lesson.createdAt)}`
-                          : ""}
-                      </Typography>
-                    </CardContent>
-                  </CardActionArea>
-                </Card>
-              </Grid>
-            ))}
-          </Grid>
-        )}
+                        <Tooltip title="Edit this lesson">
+                          <IconButton
+                            size="small"
+                            aria-label="edit lesson"
+                            onClick={(e) => editLesson(e, lesson)}
+                            sx={{
+                              bgcolor: "background.paper",
+                              "&:hover": { bgcolor: "action.hover" },
+                            }}
+                          >
+                            <EditIcon fontSize="small" />
+                          </IconButton>
+                        </Tooltip>
+                        <Tooltip title="Delete this lesson">
+                          <IconButton
+                            size="small"
+                            aria-label="delete lesson"
+                            onClick={(e) => askDelete(e, lesson)}
+                            sx={{
+                              bgcolor: "background.paper",
+                              "&:hover": {
+                                bgcolor: "error.light",
+                                color: "error.contrastText",
+                              },
+                            }}
+                          >
+                            <DeleteOutlineIcon fontSize="small" />
+                          </IconButton>
+                        </Tooltip>
+                      </Stack>
+                    )}
+                    <CardActionArea
+                      component={RouterLink}
+                      to={`/hub/${lesson.id}`}
+                      sx={{ height: "100%", alignItems: "stretch" }}
+                    >
+                      <CardContent>
+                        <Typography
+                          variant="h6"
+                          gutterBottom
+                          noWrap
+                          sx={{ pr: 4 }}
+                        >
+                          {lesson.title || "Untitled Lesson"}
+                        </Typography>
+                        <Typography variant="body2" color="text.secondary">
+                          {lesson.author || "Anonymous"}
+                        </Typography>
+                        <Typography
+                          variant="caption"
+                          color="text.secondary"
+                          sx={{ display: "block", mt: 1 }}
+                        >
+                          {typeof lesson.sectionCount === "number"
+                            ? `${lesson.sectionCount} section${lesson.sectionCount === 1 ? "" : "s"}`
+                            : ""}
+                          {lesson.createdAt
+                            ? ` · ${formatDate(lesson.createdAt)}`
+                            : ""}
+                        </Typography>
+                      </CardContent>
+                    </CardActionArea>
+                  </Card>
+                </Grid>
+              ))}
+            </Grid>
+          )}
       </Container>
 
       <Dialog
