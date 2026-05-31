@@ -290,6 +290,12 @@ export default function EditorPage() {
 
   const setTitle = (title) => setDoc((d) => ({ ...d, title }));
 
+  // The per-document list of trusted collaborators. It lives on the doc itself
+  // (not account-wide), so it persists with the draft and travels with the
+  // lesson when published. Each entry is { email, name? }.
+  const setTrustedCollaborators = (next) =>
+    setDoc((d) => ({ ...d, trustedCollaborators: next }));
+
   const updateSection = (id, next) =>
     setDoc((d) => ({
       ...d,
@@ -1004,6 +1010,8 @@ export default function EditorPage() {
         onClose={() => setCollabOpen(false)}
         collab={collab}
         initialJoinCode={joinCode}
+        trusted={doc.trustedCollaborators || []}
+        onTrustedChange={setTrustedCollaborators}
       />
 
       {/* Floating avatars showing where each collaborator is editing. */}

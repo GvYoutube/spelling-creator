@@ -3,7 +3,7 @@
 // session by code. The host admits ("adds") pending guests to the lesson before
 // they can collaborate, matching the admission model in lib/collab.js.
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Dialog from "@mui/material/Dialog";
 import DialogTitle from "@mui/material/DialogTitle";
 import DialogContent from "@mui/material/DialogContent";
@@ -31,6 +31,8 @@ import ContentCopyIcon from "@mui/icons-material/ContentCopy";
 import GroupAddIcon from "@mui/icons-material/GroupAdd";
 import LoginIcon from "@mui/icons-material/Login";
 import SendIcon from "@mui/icons-material/Send";
+import DeleteIcon from "@mui/icons-material/Delete";
+import StarIcon from "@mui/icons-material/Star";
 import { colorForId } from "../lib/presence.js";
 import { useAuth } from "../lib/auth.jsx";
 import { sendLink } from "../lib/notifications.js";
@@ -48,11 +50,17 @@ function initials(entry) {
   return src.trim().charAt(0).toUpperCase() || "?";
 }
 
+// Loose client-side email check — just enough to keep obvious typos out of the
+// trusted list. The Worker re-validates on send, so this is only for UX.
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
 export default function CollaborateDialog({
   open,
   onClose,
   collab,
   initialJoinCode = "",
+  trusted = [],
+  onTrustedChange,
 }) {
   const {
     status,
@@ -69,10 +77,13 @@ export default function CollaborateDialog({
     clearError,
   } = collab;
 
-  const { accessToken } = useAuth();
+  const { accessToken, user } = useAuth();
   const [joinCode, setJoinCode] = useState(initialJoinCode);
   const [copied, setCopied] = useState(null); // 'code' | 'link' | null
   const [sendOpen, setSendOpen] = useState(false);
+  // Status of the automatic invite send to trusted collaborators when a session
+  // goes live: { sending, sent: string[], failed: string[] } | null.
+  const [autoSend, setAutoSend] = useState(null);
 
   // When opened from an invite link, prefill the code so the user just confirms.
   useEffect(() => {
@@ -82,6 +93,73 @@ export default function CollaborateDialog({
   const inSession = status === "hosting" || status === "joined";
   const connecting = status === "connecting";
 
+  // Auto-invite trusted collaborators. Once a host session is live we have a
+  // shareable link, so we send it to each trusted collaborator's email — they
+  // get the invite in their notifications without the host lifting a finger.
+  // We track which (code, email) pairs we've already sent so a re-render or a
+  // change to the list never double-sends within the same session; a new
+  // session (new myCode) re-sends to everyone, which is what we want.
+  const sentRef = useRef(new Set());
+  useEffect(() => {
+    if (status !== "hosting" || !myCode) {
+      sentRef.current = new Set();
+      return;
+    }
+    if (!accessToken) return; // sending notifications needs a signed-in session
+    const link = inviteLink(myCode);
+    const myEmail = (user?.email || "").trim().toLowerCase();
+    const targets = trusted
+      .map((t) => (t?.email || "").trim().toLowerCase())
+      .filter((email) => EMAIL_RE.test(email) && email !== myEmail)
+      .filter((email) => !sentRef.current.has(`${myCode}|${email}`));
+    if (targets.length === 0) return;
+
+    let cancelled = false;
+    (async () => {
+      setAutoSend((prev) => ({
+        sending: true,
+        sent: prev?.sent || [],
+        failed: [],
+      }));
+      const sent = [];
+      const failed = [];
+      for (const email of targets) {
+        sentRef.current.add(`${myCode}|${email}`);
+        try {
+          await sendLink(
+            {
+              email,
+              link,
+              message:
+                "You're a trusted collaborator on this lesson — join the live session with this link.",
+            },
+            accessToken,
+          );
+          sent.push(email);
+        } catch {
+          // Let the host retry by re-sending manually; don't block the session.
+          sentRef.current.delete(`${myCode}|${email}`);
+          failed.push(email);
+        }
+      }
+      if (cancelled) return;
+      setAutoSend((prev) => ({
+        sending: false,
+        sent: [...(prev?.sent || []), ...sent],
+        failed,
+      }));
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [status, myCode, trusted, accessToken, user]);
+
+  // Clear the auto-send banner when a session ends so it doesn't linger.
+  useEffect(() => {
+    if (status === "idle") setAutoSend(null);
+  }, [status]);
+
   const copy = async (text, which) => {
     try {
       await navigator.clipboard.writeText(text);
@@ -90,6 +168,32 @@ export default function CollaborateDialog({
     } catch {
       /* clipboard blocked — the field is selectable as a fallback */
     }
+  };
+
+  // ----- Trusted collaborators (per-document list) ------------------------
+  const [trustedEmail, setTrustedEmail] = useState("");
+  const [trustedError, setTrustedError] = useState("");
+
+  const addTrusted = () => {
+    const email = trustedEmail.trim().toLowerCase();
+    if (!EMAIL_RE.test(email)) {
+      setTrustedError("Enter a valid email address.");
+      return;
+    }
+    if (trusted.some((t) => (t.email || "").trim().toLowerCase() === email)) {
+      setTrustedError("That collaborator is already on the list.");
+      return;
+    }
+    onTrustedChange?.([...trusted, { email }]);
+    setTrustedEmail("");
+    setTrustedError("");
+  };
+
+  const removeTrusted = (email) => {
+    const key = (email || "").trim().toLowerCase();
+    onTrustedChange?.(
+      trusted.filter((t) => (t.email || "").trim().toLowerCase() !== key),
+    );
   };
 
   // The pre-session landing: choose to host or to join.
@@ -144,6 +248,10 @@ export default function CollaborateDialog({
           Joining replaces your current draft with the host&apos;s lesson.
         </Typography>
       </Box>
+
+      <Divider />
+
+      {renderTrusted()}
     </Stack>
   );
 
@@ -161,6 +269,8 @@ export default function CollaborateDialog({
       <Alert severity="success" variant="outlined">
         Your session is live. Share the code or link below to invite people.
       </Alert>
+
+      {renderAutoSend()}
 
       <Box>
         <Typography variant="caption" color="text.secondary">
@@ -247,6 +357,10 @@ export default function CollaborateDialog({
       )}
 
       {renderRoster()}
+
+      <Divider />
+
+      {renderTrusted({ compact: true })}
     </Stack>
   );
 
@@ -322,6 +436,110 @@ export default function CollaborateDialog({
           ))}
         </List>
       </Box>
+    );
+
+  // Manage the per-document trusted-collaborator list and explain the
+  // auto-invite behaviour. `compact` drops the explanatory copy for the
+  // in-session (host) view where space is tighter.
+  const renderTrusted = ({ compact = false } = {}) => (
+    <Box>
+      <Stack direction="row" spacing={0.5} alignItems="center" sx={{ mb: 0.5 }}>
+        <StarIcon fontSize="small" color="warning" />
+        <Typography variant="subtitle2">Trusted collaborators</Typography>
+      </Stack>
+      {!compact && (
+        <Typography variant="body2" color="text.secondary" sx={{ mb: 1.5 }}>
+          People on this list are emailed this lesson&apos;s invite link
+          automatically whenever you start a session — no need to share the code
+          each time. This list is saved with the lesson.
+        </Typography>
+      )}
+
+      <Stack direction="row" spacing={1} alignItems="flex-start">
+        <TextField
+          size="small"
+          fullWidth
+          type="email"
+          label="Add by email"
+          placeholder="name@example.com"
+          value={trustedEmail}
+          error={Boolean(trustedError)}
+          helperText={trustedError || undefined}
+          onChange={(e) => {
+            setTrustedEmail(e.target.value);
+            if (trustedError) setTrustedError("");
+          }}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") {
+              e.preventDefault();
+              addTrusted();
+            }
+          }}
+        />
+        <Button
+          variant="outlined"
+          startIcon={<PersonAddIcon />}
+          onClick={addTrusted}
+          disabled={!trustedEmail.trim()}
+          sx={{ flexShrink: 0, mt: 0.25 }}
+        >
+          Add
+        </Button>
+      </Stack>
+
+      {trusted.length > 0 && (
+        <List dense disablePadding sx={{ mt: 1 }}>
+          {trusted.map((t) => (
+            <ListItem
+              key={t.email}
+              secondaryAction={
+                <Tooltip title="Remove">
+                  <IconButton edge="end" onClick={() => removeTrusted(t.email)}>
+                    <DeleteIcon fontSize="small" />
+                  </IconButton>
+                </Tooltip>
+              }
+            >
+              <ListItemAvatar>
+                <Avatar sx={{ bgcolor: "warning.light" }}>{initials(t)}</Avatar>
+              </ListItemAvatar>
+              <ListItemText
+                primary={t.name || t.email}
+                secondary={t.name ? t.email : undefined}
+              />
+            </ListItem>
+          ))}
+        </List>
+      )}
+
+      {!accessToken && trusted.length > 0 && (
+        <Alert severity="info" variant="outlined" sx={{ mt: 1 }}>
+          Sign in to automatically email the invite link to trusted
+          collaborators.
+        </Alert>
+      )}
+    </Box>
+  );
+
+  // A short banner summarising the automatic invite send to trusted people.
+  const renderAutoSend = () =>
+    autoSend &&
+    (autoSend.sending ||
+      autoSend.sent.length > 0 ||
+      autoSend.failed.length > 0) && (
+      <Alert
+        severity={autoSend.failed.length > 0 ? "warning" : "success"}
+        variant="outlined"
+        icon={autoSend.sending ? <CircularProgress size={18} /> : <SendIcon />}
+      >
+        {autoSend.sending
+          ? "Sending the invite link to your trusted collaborators…"
+          : autoSend.failed.length > 0
+            ? `Invited ${autoSend.sent.length}; couldn't reach ${autoSend.failed.join(", ")}.`
+            : `Invite link sent to ${autoSend.sent.length} trusted collaborator${
+                autoSend.sent.length === 1 ? "" : "s"
+              }.`}
+      </Alert>
     );
 
   return (
