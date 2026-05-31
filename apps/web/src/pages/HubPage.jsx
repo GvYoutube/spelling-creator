@@ -331,86 +331,91 @@ export default function HubPage() {
           !loading &&
           !error &&
           visibleLessons.length > 0 && (
-          <Grid container spacing={2}>
-            {visibleLessons.map((lesson) => (
-              <Grid key={lesson.id} size={{ xs: 12, sm: 6, md: 4 }}>
-                <Card
-                  variant="outlined"
-                  sx={{ height: "100%", position: "relative" }}
-                >
-                  {user && lesson.authorId && lesson.authorId === user.id && (
-                    <Stack
-                      direction="row"
-                      spacing={0.5}
-                      sx={{ position: "absolute", top: 4, right: 4, zIndex: 1 }}
-                    >
-                      <Tooltip title="Edit this lesson">
-                        <IconButton
-                          size="small"
-                          aria-label="edit lesson"
-                          onClick={(e) => editLesson(e, lesson)}
-                          sx={{
-                            bgcolor: "background.paper",
-                            "&:hover": { bgcolor: "action.hover" },
-                          }}
-                        >
-                          <EditIcon fontSize="small" />
-                        </IconButton>
-                      </Tooltip>
-                      <Tooltip title="Delete this lesson">
-                        <IconButton
-                          size="small"
-                          aria-label="delete lesson"
-                          onClick={(e) => askDelete(e, lesson)}
-                          sx={{
-                            bgcolor: "background.paper",
-                            "&:hover": {
-                              bgcolor: "error.light",
-                              color: "error.contrastText",
-                            },
-                          }}
-                        >
-                          <DeleteOutlineIcon fontSize="small" />
-                        </IconButton>
-                      </Tooltip>
-                    </Stack>
-                  )}
-                  <CardActionArea
-                    component={RouterLink}
-                    to={`/hub/${lesson.id}`}
-                    sx={{ height: "100%", alignItems: "stretch" }}
+            <Grid container spacing={2}>
+              {visibleLessons.map((lesson) => (
+                <Grid key={lesson.id} size={{ xs: 12, sm: 6, md: 4 }}>
+                  <Card
+                    variant="outlined"
+                    sx={{ height: "100%", position: "relative" }}
                   >
-                    <CardContent>
-                      <Typography
-                        variant="h6"
-                        gutterBottom
-                        noWrap
-                        sx={{ pr: 4 }}
+                    {user && lesson.authorId && lesson.authorId === user.id && (
+                      <Stack
+                        direction="row"
+                        spacing={0.5}
+                        sx={{
+                          position: "absolute",
+                          top: 4,
+                          right: 4,
+                          zIndex: 1,
+                        }}
                       >
-                        {lesson.title || "Untitled Lesson"}
-                      </Typography>
-                      <Typography variant="body2" color="text.secondary">
-                        {lesson.author || "Anonymous"}
-                      </Typography>
-                      <Typography
-                        variant="caption"
-                        color="text.secondary"
-                        sx={{ display: "block", mt: 1 }}
-                      >
-                        {typeof lesson.sectionCount === "number"
-                          ? `${lesson.sectionCount} section${lesson.sectionCount === 1 ? "" : "s"}`
-                          : ""}
-                        {lesson.createdAt
-                          ? ` · ${formatDate(lesson.createdAt)}`
-                          : ""}
-                      </Typography>
-                    </CardContent>
-                  </CardActionArea>
-                </Card>
-              </Grid>
-            ))}
-          </Grid>
-        )}
+                        <Tooltip title="Edit this lesson">
+                          <IconButton
+                            size="small"
+                            aria-label="edit lesson"
+                            onClick={(e) => editLesson(e, lesson)}
+                            sx={{
+                              bgcolor: "background.paper",
+                              "&:hover": { bgcolor: "action.hover" },
+                            }}
+                          >
+                            <EditIcon fontSize="small" />
+                          </IconButton>
+                        </Tooltip>
+                        <Tooltip title="Delete this lesson">
+                          <IconButton
+                            size="small"
+                            aria-label="delete lesson"
+                            onClick={(e) => askDelete(e, lesson)}
+                            sx={{
+                              bgcolor: "background.paper",
+                              "&:hover": {
+                                bgcolor: "error.light",
+                                color: "error.contrastText",
+                              },
+                            }}
+                          >
+                            <DeleteOutlineIcon fontSize="small" />
+                          </IconButton>
+                        </Tooltip>
+                      </Stack>
+                    )}
+                    <CardActionArea
+                      component={RouterLink}
+                      to={`/hub/${lesson.id}`}
+                      sx={{ height: "100%", alignItems: "stretch" }}
+                    >
+                      <CardContent>
+                        <Typography
+                          variant="h6"
+                          gutterBottom
+                          noWrap
+                          sx={{ pr: 4 }}
+                        >
+                          {lesson.title || "Untitled Lesson"}
+                        </Typography>
+                        <Typography variant="body2" color="text.secondary">
+                          {lesson.author || "Anonymous"}
+                        </Typography>
+                        <Typography
+                          variant="caption"
+                          color="text.secondary"
+                          sx={{ display: "block", mt: 1 }}
+                        >
+                          {typeof lesson.sectionCount === "number"
+                            ? `${lesson.sectionCount} section${lesson.sectionCount === 1 ? "" : "s"}`
+                            : ""}
+                          {lesson.createdAt
+                            ? ` · ${formatDate(lesson.createdAt)}`
+                            : ""}
+                        </Typography>
+                      </CardContent>
+                    </CardActionArea>
+                  </Card>
+                </Grid>
+              ))}
+            </Grid>
+          )}
       </Container>
 
       <Dialog
