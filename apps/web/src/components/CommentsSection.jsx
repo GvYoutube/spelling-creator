@@ -2,8 +2,14 @@
 // Reading is public; posting needs a signed-in Supabase session (the same one
 // that gates publishing). The Worker moderates posts — a comment containing
 // profanity is rejected and its reason is surfaced here as an error.
+//
+// Comments are threaded: a comment may reply to another. The Worker returns a
+// flat, oldest-first list where each comment carries a `parentId` (null for a
+// top-level comment); we nest replies under their parent here. Posting a reply
+// also notifies the parent comment's author and the lesson author — handled
+// entirely server-side.
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import Box from "@mui/material/Box";
 import Stack from "@mui/material/Stack";
@@ -21,6 +27,11 @@ import {
   postComment,
   COMMENT_BLOCKED_STATUS,
 } from "../lib/comments.js";
+
+// How deep replies are allowed to indent before they stop nesting further. Deeper
+// replies still thread (they sit under their parent) but share the cap's inset, so
+// a long back-and-forth doesn't march off the right edge.
+const MAX_INDENT_DEPTH = 4;
 
 function formatDateTime(value) {
   if (!value) return "";
@@ -55,6 +66,29 @@ export default function CommentsSection({ lessonId }) {
   // user-correctable outcome) and "error" for genuine failures.
   const [postNotice, setPostNotice] = useState(null);
 
+  // Reply state. Only one reply box is open at a time, keyed by the id of the
+  // comment being replied to (`replyTo`).
+  const [replyTo, setReplyTo] = useState(null);
+  const [replyDraft, setReplyDraft] = useState("");
+  const [replyPosting, setReplyPosting] = useState(false);
+  const [replyNotice, setReplyNotice] = useState(null);
+
+  // Group the flat list into parent -> [replies] (preserving the oldest-first
+  // order the Worker returns) so we can render the thread recursively.
+  const childrenByParent = useMemo(() => {
+    const map = new Map();
+    for (const c of comments) {
+      if (!c.parentId) continue;
+      if (!map.has(c.parentId)) map.set(c.parentId, []);
+      map.get(c.parentId).push(c);
+    }
+    return map;
+  }, [comments]);
+  const topLevel = useMemo(
+    () => comments.filter((c) => !c.parentId),
+    [comments],
+  );
+
   const load = async () => {
     setLoading(true);
     setError("");
@@ -72,6 +106,9 @@ export default function CommentsSection({ lessonId }) {
     // Reset the in-progress draft state when switching lessons.
     setDraft("");
     setPostNotice(null);
+    setReplyTo(null);
+    setReplyDraft("");
+    setReplyNotice(null);
     // Intentionally re-run only when the lesson changes, not when `load` changes.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [lessonId]);
@@ -98,6 +135,158 @@ export default function CommentsSection({ lessonId }) {
     } finally {
       setPosting(false);
     }
+  };
+
+  const openReply = (id) => {
+    setReplyTo(id);
+    setReplyDraft("");
+    setReplyNotice(null);
+  };
+
+  const cancelReply = () => {
+    setReplyTo(null);
+    setReplyDraft("");
+    setReplyNotice(null);
+  };
+
+  const submitReply = async (e) => {
+    e.preventDefault();
+    const text = replyDraft.trim();
+    if (!text || replyPosting || !replyTo) return;
+    setReplyPosting(true);
+    setReplyNotice(null);
+    try {
+      const reply = await postComment(lessonId, text, accessToken, replyTo);
+      // Append; the render derives the thread from parentId, so it lands under
+      // the comment it replies to.
+      setComments((prev) => [...prev, reply]);
+      cancelReply();
+    } catch (err) {
+      const blocked = err.status === COMMENT_BLOCKED_STATUS;
+      setReplyNotice({
+        severity: blocked ? "warning" : "error",
+        message: err.message || "Could not post your reply.",
+      });
+    } finally {
+      setReplyPosting(false);
+    }
+  };
+
+  // Render a comment and, recursively, its replies. A function (not a component)
+  // so it closes over the shared reply state without remounting on every render.
+  const renderComment = (c, depth) => {
+    const replies = childrenByParent.get(c.id) || [];
+    const indented = depth > 0;
+    return (
+      <Box key={c.id}>
+        <Stack direction="row" spacing={1.5} alignItems="flex-start">
+          <Avatar sx={{ width: 32, height: 32, fontSize: 14 }}>
+            {initial(c.author)}
+          </Avatar>
+          <Box sx={{ flexGrow: 1 }}>
+            <Stack direction="row" spacing={1} alignItems="baseline">
+              <Typography variant="subtitle2">
+                {c.author || "Anonymous"}
+              </Typography>
+              <Typography variant="caption" color="text.secondary">
+                {formatDateTime(c.createdAt)}
+              </Typography>
+            </Stack>
+            <Typography
+              variant="body2"
+              sx={{ whiteSpace: "pre-wrap", wordBreak: "break-word" }}
+            >
+              {c.body}
+            </Typography>
+
+            {/* Replying needs a signed-in session, like posting a comment. */}
+            {authEnabled && user && replyTo !== c.id && (
+              <Button
+                size="small"
+                sx={{ mt: 0.5, px: 0.5, minWidth: 0 }}
+                onClick={() => openReply(c.id)}
+              >
+                Reply
+              </Button>
+            )}
+
+            {replyTo === c.id && (
+              <Box component="form" onSubmit={submitReply} sx={{ mt: 1 }}>
+                <TextField
+                  label={`Reply to ${c.author || "Anonymous"}`}
+                  value={replyDraft}
+                  onChange={(e) => setReplyDraft(e.target.value)}
+                  multiline
+                  minRows={2}
+                  fullWidth
+                  autoFocus
+                  disabled={replyPosting}
+                  inputProps={{ maxLength: 2000 }}
+                />
+                {replyNotice && (
+                  <Alert
+                    severity={replyNotice.severity}
+                    sx={{ mt: 1 }}
+                    onClose={() => setReplyNotice(null)}
+                  >
+                    {replyNotice.severity === "warning" && (
+                      <AlertTitle>Reply blocked</AlertTitle>
+                    )}
+                    {replyNotice.message}
+                  </Alert>
+                )}
+                <Stack
+                  direction="row"
+                  spacing={1}
+                  justifyContent="flex-end"
+                  sx={{ mt: 1 }}
+                >
+                  <Button
+                    size="small"
+                    onClick={cancelReply}
+                    disabled={replyPosting}
+                  >
+                    Cancel
+                  </Button>
+                  <Button
+                    type="submit"
+                    size="small"
+                    variant="contained"
+                    disabled={replyPosting || !replyDraft.trim()}
+                    startIcon={
+                      replyPosting ? (
+                        <CircularProgress size={16} color="inherit" />
+                      ) : null
+                    }
+                  >
+                    {replyPosting ? "Posting…" : "Post reply"}
+                  </Button>
+                </Stack>
+              </Box>
+            )}
+          </Box>
+        </Stack>
+
+        {replies.length > 0 && (
+          <Stack
+            spacing={2}
+            sx={{
+              mt: 2,
+              // Indent and rule each nested level, capped so deep threads don't
+              // run off the edge.
+              ml: indented ? 0 : 2,
+              pl: 2,
+              borderLeft: 1,
+              borderColor: "divider",
+            }}
+          >
+            {replies.map((r) =>
+              renderComment(r, Math.min(depth + 1, MAX_INDENT_DEPTH)),
+            )}
+          </Stack>
+        )}
+      </Box>
+    );
   };
 
   return (
@@ -129,40 +318,13 @@ export default function CommentsSection({ lessonId }) {
 
       {!loading && !error && (
         <Stack spacing={2}>
-          {comments.length === 0 && (
+          {topLevel.length === 0 && (
             <Typography variant="body2" color="text.secondary">
               No comments yet. Be the first to share your thoughts.
             </Typography>
           )}
 
-          {comments.map((c) => (
-            <Stack
-              key={c.id}
-              direction="row"
-              spacing={1.5}
-              alignItems="flex-start"
-            >
-              <Avatar sx={{ width: 32, height: 32, fontSize: 14 }}>
-                {initial(c.author)}
-              </Avatar>
-              <Box sx={{ flexGrow: 1 }}>
-                <Stack direction="row" spacing={1} alignItems="baseline">
-                  <Typography variant="subtitle2">
-                    {c.author || "Anonymous"}
-                  </Typography>
-                  <Typography variant="caption" color="text.secondary">
-                    {formatDateTime(c.createdAt)}
-                  </Typography>
-                </Stack>
-                <Typography
-                  variant="body2"
-                  sx={{ whiteSpace: "pre-wrap", wordBreak: "break-word" }}
-                >
-                  {c.body}
-                </Typography>
-              </Box>
-            </Stack>
-          ))}
+          {topLevel.map((c) => renderComment(c, 0))}
 
           <Divider />
 

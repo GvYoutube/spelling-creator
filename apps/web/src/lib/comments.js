@@ -6,10 +6,13 @@
 //   GET  {API_URL}/lessons/:id/comments  -> { comments: Comment[] }  (public)
 //   POST {API_URL}/lessons/:id/comments  -> { comment: Comment }     (auth: Bearer Supabase JWT)
 //
-// Comment: { id, author, body, createdAt }
+// Comment: { id, parentId, author, body, createdAt }
+//   parentId is the comment this one replies to, or null for a top-level comment.
 //
 // Posting is moderated server-side: a comment containing profanity is rejected
 // outright (HTTP 422) and the Worker's plain-text reason is surfaced to the user.
+// A reply (parentId set) also notifies the parent comment's author and the lesson
+// author — handled entirely server-side.
 
 const API_URL = import.meta.env.VITE_API_URL;
 
@@ -61,15 +64,19 @@ export async function fetchComments(lessonId) {
  * @param {string} lessonId
  * @param {string} body          The comment text.
  * @param {string} accessToken   Supabase session JWT.
- * @returns {Promise<{id, author, body, createdAt}>}
+ * @param {string} [parentId]    The comment being replied to; omit for a top-level comment.
+ * @returns {Promise<{id, parentId, author, body, createdAt}>}
  */
-export async function postComment(lessonId, body, accessToken) {
+export async function postComment(lessonId, body, accessToken, parentId) {
   if (!API_URL) throw new Error("The lesson hub is not configured.");
   if (!lessonId) throw new Error("Missing lesson id.");
   if (!accessToken) throw new Error("Please sign in before commenting.");
 
   const text = (body || "").trim();
   if (!text) throw new Error("Write something before posting.");
+
+  const payload = { body: text };
+  if (parentId) payload.parentId = parentId;
 
   let res;
   try {
@@ -79,7 +86,7 @@ export async function postComment(lessonId, body, accessToken) {
         "Content-Type": "application/json",
         Authorization: `Bearer ${accessToken}`,
       },
-      body: JSON.stringify({ body: text }),
+      body: JSON.stringify(payload),
     });
   } catch {
     throw new Error("Could not reach the lesson hub.");

@@ -655,6 +655,9 @@ const MAX_COMMENT_LENGTH = 2000;
 function rowToComment(row) {
 	return {
 		id: row.id,
+		// The comment this one replies to, or null for a top-level comment. The
+		// frontend uses it to nest replies under their parent.
+		parentId: row.parent_id || null,
 		author: row.author,
 		body: row.body,
 		createdAt: row.created_at,
@@ -672,6 +675,12 @@ function rowToComment(row) {
  * and nothing is censored-and-kept. The author is derived from the verified user,
  * never from the request body. Errors are short plain-text reasons so the frontend
  * can surface res.text(), matching the rest of the API.
+ *
+ * A POST may carry `parentId` to reply to an existing comment on the same lesson.
+ * When it does, the reply notifies the parent comment's author and the lesson's
+ * author (deduplicated to a single notification when they're the same person, and
+ * never notifying the replier themselves). Notification failures are swallowed so
+ * they can't fail the reply itself.
  */
 async function handleComments(request, env, lessonId, cors) {
 	if (!env.SUPABASE_URL || !env.SUPABASE_SERVICE_ROLE_KEY) {
@@ -684,7 +693,7 @@ async function handleComments(request, env, lessonId, cors) {
 	// GET — public listing of a lesson's comments, oldest first so the thread
 	// reads top to bottom.
 	if (request.method === 'GET') {
-		const query = `lesson_id=eq.${encodeURIComponent(lessonId)}&select=id,author,body,created_at&order=created_at.asc`;
+		const query = `lesson_id=eq.${encodeURIComponent(lessonId)}&select=id,parent_id,author,body,created_at&order=created_at.asc`;
 		let res;
 		try {
 			res = await fetch(`${base}/rest/v1/comments?${query}`, { headers: supabaseHeaders(env) });
@@ -716,6 +725,10 @@ async function handleComments(request, env, lessonId, cors) {
 			return textResponse(`Comments are limited to ${MAX_COMMENT_LENGTH} characters.`, 400, cors);
 		}
 
+		// Optional: the comment being replied to. Empty/missing means a top-level
+		// comment. We validate it (below) belongs to this lesson before inserting.
+		const parentId = (body && body.parentId ? String(body.parentId) : '').trim();
+
 		// Moderation: block the entire comment if it contains profanity. Done
 		// server-side so it can't be bypassed by a crafted client request.
 		if (profanityFilter.checkProfanity(text).containsProfanity) {
@@ -736,9 +749,31 @@ async function handleComments(request, env, lessonId, cors) {
 		if (!Array.isArray(lessonRows) || lessonRows.length === 0) {
 			return textResponse('Lesson not found.', 404, cors);
 		}
+		const lesson = lessonRows[0];
+
+		// If this is a reply, the parent must exist and belong to the same lesson.
+		// We grab its author_id so we can notify that person once the reply lands.
+		let parentComment = null;
+		if (parentId) {
+			let parentRes;
+			try {
+				parentRes = await fetch(
+					`${base}/rest/v1/comments?id=eq.${encodeURIComponent(parentId)}&lesson_id=eq.${encodeURIComponent(lessonId)}&select=id,author_id&limit=1`,
+					{ headers: supabaseHeaders(env) },
+				);
+			} catch (e) {
+				return textResponse('Could not reach the comment store.', 502, cors);
+			}
+			const parentRows = parentRes.ok ? await parentRes.json().catch(() => []) : [];
+			if (!Array.isArray(parentRows) || parentRows.length === 0) {
+				return textResponse('The comment you’re replying to no longer exists.', 404, cors);
+			}
+			parentComment = parentRows[0];
+		}
 
 		const insert = {
 			lesson_id: lessonId,
+			parent_id: parentId || null,
 			author_id: user.id,
 			author: authorFromUser(user),
 			body: text,
@@ -746,7 +781,7 @@ async function handleComments(request, env, lessonId, cors) {
 
 		let res;
 		try {
-			res = await fetch(`${base}/rest/v1/comments?select=id,author,body,created_at`, {
+			res = await fetch(`${base}/rest/v1/comments?select=id,parent_id,author,body,created_at`, {
 				method: 'POST',
 				headers: {
 					...supabaseHeaders(env),
@@ -763,7 +798,32 @@ async function handleComments(request, env, lessonId, cors) {
 		if (!Array.isArray(rows) || rows.length === 0) {
 			return textResponse('Could not post the comment.', 502, cors);
 		}
-		return jsonResponse({ comment: rowToComment(rows[0]) }, 201, cors);
+		const comment = rowToComment(rows[0]);
+
+		// A reply notifies two people: the parent comment's author ("replied to your
+		// comment") and the lesson's author ("replied to a comment on your lesson").
+		// We dedupe by recipient id with a Map, so when the lesson author is also the
+		// parent comment's author they get a single notification (keeping the more
+		// specific "your comment" wording), and we never notify the replier themselves.
+		// Notification failures are swallowed so they can't fail the reply.
+		if (parentComment) {
+			const replier = authorFromUser(user);
+			const link = `/hub/${encodeURIComponent(lessonId)}`;
+			const byRecipient = new Map();
+			if (parentComment.author_id && parentComment.author_id !== user.id) {
+				byRecipient.set(parentComment.author_id, `${replier} replied to your comment`);
+			}
+			if (lesson.author_id && lesson.author_id !== user.id && !byRecipient.has(lesson.author_id)) {
+				byRecipient.set(lesson.author_id, `${replier} replied to a comment on your lesson`);
+			}
+			await Promise.all(
+				[...byRecipient.entries()].map(([userId, title]) =>
+					createNotification(env, base, { userId, type: 'comment', title, body: text, link }).catch(() => {}),
+				),
+			);
+		}
+
+		return jsonResponse({ comment }, 201, cors);
 	}
 
 	return textResponse('Method not allowed.', 405, cors);

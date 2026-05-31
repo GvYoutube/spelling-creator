@@ -39,6 +39,11 @@ create policy "lessons are public to read"
 create table if not exists public.comments (
   id          uuid primary key default gen_random_uuid(),
   lesson_id   uuid not null references public.lessons (id) on delete cascade,
+  -- The comment this one replies to, or null for a top-level comment. Self-
+  -- referential FK; cascading so deleting a comment also removes its replies.
+  -- Posting a reply notifies the parent comment's author and the lesson author
+  -- (see the Worker's handleComments).
+  parent_id   uuid references public.comments (id) on delete cascade,
   author_id   uuid not null references auth.users (id) on delete cascade,
   author      text,                       -- display name / email, denormalised for listing
   body        text not null,
@@ -47,6 +52,10 @@ create table if not exists public.comments (
 
 -- Comments are listed per lesson, oldest-first; index the lookup + sort key.
 create index if not exists comments_lesson_id_idx on public.comments (lesson_id, created_at);
+
+-- Index the self-referential FK so the on-delete cascade (and any reply lookups)
+-- don't sequential-scan the table.
+create index if not exists comments_parent_id_idx on public.comments (parent_id);
 
 -- Same posture as lessons: service-role Worker is the only writer; enable RLS as
 -- defence-in-depth and allow public reads.
