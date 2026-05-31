@@ -293,10 +293,11 @@ swaps the grid for matching hits (rendered with the same cards, so owner-only
 Edit/Delete still work). Only **title** and **author** are searched.
 
 The Worker is the only writer and keeps the index in step with Supabase as a
-side effect of the lesson routes — there is no separate indexing endpoint:
+side effect of the lesson routes:
 
 - `POST /lessons` and `PUT /lessons/:id` upsert the lesson's record.
 - `DELETE /lessons/:id` removes it.
+- `POST /reindex` rebuilds the whole index from Supabase (backfill/repair).
 
 All index writes are **best-effort**: they run after the Supabase write
 succeeds and never fail the user's action if Algolia is unreachable (at worst
@@ -314,22 +315,33 @@ the index lags until the next write or a manual reindex). The record's
 When `ALGOLIA_APP_ID` / `ALGOLIA_ADMIN_KEY` are unset, indexing is skipped and
 the rest of the hub keeps working.
 
-**One-time setup (run directly against Algolia's API with the admin key).**
-There is no Worker reindex route — configure the index settings and backfill any
-lessons that predate indexing by calling Algolia directly (its dashboard, CLI,
-or REST API). Restrict matching to title + author and rank ties by recency:
+**Setup / backfill (`POST /reindex`).** The index settings and any lessons that
+predate indexing are established by calling the Worker's reindex route. It
+applies the settings the hub relies on — matching restricted to title + author,
+ties ranked newest-first — then upserts every lesson from Supabase using the
+same record shape the live writes use:
 
 ```jsonc
-// PUT /1/indexes/{index}/settings
+// the settings the route applies (PUT /1/indexes/{index}/settings)
 {
   "searchableAttributes": ["title", "author"],
   "customRanking": ["desc(createdAtTs)"],
 }
 ```
 
-Then push existing rows (each record is `{ objectID: <lesson id>, title, author,
-authorId, sectionCount, createdAt, createdAtTs }`) via a batch `updateObject`.
-From then on the Worker keeps the index current automatically.
+It's an operator action, not a user one, so it's gated by the **Algolia admin
+key** (the same secret the route writes with — no extra credential to manage):
+send it as `Authorization: Bearer <ALGOLIA_ADMIN_KEY>`. Safe to re-run — records
+are addressed by lesson id, so each run upserts rather than duplicates. Returns
+`{ ok: true, indexed: <count> }`:
+
+```bash
+curl -X POST https://<worker-host>/reindex \
+  -H "Authorization: Bearer $ALGOLIA_ADMIN_KEY"
+```
+
+From then on the Worker keeps the index current automatically; re-run `/reindex`
+only to repair drift or after a config change.
 
 ### Supabase schema
 
