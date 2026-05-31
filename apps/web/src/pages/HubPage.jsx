@@ -78,7 +78,7 @@ export default function HubPage() {
   const [drafts, setDrafts] = useState([]);
 
   // Client-side search. `query` is what the user typed; `debouncedQuery` lags it
-  // by 200ms so we don't re-run the index on every keystroke. The lunr index is
+  // by 200ms so we don't re-run the index on every keystroke. The Fuse index is
   // rebuilt only when the lesson list changes.
   const [query, setQuery] = useState("");
   const [debouncedQuery, setDebouncedQuery] = useState("");

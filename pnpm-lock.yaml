@@ -315,12 +315,12 @@ importers:
       docx:
         specifier: ^9.0.3
         version: 9.7.1
+      fuse.js:
+        specifier: ^7.4.0
+        version: 7.4.0
       html2pdf.js:
         specifier: ^0.10.2
         version: 0.10.3
-      lunr:
-        specifier: ^2.3.9
-        version: 2.3.9
       mammoth:
         specifier: ^1.8.0
         version: 1.12.0
@@ -4394,6 +4394,13 @@ packages:
         integrity: sha512-xckBUXyTIqT97tq2x2AMb+g163b5JFysYk0x4qxNFwbfQkmNZoiRHb6sPzI9/QV33WeuvVYBUIiD4NzNIyqaRQ==,
       }
 
+  fuse.js@7.4.0:
+    resolution:
+      {
+        integrity: sha512-3UqmoSFwzX1sNB1YSk+Co0EdH29XCW2p9g48OAiy93cjKqzuABsqw2VIgSN3CmsT/wo6pIJ3F0Jxeiiby8rhIQ==,
+      }
+    engines: { node: ">=10" }
+
   gaxios@7.1.4:
     resolution:
       {
@@ -5148,12 +5155,6 @@ packages:
     resolution:
       {
         integrity: sha512-KpNARQA3Iwv+jTA0utUVVbrh+Jlrr1Fv0e56GGzAFOXN7dk/FviaDW8LHmK52DlcH4WP2n6gI8vN1aesBFgo9w==,
-      }
-
-  lunr@2.3.9:
-    resolution:
-      {
-        integrity: sha512-zTU3DaZaF3Rt9rhN3uBMGQD3dD2/vFQqnvZCDv4dl5iOzq2IZQqTxu90r4E5J+nP70J3ilqVCrbho2eWaeW8Ow==,
       }
 
   magic-string@0.25.9:
@@ -9107,6 +9108,8 @@ snapshots:
 
   functions-have-names@1.2.3: {}
 
+  fuse.js@7.4.0: {}
+
   gaxios@7.1.4:
     dependencies:
       extend: 3.0.2
@@ -9536,8 +9539,6 @@ snapshots:
   lru-cache@5.1.1:
     dependencies:
       yallist: 3.1.1
-
-  lunr@2.3.9: {}
 
   magic-string@0.25.9:
     dependencies:
