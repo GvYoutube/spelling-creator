@@ -4,22 +4,22 @@
 	"main": "src/index.js",
 	"compatibility_date": "2026-05-28",
 	"observability": {
-		"enabled": true
+		"enabled": true,
 	},
 
 	"vars": {
 		"ALLOWED_HOSTNAMES": "spellingcreator.org",
-		
+
 		"SUPABASE_URL": "https://hfkgrqihawgosalltjpy.supabase.co",
 
 		"ALGOLIA_APP_ID": "RAGAI5AP69",
-		"ALGOLIA_INDEX_NAME": "lessons"
+		"ALGOLIA_INDEX_NAME": "lessons",
 	},
 
 	"kv_namespaces": [
 		{
 			"binding": "RATE_LIMIT_KV",
-			"id": "e3d5364c3c8f4637937bb07a17ffbb38"
-		}
-	]
+			"id": "e3d5364c3c8f4637937bb07a17ffbb38",
+		},
+	],
 }
