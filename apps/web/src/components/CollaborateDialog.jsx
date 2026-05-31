@@ -450,8 +450,9 @@ export default function CollaborateDialog({
       {!compact && (
         <Typography variant="body2" color="text.secondary" sx={{ mb: 1.5 }}>
           People on this list are emailed this lesson&apos;s invite link
-          automatically whenever you start a session — no need to share the code
-          each time. This list is saved with the lesson.
+          automatically whenever you start a session, and they join straight
+          away without waiting for your approval. This list is saved with the
+          lesson.
         </Typography>
       )}
 

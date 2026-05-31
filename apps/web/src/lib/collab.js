@@ -9,7 +9,9 @@
 // collaborator yet: they sit in a pending list until the host explicitly adds
 // them (see `admit`). Only after being added does the host send them the lesson
 // and start syncing their edits. This mirrors the request: users collaborate
-// *after* being added to the lesson.
+// *after* being added to the lesson. The one exception is trusted
+// collaborators (an email list saved on the doc): they bypass the waiting room
+// and are admitted automatically the instant they connect.
 //
 // Sync model. The host is the authority and relay. The whole document is the
 // unit of sync (last-write-wins): whenever the local doc changes, the changed
@@ -168,6 +170,19 @@ export function useCollaboration({ doc, onRemoteDoc, identity }) {
     });
   }, []);
 
+  // Whether an email is on this lesson's trusted-collaborator list, read from
+  // the live doc. Trusted guests skip the waiting room and are admitted the
+  // moment they connect (see the connection handler below).
+  const isTrustedEmail = useCallback((email) => {
+    const norm = (email || "").trim().toLowerCase();
+    if (!norm) return false;
+    const list = docRef.current?.trustedCollaborators;
+    return (
+      Array.isArray(list) &&
+      list.some((t) => (t?.email || "").trim().toLowerCase() === norm)
+    );
+  }, []);
+
   // ----- Host -------------------------------------------------------------
   const startHosting = useCallback(() => {
     if (peerRef.current) return;
@@ -206,7 +221,12 @@ export function useCollaboration({ doc, onRemoteDoc, identity }) {
       };
 
       conn.on("open", () => {
-        connsRef.current.set(uid, { conn, info, admitted: false });
+        // Trusted collaborators (matched by email) are admitted automatically:
+        // we hand them the doc immediately rather than parking them as a
+        // pending request for the host to approve.
+        const trusted = isTrustedEmail(info.email);
+        connsRef.current.set(uid, { conn, info, admitted: trusted });
+        if (trusted) send(conn, { t: MSG.ADMITTED, doc: docRef.current });
         syncHostParticipants();
       });
 
@@ -249,7 +269,13 @@ export function useCollaboration({ doc, onRemoteDoc, identity }) {
       setError(err?.message || "Connection error.");
       setStatus("error");
     });
-  }, [applyRemote, applyCursor, forgetCursor, syncHostParticipants]);
+  }, [
+    applyRemote,
+    applyCursor,
+    forgetCursor,
+    syncHostParticipants,
+    isTrustedEmail,
+  ]);
 
   // Host: add a pending guest to the lesson. This is the "add the user" step —
   // it flips them to admitted, hands them the current doc, and starts syncing.
