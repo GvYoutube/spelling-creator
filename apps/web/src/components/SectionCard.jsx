@@ -49,6 +49,7 @@ export default function SectionCard({
 }) {
   const fileInputRef = useRef(null);
   const [questionMenuAnchor, setQuestionMenuAnchor] = useState(null);
+  const [aiMenuAnchor, setAiMenuAnchor] = useState(null);
   const [aiOpen, setAiOpen] = useState(false);
   const [aiQuestionOpen, setAiQuestionOpen] = useState(false);
   const [imageSearchOpen, setImageSearchOpen] = useState(false);
@@ -258,19 +259,11 @@ export default function SectionCard({
           </Button>
           <Button
             startIcon={<AutoAwesomeIcon />}
-            onClick={() => setAiOpen(true)}
+            onClick={(e) => setAiMenuAnchor(e.currentTarget)}
             variant="outlined"
             size="small"
           >
-            AI text
-          </Button>
-          <Button
-            startIcon={<AutoAwesomeIcon />}
-            onClick={() => setAiQuestionOpen(true)}
-            variant="outlined"
-            size="small"
-          >
-            AI question
+            Generate with AI
           </Button>
           <input
             ref={fileInputRef}
@@ -302,6 +295,35 @@ export default function SectionCard({
               <ListItemText primary={q.label} secondary={q.description} />
             </MenuItem>
           ))}
+        </Menu>
+
+        <Menu
+          anchorEl={aiMenuAnchor}
+          open={Boolean(aiMenuAnchor)}
+          onClose={() => setAiMenuAnchor(null)}
+        >
+          <MenuItem
+            onClick={() => {
+              setAiMenuAnchor(null);
+              setAiOpen(true);
+            }}
+          >
+            <ListItemText
+              primary="Text"
+              secondary="Generate a text block with AI"
+            />
+          </MenuItem>
+          <MenuItem
+            onClick={() => {
+              setAiMenuAnchor(null);
+              setAiQuestionOpen(true);
+            }}
+          >
+            <ListItemText
+              primary="Question"
+              secondary="Generate a question with AI"
+            />
+          </MenuItem>
         </Menu>
 
         <AiTextDialog
