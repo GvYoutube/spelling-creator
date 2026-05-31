@@ -57,9 +57,6 @@ jobs:
           test -n "${{ secrets.VITE_SUPABASE_ANON_KEY }}" && echo "supabase anon key ok"
           test -n "${{ secrets.VITE_METERED_USER }}" && echo "metered username ok"
           test -n "${{ secrets.VITE_METERED_PASS }}" && echo "metered password ok"
-          test -n "${{ secrets.VITE_ALGOLIA_APP_ID }}" && echo "algolia app id ok"
-          test -n "${{ secrets.VITE_ALGOLIA_SEARCH_KEY }}" && echo "algolia search key ok"
-          test -n "${{ secrets.VITE_ALGOLIA_INDEX_NAME }}" && echo "algolia index name ok"
 
       - name: Inject env vars
         run: |
@@ -70,9 +67,6 @@ jobs:
           echo "VITE_SUPABASE_ANON_KEY=${{ secrets.VITE_SUPABASE_ANON_KEY }}" >> apps/web/.env
           echo "VITE_METERED_USER=${{ secrets.VITE_METERED_USER }}" >> apps/web/.env
           echo "VITE_METERED_PASS=${{ secrets.VITE_METERED_PASS }}" >> apps/web/.env
-          echo "VITE_ALGOLIA_APP_ID=${{ secrets.VITE_ALGOLIA_APP_ID }}" >> apps/web/.env
-          echo "VITE_ALGOLIA_SEARCH_KEY=${{ secrets.VITE_ALGOLIA_SEARCH_KEY }}" >> apps/web/.env
-          echo "VITE_ALGOLIA_INDEX_NAME=${{ secrets.VITE_ALGOLIA_INDEX_NAME }}" >> apps/web/.env
 
       - name: Lint
         run: pnpm lint

@@ -284,65 +284,6 @@ These live in the separate `spelling-creator-cf` repo. The frontend
 - On 4xx/5xx, return a short **plain-text** reason — the frontend surfaces it
   directly (matching the existing AI/Pixabay error convention).
 
-### Hub search (Algolia)
-
-The hub's search box (in `src/lib/algolia.js` + `HubPage`) queries an
-[Algolia](https://www.algolia.com/) index **directly from the browser** using a
-**search-only** API key. An empty box shows the full newest-first listing; typing
-swaps the grid for matching hits (rendered with the same cards, so owner-only
-Edit/Delete still work). Only **title** and **author** are searched.
-
-The Worker is the only writer and keeps the index in step with Supabase as a
-side effect of the lesson routes:
-
-- `POST /lessons` and `PUT /lessons/:id` upsert the lesson's record.
-- `DELETE /lessons/:id` removes it.
-- `POST /reindex` rebuilds the whole index from Supabase (backfill/repair).
-
-All index writes are **best-effort**: they run after the Supabase write
-succeeds and never fail the user's action if Algolia is unreachable (at worst
-the index lags until the next write or a manual reindex). The record's
-`objectID` is the lesson id, so upserts and deletes address the same record.
-
-**Worker configuration.** Set on the Worker (`apps/api`):
-
-| Name                 | Where                                    | Purpose                             |
-| -------------------- | ---------------------------------------- | ----------------------------------- |
-| `ALGOLIA_APP_ID`     | `wrangler.jsonc` var (public)            | Algolia application id              |
-| `ALGOLIA_INDEX_NAME` | `wrangler.jsonc` var (default `lessons`) | Index name                          |
-| `ALGOLIA_ADMIN_KEY`  | `wrangler secret put ALGOLIA_ADMIN_KEY`  | Write key — **secret**, Worker only |
-
-When `ALGOLIA_APP_ID` / `ALGOLIA_ADMIN_KEY` are unset, indexing is skipped and
-the rest of the hub keeps working.
-
-**Setup / backfill (`POST /reindex`).** The index settings and any lessons that
-predate indexing are established by calling the Worker's reindex route. It
-applies the settings the hub relies on — matching restricted to title + author,
-ties ranked newest-first — then upserts every lesson from Supabase using the
-same record shape the live writes use:
-
-```jsonc
-// the settings the route applies (PUT /1/indexes/{index}/settings)
-{
-  "searchableAttributes": ["title", "author"],
-  "customRanking": ["desc(createdAtTs)"],
-}
-```
-
-It's an operator action, not a user one, so it's gated by the **Algolia admin
-key** (the same secret the route writes with — no extra credential to manage):
-send it as `Authorization: Bearer <ALGOLIA_ADMIN_KEY>`. Safe to re-run — records
-are addressed by lesson id, so each run upserts rather than duplicates. Returns
-`{ ok: true, indexed: <count> }`:
-
-```bash
-curl -X POST https://<worker-host>/reindex \
-  -H "Authorization: Bearer $ALGOLIA_ADMIN_KEY"
-```
-
-From then on the Worker keeps the index current automatically; re-run `/reindex`
-only to repair drift or after a config change.
-
 ### Supabase schema
 
 The canonical, ready-to-run schema lives in the Worker repo at
@@ -406,9 +347,6 @@ VITE_TURNSTILE_SITE_KEY=0x...                           # Cloudflare Turnstile s
 VITE_GOOGLE_CLIENT_ID=...apps.googleusercontent.com     # OAuth client for Save to Google Docs
 VITE_SUPABASE_URL=https://xxxx.supabase.co              # Supabase project URL (magic-link sign-in)
 VITE_SUPABASE_ANON_KEY=eyJ...                           # Supabase anon (public) key
-VITE_ALGOLIA_APP_ID=XXXXXXXXXX                          # Algolia app id (hub search)
-VITE_ALGOLIA_SEARCH_KEY=...                             # Algolia SEARCH-ONLY key (safe in the client)
-VITE_ALGOLIA_INDEX_NAME=lessons                         # Algolia index name (default "lessons")
 ```
 
 The app degrades gracefully when a feature is unconfigured:
@@ -420,13 +358,10 @@ The app degrades gracefully when a feature is unconfigured:
 - Without `VITE_SUPABASE_URL` / `VITE_SUPABASE_ANON_KEY` sign-in is disabled
   (the login page explains this) and the **Publish to hub** button is hidden;
   browsing the hub still works.
-- Without `VITE_ALGOLIA_APP_ID` / `VITE_ALGOLIA_SEARCH_KEY` the hub's **search
-  box** is hidden; browsing the newest-first listing still works.
 
-The Supabase **anon key** and the Algolia **search-only key** are designed to be
-shipped to the browser. Keep the Supabase **service-role key** / **JWT secret**
-and the Algolia **admin key** on the Worker only — never in `VITE_*` vars, which
-are bundled into the client.
+The Supabase **anon key** is designed to be shipped to the browser. Keep the
+**service-role key** and **JWT secret** on the Worker only — never in `VITE_*`
+vars, which are bundled into the client.
 
 ## How the export pipeline works
 

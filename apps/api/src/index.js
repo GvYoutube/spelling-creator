@@ -414,184 +414,6 @@ function rowToLesson(row, withDoc) {
 	return lesson;
 }
 
-// ---------------------------------------------------------------------------
-// Algolia search index
-//
-// The hub's search box queries Algolia directly from the browser with a public
-// search-only key; this Worker is the only writer, keeping the index in step
-// with Supabase. Publishing/updating a lesson upserts its record, deleting a
-// lesson removes it. Only title + author are searched (see the reindex settings
-// below), so the record carries just those plus the fields a hub card renders.
-//
-// All index writes are best-effort: they run after the Supabase write has
-// already succeeded and are wrapped so an Algolia hiccup never fails the user's
-// publish/edit/delete — at worst the index lags until the next write or a
-// reindex. When ALGOLIA_APP_ID / ALGOLIA_ADMIN_KEY aren't set, indexing is
-// skipped entirely and the rest of the hub keeps working.
-
-function algoliaConfig(env) {
-	const appId = env.ALGOLIA_APP_ID;
-	const adminKey = env.ALGOLIA_ADMIN_KEY;
-	if (!appId || !adminKey) return null;
-	return { appId, adminKey, index: env.ALGOLIA_INDEX_NAME || 'lessons' };
-}
-
-function algoliaHeaders(cfg) {
-	return {
-		'X-Algolia-Application-Id': cfg.appId,
-		'X-Algolia-API-Key': cfg.adminKey,
-		'Content-Type': 'application/json',
-	};
-}
-
-// Build the Algolia record for a lesson summary. objectID is the lesson id so
-// upserts and deletes address the same record. `createdAtTs` is a numeric mirror
-// of createdAt used for custom ranking (newest first) since Algolia can't sort
-// on an ISO string.
-function algoliaRecord(lesson) {
-	return {
-		objectID: lesson.id,
-		title: lesson.title || 'Untitled Lesson',
-		author: lesson.author || 'Anonymous',
-		authorId: lesson.authorId,
-		sectionCount: lesson.sectionCount ?? 0,
-		createdAt: lesson.createdAt,
-		createdAtTs: lesson.createdAt ? Date.parse(lesson.createdAt) || 0 : 0,
-	};
-}
-
-// Upsert a lesson's record. Best-effort: logs and swallows any failure.
-async function algoliaIndexLesson(env, lesson) {
-	const cfg = algoliaConfig(env);
-	if (!cfg) return;
-	const rec = algoliaRecord(lesson);
-	try {
-		const res = await fetch(
-			`https://${cfg.appId}.algolia.net/1/indexes/${encodeURIComponent(cfg.index)}/${encodeURIComponent(rec.objectID)}`,
-			{ method: 'PUT', headers: algoliaHeaders(cfg), body: JSON.stringify(rec) },
-		);
-		if (!res.ok) console.warn('Algolia index failed', res.status, await res.text().catch(() => ''));
-	} catch (e) {
-		console.warn('Algolia index error', e);
-	}
-}
-
-// Remove a lesson's record. Best-effort, same contract as the upsert above.
-async function algoliaDeleteLesson(env, id) {
-	const cfg = algoliaConfig(env);
-	if (!cfg) return;
-	try {
-		const res = await fetch(`https://${cfg.appId}.algolia.net/1/indexes/${encodeURIComponent(cfg.index)}/${encodeURIComponent(id)}`, {
-			method: 'DELETE',
-			headers: algoliaHeaders(cfg),
-		});
-		if (!res.ok) console.warn('Algolia delete failed', res.status, await res.text().catch(() => ''));
-	} catch (e) {
-		console.warn('Algolia delete error', e);
-	}
-}
-
-// Apply the index settings the hub relies on: only title + author are matched,
-// and ties are ranked newest-first (createdAtTs, the numeric mirror of createdAt
-// algoliaRecord writes). Unlike the per-lesson writes above this throws on
-// failure — the reindex handler is the only caller and reports the error.
-async function algoliaApplySettings(cfg) {
-	const res = await fetch(`https://${cfg.appId}.algolia.net/1/indexes/${encodeURIComponent(cfg.index)}/settings`, {
-		method: 'PUT',
-		headers: algoliaHeaders(cfg),
-		body: JSON.stringify({ searchableAttributes: ['title', 'author'], customRanking: ['desc(createdAtTs)'] }),
-	});
-	if (!res.ok) throw new Error(`Algolia settings ${res.status} ${await res.text().catch(() => '')}`);
-}
-
-// Upsert many records in chunked batch calls. `updateObject` adds or replaces by
-// objectID, so a backfilled record is identical to one a live publish would
-// write and a re-run upserts rather than duplicates. Chunked to stay within
-// Algolia's per-request limits. Throws on failure (see algoliaApplySettings).
-async function algoliaBatchUpsert(cfg, records) {
-	const CHUNK = 1000;
-	for (let i = 0; i < records.length; i += CHUNK) {
-		const slice = records.slice(i, i + CHUNK);
-		const res = await fetch(`https://${cfg.appId}.algolia.net/1/indexes/${encodeURIComponent(cfg.index)}/batch`, {
-			method: 'POST',
-			headers: algoliaHeaders(cfg),
-			body: JSON.stringify({ requests: slice.map((body) => ({ action: 'updateObject', body })) }),
-		});
-		if (!res.ok) throw new Error(`Algolia batch ${res.status} ${await res.text().catch(() => '')}`);
-	}
-}
-
-/**
- * POST /reindex — rebuild the Algolia index from Supabase.
- *
- * The Worker keeps the index in step going forward (publish/edit/delete each
- * write through), but lessons that predate indexing — or any window where it was
- * misconfigured — are never written, so the index can drift or sit empty. This
- * route reads every lesson from Supabase and upserts it using the SAME record
- * shape the live writes use (algoliaRecord), then applies the index settings the
- * hub relies on. It is safe to re-run: records are addressed by lesson id, so
- * each run upserts rather than duplicates.
- *
- * This is an operator action, not a user one: it touches the whole index and is
- * expensive, so it is gated by the Algolia admin key — a reindex IS the
- * admin-key operation, and whoever runs one already holds that Worker secret.
- * Send it as `Authorization: Bearer <ALGOLIA_ADMIN_KEY>`, not a Supabase session.
- */
-async function handleReindex(request, env, cors) {
-	if (request.method !== 'POST') return textResponse('Method not allowed.', 405, cors);
-
-	const cfg = algoliaConfig(env);
-	if (!cfg) return textResponse('Server misconfiguration: Algolia is not configured', 500, cors);
-
-	// Gate on the Algolia admin key (the same secret this route writes with).
-	const auth = request.headers.get('Authorization') || '';
-	const provided = auth.startsWith('Bearer ') ? auth.slice('Bearer '.length).trim() : '';
-	if (!provided || provided !== cfg.adminKey) return textResponse('Not authorized to reindex.', 401, cors);
-
-	if (!env.SUPABASE_URL || !env.SUPABASE_SERVICE_ROLE_KEY) {
-		return textResponse('Server misconfiguration: Supabase is not configured', 500, cors);
-	}
-
-	// Read every lesson summary, paging through in case the hub has grown past
-	// PostgREST's default row cap. Same select as the GET /lessons listing, so
-	// rowToLesson maps each row into exactly what algoliaRecord expects.
-	const base = env.SUPABASE_URL.replace(/\/$/, '');
-	const PAGE = 1000;
-	const rows = [];
-	for (let offset = 0; ; offset += PAGE) {
-		const query = `select=id,author_id,title,author,section_count,created_at&order=created_at.desc&limit=${PAGE}&offset=${offset}`;
-		let res;
-		try {
-			res = await fetch(`${base}/rest/v1/lessons?${query}`, { headers: supabaseHeaders(env) });
-		} catch (e) {
-			return textResponse('Could not reach the lesson store.', 502, cors);
-		}
-		if (!res.ok) return textResponse('Could not read lessons to reindex.', 502, cors);
-		const page = await res.json().catch(() => []);
-		if (!Array.isArray(page) || page.length === 0) break;
-		rows.push(...page);
-		if (page.length < PAGE) break;
-	}
-
-	// Apply settings even when there are no rows, so a fresh index is correctly
-	// configured before its first publish.
-	try {
-		await algoliaApplySettings(cfg);
-	} catch (e) {
-		return textResponse(`Could not apply search settings: ${e.message}`, 502, cors);
-	}
-
-	if (rows.length === 0) return jsonResponse({ ok: true, indexed: 0 }, 200, cors);
-
-	const records = rows.map((r) => algoliaRecord(rowToLesson(r, false)));
-	try {
-		await algoliaBatchUpsert(cfg, records);
-	} catch (e) {
-		return textResponse(`Could not write the search index: ${e.message}`, 502, cors);
-	}
-	return jsonResponse({ ok: true, indexed: records.length }, 200, cors);
-}
-
 /**
  * Lesson-hub endpoints, backed by Supabase Postgres via its REST API. The
  * browser never touches the database directly — it calls these Worker routes,
@@ -693,9 +515,7 @@ async function handleLessons(request, env, url, cors) {
 		if (!Array.isArray(rows) || rows.length === 0) {
 			return textResponse('Could not publish the lesson.', 502, cors);
 		}
-		const published = rowToLesson(rows[0], false);
-		await algoliaIndexLesson(env, published); // best-effort; never blocks the response on Algolia
-		return jsonResponse({ lesson: published }, 201, cors);
+		return jsonResponse({ lesson: rowToLesson(rows[0], false) }, 201, cors);
 	}
 
 	// PUT /lessons/:id — update a lesson the signed-in user already published.
@@ -747,9 +567,7 @@ async function handleLessons(request, env, url, cors) {
 		if (!Array.isArray(rows) || rows.length === 0) {
 			return textResponse('You can only edit lessons you published.', 403, cors);
 		}
-		const updated = rowToLesson(rows[0], false);
-		await algoliaIndexLesson(env, updated); // keep the search record's title in step
-		return jsonResponse({ lesson: updated }, 200, cors);
+		return jsonResponse({ lesson: rowToLesson(rows[0], false) }, 200, cors);
 	}
 
 	// DELETE /lessons/:id — remove a lesson the signed-in user published. Requires
@@ -822,7 +640,6 @@ async function handleLessons(request, env, url, cors) {
 		if (!Array.isArray(rows) || rows.length === 0) {
 			return textResponse('You can only delete lessons you published.', 403, cors);
 		}
-		await algoliaDeleteLesson(env, id); // drop it from search too
 		return jsonResponse({ ok: true }, 200, cors);
 	}
 
@@ -1226,13 +1043,6 @@ export default {
 		// Turnstile, so they are handled before the Turnstile/rate-limit AI flow.
 		if (path === '/notifications' || path.startsWith('/notifications/')) {
 			return handleNotifications(request, env, url, cors);
-		}
-
-		// Search reindex: backfill/repair the whole Algolia index from Supabase.
-		// An operator action gated by the Algolia admin key, so it is handled
-		// before the Turnstile/rate-limit AI flow rather than going through it.
-		if (path === '/reindex') {
-			return handleReindex(request, env, cors);
 		}
 
 		// KV guard
