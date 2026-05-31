@@ -53,9 +53,9 @@ export default defineConfig([
     },
   },
 
-  // API — Cloudflare Worker runtime (src) and Node tooling scripts (scripts)
+  // API — Cloudflare Worker runtime
   {
-    files: ["apps/api/**/*.{js,mjs}"],
+    files: ["apps/api/**/*.js"],
     languageOptions: { globals: { ...globals.worker, ...globals.node } },
   },
 ]);
