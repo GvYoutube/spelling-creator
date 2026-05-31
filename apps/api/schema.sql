@@ -15,8 +15,17 @@ create table if not exists public.lessons (
   -- Maintained by Postgres so the public listing can show a section count without
   -- the Worker having to download every (potentially large, image-laden) doc.
   section_count int generated always as (jsonb_array_length(doc -> 'sections')) stored,
+  -- Whether this lesson is shared on the public hub. A draft (published = false) is
+  -- backed up to the database but kept out of the public listing; only its author
+  -- sees it (GET /lessons/mine). Defaults to true so every pre-draft row — all of
+  -- which were published — keeps showing in the hub.
+  published     boolean not null default true,
   created_at    timestamptz not null default now()
 );
+
+-- Migration for databases created before the draft feature: add the column with a
+-- default of true so existing rows stay published. Safe to re-run.
+alter table public.lessons add column if not exists published boolean not null default true;
 
 -- Listing is ordered newest-first; index the sort key.
 create index if not exists lessons_created_at_idx on public.lessons (created_at desc);

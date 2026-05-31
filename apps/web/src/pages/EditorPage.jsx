@@ -30,12 +30,13 @@ import useMediaQuery from "@mui/material/useMediaQuery";
 import { useTheme } from "@mui/material/styles";
 import AddIcon from "@mui/icons-material/Add";
 import MoreVertIcon from "@mui/icons-material/MoreVert";
-import SaveIcon from "@mui/icons-material/Save";
 import DescriptionIcon from "@mui/icons-material/Description";
 import PictureAsPdfIcon from "@mui/icons-material/PictureAsPdf";
 import AddToDriveIcon from "@mui/icons-material/AddToDrive";
 import VisibilityIcon from "@mui/icons-material/Visibility";
 import CloudUploadIcon from "@mui/icons-material/CloudUpload";
+import CloudIcon from "@mui/icons-material/Cloud";
+import CloudQueueIcon from "@mui/icons-material/CloudQueue";
 import CallSplitIcon from "@mui/icons-material/CallSplit";
 import SpellcheckIcon from "@mui/icons-material/Spellcheck";
 import GroupsIcon from "@mui/icons-material/Groups";
@@ -56,6 +57,8 @@ import {
   saveDocument,
   loadEditingId,
   saveEditingId,
+  loadEditingPublished,
+  saveEditingPublished,
   loadWizardSeen,
   saveWizardSeen,
 } from "../lib/storage.js";
@@ -97,6 +100,7 @@ export default function EditorPage() {
   const [toast, setToast] = useState(null); // { severity, message }
   const [previewContent, setPreviewContent] = useState(null); // HTML string | null
   const [exportAnchor, setExportAnchor] = useState(null); // export dropdown anchor el | null
+  const [cloudAnchor, setCloudAnchor] = useState(null); // "Save to cloud" dropdown anchor el | null
   const [mobileMenuAnchor, setMobileMenuAnchor] = useState(null); // overflow menu anchor on small screens | null
 
   // Hub-editing state. `editingId` is the id of a published lesson currently
@@ -108,7 +112,12 @@ export default function EditorPage() {
   // overwrite their in-progress work; `editLoading` covers the fetch of the
   // lesson to edit.
   const [editingId, setEditingId] = useState(loadEditingId);
-  const [pendingEdit, setPendingEdit] = useState(null); // { id, title, doc } | null
+  // Whether the lesson loaded for editing is published to the hub or a private
+  // draft. Only meaningful when `editingId` is set; it tunes the "Save to cloud"
+  // actions and the status chip. Persisted so it survives reloads.
+  const [editingPublished, setEditingPublished] =
+    useState(loadEditingPublished);
+  const [pendingEdit, setPendingEdit] = useState(null); // { id, title, doc, published } | null
   const [editLoading, setEditLoading] = useState(false);
 
   const { enabled: authEnabled, accessToken, user } = useAuth();
@@ -199,33 +208,42 @@ export default function EditorPage() {
     saveEditingId(editingId);
   }, [editingId]);
 
+  // Persist whether the edited lesson is published or a draft. Clear it when no
+  // lesson is attached, so a fresh document defaults back to "publish".
+  useEffect(() => {
+    saveEditingPublished(editingId ? editingPublished : null);
+  }, [editingId, editingPublished]);
+
   // Adopt a fetched lesson into the editor: replace the working doc (this is the
   // step that overwrites the auto-saved draft). For an edit, enter edit mode so
   // "Publish" becomes "Update" on the original row. For a fork, load it as a
   // fresh, unattached draft (editingId stays null) titled "… (copy)", so
   // publishing creates a separate lesson and the original is left untouched.
-  const applyEdit = ({ id, doc: nextDoc, mode }) => {
+  const applyEdit = ({ id, doc: nextDoc, mode, published }) => {
     if (mode === "fork") {
       setDoc({
         ...nextDoc,
         title: `${nextDoc.title || "Untitled Lesson"} (copy)`,
       });
       setEditingId(null);
+      setEditingPublished(true);
       setPendingEdit(null);
       setToast({
         severity: "info",
         message:
-          "Forked into a new lesson — edit freely, then Publish to add your copy to the hub.",
+          "Forked into a new lesson — edit freely, then save it to the cloud as your own copy.",
       });
       return;
     }
     setDoc(nextDoc);
     setEditingId(id);
+    setEditingPublished(published);
     setPendingEdit(null);
     setToast({
       severity: "info",
-      message:
-        "Loaded your published lesson — edit and press Update to save it.",
+      message: published
+        ? "Loaded your published lesson — edit and save to the cloud to update it."
+        : "Loaded your draft — edit and save to the cloud, or publish it to the hub.",
     });
   };
 
@@ -266,6 +284,9 @@ export default function EditorPage() {
           title: lesson.title,
           doc: lesson.doc,
           mode,
+          // Drafts (published === false) load with their draft status preserved so
+          // a re-save keeps them private until the author chooses to publish.
+          published: lesson.published !== false,
         };
         // Edit can adopt straight away when re-opening the same lesson; either
         // mode adopts when there's no in-progress work to lose. Otherwise warn.
@@ -414,47 +435,14 @@ export default function EditorPage() {
     }
   };
 
-  const handlePublish = async () => {
-    if (doc.sections.length === 0) {
-      setToast({
-        severity: "warning",
-        message: "Add at least one section before publishing.",
-      });
-      return;
-    }
-    // Publishing requires a signed-in account — send the user to the login page
-    // (and back) if they aren't authenticated yet.
-    if (!accessToken) {
-      setToast({
-        severity: "info",
-        message: "Please sign in to publish a lesson to the hub.",
-      });
-      navigate("/login");
-      return;
-    }
-    setBusy("publish");
-    try {
-      const lesson = await publishLesson(doc, accessToken);
-      // Enter edit mode for the lesson we just created, so a further "Publish"
-      // updates this row instead of creating a duplicate.
-      if (lesson?.id) setEditingId(lesson.id);
-      setToast({
-        severity: "success",
-        message: "Lesson published to the hub.",
-        route: { to: "/hub", label: "View hub" },
-      });
-    } catch (err) {
-      console.error(err);
-      setToast({
-        severity: "error",
-        message: `Could not publish: ${err.message || err}`,
-      });
-    } finally {
-      setBusy(null);
-    }
-  };
-
-  const handleUpdate = async () => {
+  // Save the working lesson to the cloud. `publish` chooses whether it lands on the
+  // public hub (true) or is backed up as a private draft (false). Either way, if a
+  // lesson is already attached (editingId) we update that row; otherwise we create a
+  // new one and enter edit mode for it, so a further save updates it instead of
+  // creating a duplicate. The draft<->published state is recorded so the chip and
+  // menu stay accurate.
+  const handleSaveToCloud = async (publish) => {
+    setCloudAnchor(null);
     if (doc.sections.length === 0) {
       setToast({
         severity: "warning",
@@ -462,27 +450,39 @@ export default function EditorPage() {
       });
       return;
     }
+    // Saving requires a signed-in account — send the user to the login page (and
+    // back) if they aren't authenticated yet.
     if (!accessToken) {
       setToast({
         severity: "info",
-        message: "Please sign in to update your published lesson.",
+        message: "Please sign in to save your lesson to the cloud.",
       });
       navigate("/login");
       return;
     }
     setBusy("publish");
     try {
-      await updateLesson(editingId, doc, accessToken);
+      if (editingId) {
+        await updateLesson(editingId, doc, accessToken, { published: publish });
+      } else {
+        const lesson = await publishLesson(doc, accessToken, {
+          published: publish,
+        });
+        if (lesson?.id) setEditingId(lesson.id);
+      }
+      setEditingPublished(publish);
       setToast({
         severity: "success",
-        message: "Lesson updated in the hub.",
-        route: { to: "/hub", label: "View hub" },
+        message: publish
+          ? "Lesson published to the hub."
+          : "Draft saved to the cloud — only you can see it.",
+        route: publish ? { to: "/hub", label: "View hub" } : undefined,
       });
     } catch (err) {
       console.error(err);
       setToast({
         severity: "error",
-        message: `Could not update: ${err.message || err}`,
+        message: `Could not save: ${err.message || err}`,
       });
     } finally {
       setBusy(null);
@@ -495,10 +495,11 @@ export default function EditorPage() {
   // otherwise persists across reloads).
   const handleFork = () => {
     setEditingId(null);
+    setEditingPublished(true);
     setToast({
       severity: "info",
       message:
-        "Forked into a new lesson — publishing will create a separate copy in the hub.",
+        "Forked into a new lesson — saving to the cloud will create a separate copy.",
     });
   };
 
@@ -514,6 +515,16 @@ export default function EditorPage() {
 
   const [anchorEl, setAnchorEl] = useState(null);
   const menuOpen = Boolean(anchorEl);
+
+  // "Save to cloud" menu labels adapt to whether a lesson is already attached
+  // (editingId) and, if so, whether it's currently published or a draft — so each
+  // action reads as either creating, updating, or switching the lesson's state.
+  const publishActionLabel =
+    editingId && editingPublished
+      ? "Update published lesson"
+      : "Publish to hub";
+  const draftActionLabel =
+    editingId && !editingPublished ? "Update draft" : "Save as draft";
 
   return (
     <Box sx={{ minHeight: "100vh", pb: 12 }}>
@@ -647,20 +658,28 @@ export default function EditorPage() {
                     <MenuItem
                       onClick={() => {
                         closeMobileMenu();
-                        editingId ? handleUpdate() : handlePublish();
+                        handleSaveToCloud(true);
                       }}
                       disabled={busy !== null}
                     >
                       <ListItemIcon>
-                        {editingId ? (
-                          <SaveIcon fontSize="small" />
-                        ) : (
-                          <CloudUploadIcon fontSize="small" />
-                        )}
+                        <CloudUploadIcon fontSize="small" />
                       </ListItemIcon>
-                      <ListItemText>
-                        {editingId ? "Update lesson" : "Publish to hub"}
-                      </ListItemText>
+                      <ListItemText>{publishActionLabel}</ListItemText>
+                    </MenuItem>
+                  )}
+                  {showPublish && (
+                    <MenuItem
+                      onClick={() => {
+                        closeMobileMenu();
+                        handleSaveToCloud(false);
+                      }}
+                      disabled={busy !== null}
+                    >
+                      <ListItemIcon>
+                        <CloudQueueIcon fontSize="small" />
+                      </ListItemIcon>
+                      <ListItemText>{draftActionLabel}</ListItemText>
                     </MenuItem>
                   )}
                   <Divider />
@@ -769,25 +788,52 @@ export default function EditorPage() {
                     </MenuItem>
                   )}
                 </Menu>
-                {lessonHubEnabled && authEnabled && (
-                  <Button
-                    color="inherit"
-                    variant="outlined"
-                    startIcon={
-                      busy === "publish" ? (
-                        <CircularProgress size={16} color="inherit" />
-                      ) : editingId ? (
-                        <SaveIcon />
-                      ) : (
-                        <CloudUploadIcon />
-                      )
-                    }
-                    onClick={editingId ? handleUpdate : handlePublish}
-                    disabled={busy !== null}
-                    sx={inheritBorder}
-                  >
-                    {editingId ? "Update lesson" : "Publish to hub"}
-                  </Button>
+                {showPublish && (
+                  <>
+                    <Button
+                      color="inherit"
+                      variant="outlined"
+                      startIcon={
+                        busy === "publish" ? (
+                          <CircularProgress size={16} color="inherit" />
+                        ) : (
+                          <CloudIcon />
+                        )
+                      }
+                      endIcon={<ArrowDropDownIcon />}
+                      onClick={(e) => setCloudAnchor(e.currentTarget)}
+                      disabled={busy !== null}
+                      sx={inheritBorder}
+                    >
+                      Save to cloud
+                    </Button>
+                    <Menu
+                      anchorEl={cloudAnchor}
+                      open={Boolean(cloudAnchor)}
+                      onClose={() => setCloudAnchor(null)}
+                      anchorOrigin={{ vertical: "bottom", horizontal: "right" }}
+                      transformOrigin={{ vertical: "top", horizontal: "right" }}
+                    >
+                      <MenuItem onClick={() => handleSaveToCloud(true)}>
+                        <ListItemIcon>
+                          <CloudUploadIcon fontSize="small" />
+                        </ListItemIcon>
+                        <ListItemText
+                          primary={publishActionLabel}
+                          secondary="Shared on the public hub"
+                        />
+                      </MenuItem>
+                      <MenuItem onClick={() => handleSaveToCloud(false)}>
+                        <ListItemIcon>
+                          <CloudQueueIcon fontSize="small" />
+                        </ListItemIcon>
+                        <ListItemText
+                          primary={draftActionLabel}
+                          secondary="Private backup — not published"
+                        />
+                      </MenuItem>
+                    </Menu>
+                  </>
                 )}
                 <Tooltip title="Collaborate live on this lesson">
                   <Badge
@@ -845,23 +891,35 @@ export default function EditorPage() {
               useFlexGap
               sx={{ mt: 1.5 }}
             >
-              <Tooltip title="You're editing a lesson you published. Updating overwrites it in the hub. This status is saved until you update it or fork into a new lesson.">
+              <Tooltip
+                title={
+                  editingPublished
+                    ? "You're editing a lesson you published. Saving to the cloud overwrites it in the hub. This status is saved until you update it or fork into a new lesson."
+                    : "You're editing a draft backed up to the cloud. Only you can see it; saving updates the backup, or you can publish it to the hub. This status is saved until you change it or fork into a new lesson."
+                }
+              >
                 <Chip
                   size="small"
-                  color="primary"
+                  color={editingPublished ? "primary" : "default"}
                   variant="outlined"
-                  icon={<CloudUploadIcon />}
-                  label="Editing a published lesson"
+                  icon={
+                    editingPublished ? <CloudUploadIcon /> : <CloudQueueIcon />
+                  }
+                  label={
+                    editingPublished
+                      ? "Editing a published lesson"
+                      : "Editing a cloud draft"
+                  }
                 />
               </Tooltip>
-              <Tooltip title="Detach from the published lesson and start a new one. Publishing will then create a separate copy instead of overwriting the original.">
+              <Tooltip title="Detach from this saved lesson and start a new one. Saving to the cloud will then create a separate copy instead of overwriting the original.">
                 <Button
                   size="small"
                   variant="text"
                   startIcon={<CallSplitIcon />}
                   onClick={handleFork}
                 >
-                  Fork from published lesson
+                  Fork into a new lesson
                 </Button>
               </Tooltip>
             </Stack>

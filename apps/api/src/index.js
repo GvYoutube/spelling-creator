@@ -408,6 +408,10 @@ function rowToLesson(row, withDoc) {
 		title: row.title,
 		author: row.author,
 		sectionCount: row.section_count ?? 0,
+		// Whether the lesson is shared on the public hub. `false` is a draft, backed
+		// up to the database but visible only to its author. Defaults to true so a
+		// row from a database that predates the `published` column reads as published.
+		published: row.published ?? true,
 		createdAt: row.created_at,
 	};
 	if (withDoc) lesson.doc = row.doc;
@@ -419,10 +423,13 @@ function rowToLesson(row, withDoc) {
  * browser never touches the database directly — it calls these Worker routes,
  * which hold the privileged service-role key (see README "Lesson hub").
  *
- *   GET  /lessons        public  -> { lessons: LessonSummary[] }   (newest first)
- *   GET  /lessons/:id    public  -> { lesson: Lesson }             (includes doc)
- *   POST /lessons        Bearer  -> { lesson: LessonSummary }      (verified JWT)
+ *   GET  /lessons        public  -> { lessons: LessonSummary[] }   (published only, newest first)
+ *   GET  /lessons/mine   Bearer  -> { lessons: LessonSummary[] }   (caller's own, incl. drafts)
+ *   GET  /lessons/:id    public  -> { lesson: Lesson }             (includes doc; drafts too)
+ *   POST /lessons        Bearer  -> { lesson: LessonSummary }      (verified JWT; body.published picks draft/hub)
+ *   PUT  /lessons/:id    Bearer  -> { lesson: LessonSummary }      (author only; body.published may flip draft<->hub)
  *
+ * A LessonSummary carries `published` (false = draft, kept out of the public listing).
  * Errors are short plain-text reasons so the frontend can surface res.text().
  */
 async function handleLessons(request, env, url, cors) {
@@ -435,9 +442,36 @@ async function handleLessons(request, env, url, cors) {
 	const rest = url.pathname.replace(/\/$/, '').slice('/lessons'.length);
 	const id = rest.startsWith('/') ? decodeURIComponent(rest.slice(1)) : '';
 
-	// GET /lessons/:id — one published lesson, including its full editor doc.
+	// GET /lessons/mine — the signed-in user's own lessons (drafts and published),
+	// newest first, so the hub can show them their drafts. Requires a valid Supabase
+	// session JWT; the listing is scoped to the verified user's own rows. The doc is
+	// excluded (as in the public listing) to keep the payload small.
+	if (request.method === 'GET' && id === 'mine') {
+		const auth = request.headers.get('Authorization') || '';
+		const token = auth.startsWith('Bearer ') ? auth.slice('Bearer '.length).trim() : '';
+		const user = await verifySupabaseUser(env, token);
+		if (!user) return textResponse('Please sign in to see your lessons.', 401, cors);
+
+		const query = `author_id=eq.${encodeURIComponent(
+			user.id,
+		)}&select=id,author_id,title,author,section_count,published,created_at&order=created_at.desc`;
+		let res;
+		try {
+			res = await fetch(`${base}/rest/v1/lessons?${query}`, { headers: supabaseHeaders(env) });
+		} catch (e) {
+			return textResponse('Could not reach the lesson store.', 502, cors);
+		}
+		if (!res.ok) return textResponse('Could not load your lessons.', 502, cors);
+		const rows = await res.json().catch(() => []);
+		const lessons = (Array.isArray(rows) ? rows : []).map((r) => rowToLesson(r, false));
+		return jsonResponse({ lessons }, 200, cors);
+	}
+
+	// GET /lessons/:id — one lesson, including its full editor doc. Returns drafts
+	// too (so an author can load one for editing, and an unlisted-style link works);
+	// drafts are kept out of the public *listing* below, not addressable-by-id reads.
 	if (request.method === 'GET' && id) {
-		const query = `id=eq.${encodeURIComponent(id)}&select=id,author_id,title,author,section_count,created_at,doc&limit=1`;
+		const query = `id=eq.${encodeURIComponent(id)}&select=id,author_id,title,author,section_count,published,created_at,doc&limit=1`;
 		let res;
 		try {
 			res = await fetch(`${base}/rest/v1/lessons?${query}`, { headers: supabaseHeaders(env) });
@@ -452,11 +486,12 @@ async function handleLessons(request, env, url, cors) {
 		return jsonResponse({ lesson: rowToLesson(rows[0], true) }, 200, cors);
 	}
 
-	// GET /lessons — public listing, newest first. The doc (which can be large,
-	// holding base64 image data) is deliberately excluded; section_count gives the
-	// summary its count without shipping every block.
+	// GET /lessons — public listing, newest first. Only published lessons appear;
+	// drafts (published = false) are filtered out so they stay private to their
+	// author. The doc (which can be large, holding base64 image data) is deliberately
+	// excluded; section_count gives the summary its count without shipping every block.
 	if (request.method === 'GET') {
-		const query = 'select=id,author_id,title,author,section_count,created_at&order=created_at.desc';
+		const query = 'published=eq.true&select=id,author_id,title,author,section_count,published,created_at&order=created_at.desc';
 		let res;
 		try {
 			res = await fetch(`${base}/rest/v1/lessons?${query}`, { headers: supabaseHeaders(env) });
@@ -469,13 +504,16 @@ async function handleLessons(request, env, url, cors) {
 		return jsonResponse({ lessons }, 200, cors);
 	}
 
-	// POST /lessons — publish. Requires a valid Supabase session JWT; the author
-	// is derived from the verified user, never from the request body.
+	// POST /lessons — save a lesson to the cloud. Requires a valid Supabase session
+	// JWT; the author is derived from the verified user, never from the request body.
+	// `published` selects whether the lesson is shared on the public hub (true) or
+	// kept as a private draft backup (false); it defaults to true so an older client
+	// that omits the flag still publishes.
 	if (request.method === 'POST' && !id) {
 		const auth = request.headers.get('Authorization') || '';
 		const token = auth.startsWith('Bearer ') ? auth.slice('Bearer '.length).trim() : '';
 		const user = await verifySupabaseUser(env, token);
-		if (!user) return textResponse('Please sign in before publishing.', 401, cors);
+		if (!user) return textResponse('Please sign in before saving.', 401, cors);
 
 		let body;
 		try {
@@ -485,20 +523,22 @@ async function handleLessons(request, env, url, cors) {
 		}
 		const doc = body && body.doc;
 		if (!doc || typeof doc !== 'object' || !Array.isArray(doc.sections) || doc.sections.length === 0) {
-			return textResponse('Add at least one section before publishing.', 400, cors);
+			return textResponse('Add at least one section before saving.', 400, cors);
 		}
 		const title = (body.title || doc.title || 'Untitled Lesson').toString().slice(0, 300);
+		const published = body.published !== false;
 
 		const insert = {
 			author_id: user.id,
 			author: authorFromUser(user),
 			title,
 			doc,
+			published,
 		};
 
 		let res;
 		try {
-			res = await fetch(`${base}/rest/v1/lessons?select=id,author_id,title,author,section_count,created_at`, {
+			res = await fetch(`${base}/rest/v1/lessons?select=id,author_id,title,author,section_count,published,created_at`, {
 				method: 'POST',
 				headers: {
 					...supabaseHeaders(env),
@@ -510,19 +550,22 @@ async function handleLessons(request, env, url, cors) {
 		} catch (e) {
 			return textResponse('Could not reach the lesson store.', 502, cors);
 		}
-		if (!res.ok) return textResponse('Could not publish the lesson.', 502, cors);
+		if (!res.ok) return textResponse('Could not save the lesson.', 502, cors);
 		const rows = await res.json().catch(() => []);
 		if (!Array.isArray(rows) || rows.length === 0) {
-			return textResponse('Could not publish the lesson.', 502, cors);
+			return textResponse('Could not save the lesson.', 502, cors);
 		}
 		return jsonResponse({ lesson: rowToLesson(rows[0], false) }, 201, cors);
 	}
 
-	// PUT /lessons/:id — update a lesson the signed-in user already published.
-	// Requires a valid Supabase session JWT, and the verified user must be the
+	// PUT /lessons/:id — update a lesson the signed-in user already saved to the
+	// cloud. Requires a valid Supabase session JWT, and the verified user must be the
 	// lesson's author: the PATCH is filtered on both id AND author_id, so a
 	// request from anyone other than the author matches no rows and is rejected
-	// with 403. Only the title and doc are mutable; author and created_at stay put.
+	// with 403. The title, doc and published flag are mutable (so a draft can be
+	// published, or a published lesson pulled back to a draft); author and created_at
+	// stay put. `published` is only changed when the body includes a boolean for it,
+	// so an older client that omits it leaves the lesson's current state alone.
 	if (request.method === 'PUT' && id) {
 		const auth = request.headers.get('Authorization') || '';
 		const token = auth.startsWith('Bearer ') ? auth.slice('Bearer '.length).trim() : '';
@@ -540,13 +583,15 @@ async function handleLessons(request, env, url, cors) {
 			return textResponse('Add at least one section before saving.', 400, cors);
 		}
 		const title = (body.title || doc.title || 'Untitled Lesson').toString().slice(0, 300);
+		const patch = { title, doc };
+		if (typeof body.published === 'boolean') patch.published = body.published;
 
 		let res;
 		try {
 			res = await fetch(
 				`${base}/rest/v1/lessons?id=eq.${encodeURIComponent(id)}&author_id=eq.${encodeURIComponent(
 					user.id,
-				)}&select=id,author_id,title,author,section_count,created_at`,
+				)}&select=id,author_id,title,author,section_count,published,created_at`,
 				{
 					method: 'PATCH',
 					headers: {
@@ -554,7 +599,7 @@ async function handleLessons(request, env, url, cors) {
 						'Content-Type': 'application/json',
 						Prefer: 'return=representation',
 					},
-					body: JSON.stringify({ title, doc }),
+					body: JSON.stringify(patch),
 				},
 			);
 		} catch (e) {

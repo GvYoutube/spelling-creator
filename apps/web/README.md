@@ -42,11 +42,11 @@ PDF printing.
 The app is a single-page app with three client-side routes (hash-based, so deep
 links work on any static host without server rewrites):
 
-| Route      | Page           | What it does                                                        |
-| ---------- | -------------- | ------------------------------------------------------------------- |
-| `/`        | **Editor**     | The lesson builder (the original app). "Publish to hub" lives here. |
-| `/#/hub`   | **Lesson hub** | Public gallery of published lessons; click one to preview it.       |
-| `/#/login` | **Sign in**    | Magic-link sign-in / account status.                                |
+| Route      | Page           | What it does                                                                                               |
+| ---------- | -------------- | ---------------------------------------------------------------------------------------------------------- |
+| `/`        | **Editor**     | The lesson builder (the original app). The "Save to cloud" dropdown (publish or save as draft) lives here. |
+| `/#/hub`   | **Lesson hub** | Public gallery of published lessons (plus your own drafts); click one to preview it.                       |
+| `/#/login` | **Sign in**    | Magic-link sign-in / account status.                                                                       |
 
 Every page's header carries a shared nav (a **Lesson hub** link and an account
 control that shows **Sign in** or the signed-in account menu). Routing is set up
@@ -208,8 +208,13 @@ is shipped whole on each change rather than as a CRDT diff.
 ## Lesson hub & accounts
 
 The **Lesson hub** (`/#/hub`) is a public gallery of lessons users have shared.
-Anyone can browse and preview; publishing **and commenting** require a signed-in
-account. Signed-in users see an **Edit** action on lessons they published — it
+Anyone can browse and preview; saving to the cloud **and commenting** require a
+signed-in account. The editor's **Save to cloud** button is a dropdown with two
+choices: **Publish to hub** (shared publicly) or **Save as draft** (backed up to
+the database but kept private — only the author sees it, in a "Your drafts"
+section on the hub). A draft can be published later, or a published lesson pulled
+back to a draft; both go through the same `POST`/`PUT` with a `published` flag.
+Signed-in users see an **Edit** action on lessons they published — it
 opens the lesson back in the editor (warning first before it replaces any
 in-progress work), and saving sends a `PUT` that the Worker accepts only from the
 lesson's author. Comments appear beneath each lesson in its preview dialog and are
@@ -234,9 +239,10 @@ verifies it (and derives the author) before inserting the row.
 
 ```
  Browser ──magic link / session (Supabase JS)──▶ Supabase Auth
- Browser ──GET /lessons, GET /lessons/:id───────▶ Worker ──▶ Supabase Postgres   (public reads)
- Browser ──POST /lessons  (Bearer JWT)──────────▶ Worker ──verify JWT──▶ Postgres (publish)
- Browser ──PUT  /lessons/:id (Bearer JWT)────────▶ Worker ──verify JWT + author──▶ Postgres (edit own)
+ Browser ──GET /lessons, GET /lessons/:id───────▶ Worker ──▶ Supabase Postgres   (public reads; published only in listing)
+ Browser ──GET /lessons/mine (Bearer JWT)────────▶ Worker ──verify JWT──▶ Postgres (own lessons + drafts)
+ Browser ──POST /lessons  (Bearer JWT)──────────▶ Worker ──verify JWT──▶ Postgres (publish or save draft)
+ Browser ──PUT  /lessons/:id (Bearer JWT)────────▶ Worker ──verify JWT + author──▶ Postgres (edit own; may flip draft↔hub)
  Browser ──GET /lessons/:id/comments────────────▶ Worker ──▶ Supabase Postgres   (public reads)
  Browser ──POST /lessons/:id/comments (Bearer)──▶ Worker ──verify JWT, profanity check──▶ Postgres
 ```
@@ -246,31 +252,38 @@ verifies it (and derives the author) before inserting the row.
 These live in the separate `spelling-creator-cf` repo. The frontend
 (`src/lib/lessons.js`) expects them at paths under `VITE_API_URL`:
 
-| Method & path                | Auth                    | Response                                                                                   |
-| ---------------------------- | ----------------------- | ------------------------------------------------------------------------------------------ |
-| `GET /lessons`               | none (public)           | `{ "lessons": [{ id, authorId, title, author, sectionCount, createdAt }] }` (newest first) |
-| `GET /lessons/:id`           | none (public)           | `{ "lesson": { id, authorId, title, author, createdAt, doc } }`                            |
-| `POST /lessons`              | `Bearer <Supabase JWT>` | `{ "lesson": { id, authorId, title, author, createdAt } }`                                 |
-| `PUT /lessons/:id`           | `Bearer <Supabase JWT>` | `{ "lesson": { id, authorId, title, author, createdAt } }` (author only; else `403`)       |
-| `GET /lessons/:id/comments`  | none (public)           | `{ "comments": [{ id, author, body, createdAt }] }` (oldest first)                         |
-| `POST /lessons/:id/comments` | `Bearer <Supabase JWT>` | `{ "comment": { id, author, body, createdAt } }`                                           |
-| `POST /ai-text/dislike`      | `Bearer <Supabase JWT>` | `{ "ok": true }` — evicts the cached text for `{ subject, documentName }`                  |
+| Method & path                | Auth                    | Response                                                                                                              |
+| ---------------------------- | ----------------------- | --------------------------------------------------------------------------------------------------------------------- |
+| `GET /lessons`               | none (public)           | `{ "lessons": [{ id, authorId, title, author, sectionCount, published, createdAt }] }` (published only, newest first) |
+| `GET /lessons/mine`          | `Bearer <Supabase JWT>` | `{ "lessons": [{ id, authorId, title, author, sectionCount, published, createdAt }] }` (caller's own, incl. drafts)   |
+| `GET /lessons/:id`           | none (public)           | `{ "lesson": { id, authorId, title, author, sectionCount, published, createdAt, doc } }`                              |
+| `POST /lessons`              | `Bearer <Supabase JWT>` | `{ "lesson": { id, authorId, title, author, sectionCount, published, createdAt } }`                                   |
+| `PUT /lessons/:id`           | `Bearer <Supabase JWT>` | `{ "lesson": { id, authorId, title, author, sectionCount, published, createdAt } }` (author only; else `403`)         |
+| `GET /lessons/:id/comments`  | none (public)           | `{ "comments": [{ id, author, body, createdAt }] }` (oldest first)                                                    |
+| `POST /lessons/:id/comments` | `Bearer <Supabase JWT>` | `{ "comment": { id, author, body, createdAt } }`                                                                      |
+| `POST /ai-text/dislike`      | `Bearer <Supabase JWT>` | `{ "ok": true }` — evicts the cached text for `{ subject, documentName }`                                             |
 
 - `doc` is the editor document shape used throughout the app:
   `{ title, sections: [{ id, name, blocks: [...] }] }`. Store it as `jsonb`.
-- `POST /lessons` body is `{ title, doc }`. The Worker should **verify the JWT**
-  (e.g. validate the HS256 signature with the Supabase JWT secret, or call
-  `GET {SUPABASE_URL}/auth/v1/user` with the token), reject if invalid, take the
-  author from the verified user (never trust a client-supplied author), and
-  insert with the service-role key. The response includes `authorId` (the
-  publisher's Supabase user id) so the hub can tell which lessons belong to the
-  signed-in user and offer an **Edit** action on them.
-- `PUT /lessons/:id` body is `{ title, doc }`. The Worker verifies the JWT the
-  same way, then updates the row **only if the verified user is its author** (the
-  update is filtered on both `id` and `author_id`, so a non-author's request
-  matches no rows and is rejected with `403`). `author` and `created_at` are left
-  unchanged. This backs the editor's "Update lesson" button when editing a lesson
-  loaded from the hub.
+- `POST /lessons` body is `{ title, doc, published }`. The Worker should
+  **verify the JWT** (e.g. validate the HS256 signature with the Supabase JWT
+  secret, or call `GET {SUPABASE_URL}/auth/v1/user` with the token), reject if
+  invalid, take the author from the verified user (never trust a client-supplied
+  author), and insert with the service-role key. `published` (default `true` when
+  omitted) decides whether the lesson is shared on the hub or saved as a private
+  draft. The response includes `authorId` (the publisher's Supabase user id) so the
+  hub can tell which lessons belong to the signed-in user and offer **Edit**.
+- `GET /lessons/mine` verifies the JWT and returns the caller's own lessons
+  (drafts and published), scoped to `author_id = <verified user>`. It backs the
+  hub's "Your drafts" section, since drafts are filtered out of `GET /lessons`.
+- `PUT /lessons/:id` body is `{ title, doc, published? }`. The Worker verifies the
+  JWT the same way, then updates the row **only if the verified user is its author**
+  (the update is filtered on both `id` and `author_id`, so a non-author's request
+  matches no rows and is rejected with `403`). When `published` is present it is
+  updated too, so a draft can be published or a published lesson pulled back to a
+  draft; omitting it leaves the current state alone. `author` and `created_at` are
+  left unchanged. This backs the editor's **Save to cloud** actions when editing a
+  lesson loaded from the hub.
 - `POST /lessons/:id/comments` body is `{ body }`. The Worker verifies the JWT
   the same way, derives the author from the verified user, then runs the text
   through [`glin-profanity`](https://www.npmjs.com/package/glin-profanity); if any
@@ -299,6 +312,9 @@ create table public.lessons (
   -- Maintained by Postgres so the public listing can return a section count
   -- without the Worker downloading every (image-laden) doc.
   section_count int generated always as (jsonb_array_length(doc -> 'sections')) stored,
+  -- false = a private draft, backed up but kept out of the public listing.
+  -- Defaults true so pre-draft rows (all of which were published) stay visible.
+  published     boolean not null default true,
   created_at    timestamptz not null default now()
 );
 
@@ -356,7 +372,7 @@ The app degrades gracefully when a feature is unconfigured:
   configured" notice.
 - Without `VITE_GOOGLE_CLIENT_ID` the **Save to Google Docs** button is hidden.
 - Without `VITE_SUPABASE_URL` / `VITE_SUPABASE_ANON_KEY` sign-in is disabled
-  (the login page explains this) and the **Publish to hub** button is hidden;
+  (the login page explains this) and the **Save to cloud** button is hidden;
   browsing the hub still works.
 
 The Supabase **anon key** is designed to be shipped to the browser. Keep the

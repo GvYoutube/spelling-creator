@@ -3,7 +3,7 @@
 // navigates to that lesson's own page (/hub/:id), where the full document is
 // fetched and rendered. Each lesson therefore has a shareable URL.
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link as RouterLink, useNavigate, useLocation } from "react-router-dom";
 import AppBar from "@mui/material/AppBar";
 import Toolbar from "@mui/material/Toolbar";
@@ -28,17 +28,20 @@ import Alert from "@mui/material/Alert";
 import Snackbar from "@mui/material/Snackbar";
 import IconButton from "@mui/material/IconButton";
 import InputAdornment from "@mui/material/InputAdornment";
+import Chip from "@mui/material/Chip";
 import EditIcon from "@mui/icons-material/Edit";
 import DeleteOutlineIcon from "@mui/icons-material/DeleteOutline";
 import RefreshIcon from "@mui/icons-material/Refresh";
 import SearchIcon from "@mui/icons-material/Search";
 import ClearIcon from "@mui/icons-material/Clear";
+import CloudQueueIcon from "@mui/icons-material/CloudQueue";
 import Tooltip from "@mui/material/Tooltip";
 import useMediaQuery from "@mui/material/useMediaQuery";
 import { useTheme } from "@mui/material/styles";
 import NavActions from "../components/NavActions.jsx";
 import {
   fetchPublishedLessons,
+  fetchMyLessons,
   deleteLesson,
   lessonHubEnabled,
   EDIT_REQUEST_KEY,
@@ -67,6 +70,12 @@ export default function HubPage() {
   const [lessons, setLessons] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+
+  // The signed-in user's own drafts (lessons backed up to the cloud but not
+  // published). They're excluded from the public listing above, so we fetch them
+  // separately and show them in their own section. Failing to load them is
+  // non-fatal — drafts are a convenience on top of browsing the public hub.
+  const [drafts, setDrafts] = useState([]);
 
   // Client-side search. `query` is what the user typed; `debouncedQuery` lags it
   // by 200ms so we don't re-run the index on every keystroke. The lunr index is
@@ -111,10 +120,28 @@ export default function HubPage() {
     }
   };
 
+  const loadDrafts = useCallback(async () => {
+    if (!accessToken) {
+      setDrafts([]);
+      return;
+    }
+    try {
+      const mine = await fetchMyLessons(accessToken);
+      setDrafts(mine.filter((l) => l.published === false));
+    } catch {
+      setDrafts([]); // non-fatal — the public listing still works
+    }
+  }, [accessToken]);
+
   useEffect(() => {
     if (lessonHubEnabled) load();
     else setLoading(false);
   }, []);
+
+  // Load (or clear) the user's drafts whenever their sign-in state changes.
+  useEffect(() => {
+    if (lessonHubEnabled) loadDrafts();
+  }, [loadDrafts]);
 
   // The lesson page hands us a one-shot toast (e.g. after a delete) via router
   // state when it navigates back here. Show it once, then clear the state so it
@@ -168,8 +195,10 @@ export default function HubPage() {
     setDeleteError("");
     try {
       await deleteLesson(deleting.id, accessToken);
-      // Drop it from the list locally so it disappears immediately.
+      // Drop it from whichever list held it (published gallery or drafts) so it
+      // disappears immediately.
       setLessons((prev) => prev.filter((l) => l.id !== deleting.id));
+      setDrafts((prev) => prev.filter((l) => l.id !== deleting.id));
       setToast(`Deleted “${deleteTarget}”.`);
       setDeleting(null);
     } catch (err) {
@@ -230,11 +259,124 @@ export default function HubPage() {
             Browse lessons shared by the community. Open one to preview it.
           </Typography>
           {lessonHubEnabled && (
-            <IconButton onClick={load} disabled={loading} aria-label="refresh">
+            <IconButton
+              onClick={() => {
+                load();
+                loadDrafts();
+              }}
+              disabled={loading}
+              aria-label="refresh"
+            >
               <RefreshIcon />
             </IconButton>
           )}
         </Stack>
+
+        {lessonHubEnabled && drafts.length > 0 && (
+          <Box sx={{ mb: 4 }}>
+            <Stack
+              direction="row"
+              spacing={1}
+              alignItems="center"
+              flexWrap="wrap"
+              useFlexGap
+              sx={{ mb: 1.5 }}
+            >
+              <CloudQueueIcon fontSize="small" color="action" />
+              <Typography variant="h6">Your drafts</Typography>
+              <Typography variant="body2" color="text.secondary">
+                Backed up to the cloud, visible only to you. Open one to edit
+                and publish it.
+              </Typography>
+            </Stack>
+            <Grid container spacing={2}>
+              {drafts.map((lesson) => (
+                <Grid key={lesson.id} size={{ xs: 12, sm: 6, md: 4 }}>
+                  <Card
+                    variant="outlined"
+                    sx={{ height: "100%", position: "relative" }}
+                  >
+                    <Stack
+                      direction="row"
+                      spacing={0.5}
+                      sx={{
+                        position: "absolute",
+                        top: 4,
+                        right: 4,
+                        zIndex: 1,
+                      }}
+                    >
+                      <Tooltip title="Edit this draft">
+                        <IconButton
+                          size="small"
+                          aria-label="edit draft"
+                          onClick={(e) => editLesson(e, lesson)}
+                          sx={{
+                            bgcolor: "background.paper",
+                            "&:hover": { bgcolor: "action.hover" },
+                          }}
+                        >
+                          <EditIcon fontSize="small" />
+                        </IconButton>
+                      </Tooltip>
+                      <Tooltip title="Delete this draft">
+                        <IconButton
+                          size="small"
+                          aria-label="delete draft"
+                          onClick={(e) => askDelete(e, lesson)}
+                          sx={{
+                            bgcolor: "background.paper",
+                            "&:hover": {
+                              bgcolor: "error.light",
+                              color: "error.contrastText",
+                            },
+                          }}
+                        >
+                          <DeleteOutlineIcon fontSize="small" />
+                        </IconButton>
+                      </Tooltip>
+                    </Stack>
+                    <CardActionArea
+                      component={RouterLink}
+                      to={`/hub/${lesson.id}`}
+                      sx={{ height: "100%", alignItems: "stretch" }}
+                    >
+                      <CardContent>
+                        <Chip
+                          size="small"
+                          variant="outlined"
+                          icon={<CloudQueueIcon />}
+                          label="Draft"
+                          sx={{ mb: 1 }}
+                        />
+                        <Typography
+                          variant="h6"
+                          gutterBottom
+                          noWrap
+                          sx={{ pr: 4 }}
+                        >
+                          {lesson.title || "Untitled Lesson"}
+                        </Typography>
+                        <Typography
+                          variant="caption"
+                          color="text.secondary"
+                          sx={{ display: "block", mt: 1 }}
+                        >
+                          {typeof lesson.sectionCount === "number"
+                            ? `${lesson.sectionCount} section${lesson.sectionCount === 1 ? "" : "s"}`
+                            : ""}
+                          {lesson.createdAt
+                            ? ` · ${formatDate(lesson.createdAt)}`
+                            : ""}
+                        </Typography>
+                      </CardContent>
+                    </CardActionArea>
+                  </Card>
+                </Grid>
+              ))}
+            </Grid>
+          </Box>
+        )}
 
         {lessonHubEnabled && !loading && !error && lessons.length > 0 && (
           <TextField
@@ -427,8 +569,8 @@ export default function HubPage() {
         <DialogTitle>Delete this lesson?</DialogTitle>
         <DialogContent>
           <DialogContentText sx={{ mb: 2 }}>
-            This permanently deletes <strong>{deleteTarget}</strong> from the
-            hub. This can’t be undone. To confirm, type the lesson’s name below.
+            This permanently deletes <strong>{deleteTarget}</strong>. This can’t
+            be undone. To confirm, type the lesson’s name below.
           </DialogContentText>
           <TextField
             autoFocus
