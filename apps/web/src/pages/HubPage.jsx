@@ -3,7 +3,7 @@
 // navigates to that lesson's own page (/hub/:id), where the full document is
 // fetched and rendered. Each lesson therefore has a shareable URL.
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link as RouterLink, useNavigate, useLocation } from "react-router-dom";
 import AppBar from "@mui/material/AppBar";
 import Toolbar from "@mui/material/Toolbar";
@@ -27,9 +27,12 @@ import CircularProgress from "@mui/material/CircularProgress";
 import Alert from "@mui/material/Alert";
 import Snackbar from "@mui/material/Snackbar";
 import IconButton from "@mui/material/IconButton";
+import InputAdornment from "@mui/material/InputAdornment";
 import EditIcon from "@mui/icons-material/Edit";
 import DeleteOutlineIcon from "@mui/icons-material/DeleteOutline";
 import RefreshIcon from "@mui/icons-material/Refresh";
+import SearchIcon from "@mui/icons-material/Search";
+import ClearIcon from "@mui/icons-material/Clear";
 import Tooltip from "@mui/material/Tooltip";
 import useMediaQuery from "@mui/material/useMediaQuery";
 import { useTheme } from "@mui/material/styles";
@@ -40,6 +43,7 @@ import {
   lessonHubEnabled,
   EDIT_REQUEST_KEY,
 } from "../lib/lessons.js";
+import { buildLessonIndex, searchLessons } from "../lib/lessonSearch.js";
 import { useAuth } from "../lib/auth.jsx";
 
 function formatDate(value) {
@@ -63,6 +67,27 @@ export default function HubPage() {
   const [lessons, setLessons] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+
+  // Client-side search. `query` is what the user typed; `debouncedQuery` lags it
+  // by 200ms so we don't re-run the index on every keystroke. The lunr index is
+  // rebuilt only when the lesson list changes.
+  const [query, setQuery] = useState("");
+  const [debouncedQuery, setDebouncedQuery] = useState("");
+
+  const searchIndex = useMemo(() => buildLessonIndex(lessons), [lessons]);
+
+  useEffect(() => {
+    const id = setTimeout(() => setDebouncedQuery(query), 200);
+    return () => clearTimeout(id);
+  }, [query]);
+
+  // null when the box is empty -> show the full, newest-first listing.
+  const searchResults = useMemo(
+    () => searchLessons(searchIndex, debouncedQuery),
+    [searchIndex, debouncedQuery],
+  );
+  const visibleLessons = searchResults ?? lessons;
+  const searching = searchResults !== null;
 
   // Delete-confirmation dialog. `deleting` holds the lesson summary being
   // deleted (null when closed); the user must retype its title to confirm, which
@@ -211,6 +236,38 @@ export default function HubPage() {
           )}
         </Stack>
 
+        {lessonHubEnabled && !loading && !error && lessons.length > 0 && (
+          <TextField
+            fullWidth
+            size="small"
+            placeholder="Search lessons by title or author…"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            sx={{ mb: 2 }}
+            slotProps={{
+              input: {
+                startAdornment: (
+                  <InputAdornment position="start">
+                    <SearchIcon fontSize="small" />
+                  </InputAdornment>
+                ),
+                endAdornment: query ? (
+                  <InputAdornment position="end">
+                    <IconButton
+                      size="small"
+                      aria-label="clear search"
+                      onClick={() => setQuery("")}
+                      edge="end"
+                    >
+                      <ClearIcon fontSize="small" />
+                    </IconButton>
+                  </InputAdornment>
+                ) : null,
+              },
+            }}
+          />
+        )}
+
         {!lessonHubEnabled && (
           <Alert severity="info">
             The lesson hub is not configured (VITE_API_URL is missing).
@@ -251,9 +308,31 @@ export default function HubPage() {
           </Paper>
         )}
 
-        {lessonHubEnabled && !loading && !error && lessons.length > 0 && (
+        {lessonHubEnabled &&
+          !loading &&
+          !error &&
+          lessons.length > 0 &&
+          searching &&
+          visibleLessons.length === 0 && (
+            <Paper
+              variant="outlined"
+              sx={{ p: 6, textAlign: "center", borderStyle: "dashed" }}
+            >
+              <Typography variant="h6" gutterBottom>
+                No matches
+              </Typography>
+              <Typography variant="body2" color="text.secondary">
+                No lessons match “{debouncedQuery}”. Try a different search.
+              </Typography>
+            </Paper>
+          )}
+
+        {lessonHubEnabled &&
+          !loading &&
+          !error &&
+          visibleLessons.length > 0 && (
           <Grid container spacing={2}>
-            {lessons.map((lesson) => (
+            {visibleLessons.map((lesson) => (
               <Grid key={lesson.id} size={{ xs: 12, sm: 6, md: 4 }}>
                 <Card
                   variant="outlined"
