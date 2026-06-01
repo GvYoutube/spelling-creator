@@ -14,15 +14,17 @@ import Divider from "@mui/material/Divider";
 import Tooltip from "@mui/material/Tooltip";
 import useMediaQuery from "@mui/material/useMediaQuery";
 import { useTheme } from "@mui/material/styles";
+import ListItemIcon from "@mui/material/ListItemIcon";
 import CollectionsBookmarkIcon from "@mui/icons-material/CollectionsBookmark";
 import AccountCircleIcon from "@mui/icons-material/AccountCircle";
+import ShieldIcon from "@mui/icons-material/Shield";
 import { useAuth } from "../lib/auth.jsx";
 import NotificationBell from "./NotificationBell.jsx";
 
 const inheritBorder = { borderColor: "rgba(255,255,255,0.6)" };
 
 export default function NavActions({ current }) {
-  const { enabled, user, signOut } = useAuth();
+  const { enabled, user, signOut, isModerator } = useAuth();
   const navigate = useNavigate();
   const theme = useTheme();
   // On narrow screens the AppBar can't fit full text buttons, so the hub and
@@ -91,6 +93,19 @@ export default function NavActions({ current }) {
               />
             </MenuItem>
             <Divider />
+            {isModerator && (
+              <MenuItem
+                onClick={() => {
+                  setAnchorEl(null);
+                  navigate("/moderation");
+                }}
+              >
+                <ListItemIcon>
+                  <ShieldIcon fontSize="small" />
+                </ListItemIcon>
+                <ListItemText>Moderation</ListItemText>
+              </MenuItem>
+            )}
             <MenuItem onClick={handleSignOut}>Sign out</MenuItem>
           </Menu>
         </>

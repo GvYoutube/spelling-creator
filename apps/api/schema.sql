@@ -101,3 +101,100 @@ create index if not exists notifications_recipient_email_idx on public.notificat
 
 -- Only the service-role Worker reads/writes these, so no anon/authenticated policies.
 alter table public.notifications enable row level security;
+
+
+-- ============================================================================
+-- Moderation: roles, bans, shadowbanning and lesson-deletion requests.
+--
+-- A signed-in user is normally a plain author (can only touch their own
+-- content). On top of that sit two privilege tiers, stored in user_roles:
+--
+--   moderator — delete any comment, shadowban a lesson (hide it from the public
+--               hub while its author still sees it), ban users by name, and
+--               *request* that a lesson be fully deleted.
+--   admin     — everything a moderator can do, plus: add moderators, approve a
+--               moderator's lesson-deletion request, fully delete a lesson, and
+--               ban users by IP.
+--
+-- As with everything else, only the service-role Worker writes these tables; the
+-- browser asks the Worker (GET /moderation/whoami) what it's allowed to do. The
+-- Worker re-derives the caller's role from user_roles on every privileged
+-- request, so a tampered client can never grant itself a role.
+-- ============================================================================
+
+-- One row per privileged user. Admins are seeded by hand (see the snippet at the
+-- bottom of this file) — the app deliberately offers no way to create an admin,
+-- only moderators (POST /moderation/moderators, admin-only). granted_by records
+-- which admin added a moderator (null for hand-seeded admins).
+create table if not exists public.user_roles (
+  user_id    uuid primary key references auth.users (id) on delete cascade,
+  role       text not null check (role in ('moderator','admin')),
+  granted_by uuid references auth.users (id) on delete set null,
+  created_at timestamptz not null default now()
+);
+
+-- Shadowban flag: a shadowbanned lesson is dropped from the public hub listing
+-- and from public single-lesson reads (404 to everyone but its author and
+-- mods/admins), so its author still sees it as normal and doesn't realise it's
+-- hidden. Defaults to false so every existing row stays visible.
+alter table public.lessons add column if not exists shadowbanned boolean not null default false;
+
+-- The IP the content was created from, captured server-side (cf-connecting-ip).
+-- Needed so an admin can "ban this user by IP" from a piece of their content. Only
+-- ever surfaced to the browser on mod/admin reads, never in public responses.
+alter table public.lessons  add column if not exists author_ip text;
+alter table public.comments add column if not exists author_ip text;
+
+-- Name bans (created by moderators): block any account whose display name matches
+-- from posting comments or publishing/editing lessons. Stored normalised
+-- (lower-cased, trimmed) as the primary key so the lookup is exact and case-
+-- insensitive; display_name keeps the original casing for the moderation UI.
+create table if not exists public.banned_names (
+  name_lower   text primary key,
+  display_name text,
+  banned_by    uuid references auth.users (id) on delete set null,
+  created_at   timestamptz not null default now()
+);
+
+-- IP bans (created by admins): block any request from the address. Checked at the
+-- top of the content-creating Worker routes against cf-connecting-ip.
+create table if not exists public.banned_ips (
+  ip         text primary key,
+  reason     text,
+  banned_by  uuid references auth.users (id) on delete set null,
+  created_at timestamptz not null default now()
+);
+
+-- A moderator can't fully delete a lesson; they file a request here and an admin
+-- approves (which deletes the lesson) or denies it. status starts 'pending'.
+create table if not exists public.lesson_delete_requests (
+  id           uuid primary key default gen_random_uuid(),
+  lesson_id    uuid not null references public.lessons (id) on delete cascade,
+  requested_by uuid not null references auth.users (id) on delete cascade,
+  reason       text,
+  status       text not null default 'pending' check (status in ('pending','approved','denied')),
+  resolved_by  uuid references auth.users (id) on delete set null,
+  resolved_at  timestamptz,
+  created_at   timestamptz not null default now()
+);
+
+-- The admin queue reads pending requests newest-first; index the filter+sort key.
+create index if not exists lesson_delete_requests_status_idx on public.lesson_delete_requests (status, created_at desc);
+
+-- Same posture as notifications: only the service-role Worker reads/writes these,
+-- so enable RLS with no anon/authenticated policies. The browser never queries
+-- them directly — it goes through the Worker's /moderation endpoints.
+alter table public.user_roles            enable row level security;
+alter table public.banned_names          enable row level security;
+alter table public.banned_ips            enable row level security;
+alter table public.lesson_delete_requests enable row level security;
+
+
+-- ----------------------------------------------------------------------------
+-- Seed an admin. There is no in-app way to create an admin (admins can only add
+-- moderators), so run this once per admin in the Supabase SQL editor. The person
+-- must have signed in at least once so a row exists in auth.users for their email.
+-- ----------------------------------------------------------------------------
+-- insert into public.user_roles (user_id, role)
+-- select id, 'admin' from auth.users where email = 'you@example.com'
+-- on conflict (user_id) do update set role = 'admin';

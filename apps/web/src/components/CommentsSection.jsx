@@ -21,12 +21,23 @@ import Alert from "@mui/material/Alert";
 import AlertTitle from "@mui/material/AlertTitle";
 import CircularProgress from "@mui/material/CircularProgress";
 import Avatar from "@mui/material/Avatar";
+import IconButton from "@mui/material/IconButton";
+import Menu from "@mui/material/Menu";
+import MenuItem from "@mui/material/MenuItem";
+import ListItemIcon from "@mui/material/ListItemIcon";
+import ListItemText from "@mui/material/ListItemText";
+import Snackbar from "@mui/material/Snackbar";
+import MoreVertIcon from "@mui/icons-material/MoreVert";
+import DeleteOutlineIcon from "@mui/icons-material/DeleteOutline";
+import BlockIcon from "@mui/icons-material/Block";
 import { useAuth } from "../lib/auth.jsx";
 import {
   fetchComments,
   postComment,
+  deleteComment,
   COMMENT_BLOCKED_STATUS,
 } from "../lib/comments.js";
+import { banName } from "../lib/moderation.js";
 
 // How deep replies are allowed to indent before they stop nesting further. Deeper
 // replies still thread (they sit under their parent) but share the cap's inset, so
@@ -53,7 +64,7 @@ function initial(name) {
 
 export default function CommentsSection({ lessonId }) {
   const navigate = useNavigate();
-  const { enabled: authEnabled, user, accessToken } = useAuth();
+  const { enabled: authEnabled, user, accessToken, isModerator } = useAuth();
 
   const [comments, setComments] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -72,6 +83,12 @@ export default function CommentsSection({ lessonId }) {
   const [replyDraft, setReplyDraft] = useState("");
   const [replyPosting, setReplyPosting] = useState(false);
   const [replyNotice, setReplyNotice] = useState(null);
+
+  // Moderator-only per-comment action menu (delete / ban author), keyed by the
+  // comment it was opened on, plus a feedback toast for those actions.
+  const [modMenu, setModMenu] = useState({ anchor: null, comment: null });
+  const [modNotice, setModNotice] = useState("");
+  const closeModMenu = () => setModMenu({ anchor: null, comment: null });
 
   // Group the flat list into parent -> [replies] (preserving the oldest-first
   // order the Worker returns) so we can render the thread recursively.
@@ -172,6 +189,44 @@ export default function CommentsSection({ lessonId }) {
     }
   };
 
+  // Moderator: delete a comment. The Worker cascades its replies, so mirror that
+  // locally by dropping the comment and every descendant from the flat list.
+  const handleDeleteComment = async (c) => {
+    closeModMenu();
+    try {
+      await deleteComment(c.id, accessToken);
+      setComments((prev) => {
+        const removed = new Set([c.id]);
+        // The list is oldest-first, so a single forward pass catches every
+        // descendant (a reply always follows the parent it points at).
+        for (const item of prev) {
+          if (item.parentId && removed.has(item.parentId)) removed.add(item.id);
+        }
+        return prev.filter((item) => !removed.has(item.id));
+      });
+      setModNotice("Comment deleted.");
+    } catch (err) {
+      setModNotice(err.message || "Could not delete the comment.");
+    }
+  };
+
+  // Moderator: ban the comment author by display name (blocks them from posting
+  // further comments or lessons). Existing content is left in place.
+  const handleBanAuthor = async (c) => {
+    closeModMenu();
+    const name = c.author || "";
+    if (!name) {
+      setModNotice("This comment has no author name to ban.");
+      return;
+    }
+    try {
+      await banName(name, accessToken);
+      setModNotice(`Banned “${name}” from posting.`);
+    } catch (err) {
+      setModNotice(err.message || "Could not ban the author.");
+    }
+  };
+
   // Render a comment and, recursively, its replies. A function (not a component)
   // so it closes over the shared reply state without remounting on every render.
   const renderComment = (c, depth) => {
@@ -191,6 +246,19 @@ export default function CommentsSection({ lessonId }) {
               <Typography variant="caption" color="text.secondary">
                 {formatDateTime(c.createdAt)}
               </Typography>
+              {/* Moderator-only actions on this comment. */}
+              {isModerator && (
+                <IconButton
+                  size="small"
+                  sx={{ ml: "auto", p: 0.25 }}
+                  aria-label="moderate comment"
+                  onClick={(e) =>
+                    setModMenu({ anchor: e.currentTarget, comment: c })
+                  }
+                >
+                  <MoreVertIcon fontSize="small" />
+                </IconButton>
+              )}
             </Stack>
             <Typography
               variant="body2"
@@ -393,6 +461,36 @@ export default function CommentsSection({ lessonId }) {
           )}
         </Stack>
       )}
+
+      {/* Moderator action menu (shared across comments; opened per comment). */}
+      <Menu
+        anchorEl={modMenu.anchor}
+        open={Boolean(modMenu.anchor)}
+        onClose={closeModMenu}
+        anchorOrigin={{ vertical: "bottom", horizontal: "right" }}
+        transformOrigin={{ vertical: "top", horizontal: "right" }}
+      >
+        <MenuItem onClick={() => handleDeleteComment(modMenu.comment)}>
+          <ListItemIcon>
+            <DeleteOutlineIcon fontSize="small" />
+          </ListItemIcon>
+          <ListItemText>Delete comment</ListItemText>
+        </MenuItem>
+        <MenuItem onClick={() => handleBanAuthor(modMenu.comment)}>
+          <ListItemIcon>
+            <BlockIcon fontSize="small" />
+          </ListItemIcon>
+          <ListItemText>Ban author by name</ListItemText>
+        </MenuItem>
+      </Menu>
+
+      <Snackbar
+        open={Boolean(modNotice)}
+        autoHideDuration={4000}
+        onClose={() => setModNotice("")}
+        message={modNotice}
+        anchorOrigin={{ vertical: "bottom", horizontal: "center" }}
+      />
     </Box>
   );
 }

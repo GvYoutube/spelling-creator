@@ -96,3 +96,14 @@ export async function postComment(lessonId, body, accessToken, parentId) {
   const data = await res.json().catch(() => ({}));
   return data.comment || {};
 }
+
+/**
+ * Delete any comment as a moderator/admin. Privileged: the Worker verifies the
+ * caller's role (re-derived from the database) before removing the row, and its
+ * replies cascade with it. A plain author can't reach this — it's a moderation
+ * action, distinct from the (not-yet-implemented) author self-delete.
+ * @param {string} commentId
+ * @param {string} accessToken  Supabase session JWT.
+ * @returns {Promise<void>}
+ */
+export { deleteCommentAsMod as deleteComment } from "./moderation.js";

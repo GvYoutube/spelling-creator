@@ -8,6 +8,7 @@ import EditorPage from "./pages/EditorPage.jsx";
 import HubPage from "./pages/HubPage.jsx";
 import LessonPage from "./pages/LessonPage.jsx";
 import LoginPage from "./pages/LoginPage.jsx";
+import ModerationPage from "./pages/ModerationPage.jsx";
 
 export default function App() {
   return (
@@ -16,6 +17,7 @@ export default function App() {
       <Route path="/hub" element={<HubPage />} />
       <Route path="/hub/:id" element={<LessonPage />} />
       <Route path="/login" element={<LoginPage />} />
+      <Route path="/moderation" element={<ModerationPage />} />
       {/* Unknown paths fall back to the editor. */}
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>

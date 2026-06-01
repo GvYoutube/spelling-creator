@@ -32,6 +32,7 @@ import Divider from "@mui/material/Divider";
 import Tooltip from "@mui/material/Tooltip";
 import useMediaQuery from "@mui/material/useMediaQuery";
 import { useTheme } from "@mui/material/styles";
+import Chip from "@mui/material/Chip";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import EditIcon from "@mui/icons-material/Edit";
 import DeleteOutlineIcon from "@mui/icons-material/DeleteOutline";
@@ -39,6 +40,11 @@ import PictureAsPdfIcon from "@mui/icons-material/PictureAsPdf";
 import DescriptionIcon from "@mui/icons-material/Description";
 import ForkRightIcon from "@mui/icons-material/ForkRight";
 import MoreVertIcon from "@mui/icons-material/MoreVert";
+import ShieldIcon from "@mui/icons-material/Shield";
+import VisibilityOffIcon from "@mui/icons-material/VisibilityOff";
+import VisibilityIcon from "@mui/icons-material/Visibility";
+import BlockIcon from "@mui/icons-material/Block";
+import WifiOffIcon from "@mui/icons-material/WifiOff";
 import NavActions from "../components/NavActions.jsx";
 import CommentsSection from "../components/CommentsSection.jsx";
 import {
@@ -48,6 +54,13 @@ import {
   EDIT_REQUEST_KEY,
   FORK_REQUEST_KEY,
 } from "../lib/lessons.js";
+import {
+  setShadowban,
+  banName,
+  banIp,
+  requestLessonDeletion,
+  deleteLessonAsAdmin,
+} from "../lib/moderation.js";
 import { useAuth } from "../lib/auth.jsx";
 import {
   useDocumentMeta,
@@ -72,7 +85,7 @@ function formatDate(value) {
 
 export default function LessonPage() {
   const { id } = useParams();
-  const { user, accessToken } = useAuth();
+  const { user, accessToken, isModerator, isAdmin } = useAuth();
   const navigate = useNavigate();
   const theme = useTheme();
   // Below "md" the toolbar's action buttons collapse into an overflow menu.
@@ -90,11 +103,28 @@ export default function LessonPage() {
   const [toast, setToast] = useState("");
 
   // Delete-confirmation dialog. The user must retype the lesson's title to
-  // confirm, guarding against an accidental, irreversible delete.
+  // confirm, guarding against an accidental, irreversible delete. `deleteMode`
+  // is "author" for the author's own delete or "admin" for an admin full-delete
+  // of someone else's lesson — same dialog, different endpoint on confirm.
   const [deleteOpen, setDeleteOpen] = useState(false);
+  const [deleteMode, setDeleteMode] = useState("author");
   const [deleteText, setDeleteText] = useState("");
   const [deleteBusy, setDeleteBusy] = useState(false);
   const [deleteError, setDeleteError] = useState("");
+
+  // Moderation menu + its dialogs/feedback.
+  const [modMenuAnchor, setModMenuAnchor] = useState(null);
+  const closeModMenu = () => setModMenuAnchor(null);
+  const [shadowBusy, setShadowBusy] = useState(false);
+  // Deletion-request dialog (a moderator asking an admin to delete this lesson).
+  const [reqOpen, setReqOpen] = useState(false);
+  const [reqReason, setReqReason] = useState("");
+  const [reqBusy, setReqBusy] = useState(false);
+  const [reqError, setReqError] = useState("");
+  // IP-ban confirm dialog (admin).
+  const [ipBanOpen, setIpBanOpen] = useState(false);
+  const [ipBanBusy, setIpBanBusy] = useState(false);
+  const [ipBanError, setIpBanError] = useState("");
 
   useEffect(() => {
     if (!lessonHubEnabled) {
@@ -186,7 +216,12 @@ export default function LessonPage() {
     setDeleteBusy(true);
     setDeleteError("");
     try {
-      await deleteLesson(id, accessToken);
+      // An author deletes their own lesson; an admin can fully delete anyone's.
+      if (deleteMode === "admin") {
+        await deleteLessonAsAdmin(id, accessToken);
+      } else {
+        await deleteLesson(id, accessToken);
+      }
       // Hand the hub a one-shot toast so the user gets feedback after we leave.
       navigate("/hub", { state: { deletedTitle: deleteTarget } });
     } catch (err) {
@@ -197,6 +232,79 @@ export default function LessonPage() {
 
   const isAuthor =
     Boolean(user) && lesson?.authorId && lesson.authorId === user.id;
+
+  // Open the type-the-title delete dialog in author or admin mode.
+  const openDelete = (mode) => {
+    setDeleteMode(mode);
+    setDeleteText("");
+    setDeleteError("");
+    setDeleteOpen(true);
+  };
+
+  // Moderator: hide/show this lesson on the public hub. Updates local state so
+  // the badge and menu label flip immediately.
+  const toggleShadowban = async () => {
+    closeModMenu();
+    if (!lesson) return;
+    setShadowBusy(true);
+    try {
+      const next = !lesson.shadowbanned;
+      await setShadowban(id, next, accessToken);
+      setLesson((prev) => (prev ? { ...prev, shadowbanned: next } : prev));
+      setToast(next ? "Lesson shadowbanned." : "Lesson restored.");
+    } catch (err) {
+      setToast(err.message || "Could not update the lesson.");
+    } finally {
+      setShadowBusy(false);
+    }
+  };
+
+  // Moderator: ban the lesson author by display name.
+  const banAuthorName = async () => {
+    closeModMenu();
+    const name = lesson?.author || "";
+    if (!name) {
+      setToast("This lesson has no author name to ban.");
+      return;
+    }
+    try {
+      await banName(name, accessToken);
+      setToast(`Banned “${name}” from posting.`);
+    } catch (err) {
+      setToast(err.message || "Could not ban the author.");
+    }
+  };
+
+  // Moderator: file a request for an admin to fully delete this lesson.
+  const submitDeleteRequest = async () => {
+    setReqBusy(true);
+    setReqError("");
+    try {
+      await requestLessonDeletion(id, reqReason.trim(), accessToken);
+      setReqOpen(false);
+      setReqReason("");
+      setToast("Deletion request sent to admins.");
+    } catch (err) {
+      setReqError(err.message || "Could not send the request.");
+    } finally {
+      setReqBusy(false);
+    }
+  };
+
+  // Admin: ban the address this lesson was published from.
+  const confirmIpBan = async () => {
+    setIpBanBusy(true);
+    setIpBanError("");
+    try {
+      await banIp(lesson.authorIp, "", accessToken);
+      setIpBanOpen(false);
+      setToast(`Banned IP ${lesson.authorIp}.`);
+    } catch (err) {
+      setIpBanError(err.message || "Could not ban the IP.");
+    } finally {
+      setIpBanBusy(false);
+    }
+  };
 
   // Description shared by the social/SEO meta tags and the Course JSON-LD below,
   // drawn from the lesson's own rendered text with a sensible fallback.
@@ -339,9 +447,7 @@ export default function LessonPage() {
                     <MenuItem
                       onClick={() => {
                         closeMobileMenu();
-                        setDeleteText("");
-                        setDeleteError("");
-                        setDeleteOpen(true);
+                        openDelete("author");
                       }}
                     >
                       <ListItemIcon>
@@ -405,14 +511,100 @@ export default function LessonPage() {
                 <Button
                   color="inherit"
                   startIcon={<DeleteOutlineIcon />}
-                  onClick={() => {
-                    setDeleteText("");
-                    setDeleteError("");
-                    setDeleteOpen(true);
-                  }}
+                  onClick={() => openDelete("author")}
                 >
                   Delete
                 </Button>
+              </>
+            )}
+            {/* Moderator/admin tools — one menu, shown to mods and admins. */}
+            {isModerator && lesson && (
+              <>
+                <Tooltip title="Moderation">
+                  <IconButton
+                    color="inherit"
+                    onClick={(e) => setModMenuAnchor(e.currentTarget)}
+                    aria-label="moderation actions"
+                  >
+                    <ShieldIcon />
+                  </IconButton>
+                </Tooltip>
+                <Menu
+                  anchorEl={modMenuAnchor}
+                  open={Boolean(modMenuAnchor)}
+                  onClose={closeModMenu}
+                  anchorOrigin={{ vertical: "bottom", horizontal: "right" }}
+                  transformOrigin={{ vertical: "top", horizontal: "right" }}
+                >
+                  <MenuItem onClick={toggleShadowban} disabled={shadowBusy}>
+                    <ListItemIcon>
+                      {lesson.shadowbanned ? (
+                        <VisibilityIcon fontSize="small" />
+                      ) : (
+                        <VisibilityOffIcon fontSize="small" />
+                      )}
+                    </ListItemIcon>
+                    <ListItemText>
+                      {lesson.shadowbanned
+                        ? "Un-shadowban lesson"
+                        : "Shadowban lesson"}
+                    </ListItemText>
+                  </MenuItem>
+                  <MenuItem onClick={banAuthorName}>
+                    <ListItemIcon>
+                      <BlockIcon fontSize="small" />
+                    </ListItemIcon>
+                    <ListItemText>Ban author by name</ListItemText>
+                  </MenuItem>
+                  {/* Mods request deletion; admins delete outright. */}
+                  {!isAdmin && (
+                    <MenuItem
+                      onClick={() => {
+                        closeModMenu();
+                        setReqReason("");
+                        setReqError("");
+                        setReqOpen(true);
+                      }}
+                    >
+                      <ListItemIcon>
+                        <DeleteOutlineIcon fontSize="small" />
+                      </ListItemIcon>
+                      <ListItemText>Request deletion…</ListItemText>
+                    </MenuItem>
+                  )}
+                  {isAdmin && (
+                    <MenuItem
+                      onClick={() => {
+                        closeModMenu();
+                        openDelete("admin");
+                      }}
+                    >
+                      <ListItemIcon>
+                        <DeleteOutlineIcon fontSize="small" />
+                      </ListItemIcon>
+                      <ListItemText>Delete lesson fully…</ListItemText>
+                    </MenuItem>
+                  )}
+                  {isAdmin && (
+                    <MenuItem
+                      onClick={() => {
+                        closeModMenu();
+                        setIpBanError("");
+                        setIpBanOpen(true);
+                      }}
+                      disabled={!lesson.authorIp}
+                    >
+                      <ListItemIcon>
+                        <WifiOffIcon fontSize="small" />
+                      </ListItemIcon>
+                      <ListItemText>
+                        {lesson.authorIp
+                          ? "Ban author by IP"
+                          : "Ban by IP (no IP on record)"}
+                      </ListItemText>
+                    </MenuItem>
+                  )}
+                </Menu>
               </>
             )}
             <NavActions current="lesson" />
@@ -454,9 +646,21 @@ export default function LessonPage() {
         {lessonHubEnabled && !loading && !error && lesson && (
           <>
             <Stack sx={{ mb: 2 }}>
-              <Typography variant="h4">
-                {lesson.title || "Untitled Lesson"}
-              </Typography>
+              <Stack direction="row" spacing={1} alignItems="center">
+                <Typography variant="h4">
+                  {lesson.title || "Untitled Lesson"}
+                </Typography>
+                {/* Only the author and mods/admins can load a shadowbanned
+                    lesson, so this badge is never seen by the public. */}
+                {lesson.shadowbanned && (
+                  <Chip
+                    size="small"
+                    color="warning"
+                    icon={<VisibilityOffIcon />}
+                    label="Shadowbanned"
+                  />
+                )}
+              </Stack>
               <Typography variant="body2" color="text.secondary">
                 {lesson.author || "Anonymous"}
                 {typeof lesson.sectionCount === "number"
@@ -529,6 +733,97 @@ export default function LessonPage() {
             }
           >
             Delete
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Moderator → admin: request that this lesson be fully deleted. */}
+      <Dialog
+        open={reqOpen}
+        onClose={() => !reqBusy && setReqOpen(false)}
+        fullWidth
+        maxWidth="xs"
+      >
+        <DialogTitle>Request deletion</DialogTitle>
+        <DialogContent>
+          <DialogContentText sx={{ mb: 2 }}>
+            Ask an admin to permanently delete <strong>{deleteTarget}</strong>.
+            Add a reason to help them decide.
+          </DialogContentText>
+          <TextField
+            autoFocus
+            fullWidth
+            size="small"
+            label="Reason (optional)"
+            multiline
+            minRows={2}
+            value={reqReason}
+            onChange={(e) => setReqReason(e.target.value)}
+            disabled={reqBusy}
+            inputProps={{ maxLength: 1000 }}
+          />
+          {reqError && (
+            <Alert severity="error" sx={{ mt: 2 }}>
+              {reqError}
+            </Alert>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setReqOpen(false)} disabled={reqBusy}>
+            Cancel
+          </Button>
+          <Button
+            variant="contained"
+            onClick={submitDeleteRequest}
+            disabled={reqBusy}
+            startIcon={
+              reqBusy ? <CircularProgress size={16} color="inherit" /> : null
+            }
+          >
+            Send request
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Admin: ban the IP this lesson was published from. */}
+      <Dialog
+        open={ipBanOpen}
+        onClose={() => !ipBanBusy && setIpBanOpen(false)}
+        fullWidth
+        maxWidth="xs"
+      >
+        <DialogTitle>Ban this IP address?</DialogTitle>
+        <DialogContent>
+          <DialogContentText>
+            This blocks all posting from{" "}
+            <strong>{lesson?.authorIp || "this address"}</strong> (the address{" "}
+            <strong>{lesson?.author || "the author"}</strong> published this
+            lesson from). Existing content stays in place.
+          </DialogContentText>
+          {ipBanError && (
+            <Alert severity="error" sx={{ mt: 2 }}>
+              {ipBanError}
+            </Alert>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setIpBanOpen(false)} disabled={ipBanBusy}>
+            Cancel
+          </Button>
+          <Button
+            color="error"
+            variant="contained"
+            onClick={confirmIpBan}
+            disabled={ipBanBusy || !lesson?.authorIp}
+            startIcon={
+              ipBanBusy ? (
+                <CircularProgress size={16} color="inherit" />
+              ) : (
+                <WifiOffIcon />
+              )
+            }
+          >
+            Ban IP
           </Button>
         </DialogActions>
       </Dialog>

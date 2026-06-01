@@ -646,10 +646,115 @@ function authorFromUser(user) {
 }
 
 /**
+ * The client IP a request arrived from, per Cloudflare's `cf-connecting-ip`
+ * header (the same source the rate limiter uses). Recorded on new content so an
+ * admin can later ban that address, and checked against `banned_ips`.
+ */
+function clientIp(request) {
+	return request.headers.get('cf-connecting-ip') || '';
+}
+
+/**
+ * Pull the `Authorization: Bearer <jwt>` token off a request, or '' if absent.
+ */
+function bearerToken(request) {
+	const auth = request.headers.get('Authorization') || '';
+	return auth.startsWith('Bearer ') ? auth.slice('Bearer '.length).trim() : '';
+}
+
+/**
+ * The privilege tier of a verified user: 'admin', 'moderator', or null for a
+ * plain author. Read from public.user_roles with the service-role key, so the
+ * role can never be asserted by the client — it is always re-derived server-side.
+ */
+async function getUserRole(env, base, userId) {
+	if (!userId) return null;
+	let res;
+	try {
+		res = await fetch(`${base}/rest/v1/user_roles?user_id=eq.${encodeURIComponent(userId)}&select=role&limit=1`, {
+			headers: supabaseHeaders(env),
+		});
+	} catch (e) {
+		return null;
+	}
+	if (!res.ok) return null;
+	const rows = await res.json().catch(() => []);
+	return Array.isArray(rows) && rows.length ? rows[0].role : null;
+}
+
+/**
+ * Verify a request's Supabase JWT and look up the caller's moderation role in one
+ * step. Returns { user, role } — user is null when the token is missing/invalid,
+ * role is 'admin' | 'moderator' | null.
+ */
+async function verifyUserAndRole(env, base, request) {
+	const user = await verifySupabaseUser(env, bearerToken(request));
+	if (!user) return { user: null, role: null };
+	const role = await getUserRole(env, base, user.id);
+	return { user, role };
+}
+
+const isModeratorRole = (role) => role === 'moderator' || role === 'admin';
+
+/**
+ * Whether an IP address is banned (admin-issued). Checked at the top of the
+ * content-creating routes so a banned address can't post anything new.
+ */
+async function isIpBanned(env, base, ip) {
+	if (!ip) return false;
+	let res;
+	try {
+		res = await fetch(`${base}/rest/v1/banned_ips?ip=eq.${encodeURIComponent(ip)}&select=ip&limit=1`, {
+			headers: supabaseHeaders(env),
+		});
+	} catch (e) {
+		return false;
+	}
+	if (!res.ok) return false;
+	const rows = await res.json().catch(() => []);
+	return Array.isArray(rows) && rows.length > 0;
+}
+
+/**
+ * Whether a display name is banned (moderator-issued). Names are stored
+ * normalised (lower-cased, trimmed); compare the same way.
+ */
+async function isNameBanned(env, base, name) {
+	const key = (name || '').trim().toLowerCase();
+	if (!key) return false;
+	let res;
+	try {
+		res = await fetch(`${base}/rest/v1/banned_names?name_lower=eq.${encodeURIComponent(key)}&select=name_lower&limit=1`, {
+			headers: supabaseHeaders(env),
+		});
+	} catch (e) {
+		return false;
+	}
+	if (!res.ok) return false;
+	const rows = await res.json().catch(() => []);
+	return Array.isArray(rows) && rows.length > 0;
+}
+
+/**
+ * Reject a content-creating request from a banned user. Returns a Response (the
+ * 403 to send) when the caller's IP or display name is banned, or null when they
+ * are clear to proceed. Kept in one place so every write path bans identically.
+ */
+async function bannedResponse(env, base, request, user, cors) {
+	if (await isIpBanned(env, base, clientIp(request))) {
+		return textResponse('Your access has been suspended.', 403, cors);
+	}
+	if (await isNameBanned(env, base, authorFromUser(user))) {
+		return textResponse('Your access has been suspended.', 403, cors);
+	}
+	return null;
+}
+
+/**
  * Map a Supabase `lessons` row to the camelCase summary the frontend expects.
  * `withDoc` includes the full editor document (used by the single-lesson fetch).
  */
-function rowToLesson(row, withDoc) {
+function rowToLesson(row, withDoc, includeMod) {
 	const lesson = {
 		id: row.id,
 		// The author's Supabase user id — the frontend compares it with the
@@ -663,9 +768,15 @@ function rowToLesson(row, withDoc) {
 		// up to the database but visible only to its author. Defaults to true so a
 		// row from a database that predates the `published` column reads as published.
 		published: row.published ?? true,
+		// Whether a moderator has hidden the lesson from the public hub. Defaults to
+		// false so rows predating the column read as visible.
+		shadowbanned: row.shadowbanned ?? false,
 		createdAt: row.created_at,
 	};
 	if (withDoc) lesson.doc = row.doc;
+	// The author's IP is sensitive: only attach it for mod/admin reads (for the
+	// admin "ban by IP" action), never in public or author-facing responses.
+	if (includeMod) lesson.authorIp = row.author_ip ?? null;
 	return lesson;
 }
 
@@ -721,8 +832,13 @@ async function handleLessons(request, env, url, cors) {
 	// GET /lessons/:id — one lesson, including its full editor doc. Returns drafts
 	// too (so an author can load one for editing, and an unlisted-style link works);
 	// drafts are kept out of the public *listing* below, not addressable-by-id reads.
+	//
+	// Shadowbanned lessons are the exception: they 404 to the public, exactly as if
+	// they didn't exist, but stay readable to their author (who must not realise
+	// they're hidden) and to moderators/admins (who manage them). So we only verify
+	// a JWT when the row turns out to be shadowbanned — public reads stay token-free.
 	if (request.method === 'GET' && id) {
-		const query = `id=eq.${encodeURIComponent(id)}&select=id,author_id,title,author,section_count,published,created_at,doc&limit=1`;
+		const query = `id=eq.${encodeURIComponent(id)}&select=id,author_id,title,author,section_count,published,shadowbanned,author_ip,created_at,doc&limit=1`;
 		let res;
 		try {
 			res = await fetch(`${base}/rest/v1/lessons?${query}`, { headers: supabaseHeaders(env) });
@@ -734,7 +850,18 @@ async function handleLessons(request, env, url, cors) {
 		if (!Array.isArray(rows) || rows.length === 0) {
 			return textResponse('Lesson not found.', 404, cors);
 		}
-		return jsonResponse({ lesson: rowToLesson(rows[0], true) }, 200, cors);
+		const row = rows[0];
+		if (row.shadowbanned) {
+			const { user, role } = await verifyUserAndRole(env, base, request);
+			const isOwner = user && user.id === row.author_id;
+			if (!isOwner && !isModeratorRole(role)) {
+				return textResponse('Lesson not found.', 404, cors);
+			}
+			// Moderators/admins get the author IP (for the "ban by IP" action); the
+			// author themselves does not.
+			return jsonResponse({ lesson: rowToLesson(row, true, isModeratorRole(role)) }, 200, cors);
+		}
+		return jsonResponse({ lesson: rowToLesson(row, true) }, 200, cors);
 	}
 
 	// GET /lessons — public listing, newest first. Only published lessons appear;
@@ -742,7 +869,8 @@ async function handleLessons(request, env, url, cors) {
 	// author. The doc (which can be large, holding base64 image data) is deliberately
 	// excluded; section_count gives the summary its count without shipping every block.
 	if (request.method === 'GET') {
-		const query = 'published=eq.true&select=id,author_id,title,author,section_count,published,created_at&order=created_at.desc';
+		const query =
+			'published=eq.true&shadowbanned=eq.false&select=id,author_id,title,author,section_count,published,created_at&order=created_at.desc';
 		let res;
 		try {
 			res = await fetch(`${base}/rest/v1/lessons?${query}`, { headers: supabaseHeaders(env) });
@@ -766,6 +894,10 @@ async function handleLessons(request, env, url, cors) {
 		const user = await verifySupabaseUser(env, token);
 		if (!user) return textResponse('Please sign in before saving.', 401, cors);
 
+		// Banned users (by IP or display name) can't publish new lessons.
+		const banned = await bannedResponse(env, base, request, user, cors);
+		if (banned) return banned;
+
 		let body;
 		try {
 			body = await request.json();
@@ -785,6 +917,8 @@ async function handleLessons(request, env, url, cors) {
 			title,
 			doc,
 			published,
+			// Recorded so an admin can later ban the address from a lesson of theirs.
+			author_ip: clientIp(request) || null,
 		};
 
 		let res;
@@ -822,6 +956,10 @@ async function handleLessons(request, env, url, cors) {
 		const token = auth.startsWith('Bearer ') ? auth.slice('Bearer '.length).trim() : '';
 		const user = await verifySupabaseUser(env, token);
 		if (!user) return textResponse('Please sign in before editing.', 401, cors);
+
+		// Banned users (by IP or display name) can't edit lessons either.
+		const banned = await bannedResponse(env, base, request, user, cors);
+		if (banned) return banned;
 
 		let body;
 		try {
@@ -1009,6 +1147,10 @@ async function handleComments(request, env, lessonId, cors) {
 		const user = await verifySupabaseUser(env, token);
 		if (!user) return textResponse('Please sign in before commenting.', 401, cors);
 
+		// Banned users (by IP or display name) can't post comments.
+		const banned = await bannedResponse(env, base, request, user, cors);
+		if (banned) return banned;
+
 		let body;
 		try {
 			body = await request.json();
@@ -1073,6 +1215,8 @@ async function handleComments(request, env, lessonId, cors) {
 			author_id: user.id,
 			author: authorFromUser(user),
 			body: text,
+			// Recorded so an admin can later ban the address from this comment.
+			author_ip: clientIp(request) || null,
 		};
 
 		let res;
@@ -1123,6 +1267,470 @@ async function handleComments(request, env, lessonId, cors) {
 	}
 
 	return textResponse('Method not allowed.', 405, cors);
+}
+
+/**
+ * Permanently delete a lesson and its comments, regardless of author. Used by the
+ * admin "delete fully" action and by approving a moderator's deletion request.
+ * Mirrors the author DELETE path's comments-first ordering so it works even on a
+ * database whose comments FK doesn't cascade. Returns true if a lesson row was
+ * actually removed.
+ */
+async function fullyDeleteLesson(env, base, lessonId) {
+	try {
+		await fetch(`${base}/rest/v1/comments?lesson_id=eq.${encodeURIComponent(lessonId)}`, {
+			method: 'DELETE',
+			headers: supabaseHeaders(env),
+		});
+	} catch (e) {
+		return false;
+	}
+	let res;
+	try {
+		res = await fetch(`${base}/rest/v1/lessons?id=eq.${encodeURIComponent(lessonId)}&select=id`, {
+			method: 'DELETE',
+			headers: { ...supabaseHeaders(env), Prefer: 'return=representation' },
+		});
+	} catch (e) {
+		return false;
+	}
+	if (!res.ok) return false;
+	const rows = await res.json().catch(() => []);
+	return Array.isArray(rows) && rows.length > 0;
+}
+
+/**
+ * Look up an auth user by email via the Supabase Admin API (service-role). GoTrue
+ * offers no email filter, so page the admin user list and match. Bounded so a huge
+ * user base can't spin forever. Returns the user object or null.
+ */
+async function findAuthUserByEmail(env, email) {
+	const target = (email || '').trim().toLowerCase();
+	if (!target) return null;
+	const baseUrl = env.SUPABASE_URL.replace(/\/$/, '');
+	const perPage = 200;
+	for (let page = 1; page <= 20; page++) {
+		let res;
+		try {
+			res = await fetch(`${baseUrl}/auth/v1/admin/users?page=${page}&per_page=${perPage}`, { headers: supabaseHeaders(env) });
+		} catch (e) {
+			return null;
+		}
+		if (!res.ok) return null;
+		const data = await res.json().catch(() => null);
+		const users = Array.isArray(data) ? data : data && Array.isArray(data.users) ? data.users : [];
+		const match = users.find((u) => (u.email || '').toLowerCase() === target);
+		if (match) return match;
+		if (users.length < perPage) return null; // reached the last page
+	}
+	return null;
+}
+
+/**
+ * Fetch a single auth user by id via the Admin API. Used to attach emails to the
+ * moderator list. Returns the user object or null.
+ */
+async function getAuthUserById(env, id) {
+	const baseUrl = env.SUPABASE_URL.replace(/\/$/, '');
+	let res;
+	try {
+		res = await fetch(`${baseUrl}/auth/v1/admin/users/${encodeURIComponent(id)}`, { headers: supabaseHeaders(env) });
+	} catch (e) {
+		return null;
+	}
+	if (!res.ok) return null;
+	return await res.json().catch(() => null);
+}
+
+/**
+ * Moderation endpoints — the privileged layer on top of the lesson hub. Every
+ * route re-derives the caller's role from public.user_roles server-side (the
+ * client's claim of being a mod/admin is never trusted), then gates on it:
+ * "mod+" routes need moderator or admin; "admin" routes need admin.
+ *
+ *   GET    /moderation/whoami                            any signed-in -> { role }
+ *   DELETE /moderation/comments/:id                      mod+   delete a comment (replies cascade)
+ *   POST   /moderation/lessons/:id/shadowban             mod+   { shadowbanned } hide/show a lesson
+ *   POST   /moderation/lessons/:id/delete-request        mod+   { reason } ask an admin to delete
+ *   GET    /moderation/lessons/shadowbanned              mod+   list shadowbanned lessons
+ *   DELETE /moderation/lessons/:id                       admin  fully delete a lesson
+ *   GET    /moderation/delete-requests                   admin  pending deletion requests
+ *   POST   /moderation/delete-requests/:id/approve       admin  delete the lesson + resolve
+ *   POST   /moderation/delete-requests/:id/deny          admin  resolve without deleting
+ *   GET    /moderation/bans                              mod+   name bans (+ ip bans for admin)
+ *   POST   /moderation/bans/name                         mod+   { name } ban a display name
+ *   DELETE /moderation/bans/name/:nameLower              mod+   lift a name ban
+ *   POST   /moderation/bans/ip                           admin  { ip, reason? } ban an address
+ *   DELETE /moderation/bans/ip/:ip                       admin  lift an ip ban
+ *   GET    /moderation/moderators                        admin  list moderators
+ *   POST   /moderation/moderators                        admin  { email } add a moderator
+ *   DELETE /moderation/moderators/:userId                admin  remove a moderator
+ *
+ * Errors are short plain-text reasons, matching the rest of the API.
+ */
+async function handleModeration(request, env, url, cors) {
+	if (!env.SUPABASE_URL || !env.SUPABASE_SERVICE_ROLE_KEY) {
+		return textResponse('Server misconfiguration: Supabase is not configured', 500, cors);
+	}
+	const base = env.SUPABASE_URL.replace(/\/$/, '');
+	const method = request.method;
+
+	// Path under "/moderation", split into decoded segments.
+	const rest = url.pathname.replace(/\/$/, '').slice('/moderation'.length);
+	const seg = rest
+		.split('/')
+		.filter(Boolean)
+		.map((s) => decodeURIComponent(s));
+
+	// Every route needs a verified caller; derive their role once up front.
+	const { user, role } = await verifyUserAndRole(env, base, request);
+	if (!user) return textResponse('Please sign in.', 401, cors);
+
+	// Tier gates: return a Response on failure, null when the caller may proceed.
+	const denyMod = () => (isModeratorRole(role) ? null : textResponse('Moderator access required.', 403, cors));
+	const denyAdmin = () => (role === 'admin' ? null : textResponse('Admin access required.', 403, cors));
+	const readJson = async () => {
+		try {
+			return await request.json();
+		} catch (e) {
+			return null;
+		}
+	};
+	const nowIso = () => new Date().toISOString();
+
+	// GET /moderation/whoami — any signed-in user learns their own tier.
+	if (method === 'GET' && seg.length === 1 && seg[0] === 'whoami') {
+		return jsonResponse({ role: role || null }, 200, cors);
+	}
+
+	// DELETE /moderation/comments/:id — mod+ removes any comment; its replies go
+	// with it via the comments.parent_id ON DELETE CASCADE.
+	if (method === 'DELETE' && seg.length === 2 && seg[0] === 'comments') {
+		const denied = denyMod();
+		if (denied) return denied;
+		let res;
+		try {
+			res = await fetch(`${base}/rest/v1/comments?id=eq.${encodeURIComponent(seg[1])}&select=id`, {
+				method: 'DELETE',
+				headers: { ...supabaseHeaders(env), Prefer: 'return=representation' },
+			});
+		} catch (e) {
+			return textResponse('Could not reach the comment store.', 502, cors);
+		}
+		if (!res.ok) return textResponse('Could not delete the comment.', 502, cors);
+		const rows = await res.json().catch(() => []);
+		if (!Array.isArray(rows) || rows.length === 0) return textResponse('Comment not found.', 404, cors);
+		return jsonResponse({ ok: true }, 200, cors);
+	}
+
+	// GET /moderation/lessons/shadowbanned — mod+ lists currently hidden lessons.
+	if (method === 'GET' && seg.length === 2 && seg[0] === 'lessons' && seg[1] === 'shadowbanned') {
+		const denied = denyMod();
+		if (denied) return denied;
+		let res;
+		try {
+			res = await fetch(
+				`${base}/rest/v1/lessons?shadowbanned=eq.true&select=id,author_id,title,author,section_count,published,shadowbanned,created_at&order=created_at.desc`,
+				{ headers: supabaseHeaders(env) },
+			);
+		} catch (e) {
+			return textResponse('Could not reach the lesson store.', 502, cors);
+		}
+		if (!res.ok) return textResponse('Could not load lessons.', 502, cors);
+		const rows = await res.json().catch(() => []);
+		const lessons = (Array.isArray(rows) ? rows : []).map((r) => rowToLesson(r, false));
+		return jsonResponse({ lessons }, 200, cors);
+	}
+
+	// POST /moderation/lessons/:id/shadowban — mod+ toggles a lesson's visibility.
+	if (method === 'POST' && seg.length === 3 && seg[0] === 'lessons' && seg[2] === 'shadowban') {
+		const denied = denyMod();
+		if (denied) return denied;
+		const body = await readJson();
+		if (!body || typeof body.shadowbanned !== 'boolean') {
+			return textResponse('Provide a boolean "shadowbanned".', 400, cors);
+		}
+		let res;
+		try {
+			res = await fetch(
+				`${base}/rest/v1/lessons?id=eq.${encodeURIComponent(seg[1])}&select=id,author_id,title,author,section_count,published,shadowbanned,author_ip,created_at`,
+				{
+					method: 'PATCH',
+					headers: { ...supabaseHeaders(env), 'Content-Type': 'application/json', Prefer: 'return=representation' },
+					body: JSON.stringify({ shadowbanned: body.shadowbanned }),
+				},
+			);
+		} catch (e) {
+			return textResponse('Could not reach the lesson store.', 502, cors);
+		}
+		if (!res.ok) return textResponse('Could not update the lesson.', 502, cors);
+		const rows = await res.json().catch(() => []);
+		if (!Array.isArray(rows) || rows.length === 0) return textResponse('Lesson not found.', 404, cors);
+		return jsonResponse({ lesson: rowToLesson(rows[0], false, true) }, 200, cors);
+	}
+
+	// POST /moderation/lessons/:id/delete-request — a moderator asks an admin to
+	// fully delete a lesson (mods can't delete lessons themselves).
+	if (method === 'POST' && seg.length === 3 && seg[0] === 'lessons' && seg[2] === 'delete-request') {
+		const denied = denyMod();
+		if (denied) return denied;
+		const body = await readJson();
+		const reason = body && typeof body.reason === 'string' ? body.reason.trim().slice(0, 1000) : '';
+		const insert = { lesson_id: seg[1], requested_by: user.id, reason: reason || null };
+		let res;
+		try {
+			res = await fetch(`${base}/rest/v1/lesson_delete_requests?select=id,lesson_id,reason,status,created_at`, {
+				method: 'POST',
+				headers: { ...supabaseHeaders(env), 'Content-Type': 'application/json', Prefer: 'return=representation' },
+				body: JSON.stringify(insert),
+			});
+		} catch (e) {
+			return textResponse('Could not reach the lesson store.', 502, cors);
+		}
+		// A bad lesson id violates the FK — surface it as a 404 rather than a 502.
+		if (res.status === 409 || res.status === 400) return textResponse('Lesson not found.', 404, cors);
+		if (!res.ok) return textResponse('Could not file the request.', 502, cors);
+		const rows = await res.json().catch(() => []);
+		return jsonResponse({ request: Array.isArray(rows) ? rows[0] : null }, 201, cors);
+	}
+
+	// DELETE /moderation/lessons/:id — admin fully deletes any lesson.
+	if (method === 'DELETE' && seg.length === 2 && seg[0] === 'lessons') {
+		const denied = denyAdmin();
+		if (denied) return denied;
+		const ok = await fullyDeleteLesson(env, base, seg[1]);
+		if (!ok) return textResponse('Lesson not found.', 404, cors);
+		return jsonResponse({ ok: true }, 200, cors);
+	}
+
+	// GET /moderation/delete-requests — admin reviews pending deletion requests,
+	// each embedded with its lesson's title/author for context.
+	if (method === 'GET' && seg.length === 1 && seg[0] === 'delete-requests') {
+		const denied = denyAdmin();
+		if (denied) return denied;
+		let res;
+		try {
+			res = await fetch(
+				`${base}/rest/v1/lesson_delete_requests?status=eq.pending&select=id,lesson_id,reason,status,created_at,lesson:lessons(title,author)&order=created_at.desc`,
+				{ headers: supabaseHeaders(env) },
+			);
+		} catch (e) {
+			return textResponse('Could not reach the lesson store.', 502, cors);
+		}
+		if (!res.ok) return textResponse('Could not load requests.', 502, cors);
+		const rows = await res.json().catch(() => []);
+		const requests = (Array.isArray(rows) ? rows : []).map((r) => ({
+			id: r.id,
+			lessonId: r.lesson_id,
+			reason: r.reason || '',
+			status: r.status,
+			createdAt: r.created_at,
+			lessonTitle: r.lesson ? r.lesson.title : null,
+			lessonAuthor: r.lesson ? r.lesson.author : null,
+		}));
+		return jsonResponse({ requests }, 200, cors);
+	}
+
+	// POST /moderation/delete-requests/:id/approve | /deny — admin resolves a
+	// request. Approving deletes the lesson; either way the request is marked
+	// resolved with the admin's id and timestamp.
+	if (method === 'POST' && seg.length === 3 && seg[0] === 'delete-requests' && (seg[2] === 'approve' || seg[2] === 'deny')) {
+		const denied = denyAdmin();
+		if (denied) return denied;
+		const reqId = seg[1];
+		// Read the pending request so we know which lesson to delete on approve.
+		let lookRes;
+		try {
+			lookRes = await fetch(
+				`${base}/rest/v1/lesson_delete_requests?id=eq.${encodeURIComponent(reqId)}&status=eq.pending&select=id,lesson_id&limit=1`,
+				{ headers: supabaseHeaders(env) },
+			);
+		} catch (e) {
+			return textResponse('Could not reach the lesson store.', 502, cors);
+		}
+		const lookRows = lookRes.ok ? await lookRes.json().catch(() => []) : [];
+		if (!Array.isArray(lookRows) || lookRows.length === 0) {
+			return textResponse('Request not found or already resolved.', 404, cors);
+		}
+		if (seg[2] === 'approve') {
+			await fullyDeleteLesson(env, base, lookRows[0].lesson_id);
+		}
+		const patch = { status: seg[2] === 'approve' ? 'approved' : 'denied', resolved_by: user.id, resolved_at: nowIso() };
+		try {
+			await fetch(`${base}/rest/v1/lesson_delete_requests?id=eq.${encodeURIComponent(reqId)}`, {
+				method: 'PATCH',
+				headers: { ...supabaseHeaders(env), 'Content-Type': 'application/json' },
+				body: JSON.stringify(patch),
+			});
+		} catch (e) {
+			return textResponse('Could not resolve the request.', 502, cors);
+		}
+		return jsonResponse({ ok: true }, 200, cors);
+	}
+
+	// GET /moderation/bans — name bans for any mod; admins also see ip bans.
+	if (method === 'GET' && seg.length === 1 && seg[0] === 'bans') {
+		const denied = denyMod();
+		if (denied) return denied;
+		let names = [];
+		try {
+			const r = await fetch(`${base}/rest/v1/banned_names?select=name_lower,display_name,created_at&order=created_at.desc`, {
+				headers: supabaseHeaders(env),
+			});
+			if (r.ok) names = await r.json().catch(() => []);
+		} catch (e) {
+			return textResponse('Could not load bans.', 502, cors);
+		}
+		let ips = [];
+		if (role === 'admin') {
+			try {
+				const r = await fetch(`${base}/rest/v1/banned_ips?select=ip,reason,created_at&order=created_at.desc`, {
+					headers: supabaseHeaders(env),
+				});
+				if (r.ok) ips = await r.json().catch(() => []);
+			} catch (e) {
+				return textResponse('Could not load bans.', 502, cors);
+			}
+		}
+		return jsonResponse({ names, ips }, 200, cors);
+	}
+
+	// POST /moderation/bans/name — mod+ bans a display name (stored normalised).
+	if (method === 'POST' && seg.length === 2 && seg[0] === 'bans' && seg[1] === 'name') {
+		const denied = denyMod();
+		if (denied) return denied;
+		const body = await readJson();
+		const display = body && typeof body.name === 'string' ? body.name.trim() : '';
+		const nameLower = display.toLowerCase();
+		if (!nameLower) return textResponse('Provide a name to ban.', 400, cors);
+		try {
+			const r = await fetch(`${base}/rest/v1/banned_names?on_conflict=name_lower`, {
+				method: 'POST',
+				headers: { ...supabaseHeaders(env), 'Content-Type': 'application/json', Prefer: 'resolution=merge-duplicates' },
+				body: JSON.stringify({ name_lower: nameLower, display_name: display, banned_by: user.id }),
+			});
+			if (!r.ok) return textResponse('Could not ban the name.', 502, cors);
+		} catch (e) {
+			return textResponse('Could not reach the store.', 502, cors);
+		}
+		return jsonResponse({ ok: true }, 200, cors);
+	}
+
+	// DELETE /moderation/bans/name/:nameLower — mod+ lifts a name ban.
+	if (method === 'DELETE' && seg.length === 3 && seg[0] === 'bans' && seg[1] === 'name') {
+		const denied = denyMod();
+		if (denied) return denied;
+		try {
+			await fetch(`${base}/rest/v1/banned_names?name_lower=eq.${encodeURIComponent(seg[2].toLowerCase())}`, {
+				method: 'DELETE',
+				headers: supabaseHeaders(env),
+			});
+		} catch (e) {
+			return textResponse('Could not lift the ban.', 502, cors);
+		}
+		return jsonResponse({ ok: true }, 200, cors);
+	}
+
+	// POST /moderation/bans/ip — admin bans an IP address.
+	if (method === 'POST' && seg.length === 2 && seg[0] === 'bans' && seg[1] === 'ip') {
+		const denied = denyAdmin();
+		if (denied) return denied;
+		const body = await readJson();
+		const ip = body && typeof body.ip === 'string' ? body.ip.trim() : '';
+		const reason = body && typeof body.reason === 'string' ? body.reason.trim().slice(0, 200) : '';
+		if (!ip) return textResponse('Provide an IP to ban.', 400, cors);
+		try {
+			const r = await fetch(`${base}/rest/v1/banned_ips?on_conflict=ip`, {
+				method: 'POST',
+				headers: { ...supabaseHeaders(env), 'Content-Type': 'application/json', Prefer: 'resolution=merge-duplicates' },
+				body: JSON.stringify({ ip, reason: reason || null, banned_by: user.id }),
+			});
+			if (!r.ok) return textResponse('Could not ban the IP.', 502, cors);
+		} catch (e) {
+			return textResponse('Could not reach the store.', 502, cors);
+		}
+		return jsonResponse({ ok: true }, 200, cors);
+	}
+
+	// DELETE /moderation/bans/ip/:ip — admin lifts an IP ban.
+	if (method === 'DELETE' && seg.length === 3 && seg[0] === 'bans' && seg[1] === 'ip') {
+		const denied = denyAdmin();
+		if (denied) return denied;
+		try {
+			await fetch(`${base}/rest/v1/banned_ips?ip=eq.${encodeURIComponent(seg[2])}`, {
+				method: 'DELETE',
+				headers: supabaseHeaders(env),
+			});
+		} catch (e) {
+			return textResponse('Could not lift the ban.', 502, cors);
+		}
+		return jsonResponse({ ok: true }, 200, cors);
+	}
+
+	// GET /moderation/moderators — admin lists moderators with their emails.
+	if (method === 'GET' && seg.length === 1 && seg[0] === 'moderators') {
+		const denied = denyAdmin();
+		if (denied) return denied;
+		let rows = [];
+		try {
+			const r = await fetch(`${base}/rest/v1/user_roles?role=eq.moderator&select=user_id,granted_by,created_at&order=created_at.desc`, {
+				headers: supabaseHeaders(env),
+			});
+			if (r.ok) rows = await r.json().catch(() => []);
+		} catch (e) {
+			return textResponse('Could not load moderators.', 502, cors);
+		}
+		const moderators = await Promise.all(
+			(Array.isArray(rows) ? rows : []).map(async (row) => {
+				const u = await getAuthUserById(env, row.user_id);
+				return { userId: row.user_id, email: u ? u.email : null, createdAt: row.created_at };
+			}),
+		);
+		return jsonResponse({ moderators }, 200, cors);
+	}
+
+	// POST /moderation/moderators — admin grants moderator to a user by email.
+	if (method === 'POST' && seg.length === 1 && seg[0] === 'moderators') {
+		const denied = denyAdmin();
+		if (denied) return denied;
+		const body = await readJson();
+		const email = body && typeof body.email === 'string' ? body.email.trim() : '';
+		if (!email) return textResponse('Provide an email.', 400, cors);
+		const target = await findAuthUserByEmail(env, email);
+		if (!target) return textResponse('No signed-in user with that email was found. Ask them to sign in once first.', 404, cors);
+		// Never touch an admin's role: don't demote and don't re-grant.
+		const existing = await getUserRole(env, base, target.id);
+		if (existing === 'admin') return textResponse('That user is an admin.', 409, cors);
+		try {
+			const r = await fetch(`${base}/rest/v1/user_roles?on_conflict=user_id`, {
+				method: 'POST',
+				headers: { ...supabaseHeaders(env), 'Content-Type': 'application/json', Prefer: 'resolution=merge-duplicates' },
+				body: JSON.stringify({ user_id: target.id, role: 'moderator', granted_by: user.id }),
+			});
+			if (!r.ok) return textResponse('Could not add the moderator.', 502, cors);
+		} catch (e) {
+			return textResponse('Could not reach the store.', 502, cors);
+		}
+		return jsonResponse({ moderator: { userId: target.id, email: target.email } }, 201, cors);
+	}
+
+	// DELETE /moderation/moderators/:userId — admin revokes moderator. Filtered to
+	// role='moderator' so it can never remove an admin.
+	if (method === 'DELETE' && seg.length === 2 && seg[0] === 'moderators') {
+		const denied = denyAdmin();
+		if (denied) return denied;
+		try {
+			await fetch(`${base}/rest/v1/user_roles?user_id=eq.${encodeURIComponent(seg[1])}&role=eq.moderator`, {
+				method: 'DELETE',
+				headers: supabaseHeaders(env),
+			});
+		} catch (e) {
+			return textResponse('Could not remove the moderator.', 502, cors);
+		}
+		return jsonResponse({ ok: true }, 200, cors);
+	}
+
+	return textResponse('Not found.', 404, cors);
 }
 
 /**
@@ -1666,6 +2274,14 @@ export default {
 		// Turnstile, so they are handled before the Turnstile/rate-limit AI flow.
 		if (path === '/notifications' || path.startsWith('/notifications/')) {
 			return handleNotifications(request, env, url, cors);
+		}
+
+		// Moderation routes: the admin/moderator privilege layer (role lookups,
+		// shadowbanning, bans, lesson-deletion requests, moderator management).
+		// Like the lesson-hub writes, gated by a Supabase JWT (and a DB-derived
+		// role) rather than Turnstile, so handled before the AI flow below.
+		if (path === '/moderation' || path.startsWith('/moderation/')) {
+			return handleModeration(request, env, url, cors);
 		}
 
 		// One-time admin backfill: convert existing lessons' inline base64 images
