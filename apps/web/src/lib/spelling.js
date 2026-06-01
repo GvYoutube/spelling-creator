@@ -14,10 +14,11 @@ export function createSpellingBlock(newId) {
   return { id: newId(), type: "spelling", words: [{ id: newId(), text: "" }] };
 }
 
-// Pull every capitalized word out of the lesson's text blocks, in reading
-// order, with duplicates removed. "Capitalized" means the word starts with an
-// uppercase letter (covers ALL-CAPS too). Used by the spelling block's fill
-// button to populate the list from the words already written into the passage.
+// Pull every ALL-CAPS word out of the lesson's text blocks, in reading order,
+// with duplicates removed. "ALL-CAPS" means every cased letter in the word is
+// uppercase (so "DOG" qualifies but "Dog" and "dog" do not). Used by the
+// spelling block's fill button to populate the list from the words already
+// written into the passage.
 export function extractCapitalizedWords(doc) {
   const text = (doc?.sections || [])
     .flatMap((s) => s.blocks || [])
@@ -31,10 +32,11 @@ export function extractCapitalizedWords(doc) {
   const seen = new Set();
   const words = [];
   for (const word of tokens) {
-    const first = word[0];
-    // Keep only words whose first letter is an uppercase cased letter.
-    if (first === first.toLocaleLowerCase()) continue;
-    if (first !== first.toLocaleUpperCase()) continue;
+    // Keep only words that are entirely upper-case. Uppercasing must not change
+    // the word, and it must differ from its lower-cased form (so it has at least
+    // one cased letter and isn't, say, all apostrophes).
+    if (word !== word.toLocaleUpperCase()) continue;
+    if (word === word.toLocaleLowerCase()) continue;
     if (seen.has(word)) continue;
     seen.add(word);
     words.push(word);

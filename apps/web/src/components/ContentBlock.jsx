@@ -340,8 +340,8 @@ function SpellingBlock({
           <Tooltip
             title={
               capitalizedWords.length
-                ? "Fill in every capitalized word from the lesson text"
-                : "No capitalized words in the lesson text yet"
+                ? "Fill in every ALL-CAPS word from the lesson text"
+                : "No ALL-CAPS words in the lesson text yet"
             }
           >
             <span>
