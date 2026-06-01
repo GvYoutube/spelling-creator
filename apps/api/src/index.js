@@ -1194,6 +1194,77 @@ async function prerender(request, env, ctx, url) {
 	}
 }
 
+// Standard Open Graph / Twitter preview image dimensions (1.91:1).
+const OG_WIDTH = 1200;
+const OG_HEIGHT = 630;
+
+// GET /og-image?path=/hub/:id — render the given in-site path with the same
+// headless Chromium used for prerendering and return a PNG screenshot sized for
+// social link previews. The per-page <meta property="og:image"> the SPA writes
+// (see web/src/lib/seo.js) points here, so the preview a scraper fetches is a
+// live snapshot of the actual page. Results are edge-cached by path so repeat
+// hits don't each spin up a browser.
+async function ogImage(request, env, ctx, url) {
+	if (!env.BROWSER) return textResponse('Browser rendering unavailable.', 503);
+
+	// Only ever screenshot a same-site path. Strip any query/hash so the cache
+	// key (and the rendered preview) stays stable per page.
+	let path = url.searchParams.get('path') || '/';
+	if (!path.startsWith('/') || path.startsWith('//')) path = '/';
+	path = path.split(/[?#]/)[0];
+
+	const cache = caches.default;
+	const cacheKey = new Request(`${url.origin}/og-image?path=${encodeURIComponent(path)}`, { method: 'GET' });
+	const hit = await cache.match(cacheKey);
+	if (hit) return hit;
+
+	// Load this same Worker with the bypass flag so it serves the real SPA shell
+	// + assets (rather than recursively prerendering) and renders the page.
+	const target = new URL(`${url.origin}${path}`);
+	target.searchParams.set(PRERENDER_BYPASS, '1');
+
+	let browser;
+	try {
+		browser = await puppeteer.launch(env.BROWSER);
+		const page = await browser.newPage();
+		await page.setViewport({ width: OG_WIDTH, height: OG_HEIGHT, deviceScaleFactor: 1 });
+
+		// Unlike prerendering we keep images and fonts — they're exactly what the
+		// screenshot is meant to capture — and only block the interactive
+		// third-party widgets (Turnstile, Google Identity) so the page can still
+		// reach network-idle promptly.
+		await page.setRequestInterception(true);
+		page.on('request', (req) => {
+			if (/challenges\.cloudflare\.com|accounts\.google\.com/.test(req.url())) {
+				return req.abort();
+			}
+			req.continue();
+		});
+
+		await page.goto(target.toString(), { waitUntil: 'networkidle0', timeout: 20000 });
+		const buffer = await page.screenshot({
+			type: 'png',
+			clip: { x: 0, y: 0, width: OG_WIDTH, height: OG_HEIGHT },
+		});
+
+		const response = new Response(buffer, {
+			status: 200,
+			headers: {
+				'Content-Type': 'image/png',
+				// Let the edge serve repeat scraper hits without re-rendering.
+				'Cache-Control': 'public, max-age=3600',
+				'X-Og-Image': '1',
+			},
+		});
+		ctx.waitUntil(cache.put(cacheKey, response.clone()));
+		return response;
+	} catch (err) {
+		return textResponse('Failed to render preview image.', 500);
+	} finally {
+		if (browser) await browser.close();
+	}
+}
+
 /** XML-escape a value for safe inclusion in a <loc> element. */
 function xmlEscape(value) {
 	return String(value).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&apos;');
@@ -1340,6 +1411,13 @@ export default {
 		// robots.txt: allow everything and point crawlers at the dynamic sitemap.
 		if (path === '/robots.txt') {
 			return handleRobots(request, env, url);
+		}
+
+		// Open Graph preview image: a headless-Chromium screenshot of an in-site
+		// page, referenced by the per-page og:image meta tag. Served before the
+		// frontend fall-through so the SPA's catch-all never shadows it.
+		if (path === '/og-image') {
+			return ogImage(request, env, ctx, url);
 		}
 
 		// Everything else that is a GET/HEAD is a request for the frontend: serve

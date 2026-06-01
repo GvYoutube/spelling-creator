@@ -17,7 +17,17 @@
       property="og:description"
       content="Create and print Spelling lessons with sections, text, and images."
     />
-    <meta name="twitter:card" content="summary" />
+    <!-- Homepage screenshot rendered by the Worker (/og-image). The SPA swaps in
+         a per-page screenshot via src/lib/seo.js; this is the default a scraper
+         sees if the page isn't prerendered. -->
+    <meta
+      property="og:image"
+      content="https://spellingcreator.org/og-image?path=/"
+    />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:type" content="image/png" />
+    <meta name="twitter:card" content="summary_large_image" />
     <link
       rel="stylesheet"
       href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500;700&display=swap"

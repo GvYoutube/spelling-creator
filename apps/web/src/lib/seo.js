@@ -34,7 +34,9 @@ function setMetaTag(attr, key, content) {
  * @param {object}  meta
  * @param {string} [meta.title]        Page title; appended to the site name.
  * @param {string} [meta.description]  Meta/OG description (falls back to site default).
- * @param {string} [meta.image]        Absolute URL for the OG/Twitter preview image.
+ * @param {string} [meta.image]        Absolute URL for the OG/Twitter preview
+ *   image. Leave undefined to default to a live screenshot of the current page
+ *   (rendered by the Worker's /og-image endpoint); pass null to opt out entirely.
  * @param {string} [meta.type]         OG type: "website" (default) or "article".
  */
 export function useDocumentMeta({
@@ -46,7 +48,15 @@ export function useDocumentMeta({
   useEffect(() => {
     const fullTitle = title ? `${title} · ${SITE_NAME}` : SITE_NAME;
     const desc = description || DEFAULT_DESCRIPTION;
-    const url = window.location.href;
+    const { origin, pathname, href } = window.location;
+
+    // Default the preview image to a screenshot of this page: the Worker's
+    // /og-image endpoint renders the path with headless Chromium (the same
+    // method used to prerender pages for crawlers). Pass `null` to opt out.
+    const ogImage =
+      image === undefined
+        ? `${origin}/og-image?path=${encodeURIComponent(pathname)}`
+        : image;
 
     document.title = fullTitle;
     setMetaTag("name", "description", desc);
@@ -55,17 +65,22 @@ export function useDocumentMeta({
     setMetaTag("property", "og:type", type);
     setMetaTag("property", "og:title", fullTitle);
     setMetaTag("property", "og:description", desc);
-    setMetaTag("property", "og:url", url);
-    setMetaTag("property", "og:image", image);
+    setMetaTag("property", "og:url", href);
+    setMetaTag("property", "og:image", ogImage);
+    // The screenshot is a fixed-size PNG; advertise its dimensions/type so
+    // scrapers can lay out the large-image card without fetching it first.
+    setMetaTag("property", "og:image:width", ogImage ? "1200" : "");
+    setMetaTag("property", "og:image:height", ogImage ? "630" : "");
+    setMetaTag("property", "og:image:type", ogImage ? "image/png" : "");
 
     setMetaTag(
       "name",
       "twitter:card",
-      image ? "summary_large_image" : "summary",
+      ogImage ? "summary_large_image" : "summary",
     );
     setMetaTag("name", "twitter:title", fullTitle);
     setMetaTag("name", "twitter:description", desc);
-    setMetaTag("name", "twitter:image", image);
+    setMetaTag("name", "twitter:image", ogImage);
   }, [title, description, image, type]);
 }
 
