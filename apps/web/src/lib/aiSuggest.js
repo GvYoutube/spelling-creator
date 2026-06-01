@@ -143,3 +143,41 @@ export async function suggestQuestion(subject, token, context = {}) {
   const data = await res.json().catch(() => ({}));
   return data.question || {};
 }
+
+/**
+ * Ask the Worker to suggest a batch of lesson topic ideas for an age range.
+ * @param {string} ageRange  The age range the lesson is pitched at (may be empty).
+ * @param {string} token     Turnstile token from the widget's callback.
+ * @returns {Promise<Array<{title: string, description: string}>>} Suggested ideas.
+ */
+export async function suggestLessonIdeas(ageRange, token) {
+  if (!API_URL) {
+    throw new Error("VITE_API_URL is not configured.");
+  }
+  if (!token) {
+    throw new Error("Please complete the verification challenge first.");
+  }
+
+  let res;
+  try {
+    res = await fetch(API_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        mode: "lessonIdea",
+        ageRange: ageRange || "",
+        token,
+      }),
+    });
+  } catch (e) {
+    throw new Error("Could not reach the suggestion service.", { cause: e });
+  }
+
+  if (!res.ok) {
+    const detail = await res.text().catch(() => "");
+    throw new Error(detail || `Request failed (${res.status}).`);
+  }
+
+  const data = await res.json().catch(() => ({}));
+  return Array.isArray(data.ideas) ? data.ideas : [];
+}

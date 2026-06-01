@@ -101,7 +101,28 @@ const CACHE_TTL = 60 * 60 * 24 * 30; // 30 days
 // The request modes this Worker understands. "text"/"question" drive the AI
 // suggesters; "imageSearch"/"imageFetch" drive the Pixabay image search. Any
 // unknown mode falls back to "text".
-const KNOWN_MODES = new Set(['text', 'question', 'imageSearch', 'imageFetch']);
+const KNOWN_MODES = new Set(['text', 'question', 'imageSearch', 'imageFetch', 'lessonIdea']);
+
+// Structured-output schema for the lesson-idea suggester: a short list of lesson
+// topic ideas pitched at an age range, each with a title the user can adopt as
+// their lesson title and a one-line description of what it would cover.
+const LESSON_IDEA_SCHEMA = {
+	type: Type.OBJECT,
+	properties: {
+		ideas: {
+			type: Type.ARRAY,
+			items: {
+				type: Type.OBJECT,
+				properties: {
+					title: { type: Type.STRING },
+					description: { type: Type.STRING },
+				},
+				required: ['title', 'description'],
+			},
+		},
+	},
+	required: ['ideas'],
+};
 
 // The only hosts the image proxy will ever fetch from — an SSRF guard so a
 // crafted `url` can't make the Worker fetch arbitrary internal/external targets.
@@ -1447,6 +1468,10 @@ export default {
 		const documentName = body.documentName || '';
 		const questionType = body.questionType || 'single';
 		const sectionText = body.sectionText || '';
+		// Age range the lesson is pitched at (e.g. "7–9 years"); used by the
+		// lessonIdea suggester to tailor topic ideas. Capped so it can't bloat the
+		// prompt.
+		const ageRange = typeof body.ageRange === 'string' ? body.ageRange.trim().slice(0, 60) : '';
 		// Prompts of questions already in the section, so we can ask the model
 		// not to repeat them. Keep only non-empty strings and cap the count so a
 		// large section can't blow up the prompt.
@@ -1532,6 +1557,32 @@ export default {
 		}
 		if (mode === 'imageFetch') {
 			return handleImageFetch(imageUrl, okHeaders, cors);
+		}
+
+		// Lesson-idea suggester: propose a handful of lesson topics suited to the
+		// given age range. Not cached — like questions, users expect a fresh batch
+		// of ideas each time they ask.
+		if (mode === 'lessonIdea') {
+			const audienceBlock = ageRange
+				? ` for students aged ${ageRange}. Pitch the topics, language, and complexity so they are appropriate and engaging for that age group.`
+				: ' for school students.';
+			const prompt = `Suggest 6 varied, engaging lesson topic ideas${audienceBlock} Each lesson will become a spelling/vocabulary lesson, so favour topics rich in interesting words. For each idea, give a short, catchy "title" suitable to use directly as the lesson title, and a one-sentence "description" of what the lesson would cover. Make the ideas span a range of subjects (science, history, nature, everyday life, etc.) rather than clustering around one theme.`;
+
+			try {
+				const aiResponse = await generateContentWithFallback({
+					contents: prompt,
+					config: {
+						responseMimeType: 'application/json',
+						responseSchema: LESSON_IDEA_SCHEMA,
+					},
+				});
+
+				const parsed = JSON.parse(aiResponse.text);
+				const ideas = Array.isArray(parsed.ideas) ? parsed.ideas.slice(0, 12) : [];
+				return new Response(JSON.stringify({ ideas }), { status: 200, headers: okHeaders() });
+			} catch (err) {
+				return new Response('Upstream AI error', { status: 502, headers: cors });
+			}
 		}
 
 		// Include the overall lesson title (when we have one) so the model can

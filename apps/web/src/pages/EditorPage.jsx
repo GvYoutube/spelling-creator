@@ -24,6 +24,9 @@ import Chip from "@mui/material/Chip";
 import Backdrop from "@mui/material/Backdrop";
 import Menu from "@mui/material/Menu";
 import MenuItem from "@mui/material/MenuItem";
+import Select from "@mui/material/Select";
+import FormControl from "@mui/material/FormControl";
+import InputLabel from "@mui/material/InputLabel";
 import ListItemIcon from "@mui/material/ListItemIcon";
 import ListItemText from "@mui/material/ListItemText";
 import Divider from "@mui/material/Divider";
@@ -44,6 +47,7 @@ import GroupsIcon from "@mui/icons-material/Groups";
 import IosShareIcon from "@mui/icons-material/IosShare";
 import ArrowDropDownIcon from "@mui/icons-material/ArrowDropDown";
 import HelpOutlineIcon from "@mui/icons-material/HelpOutline";
+import AutoAwesomeIcon from "@mui/icons-material/AutoAwesome";
 import GitHubIcon from "@mui/icons-material/GitHub";
 import UploadFileIcon from "@mui/icons-material/UploadFile";
 import WarningAmberIcon from "@mui/icons-material/WarningAmber";
@@ -53,6 +57,8 @@ import NavActions from "../components/NavActions.jsx";
 import CollaborateDialog from "../components/CollaborateDialog.jsx";
 import CollabCursors from "../components/CollabCursors.jsx";
 import FirstLessonWizard from "../components/FirstLessonWizard.jsx";
+import AiLessonIdeaDialog from "../components/AiLessonIdeaDialog.jsx";
+import { AGE_RANGES } from "../lib/ageRanges.js";
 import { newId } from "../lib/id.js";
 import { extractCapitalizedWords } from "../lib/spelling.js";
 import {
@@ -100,6 +106,7 @@ export default function EditorPage() {
   useDocumentMeta();
   const [doc, setDoc] = useState(createInitialDoc);
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [ideaDialogOpen, setIdeaDialogOpen] = useState(false);
   const [newSectionName, setNewSectionName] = useState("");
   const [busy, setBusy] = useState(null); // 'docx' | 'pdf' | 'gdocs' | 'preview' | 'publish' | 'import' | null
   const [toast, setToast] = useState(null); // { severity, message }
@@ -338,6 +345,11 @@ export default function EditorPage() {
   }, []);
 
   const setTitle = (title) => setDoc((d) => ({ ...d, title }));
+
+  // The age range the lesson is pitched at. Lives on the doc (so it persists
+  // with the draft and travels with the lesson when published) and feeds the
+  // AI lesson-idea suggester.
+  const setAgeRange = (ageRange) => setDoc((d) => ({ ...d, ageRange }));
 
   // The per-document list of trusted collaborators. It lives on the doc itself
   // (not account-wide), so it persists with the draft and travels with the
@@ -963,6 +975,43 @@ export default function EditorPage() {
               htmlInput: { "data-collab-field": "doc:title" },
             }}
           />
+          <Stack
+            direction="row"
+            spacing={1.5}
+            alignItems="center"
+            flexWrap="wrap"
+            useFlexGap
+            sx={{ mt: 1.5 }}
+          >
+            <FormControl size="small" sx={{ minWidth: 160 }}>
+              <InputLabel id="age-range-label">Age range</InputLabel>
+              <Select
+                labelId="age-range-label"
+                label="Age range"
+                value={doc.ageRange || ""}
+                onChange={(e) => setAgeRange(e.target.value)}
+              >
+                <MenuItem value="">
+                  <em>Any age</em>
+                </MenuItem>
+                {AGE_RANGES.map((range) => (
+                  <MenuItem key={range} value={range}>
+                    {range}
+                  </MenuItem>
+                ))}
+              </Select>
+            </FormControl>
+            <Tooltip title="Get AI lesson ideas tailored to this age range">
+              <Button
+                size="small"
+                variant="outlined"
+                startIcon={<AutoAwesomeIcon />}
+                onClick={() => setIdeaDialogOpen(true)}
+              >
+                Suggest ideas
+              </Button>
+            </Tooltip>
+          </Stack>
           <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
             {sectionCount} section{sectionCount === 1 ? "" : "s"} · {blockCount}{" "}
             content block
@@ -1251,6 +1300,13 @@ export default function EditorPage() {
       </Dialog>
 
       <FirstLessonWizard open={wizardOpen} onClose={closeWizard} />
+
+      <AiLessonIdeaDialog
+        open={ideaDialogOpen}
+        ageRange={doc.ageRange || ""}
+        onSelect={setTitle}
+        onClose={() => setIdeaDialogOpen(false)}
+      />
 
       <CollaborateDialog
         open={collabOpen}
