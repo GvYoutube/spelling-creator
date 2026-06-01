@@ -109,33 +109,17 @@ export function useJsonLd(data) {
   }, [json]);
 }
 
-/**
- * Build schema.org `Course` JSON-LD for a single lesson, following Google's
- * Course structured-data guidelines:
- * https://developers.google.com/search/docs/appearance/structured-data/course
- *
- * `name` and `description` are required; `provider` is recommended. The lessons
- * are free, so we also advertise a zero-price Offer and isAccessibleForFree —
- * accurate, and it improves eligibility for the richer "Course info" result.
- * Promotional text, pricing, and discounts are kept out of the title/description
- * per Google's content guidelines.
- *
- * @param {object}  opts
- * @param {object}  opts.lesson       Lesson summary/doc ({ title, author, createdAt }).
- * @param {string} [opts.description] Plain-text course summary (1–500 chars).
- * @param {string}  opts.url          Canonical URL of this lesson's page.
- * @param {string}  opts.origin       Site origin, used as the provider URL.
- * @returns {object|null}
- */
-export function buildLessonCourseSchema({ lesson, description, url, origin }) {
-  if (!lesson) return null;
+// Build the bare schema.org `Course` object (no top-level @context, so it can
+// either stand alone or be embedded inside an ItemList). `name`, `description`,
+// and `provider` are the properties Google's Course list feature requires; the
+// lessons are free, so we also advertise a zero-price Offer and
+// isAccessibleForFree (accurate). Promotional text, pricing, and discounts are
+// kept out of the name/description per Google's content guidelines.
+function courseObject({ lesson, description, url, origin }) {
   const course = {
-    "@context": "https://schema.org",
     "@type": "Course",
     name: lesson.title || "Untitled Lesson",
-    description:
-      description ||
-      `A spelling lesson${lesson.author ? ` by ${lesson.author}` : ""}.`,
+    description: description || summaryDescription(lesson),
     inLanguage: "en",
     isAccessibleForFree: true,
     provider: {
@@ -162,27 +146,68 @@ export function buildLessonCourseSchema({ lesson, description, url, origin }) {
   return course;
 }
 
+// Fallback Course description from a lesson summary (which carries no body
+// text), used on the hub carousel where the full rendered text isn't available.
+function summaryDescription(lesson) {
+  const sections =
+    typeof lesson.sectionCount === "number"
+      ? ` with ${lesson.sectionCount} section${lesson.sectionCount === 1 ? "" : "s"}`
+      : "";
+  return `A printable spelling lesson${sections} to practise and learn.`;
+}
+
 /**
- * Build a schema.org `ItemList` carousel of lessons for a summary page (the
- * hub), per Google's "summary page + detail pages" list format: each ListItem
- * carries only its position and the canonical URL of a lesson page, where the
- * full Course markup lives (see buildLessonCourseSchema). Google needs at least
- * three items to render a carousel, but emitting fewer is harmless.
+ * Build standalone schema.org `Course` JSON-LD for a single lesson's page.
+ *
+ * NOTE: a lone Course corresponds to Google's "Course info" rich result, which
+ * Google retired in September 2025 — so this no longer produces a visual rich
+ * result on its own. It's kept because it's valid, accurate semantic data that
+ * helps Google understand the page, and it's the per-lesson detail markup the
+ * hub's Course-list carousel (see buildLessonListSchema) points at. The carousel
+ * on the hub is the markup that actually still renders as a rich result.
+ *
+ * @param {object}  opts
+ * @param {object}  opts.lesson       Lesson summary/doc ({ title, author, createdAt }).
+ * @param {string} [opts.description] Plain-text course summary (1–500 chars).
+ * @param {string}  opts.url          Canonical URL of this lesson's page.
+ * @param {string}  opts.origin       Site origin, used as the provider URL.
+ * @returns {object|null}
+ */
+export function buildLessonCourseSchema(opts) {
+  if (!opts.lesson) return null;
+  return { "@context": "https://schema.org", ...courseObject(opts) };
+}
+
+/**
+ * Build a schema.org `ItemList` of Courses for the hub — Google's Course list
+ * (carousel) rich result, which (unlike the deprecated Course info) is still
+ * supported: https://developers.google.com/search/docs/appearance/structured-data/course
+ *
+ * Each ListItem embeds a FULL named Course (name + description + provider), as
+ * the carousel requires — a URL-only list is rejected as "unnamed items".
+ * Google needs at least three courses to render the carousel, so this returns
+ * null below that threshold rather than emit markup that can never qualify.
  *
  * @param {object}        opts
- * @param {Array<{id}>}   opts.lessons  Published lesson summaries, in display order.
- * @param {string}        opts.origin   Site origin, used to build each lesson URL.
+ * @param {Array<object>} opts.lessons  Published lesson summaries, in display order.
+ * @param {string}        opts.origin   Site origin, for provider + per-lesson URLs.
  * @returns {object|null}
  */
 export function buildLessonListSchema({ lessons, origin }) {
-  if (!Array.isArray(lessons) || lessons.length === 0) return null;
+  // Below Google's three-course minimum the carousel can't appear, so emit
+  // nothing rather than markup that will never qualify.
+  if (!Array.isArray(lessons) || lessons.length < 3) return null;
   return {
     "@context": "https://schema.org",
     "@type": "ItemList",
     itemListElement: lessons.map((lesson, i) => ({
       "@type": "ListItem",
       position: i + 1,
-      url: `${origin}/hub/${lesson.id}`,
+      item: courseObject({
+        lesson,
+        url: `${origin}/hub/${lesson.id}`,
+        origin,
+      }),
     })),
   };
 }

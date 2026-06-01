@@ -108,11 +108,12 @@ export default function HubPage() {
   const visibleLessons = searchResults ?? lessons;
   const searching = searchResults !== null;
 
-  // schema.org ItemList of the published lessons, each linking to its own page
-  // where the full Course markup lives — Google's summary-page list format. We
-  // always list the full published set (not the filtered search view) so the
-  // structured data describes the hub, not a transient query. Captured for
-  // crawlers via the Worker's prerendered snapshot.
+  // schema.org Course-list carousel for the published lessons — the still-
+  // supported Course rich result (the per-lesson "Course info" markup was
+  // retired by Google in Sept 2025). Each entry embeds a full named Course, as
+  // the carousel requires. We always describe the full published set (not the
+  // transient search view), and the builder emits nothing below Google's three-
+  // course minimum. Captured for crawlers via the Worker's prerendered snapshot.
   useJsonLd(buildLessonListSchema({ lessons, origin: window.location.origin }));
 
   // Delete-confirmation dialog. `deleting` holds the lesson summary being
