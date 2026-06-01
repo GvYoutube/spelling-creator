@@ -42,7 +42,7 @@ import { sendLink } from "../lib/notifications.js";
 function inviteLink(code) {
   // HashRouter: the app route lives after `#`. Editor is at "/".
   const base = `${window.location.origin}${window.location.pathname}`;
-  return `${base}#/?join=${encodeURIComponent(code)}`;
+  return `${base}/?join=${encodeURIComponent(code)}`;
 }
 
 function initials(entry) {

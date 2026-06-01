@@ -42,11 +42,11 @@ PDF printing.
 The app is a single-page app with three client-side routes (hash-based, so deep
 links work on any static host without server rewrites):
 
-| Route      | Page           | What it does                                                                                               |
-| ---------- | -------------- | ---------------------------------------------------------------------------------------------------------- |
-| `/`        | **Editor**     | The lesson builder (the original app). The "Save to cloud" dropdown (publish or save as draft) lives here. |
-| `/#/hub`   | **Lesson hub** | Public gallery of published lessons (plus your own drafts); click one to preview it.                       |
-| `/#/login` | **Sign in**    | Magic-link sign-in / account status.                                                                       |
+| Route    | Page           | What it does                                                                                               |
+| -------- | -------------- | ---------------------------------------------------------------------------------------------------------- |
+| `/`      | **Editor**     | The lesson builder (the original app). The "Save to cloud" dropdown (publish or save as draft) lives here. |
+| `/hub`   | **Lesson hub** | Public gallery of published lessons (plus your own drafts); click one to preview it.                       |
+| `/login` | **Sign in**    | Magic-link sign-in / account status.                                                                       |
 
 Every page's header carries a shared nav (a **Lesson hub** link and an account
 control that shows **Sign in** or the signed-in account menu). Routing is set up
@@ -180,7 +180,7 @@ the document; everyone else is a _guest_.
 
 1. The host clicks **Start a collaboration session** and gets a short **session
    code** (their PeerJS peer id) plus a one-click **invite link**
-   (`/#/?join=<code>`, which deep-links a recipient straight to the join screen).
+   (`/?join=<code>`, which deep-links a recipient straight to the join screen).
 2. A guest pastes the code (or opens the invite link) and connects. Connecting
    does **not** yet make them a collaborator.
 3. The guest appears in the host's **Waiting to join** list. The host clicks
@@ -207,7 +207,7 @@ is shipped whole on each change rather than as a CRDT diff.
 
 ## Lesson hub & accounts
 
-The **Lesson hub** (`/#/hub`) is a public gallery of lessons users have shared.
+The **Lesson hub** (`/hub`) is a public gallery of lessons users have shared.
 Anyone can browse and preview; saving to the cloud **and commenting** require a
 signed-in account. The editor's **Save to cloud** button is a dropdown with two
 choices: **Publish to hub** (shared publicly) or **Save as draft** (backed up to
@@ -228,7 +228,7 @@ All lesson reads/writes go through the companion `spelling-creator-cf` Worker,
 which holds the privileged Supabase credentials server-side. The only thing the
 browser does directly with Supabase is **authentication**.
 
-**How sign-in works.** The login page (`/#/login`) uses
+**How sign-in works.** The login page (`/login`) uses
 [Supabase Auth](https://supabase.com/docs/guides/auth) magic links: enter an
 email, receive a one-time link, and the Supabase JS client (in `src/lib/supabase.js`)
 exchanges the callback for a session. We use the **PKCE** flow so the callback
