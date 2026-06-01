@@ -44,6 +44,8 @@ import IosShareIcon from "@mui/icons-material/IosShare";
 import ArrowDropDownIcon from "@mui/icons-material/ArrowDropDown";
 import HelpOutlineIcon from "@mui/icons-material/HelpOutline";
 import GitHubIcon from "@mui/icons-material/GitHub";
+import UploadFileIcon from "@mui/icons-material/UploadFile";
+import WarningAmberIcon from "@mui/icons-material/WarningAmber";
 import Badge from "@mui/material/Badge";
 import SectionCard from "../components/SectionCard.jsx";
 import NavActions from "../components/NavActions.jsx";
@@ -63,6 +65,7 @@ import {
   saveWizardSeen,
 } from "../lib/storage.js";
 import { exportDocx } from "../lib/docxExport.js";
+import { importDocxFile } from "../lib/docxImport.js";
 import { exportPdf } from "../lib/pdfExport.js";
 import { previewHtml, PREVIEW_STYLES } from "../lib/htmlPreview.js";
 import { saveToGoogleDrive, googleDriveEnabled } from "../lib/googleDrive.js";
@@ -96,12 +99,19 @@ export default function EditorPage() {
   const [doc, setDoc] = useState(createInitialDoc);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [newSectionName, setNewSectionName] = useState("");
-  const [busy, setBusy] = useState(null); // 'docx' | 'pdf' | 'gdocs' | 'preview' | 'publish' | null
+  const [busy, setBusy] = useState(null); // 'docx' | 'pdf' | 'gdocs' | 'preview' | 'publish' | 'import' | null
   const [toast, setToast] = useState(null); // { severity, message }
   const [previewContent, setPreviewContent] = useState(null); // HTML string | null
   const [exportAnchor, setExportAnchor] = useState(null); // export dropdown anchor el | null
   const [cloudAnchor, setCloudAnchor] = useState(null); // "Save to cloud" dropdown anchor el | null
   const [mobileMenuAnchor, setMobileMenuAnchor] = useState(null); // overflow menu anchor on small screens | null
+  // Word-import flow. `importWarnOpen` shows the "import is best-effort" warning
+  // before the file picker; `importError` holds the reason a chosen file was
+  // rejected (shown in a dialog — the editor is left untouched). The hidden
+  // file input is triggered programmatically from the warning dialog.
+  const [importWarnOpen, setImportWarnOpen] = useState(false);
+  const [importError, setImportError] = useState(null);
+  const importInputRef = useRef(null);
 
   // Hub-editing state. `editingId` is the id of a published lesson currently
   // loaded for editing (so "Publish" becomes "Update"); null when authoring a
@@ -220,6 +230,21 @@ export default function EditorPage() {
   // fresh, unattached draft (editingId stays null) titled "… (copy)", so
   // publishing creates a separate lesson and the original is left untouched.
   const applyEdit = ({ id, doc: nextDoc, mode, published }) => {
+    if (mode === "import") {
+      // An imported Word doc loads as a fresh, unattached lesson (like a fork,
+      // but keeping the document's own title): saving it later creates a new
+      // cloud lesson rather than overwriting anything.
+      setDoc(nextDoc);
+      setEditingId(null);
+      setEditingPublished(true);
+      setPendingEdit(null);
+      setToast({
+        severity: "info",
+        message:
+          "Imported from Word. Word import is best-effort — review the lesson, as some formatting or content may have been lost.",
+      });
+      return;
+    }
     if (mode === "fork") {
       setDoc({
         ...nextDoc,
@@ -503,6 +528,42 @@ export default function EditorPage() {
     });
   };
 
+  // Word import. We warn first (the conversion is lossy and can fail), then open
+  // the file picker; the chosen file is parsed and validated by importDocxFile,
+  // which rejects documents that aren't structured as a lesson — those are
+  // refused with an explanatory dialog and never loaded into the editor.
+  const openImportWarning = () => {
+    setImportWarnOpen(true);
+  };
+
+  const triggerImportPicker = () => {
+    setImportWarnOpen(false);
+    importInputRef.current?.click();
+  };
+
+  const handleImportFile = async (e) => {
+    const file = e.target.files?.[0];
+    // Reset the input so picking the same file again still fires onChange.
+    e.target.value = "";
+    if (!file) return;
+    setBusy("import");
+    try {
+      const imported = await importDocxFile(file);
+      // Reuse the overwrite-confirmation flow when there's in-progress work to
+      // lose; otherwise load straight away.
+      const incoming = { doc: imported, title: imported.title, mode: "import" };
+      if (docHasContent(doc)) setPendingEdit(incoming);
+      else applyEdit(incoming);
+    } catch (err) {
+      setImportError(
+        err?.message ||
+          "This Word document couldn't be imported. Please check it and try again.",
+      );
+    } finally {
+      setBusy(null);
+    }
+  };
+
   const sectionCount = doc.sections.length;
   const blockCount = useMemo(
     () => doc.sections.reduce((sum, s) => sum + s.blocks.length, 0),
@@ -546,6 +607,17 @@ export default function EditorPage() {
             anchorOrigin={{ vertical: "bottom", horizontal: "right" }}
             transformOrigin={{ vertical: "top", horizontal: "right" }}
           >
+            <MenuItem
+              onClick={() => {
+                setAnchorEl(null);
+                openImportWarning();
+              }}
+              disabled={busy !== null}
+            >
+              <UploadFileIcon sx={{ mr: 1, fontSize: 20 }} />
+              Import Word document
+            </MenuItem>
+            <Divider />
             <MenuItem
               onClick={() => {
                 setAnchorEl(null);
@@ -613,6 +685,18 @@ export default function EditorPage() {
                       <VisibilityIcon fontSize="small" />
                     </ListItemIcon>
                     <ListItemText>Preview</ListItemText>
+                  </MenuItem>
+                  <MenuItem
+                    onClick={() => {
+                      closeMobileMenu();
+                      openImportWarning();
+                    }}
+                    disabled={busy !== null}
+                  >
+                    <ListItemIcon>
+                      <UploadFileIcon fontSize="small" />
+                    </ListItemIcon>
+                    <ListItemText>Import Word document</ListItemText>
                   </MenuItem>
                   <Divider />
                   <MenuItem
@@ -957,13 +1041,27 @@ export default function EditorPage() {
               Tap the <strong>+</strong> button to create your first lesson
               section.
             </Typography>
-            <Button
-              variant="contained"
-              startIcon={<AddIcon />}
-              onClick={openAddDialog}
+            <Stack
+              direction={{ xs: "column", sm: "row" }}
+              spacing={1.5}
+              justifyContent="center"
             >
-              Add section
-            </Button>
+              <Button
+                variant="contained"
+                startIcon={<AddIcon />}
+                onClick={openAddDialog}
+              >
+                Add section
+              </Button>
+              <Button
+                variant="outlined"
+                startIcon={<UploadFileIcon />}
+                onClick={openImportWarning}
+                disabled={busy !== null}
+              >
+                Import Word document
+              </Button>
+            </Stack>
           </Paper>
         )}
       </Container>
@@ -1046,9 +1144,13 @@ export default function EditorPage() {
         <DialogTitle>Replace your current work?</DialogTitle>
         <DialogContent>
           <Typography variant="body2">
-            {pendingEdit?.mode === "fork" ? "Forking" : "Opening"}{" "}
+            {pendingEdit?.mode === "fork"
+              ? "Forking "
+              : pendingEdit?.mode === "import"
+                ? "Importing "
+                : "Opening "}
             <strong>{pendingEdit?.title || "this lesson"}</strong>
-            {pendingEdit?.mode === "fork" ? "" : " for editing"} will replace
+            {pendingEdit?.mode === "edit" ? " for editing" : ""} will replace
             the lesson you’re working on now. Your in-progress work is
             auto-saved in this browser, and replacing it can’t be undone.
           </Typography>
@@ -1062,7 +1164,86 @@ export default function EditorPage() {
           >
             {pendingEdit?.mode === "fork"
               ? "Replace and fork"
-              : "Replace and edit"}
+              : pendingEdit?.mode === "import"
+                ? "Replace and import"
+                : "Replace and edit"}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Hidden picker for Word import, triggered from the warning dialog. */}
+      <input
+        ref={importInputRef}
+        type="file"
+        accept=".docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+        hidden
+        onChange={handleImportFile}
+      />
+
+      {/* Warn before importing: the docx → lesson conversion is best-effort. */}
+      <Dialog
+        open={importWarnOpen}
+        onClose={() => setImportWarnOpen(false)}
+        fullWidth
+        maxWidth="xs"
+      >
+        <DialogTitle>Import a Word document</DialogTitle>
+        <DialogContent>
+          <Typography variant="body2" gutterBottom>
+            Importing a <strong>.docx</strong> file is{" "}
+            <strong>best-effort and lossy</strong>. It works best with documents
+            exported from this app; files written elsewhere may import poorly or
+            not at all.
+          </Typography>
+          <Typography variant="body2" gutterBottom>
+            For the import to work, the document must use{" "}
+            <strong>Heading 2</strong> styles for its section headings. Images,
+            colours, and exact formatting may be lost, and answer lines for
+            open-ended questions reset to the default.
+          </Typography>
+          <Typography variant="body2">
+            If the document isn’t structured as a lesson, it won’t be opened.
+            Your current work is replaced only after you confirm.
+          </Typography>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setImportWarnOpen(false)}>Cancel</Button>
+          <Button
+            variant="contained"
+            startIcon={<UploadFileIcon />}
+            onClick={triggerImportPicker}
+          >
+            Choose file
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Refusal: a readable file that isn't structured as a lesson. The editor
+          is left untouched; we just explain why it couldn't be opened. */}
+      <Dialog
+        open={Boolean(importError)}
+        onClose={() => setImportError(null)}
+        fullWidth
+        maxWidth="xs"
+      >
+        <DialogTitle sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+          <WarningAmberIcon color="warning" />
+          Couldn’t import this document
+        </DialogTitle>
+        <DialogContent>
+          <Typography variant="body2">{importError}</Typography>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setImportError(null)}>Close</Button>
+          <Button
+            variant="contained"
+            startIcon={<UploadFileIcon />}
+            onClick={() => {
+              setImportError(null);
+              importInputRef.current?.click();
+            }}
+          >
+            Try another file
           </Button>
         </DialogActions>
       </Dialog>
