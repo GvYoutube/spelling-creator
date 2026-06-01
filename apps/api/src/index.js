@@ -28,7 +28,14 @@ async function generateContentWithFallback(request) {
 // its word list into a regex) and reused across requests. `checkProfanity(text)`
 // returns { containsProfanity, profaneWords }; we reject a comment outright when
 // containsProfanity is true rather than censoring individual words.
-const profanityFilter = new Filter();
+const profanityFilter = new Filter({
+	languages: ['english', 'spanish', 'hindi'], // three most spoken languages
+	detectLeetspeak: true,
+	leetspeakLevel: 'moderate',
+	normalizeUnicode: true,
+	cacheResults: true,
+	maxCacheSize: 1000,
+});
 
 const TURNSTILE_SITEVERIFY_URL = 'https://challenges.cloudflare.com/turnstile/v0/siteverify';
 
