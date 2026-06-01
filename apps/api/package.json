@@ -10,9 +10,10 @@
 	},
 	"devDependencies": {
 		"@cloudflare/vitest-pool-workers": "^0.12.4",
-		"wrangler": "^3.101.0"
+		"wrangler": "^4.95.0"
 	},
 	"dependencies": {
+		"@cloudflare/puppeteer": "^1.1.0",
 		"@google/genai": "^2.6.0",
 		"glin-profanity": "^3.3.0"
 	}

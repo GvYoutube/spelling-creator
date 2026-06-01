@@ -49,6 +49,7 @@ import {
   FORK_REQUEST_KEY,
 } from "../lib/lessons.js";
 import { useAuth } from "../lib/auth.jsx";
+import { useDocumentMeta, htmlToDescription } from "../lib/seo.js";
 import { previewHtml, PREVIEW_STYLES } from "../lib/htmlPreview.js";
 import { exportDocx } from "../lib/docxExport.js";
 import { exportPdf } from "../lib/pdfExport.js";
@@ -191,6 +192,20 @@ export default function LessonPage() {
 
   const isAuthor =
     Boolean(user) && lesson?.authorId && lesson.authorId === user.id;
+
+  // Per-page title + social/SEO tags. Crawlers receive these in the Worker's
+  // prerendered snapshot; the description is drawn from the lesson's own text.
+  useDocumentMeta({
+    type: "article",
+    title:
+      lesson?.title ||
+      (loading ? "Lesson" : error ? "Lesson not found" : "Lesson"),
+    description:
+      htmlToDescription(html) ||
+      (lesson
+        ? `A spelling lesson${lesson.author ? ` by ${lesson.author}` : ""}.`
+        : undefined),
+  });
 
   return (
     <Box sx={{ minHeight: "100vh", pb: 8 }}>

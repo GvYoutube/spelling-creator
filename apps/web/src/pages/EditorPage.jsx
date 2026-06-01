@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
+import { useDocumentMeta } from "../lib/seo.js";
 import AppBar from "@mui/material/AppBar";
 import Toolbar from "@mui/material/Toolbar";
 import Typography from "@mui/material/Typography";
@@ -96,6 +97,7 @@ function docHasContent(d) {
 const inheritBorder = { borderColor: "rgba(255,255,255,0.6)" };
 
 export default function EditorPage() {
+  useDocumentMeta();
   const [doc, setDoc] = useState(createInitialDoc);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [newSectionName, setNewSectionName] = useState("");

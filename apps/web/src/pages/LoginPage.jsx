@@ -27,10 +27,12 @@ import EditIcon from "@mui/icons-material/Edit";
 import MarkEmailReadIcon from "@mui/icons-material/MarkEmailRead";
 import NavActions from "../components/NavActions.jsx";
 import { useAuth } from "../lib/auth.jsx";
+import { useDocumentMeta } from "../lib/seo.js";
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 export default function LoginPage() {
+  useDocumentMeta({ title: "Sign in" });
   const { enabled, user, loading, signInWithMagicLink, signOut } = useAuth();
   const navigate = useNavigate();
   const theme = useTheme();

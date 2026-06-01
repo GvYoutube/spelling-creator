@@ -48,6 +48,7 @@ import {
 } from "../lib/lessons.js";
 import { buildLessonIndex, searchLessons } from "../lib/lessonSearch.js";
 import { useAuth } from "../lib/auth.jsx";
+import { useDocumentMeta } from "../lib/seo.js";
 
 function formatDate(value) {
   if (!value) return "";
@@ -61,6 +62,11 @@ function formatDate(value) {
 }
 
 export default function HubPage() {
+  useDocumentMeta({
+    title: "Lesson hub",
+    description:
+      "Browse and copy community-made spelling lessons, then print or export them.",
+  });
   const { user, accessToken } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();

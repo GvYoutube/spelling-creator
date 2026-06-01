@@ -3,6 +3,9 @@
 	"name": "spelling-creator",
 	"main": "src/index.js",
 	"compatibility_date": "2026-05-28",
+	// @cloudflare/puppeteer (used for crawler prerendering) needs the Node.js
+	// compatibility runtime.
+	"compatibility_flags": ["nodejs_compat"],
 	"observability": {
 		"enabled": true,
 	},
@@ -10,6 +13,23 @@
 	"vars": {
 		"ALLOWED_HOSTNAMES": "spellingcreator.org",
 		"SUPABASE_URL": "https://hfkgrqihawgosalltjpy.supabase.co",
+	},
+
+	// Serve the built web SPA as static assets. The Worker runs first on every
+	// request (run_worker_first) so it can intercept crawler navigations and
+	// return a prerendered snapshot; everything else falls through to env.ASSETS.
+	// not_found_handling serves index.html for client-side (BrowserRouter) routes.
+	"assets": {
+		"directory": "../web/dist",
+		"binding": "ASSETS",
+		"not_found_handling": "single-page-application",
+		"run_worker_first": true,
+	},
+
+	// Browser Rendering binding — headless Chromium used to prerender pages for
+	// crawlers/social scrapers via @cloudflare/puppeteer.
+	"browser": {
+		"binding": "BROWSER",
 	},
 
 	"kv_namespaces": [

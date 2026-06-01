@@ -1,24 +1,26 @@
 import React from "react";
 import ReactDOM from "react-dom/client";
-import { HashRouter } from "react-router-dom";
+import { BrowserRouter } from "react-router-dom";
 import CssBaseline from "@mui/material/CssBaseline";
 import { ThemeProvider } from "@mui/material/styles";
 import App from "./App.jsx";
 import theme from "./theme.js";
 import { AuthProvider } from "./lib/auth.jsx";
 
-// HashRouter keeps deep links (e.g. /#/hub) working on any static host without
-// needing server-side SPA rewrites. AuthProvider exposes the Supabase session
-// to every page.
+// BrowserRouter gives every page a real path (e.g. /hub/:id) so the Worker can
+// see which page a crawler requested and return a prerendered snapshot. The
+// Worker serves index.html for unknown paths (assets single-page-application
+// fallback), so client-side deep links resolve. AuthProvider exposes the
+// Supabase session to every page.
 ReactDOM.createRoot(document.getElementById("root")).render(
   <React.StrictMode>
     <ThemeProvider theme={theme}>
       <CssBaseline />
-      <HashRouter>
+      <BrowserRouter>
         <AuthProvider>
           <App />
         </AuthProvider>
-      </HashRouter>
+      </BrowserRouter>
     </ThemeProvider>
   </React.StrictMode>,
 );

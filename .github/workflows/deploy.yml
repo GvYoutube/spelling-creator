@@ -1,9 +1,13 @@
-name: Deploy to GitHub Pages
+name: Deploy to Cloudflare
 
+# The Worker now hosts the SPA: it serves the built web app as static assets and
+# prerenders pages for crawlers with Browser Rendering. So a deploy builds the
+# web app, then `wrangler deploy` uploads the Worker together with apps/web/dist.
 on:
   push:
     paths:
       - "apps/web/**"
+      - "apps/api/**"
       - "pnpm-lock.yaml"
       - "pnpm-workspace.yaml"
       - ".github/workflows/deploy.yml"
@@ -11,21 +15,14 @@ on:
       - master
   workflow_dispatch:
 
-permissions:
-  contents: read
-  pages: write
-  id-token: write
-
+# Don't run two deploys against the Worker at once.
 concurrency:
-  group: "pages"
+  group: "deploy-cloudflare"
   cancel-in-progress: true
 
 jobs:
   build-and-deploy:
     runs-on: ubuntu-latest
-
-    environment:
-      name: github-pages
 
     env:
       CI: true
@@ -57,6 +54,7 @@ jobs:
           test -n "${{ secrets.VITE_SUPABASE_ANON_KEY }}" && echo "supabase anon key ok"
           test -n "${{ secrets.VITE_METERED_USER }}" && echo "metered username ok"
           test -n "${{ secrets.VITE_METERED_PASS }}" && echo "metered password ok"
+          test -n "${{ secrets.CLOUDFLARE_API_TOKEN }}" && echo "cloudflare token ok"
 
       - name: Inject env vars
         run: |
@@ -71,17 +69,14 @@ jobs:
       - name: Lint
         run: pnpm lint
 
-      - name: Build
+      - name: Build web app
         run: pnpm --filter @spelling-creator/web build
 
-      - name: Setup GitHub Pages
-        uses: actions/configure-pages@v5
-
-      - name: Upload dist artifact
-        uses: actions/upload-pages-artifact@v3
+      # Deploys the Worker (apps/api) which bundles apps/web/dist as static
+      # assets via the `assets` config in wrangler.jsonc.
+      - name: Deploy Worker
+        uses: cloudflare/wrangler-action@v3
         with:
-          path: apps/web/dist
-
-      - name: Deploy to GitHub Pages
-        id: deployment
-        uses: actions/deploy-pages@v4
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          workingDirectory: apps/api
+          packageManager: pnpm
