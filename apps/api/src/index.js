@@ -8,7 +8,7 @@ const ai = new GoogleGenAI({ apiKey: GEMINI_API_KEY });
 
 // Models to try, newest first. If a model is unavailable or errors (e.g. not yet
 // rolled out to this key), we fall back to the next one in order.
-const GEMINI_MODELS = ['gemini-2.5-pro', 'gemini-3.5-flash', 'gemini-3-flash', 'gemini-2.5-flash'];
+const GEMINI_MODELS = ['gemini-3.5-flash', 'gemini-3-flash', 'gemini-2.5-flash'];
 
 // Run generateContent against GEMINI_MODELS in order, returning the first success.
 // Throws the last error only if every model fails.
