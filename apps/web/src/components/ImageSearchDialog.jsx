@@ -16,6 +16,7 @@ import Typography from "@mui/material/Typography";
 import CircularProgress from "@mui/material/CircularProgress";
 import SearchIcon from "@mui/icons-material/Search";
 import { searchPixabayImages, fetchPixabayImage } from "../lib/pixabay.js";
+import { decodeDataUrl, storeImageBytes } from "../lib/imageRef.js";
 import { TURNSTILE_SITE_KEY, whenTurnstileReady } from "../lib/turnstile.js";
 
 /**
@@ -123,8 +124,10 @@ export default function ImageSearchDialog({ open, onInsert, onClose }) {
     setError("");
     try {
       const dataUrl = await fetchPixabayImage(hit.webformatURL, token);
+      const { bytes, mime } = decodeDataUrl(dataUrl);
+      const image = await storeImageBytes(bytes, mime);
       onInsert({
-        src: dataUrl,
+        image,
         width: hit.webformatWidth,
         height: hit.webformatHeight,
         // Pre-fill the caption with attribution (appreciated by Pixabay).

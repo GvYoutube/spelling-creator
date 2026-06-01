@@ -14,6 +14,7 @@ import mammoth from "mammoth";
 import { newId } from "./id.js";
 import { QUESTION_TYPES } from "./questions.js";
 import { DEFAULT_IMAGE_SIZE, DEFAULT_IMAGE_ALIGN } from "./image.js";
+import { convertDocImages, resolveImageSrc } from "./imageRef.js";
 
 // Thrown when a document is readable but not structured as a lesson. EditorPage
 // surfaces the message to the user and refuses to load it (the "refuse to open"
@@ -64,8 +65,10 @@ export async function importDocxFile(file) {
 
   const doc = parseHtmlToDoc(html, file.name);
   validateImportedDoc(doc);
+  // Measure while the images still carry their base64 `src`, then convert each
+  // to a binary blob + hash ref so the imported lesson matches the new model.
   await measureImages(doc);
-  return doc;
+  return convertDocImages(doc);
 }
 
 // Walk mammoth's HTML and rebuild the lesson. We iterate the body's block-level
@@ -368,7 +371,7 @@ function validateImportedDoc(doc) {
 
 function blockHasContent(block) {
   if (block.type === "text") return Boolean(block.text.trim());
-  if (block.type === "image") return Boolean(block.src);
+  if (block.type === "image") return Boolean(block.image || block.src);
   if (block.type === "question") return Boolean(block.prompt);
   if (block.type === "spelling") {
     return (block.words || []).some((w) => w.text.trim());
@@ -382,19 +385,27 @@ function blockHasContent(block) {
 async function measureImages(doc) {
   const images = doc.sections
     .flatMap((s) => s.blocks)
-    .filter((b) => b.type === "image" && b.src);
+    .filter((b) => b.type === "image" && (b.image || b.src));
   await Promise.all(
     images.map(
       (block) =>
         new Promise((resolve) => {
-          const img = new Image();
-          img.onload = () => {
-            block.width = img.naturalWidth;
-            block.height = img.naturalHeight;
-            resolve();
-          };
-          img.onerror = () => resolve();
-          img.src = block.src;
+          resolveImageSrc(block)
+            .then(({ url, revoke }) => {
+              const img = new Image();
+              img.onload = () => {
+                block.width = img.naturalWidth;
+                block.height = img.naturalHeight;
+                revoke();
+                resolve();
+              };
+              img.onerror = () => {
+                revoke();
+                resolve();
+              };
+              img.src = url;
+            })
+            .catch(() => resolve());
         }),
     ),
   );

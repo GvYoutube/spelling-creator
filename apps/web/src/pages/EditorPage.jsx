@@ -70,7 +70,10 @@ import {
   saveEditingPublished,
   loadWizardSeen,
   saveWizardSeen,
+  migrateLocalStorage,
 } from "../lib/storage.js";
+import { convertDocImages } from "../lib/imageRef.js";
+import { ensureImagesUploaded } from "../lib/imagesClient.js";
 import { exportDocx } from "../lib/docxExport.js";
 import { importDocxFile } from "../lib/docxImport.js";
 import { exportPdf } from "../lib/pdfExport.js";
@@ -88,8 +91,11 @@ import { useAuth } from "../lib/auth.jsx";
 import { useCollaboration } from "../lib/collab.js";
 import { useSelectionBroadcast } from "../lib/useSelectionBroadcast.js";
 
+// The starter document a fresh editor opens with. Any persisted draft is loaded
+// asynchronously from IndexedDB on mount (see the hydration effect) and replaces
+// this once available.
 function createInitialDoc() {
-  return loadDocument() || { title: "Put your topic here...", sections: [] };
+  return { title: "Put your topic here...", sections: [] };
 }
 
 // Whether a document holds work worth protecting from being clobbered. The
@@ -130,12 +136,11 @@ export default function EditorPage() {
   // `pendingEdit` holds a fetched lesson awaiting the user's confirmation to
   // overwrite their in-progress work; `editLoading` covers the fetch of the
   // lesson to edit.
-  const [editingId, setEditingId] = useState(loadEditingId);
+  const [editingId, setEditingId] = useState(null);
   // Whether the lesson loaded for editing is published to the hub or a private
   // draft. Only meaningful when `editingId` is set; it tunes the "Save to cloud"
   // actions and the status chip. Persisted so it survives reloads.
-  const [editingPublished, setEditingPublished] =
-    useState(loadEditingPublished);
+  const [editingPublished, setEditingPublished] = useState(true);
   const [pendingEdit, setPendingEdit] = useState(null); // { id, title, doc, published } | null
   const [editLoading, setEditLoading] = useState(false);
 
@@ -174,8 +179,35 @@ export default function EditorPage() {
   // localStorage flag); dismissing it sets the flag so it won't reappear. The
   // help button reopens it on demand without touching the flag.
   const [wizardOpen, setWizardOpen] = useState(false);
+
+  // Editor state lives in IndexedDB now (async), so we hydrate it on mount
+  // rather than synchronously at useState time. `hydrated` gates the persistence
+  // effects below so they don't write the empty starter doc over a saved draft
+  // before it loads, and defers the hub edit/fork request until we know whether
+  // there's in-progress work to protect. migrateLocalStorage() first moves any
+  // pre-IndexedDB draft across (a one-time, idempotent no-op afterwards).
+  const [hydrated, setHydrated] = useState(false);
   useEffect(() => {
-    if (!loadWizardSeen()) setWizardOpen(true);
+    let cancelled = false;
+    (async () => {
+      await migrateLocalStorage();
+      const [savedDoc, savedEditingId, savedPublished, seen] =
+        await Promise.all([
+          loadDocument(),
+          loadEditingId(),
+          loadEditingPublished(),
+          loadWizardSeen(),
+        ]);
+      if (cancelled) return;
+      if (savedDoc) setDoc(savedDoc);
+      if (savedEditingId) setEditingId(savedEditingId);
+      setEditingPublished(savedPublished);
+      if (!seen) setWizardOpen(true);
+      setHydrated(true);
+    })();
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   const closeWizard = () => {
@@ -219,19 +251,19 @@ export default function EditorPage() {
   }, [editingId]);
 
   useEffect(() => {
-    saveDocument(doc);
-  }, [doc]);
+    if (hydrated) saveDocument(doc);
+  }, [doc, hydrated]);
 
   // Persist the editing-published status so it survives reloads/tab closes.
   useEffect(() => {
-    saveEditingId(editingId);
-  }, [editingId]);
+    if (hydrated) saveEditingId(editingId);
+  }, [editingId, hydrated]);
 
   // Persist whether the edited lesson is published or a draft. Clear it when no
   // lesson is attached, so a fresh document defaults back to "publish".
   useEffect(() => {
-    saveEditingPublished(editingId ? editingPublished : null);
-  }, [editingId, editingPublished]);
+    if (hydrated) saveEditingPublished(editingId ? editingPublished : null);
+  }, [editingId, editingPublished, hydrated]);
 
   // Adopt a fetched lesson into the editor: replace the working doc (this is the
   // step that overwrites the auto-saved draft). For an edit, enter edit mode so
@@ -289,7 +321,9 @@ export default function EditorPage() {
   // current draft. A one-shot ref guards against StrictMode's dev-only
   // double-mount; clearing the key also stops a reload from reloading it.
   useEffect(() => {
-    if (editRequestedRef.current) return;
+    // Wait until the saved draft has hydrated, so the "is there work to lose?"
+    // check below sees the real document rather than the empty starter.
+    if (!hydrated || editRequestedRef.current) return;
     let lessonId = null;
     let mode = "edit";
     try {
@@ -342,7 +376,7 @@ export default function EditorPage() {
         });
       })
       .finally(() => setEditLoading(false));
-  }, []);
+  }, [hydrated]);
 
   const setTitle = (title) => setDoc((d) => ({ ...d, title }));
 
@@ -501,10 +535,19 @@ export default function EditorPage() {
     }
     setBusy("publish");
     try {
+      // Convert any lingering legacy base64 images (e.g. from a fork or Word
+      // import) to binary refs, then upload every referenced image to R2 before
+      // writing the doc row — so the saved lesson never references a missing
+      // object. A failed upload aborts here (caught below) and nothing is saved.
+      const converted = await convertDocImages(doc);
+      if (converted !== doc) setDoc(converted);
+      await ensureImagesUploaded(converted, accessToken);
       if (editingId) {
-        await updateLesson(editingId, doc, accessToken, { published: publish });
+        await updateLesson(editingId, converted, accessToken, {
+          published: publish,
+        });
       } else {
-        const lesson = await publishLesson(doc, accessToken, {
+        const lesson = await publishLesson(converted, accessToken, {
           published: publish,
         });
         if (lesson?.id) setEditingId(lesson.id);

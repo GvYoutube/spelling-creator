@@ -1,46 +1,37 @@
-// Read a File into a data URL and measure its natural dimensions so we can
-// size it correctly in both the editor preview and the docx/pdf export.
+// Read a File into raw bytes and measure its natural dimensions so we can size
+// it correctly in both the editor preview and the docx/pdf export. The bytes are
+// stored as a binary blob (see storeImageBytes); the caller no longer keeps a
+// base64 data URL on the block.
 export function readImageFile(file) {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.onerror = () => reject(new Error("Could not read the image file."));
     reader.onload = () => {
-      const dataUrl = reader.result;
+      const bytes = new Uint8Array(reader.result);
+      const mime = file.type || "image/png";
+      // Measure via a temporary object URL — cheaper than a base64 data URL and
+      // revoked as soon as we have the dimensions.
+      const url = URL.createObjectURL(new Blob([bytes], { type: mime }));
       const img = new Image();
-      img.onerror = () => reject(new Error("Could not decode the image file."));
+      img.onerror = () => {
+        URL.revokeObjectURL(url);
+        reject(new Error("Could not decode the image file."));
+      };
       img.onload = () => {
-        resolve({
-          src: dataUrl,
+        const result = {
+          bytes,
+          mime,
           width: img.naturalWidth,
           height: img.naturalHeight,
           name: file.name,
-        });
+        };
+        URL.revokeObjectURL(url);
+        resolve(result);
       };
-      img.src = dataUrl;
+      img.src = url;
     };
-    reader.readAsDataURL(file);
+    reader.readAsArrayBuffer(file);
   });
-}
-
-// Convert a data URL into the raw bytes docx needs for an ImageRun.
-export function dataUrlToUint8Array(dataUrl) {
-  const base64 = dataUrl.split(",")[1] || "";
-  const binary = atob(base64);
-  const bytes = new Uint8Array(binary.length);
-  for (let i = 0; i < binary.length; i += 1) {
-    bytes[i] = binary.charCodeAt(i);
-  }
-  return bytes;
-}
-
-// docx wants one of: png | jpg | gif | bmp
-export function imageTypeFromDataUrl(dataUrl) {
-  const match = /^data:image\/([a-zA-Z0-9.+-]+)/.exec(dataUrl);
-  const raw = match ? match[1].toLowerCase() : "png";
-  if (raw === "jpeg") return "jpg";
-  if (raw === "svg+xml") return "png"; // svg unsupported by docx ImageRun; fall back
-  if (["png", "jpg", "gif", "bmp"].includes(raw)) return raw;
-  return "png";
 }
 
 // Selectable image sizes, expressed as a fraction of the available width. The

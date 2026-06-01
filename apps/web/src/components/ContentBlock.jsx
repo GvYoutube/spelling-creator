@@ -25,6 +25,7 @@ import {
   DEFAULT_IMAGE_ALIGN,
 } from "../lib/image.js";
 import { newId } from "../lib/id.js";
+import { useImageSrc } from "../lib/useImageSrc.js";
 import { questionMeta } from "../lib/questions.js";
 import { SPELLING_COLOR } from "../lib/spelling.js";
 
@@ -84,103 +85,7 @@ export default function ContentBlock({
   }
 
   if (block.type === "image") {
-    const align = block.align || DEFAULT_IMAGE_ALIGN;
-    const size = block.size || DEFAULT_IMAGE_SIZE;
-    const preview = fitWithin(
-      block.width,
-      block.height,
-      360 * imageSizeScale(size),
-    );
-    // The preview image is display:block, so margins decide its alignment.
-    const imgMargin =
-      align === "left"
-        ? "0 auto 0 0"
-        : align === "right"
-          ? "0 0 0 auto"
-          : "0 auto";
-    return (
-      <Paper variant="outlined" sx={{ p: 2 }}>
-        <Stack
-          direction="row"
-          justifyContent="space-between"
-          alignItems="flex-start"
-          spacing={1}
-        >
-          <Box sx={{ flexGrow: 1, minWidth: 0 }}>
-            <Box
-              component="img"
-              src={block.src}
-              alt={block.caption || "lesson image"}
-              sx={{
-                display: "block",
-                maxWidth: "100%",
-                width: preview.width,
-                height: "auto",
-                borderRadius: 1,
-                border: "1px solid",
-                borderColor: "divider",
-                margin: imgMargin,
-                mb: 1.5,
-              }}
-            />
-            <Stack
-              direction="row"
-              spacing={2}
-              alignItems="center"
-              useFlexGap
-              flexWrap="wrap"
-              sx={{ mb: 1.5 }}
-            >
-              <ToggleButtonGroup
-                size="small"
-                exclusive
-                value={align}
-                onChange={(e, value) =>
-                  value && onChange({ ...block, align: value })
-                }
-                aria-label="image alignment"
-              >
-                <ToggleButton value="left" aria-label="align left">
-                  <FormatAlignLeftIcon fontSize="small" />
-                </ToggleButton>
-                <ToggleButton value="center" aria-label="align center">
-                  <FormatAlignCenterIcon fontSize="small" />
-                </ToggleButton>
-                <ToggleButton value="right" aria-label="align right">
-                  <FormatAlignRightIcon fontSize="small" />
-                </ToggleButton>
-              </ToggleButtonGroup>
-              <ToggleButtonGroup
-                size="small"
-                exclusive
-                value={size}
-                onChange={(e, value) =>
-                  value && onChange({ ...block, size: value })
-                }
-                aria-label="image size"
-              >
-                {IMAGE_SIZES.map((s) => (
-                  <ToggleButton key={s.key} value={s.key}>
-                    {s.label}
-                  </ToggleButton>
-                ))}
-              </ToggleButtonGroup>
-            </Stack>
-            <TextField
-              fullWidth
-              size="small"
-              label="Caption (optional)"
-              value={block.caption || ""}
-              onChange={(e) => onChange({ ...block, caption: e.target.value })}
-              slotProps={{
-                htmlInput: { "data-collab-field": `block:${block.id}:caption` },
-              }}
-            />
-          </Box>
-          {controls}
-        </Stack>
-      </Paper>
-    );
+    return <ImageBlock block={block} onChange={onChange} controls={controls} />;
   }
 
   // text block
@@ -198,6 +103,127 @@ export default function ContentBlock({
             htmlInput: { "data-collab-field": `block:${block.id}:text` },
           }}
         />
+        {controls}
+      </Stack>
+    </Paper>
+  );
+}
+
+// Image blocks reference their bytes by content hash; useImageSrc resolves that
+// to a usable URL (a local blob URL, or the public R2 URL once uploaded). It's
+// its own component so the hook is always called for an image block, never
+// conditionally inside ContentBlock.
+function ImageBlock({ block, onChange, controls }) {
+  const src = useImageSrc(block);
+  const align = block.align || DEFAULT_IMAGE_ALIGN;
+  const size = block.size || DEFAULT_IMAGE_SIZE;
+  const preview = fitWithin(
+    block.width,
+    block.height,
+    360 * imageSizeScale(size),
+  );
+  // The preview image is display:block, so margins decide its alignment.
+  const imgMargin =
+    align === "left"
+      ? "0 auto 0 0"
+      : align === "right"
+        ? "0 0 0 auto"
+        : "0 auto";
+  return (
+    <Paper variant="outlined" sx={{ p: 2 }}>
+      <Stack
+        direction="row"
+        justifyContent="space-between"
+        alignItems="flex-start"
+        spacing={1}
+      >
+        <Box sx={{ flexGrow: 1, minWidth: 0 }}>
+          {src ? (
+            <Box
+              component="img"
+              src={src}
+              alt={block.caption || "lesson image"}
+              sx={{
+                display: "block",
+                maxWidth: "100%",
+                width: preview.width,
+                height: "auto",
+                borderRadius: 1,
+                border: "1px solid",
+                borderColor: "divider",
+                margin: imgMargin,
+                mb: 1.5,
+              }}
+            />
+          ) : (
+            <Box
+              sx={{
+                width: preview.width,
+                maxWidth: "100%",
+                height: preview.height,
+                borderRadius: 1,
+                border: "1px solid",
+                borderColor: "divider",
+                bgcolor: "action.hover",
+                margin: imgMargin,
+                mb: 1.5,
+              }}
+            />
+          )}
+          <Stack
+            direction="row"
+            spacing={2}
+            alignItems="center"
+            useFlexGap
+            flexWrap="wrap"
+            sx={{ mb: 1.5 }}
+          >
+            <ToggleButtonGroup
+              size="small"
+              exclusive
+              value={align}
+              onChange={(e, value) =>
+                value && onChange({ ...block, align: value })
+              }
+              aria-label="image alignment"
+            >
+              <ToggleButton value="left" aria-label="align left">
+                <FormatAlignLeftIcon fontSize="small" />
+              </ToggleButton>
+              <ToggleButton value="center" aria-label="align center">
+                <FormatAlignCenterIcon fontSize="small" />
+              </ToggleButton>
+              <ToggleButton value="right" aria-label="align right">
+                <FormatAlignRightIcon fontSize="small" />
+              </ToggleButton>
+            </ToggleButtonGroup>
+            <ToggleButtonGroup
+              size="small"
+              exclusive
+              value={size}
+              onChange={(e, value) =>
+                value && onChange({ ...block, size: value })
+              }
+              aria-label="image size"
+            >
+              {IMAGE_SIZES.map((s) => (
+                <ToggleButton key={s.key} value={s.key}>
+                  {s.label}
+                </ToggleButton>
+              ))}
+            </ToggleButtonGroup>
+          </Stack>
+          <TextField
+            fullWidth
+            size="small"
+            label="Caption (optional)"
+            value={block.caption || ""}
+            onChange={(e) => onChange({ ...block, caption: e.target.value })}
+            slotProps={{
+              htmlInput: { "data-collab-field": `block:${block.id}:caption` },
+            }}
+          />
+        </Box>
         {controls}
       </Stack>
     </Paper>

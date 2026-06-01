@@ -205,7 +205,7 @@ export async function saveToGoogleDrive(doc) {
   try {
     const token = await getAccessToken();
 
-    const document = buildDocument(doc);
+    const document = await buildDocument(doc);
     const docxBlob = await Packer.toBlob(document);
 
     const metadata = {

@@ -27,6 +27,7 @@ import AiQuestionDialog from "./AiQuestionDialog.jsx";
 import ImageSearchDialog from "./ImageSearchDialog.jsx";
 import { newId } from "../lib/id.js";
 import { readImageFile } from "../lib/image.js";
+import { storeImageBytes } from "../lib/imageRef.js";
 import {
   QUESTION_TYPE_LIST,
   createQuestionBlock,
@@ -98,10 +99,11 @@ export default function SectionCard({
       if (!file.type.startsWith("image/")) continue;
       try {
         const img = await readImageFile(file);
+        const image = await storeImageBytes(img.bytes, img.mime);
         newBlocks.push({
           id: newId(),
           type: "image",
-          src: img.src,
+          image,
           width: img.width,
           height: img.height,
           caption: "",
@@ -118,10 +120,10 @@ export default function SectionCard({
     e.target.value = ""; // allow re-selecting the same file
   };
 
-  const addSearchedImage = ({ src, width, height, caption = "" }) => {
+  const addSearchedImage = ({ image, width, height, caption = "" }) => {
     updateBlocks([
       ...section.blocks,
-      { id: newId(), type: "image", src, width, height, caption },
+      { id: newId(), type: "image", image, width, height, caption },
     ]);
   };
 

@@ -38,4 +38,15 @@
 			"id": "e3d5364c3c8f4637937bb07a17ffbb38",
 		},
 	],
+
+	// R2 bucket holding lesson images as binary objects, keyed by their SHA-256
+	// content hash. Served publicly by GET /images/:hash and written by the
+	// authenticated PUT /images/:hash (see src/index.js). Create it once with:
+	//   wrangler r2 bucket create spelling-creator-images
+	"r2_buckets": [
+		{
+			"binding": "IMAGES",
+			"bucket_name": "spelling-creator-images",
+		},
+	],
 }

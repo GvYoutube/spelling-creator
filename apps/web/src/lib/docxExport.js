@@ -8,12 +8,8 @@ import {
   AlignmentType,
   BorderStyle,
 } from "docx";
-import {
-  dataUrlToUint8Array,
-  imageTypeFromDataUrl,
-  fitWithin,
-  imageSizeScale,
-} from "./image.js";
+import { fitWithin, imageSizeScale } from "./image.js";
+import { getImageBytes } from "./imageRef.js";
 import { questionMeta } from "./questions.js";
 import { SPELLING_COLOR } from "./spelling.js";
 
@@ -41,10 +37,11 @@ function textBlockParagraphs(block) {
   );
 }
 
-function imageBlockParagraphs(block) {
+async function imageBlockParagraphs(block) {
   const paragraphs = [];
   const alignment = imageAlignment(block);
   try {
+    const { bytes, ext } = await getImageBytes(block);
     const { width, height } = fitWithin(
       block.width,
       block.height,
@@ -56,8 +53,8 @@ function imageBlockParagraphs(block) {
         spacing: { before: 120, after: 60 },
         children: [
           new ImageRun({
-            type: imageTypeFromDataUrl(block.src),
-            data: dataUrlToUint8Array(block.src),
+            type: ext,
+            data: bytes,
             transformation: { width, height },
           }),
         ],
@@ -256,7 +253,7 @@ function spellingBlockParagraphs(block) {
   return paragraphs;
 }
 
-function sectionParagraphs(section) {
+async function sectionParagraphs(section) {
   const paragraphs = [
     new Paragraph({
       heading: HeadingLevel.HEADING_2,
@@ -280,8 +277,8 @@ function sectionParagraphs(section) {
   for (const block of section.blocks) {
     if (block.type === "text") {
       paragraphs.push(...textBlockParagraphs(block));
-    } else if (block.type === "image" && block.src) {
-      paragraphs.push(...imageBlockParagraphs(block));
+    } else if (block.type === "image" && (block.image || block.src)) {
+      paragraphs.push(...(await imageBlockParagraphs(block)));
     } else if (block.type === "question") {
       paragraphs.push(...questionBlockParagraphs(block));
     } else if (block.type === "spelling") {
@@ -294,8 +291,9 @@ function sectionParagraphs(section) {
   return paragraphs;
 }
 
-// Build an in-memory docx Document from the lesson state.
-export function buildDocument(doc) {
+// Build an in-memory docx Document from the lesson state. Async because image
+// bytes may need fetching from R2 for a lesson whose images aren't held locally.
+export async function buildDocument(doc) {
   const children = [
     new Paragraph({
       heading: HeadingLevel.TITLE,
@@ -308,7 +306,7 @@ export function buildDocument(doc) {
   ];
 
   for (const section of doc.sections) {
-    children.push(...sectionParagraphs(section));
+    children.push(...(await sectionParagraphs(section)));
   }
 
   return new Document({
@@ -344,7 +342,7 @@ function safeFileName(title) {
 
 // Generate and download the .docx file.
 export async function exportDocx(doc) {
-  const document = buildDocument(doc);
+  const document = await buildDocument(doc);
   const blob = await Packer.toBlob(document);
   triggerDownload(blob, safeFileName(doc.title));
 }

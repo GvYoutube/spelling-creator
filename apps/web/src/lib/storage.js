@@ -1,103 +1,102 @@
-// Auto-persist the working lesson to localStorage so progress survives reloads.
-const STORAGE_KEY = "s2c-lesson-maker:doc";
-// The id of the cloud lesson currently being edited, persisted alongside the doc
-// so the "editing a saved lesson" status survives reloads and tab closes (cleared
-// only by overwriting it or forking into a new lesson).
-const EDITING_ID_KEY = "s2c-lesson-maker:editing-id";
-// Whether the lesson identified by EDITING_ID_KEY is published to the hub ("1") or
-// a private draft ("0"). Persisted so the editor can show the right status and the
-// "Save to cloud" actions stay accurate across reloads.
-const EDITING_PUBLISHED_KEY = "s2c-lesson-maker:editing-published";
-// Set once the first-lesson wizard has been dismissed, so it doesn't reappear
-// on every visit. Reopening it from the help button doesn't clear this — the
-// wizard only auto-shows when the key is absent.
-const WIZARD_SEEN_KEY = "s2c-lesson-maker:wizard-seen";
+// Working-lesson persistence. Backed by IndexedDB (see imageStore.js) so images
+// can be stored as binary blobs and large drafts aren't capped by localStorage's
+// ~5 MB quota. These functions are async — callers await them.
+//
+// migrateLocalStorage() performs a one-time move of any pre-IndexedDB draft (the
+// old localStorage keys, with base64 images inline) into IndexedDB, converting
+// each inline image to a binary blob + hash ref. It is idempotent.
 
-export function loadDocument() {
+import {
+  loadDocument,
+  saveDocument,
+  clearDocument,
+  loadEditingId,
+  saveEditingId,
+  loadEditingPublished,
+  saveEditingPublished,
+  loadWizardSeen,
+  saveWizardSeen,
+} from "./imageStore.js";
+import { convertDocImages } from "./imageRef.js";
+
+export {
+  loadDocument,
+  saveDocument,
+  clearDocument,
+  loadEditingId,
+  saveEditingId,
+  loadEditingPublished,
+  saveEditingPublished,
+  loadWizardSeen,
+  saveWizardSeen,
+};
+
+// Legacy localStorage keys (pre-IndexedDB). Read once by migrateLocalStorage,
+// then removed.
+const LS_DOC = "s2c-lesson-maker:doc";
+const LS_EDITING_ID = "s2c-lesson-maker:editing-id";
+const LS_EDITING_PUBLISHED = "s2c-lesson-maker:editing-published";
+const LS_WIZARD_SEEN = "s2c-lesson-maker:wizard-seen";
+// Set once the migration has run, so we don't repeatedly poke localStorage.
+const MIGRATED_FLAG = "s2c-lesson-maker:migrated-to-idb";
+
+function safeGet(key) {
   try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return null;
-    return JSON.parse(raw);
+    return localStorage.getItem(key);
   } catch {
     return null;
   }
 }
 
-export function saveDocument(doc) {
+// One-time move of the old localStorage draft into IndexedDB. Safe to call on
+// every load: once the migrated flag is set (or the old keys are gone) it's a
+// no-op. Run before hydrating editor state from IndexedDB.
+export async function migrateLocalStorage() {
+  let rawDoc;
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(doc));
+    if (localStorage.getItem(MIGRATED_FLAG)) return;
+    rawDoc = localStorage.getItem(LS_DOC);
   } catch {
-    // Quota errors (large images) are non-fatal, the in-memory doc still works.
+    return; // localStorage unavailable — nothing to migrate
   }
-}
 
-export function clearDocument() {
   try {
-    localStorage.removeItem(STORAGE_KEY);
-  } catch {
-    /* ignore */
-  }
-}
+    // Move the small flags first (cheap, independent of the doc). Only seed each
+    // when the old key is present, so we don't overwrite newer IndexedDB state.
+    const editingId = safeGet(LS_EDITING_ID);
+    if (editingId) await saveEditingId(editingId);
+    const publishedFlag = safeGet(LS_EDITING_PUBLISHED);
+    if (publishedFlag !== null) {
+      await saveEditingPublished(publishedFlag !== "0");
+    }
+    if (safeGet(LS_WIZARD_SEEN) === "1") await saveWizardSeen();
 
-export function loadEditingId() {
-  try {
-    return localStorage.getItem(EDITING_ID_KEY) || null;
-  } catch {
-    return null;
-  }
-}
+    if (rawDoc) {
+      const doc = JSON.parse(rawDoc);
+      const converted = await convertDocImages(doc);
+      // Don't clobber a doc already created in IndexedDB after a prior partial
+      // migration; only seed when the IndexedDB doc is still empty.
+      if (!(await loadDocument())) await saveDocument(converted);
+    }
 
-// Persist the id of the lesson being edited. A falsy id removes the key, so the
-// next load restores a "saving a fresh lesson" state.
-export function saveEditingId(id) {
-  try {
-    if (id) localStorage.setItem(EDITING_ID_KEY, id);
-    else localStorage.removeItem(EDITING_ID_KEY);
-  } catch {
-    /* ignore */
-  }
-}
-
-// Whether the lesson being edited is published to the hub. Returns true when there
-// is no stored flag, matching the pre-draft behaviour where every saved lesson was
-// published.
-export function loadEditingPublished() {
-  try {
-    return localStorage.getItem(EDITING_PUBLISHED_KEY) !== "0";
-  } catch {
-    return true;
-  }
-}
-
-// Persist whether the edited lesson is published ("1") or a draft ("0"). A null
-// value clears the flag (no lesson attached), restoring the default.
-export function saveEditingPublished(published) {
-  try {
-    if (published === null || published === undefined) {
-      localStorage.removeItem(EDITING_PUBLISHED_KEY);
-    } else {
-      localStorage.setItem(EDITING_PUBLISHED_KEY, published ? "1" : "0");
+    for (const key of [
+      LS_DOC,
+      LS_EDITING_ID,
+      LS_EDITING_PUBLISHED,
+      LS_WIZARD_SEEN,
+    ]) {
+      try {
+        localStorage.removeItem(key);
+      } catch {
+        /* ignore */
+      }
+    }
+    try {
+      localStorage.setItem(MIGRATED_FLAG, "1");
+    } catch {
+      /* ignore */
     }
   } catch {
-    /* ignore */
-  }
-}
-
-// Whether the first-lesson wizard has been dismissed before. Used to auto-show
-// it only to newcomers; the help button opens it regardless of this flag.
-export function loadWizardSeen() {
-  try {
-    return localStorage.getItem(WIZARD_SEEN_KEY) === "1";
-  } catch {
-    // Treat an unreadable store as "already seen" so we never nag in a loop.
-    return true;
-  }
-}
-
-export function saveWizardSeen() {
-  try {
-    localStorage.setItem(WIZARD_SEEN_KEY, "1");
-  } catch {
-    /* ignore — the wizard just shows again next visit */
+    // Best effort: leave the old keys in place so the next load can retry.
   }
 }

@@ -18,8 +18,13 @@
 // side sends the full doc; the host re-broadcasts a guest's change to the other
 // admitted guests. Echoes are suppressed by remembering the JSON of the last
 // doc we sent or received and not re-sending an identical one. The lesson doc
-// here is small (text/questions; images are data-urls), so shipping it whole on
-// each edit is simple and good enough — no CRDT needed.
+// here is small — images are referenced by content hash (not inlined), so even
+// an image-heavy lesson ships cheaply — so sending it whole on each edit is
+// simple and good enough; no CRDT needed.
+//
+// Note: a guest receives image *refs*, not the bytes. They resolve to the public
+// R2 URL once the host has saved/published the lesson; an image still only in the
+// host's IndexedDB (an unsaved draft) shows a placeholder for guests until then.
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import Peer from "peerjs";

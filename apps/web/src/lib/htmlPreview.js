@@ -58,7 +58,7 @@ function imageStyle(block) {
 function imageLayoutOptions(doc) {
   const imageBlocks = doc.sections
     .flatMap((s) => s.blocks)
-    .filter((b) => b.type === "image" && b.src);
+    .filter((b) => b.type === "image" && (b.image || b.src));
   let index = 0;
   return {
     convertImage: mammoth.images.imgElement((image) =>
@@ -93,7 +93,7 @@ function colorizeQuestionLabels(html) {
 // Build the docx in memory and convert it to HTML with mammoth, so the preview
 // and PDF match what the docx export produces. Returns an HTML string.
 export async function docToHtml(doc) {
-  const document = buildDocument(doc);
+  const document = await buildDocument(doc);
   const blob = await Packer.toBlob(document);
   const arrayBuffer = await blob.arrayBuffer();
   const { value: html } = await mammoth.convertToHtml(
