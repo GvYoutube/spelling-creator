@@ -156,23 +156,18 @@ function questionBlockParagraphs(block) {
       );
     });
   } else if (block.questionType === "open") {
-    const lines = Math.max(0, Number(block.answerLines) || 0);
-    for (let i = 0; i < lines; i++) {
-      paragraphs.push(
-        new Paragraph({
-          spacing: { after: 60 },
-          border: {
-            bottom: {
-              style: BorderStyle.SINGLE,
-              size: 4,
-              color: "cccccc",
-              space: 2,
-            },
-          },
-          children: [new TextRun({ text: "", size: 24 })],
-        }),
-      );
-    }
+    paragraphs.push(
+      new Paragraph({
+        spacing: { after: 120 },
+        children: [
+          new TextRun({ text: "Example answer: ", italics: true, size: 24 }),
+          new TextRun({
+            text: block.exampleAnswer || "____________",
+            size: 24,
+          }),
+        ],
+      }),
+    );
   } else if (block.questionType === "background") {
     if (block.background) {
       paragraphs.push(

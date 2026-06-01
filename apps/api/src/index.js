@@ -60,8 +60,8 @@ const QUESTION_SCHEMAS = {
 	},
 	open: {
 		type: Type.OBJECT,
-		properties: { prompt: { type: Type.STRING } },
-		required: ['prompt'],
+		properties: { prompt: { type: Type.STRING }, exampleAnswer: { type: Type.STRING } },
+		required: ['prompt', 'exampleAnswer'],
 	},
 	background: {
 		type: Type.OBJECT,
@@ -90,7 +90,7 @@ const QUESTION_INSTRUCTIONS = {
 		'The question must have a single short typed answer (a word or brief phrase). Do not make the answer a number under any circumstances. Do not provide answer options. Put the correct answer in "answer".',
 	multiple:
 		'The question must have several distinct correct answers, any one of which a student could type to be marked correct (the student only needs to give one). If you generate a single answer, consider that a failure. Do not provide answer options. Put each accepted answer as a separate string in "answers".',
-	open: 'Write a question that invites a free, written response. Do not provide answer options.',
+	open: 'Write a question that invites a free, written response. Do not provide answer options. Put the question in "prompt" and a concise example of a good answer (a model response a teacher could mark against) in "exampleAnswer".',
 	background:
 		'The question must test prior knowledge that is NOT explained anywhere in the lesson text — the student is expected to already know it. Do not ask about anything the lesson text covers. Put the question in "prompt", a short paragraph of the prior knowledge a student needs to answer it in "background", and the correct answer (a word or brief phrase) in "answer".',
 };

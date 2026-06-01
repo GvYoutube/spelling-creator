@@ -493,18 +493,23 @@ function QuestionBlock({ block, onChange, controls }) {
 
           {block.questionType === "open" && (
             <TextField
-              type="number"
+              fullWidth
+              multiline
+              minRows={2}
               size="small"
-              label="Answer lines"
-              value={block.answerLines ?? 3}
+              label="Example answer"
+              placeholder="An example of a good response…"
+              value={block.exampleAnswer ?? ""}
               onChange={(e) =>
-                onChange({
-                  ...block,
-                  answerLines: Math.max(0, Number(e.target.value) || 0),
-                })
+                onChange({ ...block, exampleAnswer: e.target.value })
               }
-              sx={{ mt: 1.5, maxWidth: 160 }}
-              helperText="Blank lines for the response"
+              sx={{ mt: 1.5 }}
+              helperText="A model response to guide marking"
+              slotProps={{
+                htmlInput: {
+                  "data-collab-field": `block:${block.id}:exampleAnswer`,
+                },
+              }}
             />
           )}
 

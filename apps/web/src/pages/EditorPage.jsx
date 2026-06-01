@@ -1292,8 +1292,7 @@ export default function EditorPage() {
           <Typography variant="body2" gutterBottom>
             For the import to work, the document must use{" "}
             <strong>Heading 2</strong> styles for its section headings. Images,
-            colours, and exact formatting may be lost, and answer lines for
-            open-ended questions reset to the default.
+            colours, and exact formatting may be lost.
           </Typography>
           <Typography variant="body2">
             If the document isn’t structured as a lesson, it won’t be opened.

@@ -58,7 +58,7 @@ export function createQuestionBlock(newId, questionType) {
     case "multiple":
       return { ...base, answers: [{ id: newId(), text: "" }] };
     case "open":
-      return { ...base, answerLines: 3 };
+      return { ...base, exampleAnswer: "" };
     case "background":
       return { ...base, background: "", answer: "" };
     default:
@@ -88,7 +88,11 @@ export function buildQuestionBlock(newId, questionType, data = {}) {
     case "multiple":
       return { ...base, answers: toAnswers(newId, data.answers) };
     case "open":
-      return { ...base, answerLines: 3 };
+      return {
+        ...base,
+        exampleAnswer:
+          typeof data.exampleAnswer === "string" ? data.exampleAnswer : "",
+      };
     case "background":
       return {
         ...base,

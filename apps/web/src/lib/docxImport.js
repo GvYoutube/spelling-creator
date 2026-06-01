@@ -33,10 +33,6 @@ const LABEL_TO_TYPE = Object.fromEntries(
   Object.values(QUESTION_TYPES).map((q) => [q.label.toLowerCase(), q.key]),
 );
 
-// open-ended questions export as empty bordered lines, which mammoth drops, so
-// the count can't be recovered. Fall back to the editor's default.
-const DEFAULT_OPEN_LINES = 3;
-
 // Read a .docx File and rebuild a lesson document. Resolves to a doc shaped like
 // { title, sections } ready for the editor; rejects (DocxImportError) when the
 // file isn't a usable lesson.
@@ -284,9 +280,12 @@ function readQuestion(nodes, i, { type, prompt }) {
       block.answers.push({ id: newId(), text: "" });
     }
   } else if (type === "open") {
-    // The blank answer lines don't survive the docx → HTML conversion, so the
-    // original count is unrecoverable; use the editor's default.
-    block.answerLines = DEFAULT_OPEN_LINES;
+    block.exampleAnswer = "";
+    const n = peek(i + 1);
+    if (n && n.tag === "p" && /^example answer\s*:/i.test(n.text)) {
+      block.exampleAnswer = stripLabel(n.text);
+      last = i + 1;
+    }
   }
 
   return { block, next: last };
