@@ -84,6 +84,109 @@ export function useDocumentMeta({
   }, [title, description, image, type]);
 }
 
+/**
+ * Inject (and keep in sync) a single JSON-LD `<script>` in `<head>` for the
+ * current page. Like useDocumentMeta, this exists for crawlers: the Worker's
+ * prerendered snapshot captures whatever we write into the DOM, so search
+ * engines receive the structured data even though the app is client-rendered.
+ * The block is removed when the data clears or the page unmounts, so navigating
+ * between routes never leaves stale structured data behind.
+ * @param {object|null} data  A schema.org object to serialise, or null/undefined
+ *   to emit nothing.
+ */
+export function useJsonLd(data) {
+  // Serialise outside the effect so the dependency is a stable string: the
+  // effect re-runs only when the structured data actually changes, not on every
+  // render (a fresh object literal would otherwise look "new" each time).
+  const json = data ? JSON.stringify(data) : "";
+  useEffect(() => {
+    if (!json) return undefined;
+    const el = document.createElement("script");
+    el.type = "application/ld+json";
+    el.textContent = json;
+    document.head.appendChild(el);
+    return () => el.remove();
+  }, [json]);
+}
+
+/**
+ * Build schema.org `Course` JSON-LD for a single lesson, following Google's
+ * Course structured-data guidelines:
+ * https://developers.google.com/search/docs/appearance/structured-data/course
+ *
+ * `name` and `description` are required; `provider` is recommended. The lessons
+ * are free, so we also advertise a zero-price Offer and isAccessibleForFree —
+ * accurate, and it improves eligibility for the richer "Course info" result.
+ * Promotional text, pricing, and discounts are kept out of the title/description
+ * per Google's content guidelines.
+ *
+ * @param {object}  opts
+ * @param {object}  opts.lesson       Lesson summary/doc ({ title, author, createdAt }).
+ * @param {string} [opts.description] Plain-text course summary (1–500 chars).
+ * @param {string}  opts.url          Canonical URL of this lesson's page.
+ * @param {string}  opts.origin       Site origin, used as the provider URL.
+ * @returns {object|null}
+ */
+export function buildLessonCourseSchema({ lesson, description, url, origin }) {
+  if (!lesson) return null;
+  const course = {
+    "@context": "https://schema.org",
+    "@type": "Course",
+    name: lesson.title || "Untitled Lesson",
+    description:
+      description ||
+      `A spelling lesson${lesson.author ? ` by ${lesson.author}` : ""}.`,
+    inLanguage: "en",
+    isAccessibleForFree: true,
+    provider: {
+      "@type": "Organization",
+      name: SITE_NAME,
+      url: origin,
+    },
+    offers: {
+      "@type": "Offer",
+      category: "Free",
+      price: "0",
+      priceCurrency: "USD",
+    },
+  };
+  if (url) course.url = url;
+  if (lesson.author) {
+    course.author = { "@type": "Person", name: lesson.author };
+  }
+  if (lesson.createdAt) {
+    // schema.org dateCreated expects ISO 8601; skip an unparseable value.
+    const d = new Date(lesson.createdAt);
+    if (!Number.isNaN(d.getTime())) course.dateCreated = d.toISOString();
+  }
+  return course;
+}
+
+/**
+ * Build a schema.org `ItemList` carousel of lessons for a summary page (the
+ * hub), per Google's "summary page + detail pages" list format: each ListItem
+ * carries only its position and the canonical URL of a lesson page, where the
+ * full Course markup lives (see buildLessonCourseSchema). Google needs at least
+ * three items to render a carousel, but emitting fewer is harmless.
+ *
+ * @param {object}        opts
+ * @param {Array<{id}>}   opts.lessons  Published lesson summaries, in display order.
+ * @param {string}        opts.origin   Site origin, used to build each lesson URL.
+ * @returns {object|null}
+ */
+export function buildLessonListSchema({ lessons, origin }) {
+  if (!Array.isArray(lessons) || lessons.length === 0) return null;
+  return {
+    "@context": "https://schema.org",
+    "@type": "ItemList",
+    itemListElement: lessons.map((lesson, i) => ({
+      "@type": "ListItem",
+      position: i + 1,
+      url: `${origin}/hub/${lesson.id}`,
+    })),
+  };
+}
+
 // Collapse rendered HTML to a short plain-text summary suitable for a meta
 // description. Strips tags/entities, squashes whitespace, and truncates.
 export function htmlToDescription(html, max = 160) {

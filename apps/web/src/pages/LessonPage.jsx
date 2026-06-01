@@ -49,7 +49,12 @@ import {
   FORK_REQUEST_KEY,
 } from "../lib/lessons.js";
 import { useAuth } from "../lib/auth.jsx";
-import { useDocumentMeta, htmlToDescription } from "../lib/seo.js";
+import {
+  useDocumentMeta,
+  useJsonLd,
+  buildLessonCourseSchema,
+  htmlToDescription,
+} from "../lib/seo.js";
 import { previewHtml, PREVIEW_STYLES } from "../lib/htmlPreview.js";
 import { exportDocx } from "../lib/docxExport.js";
 import { exportPdf } from "../lib/pdfExport.js";
@@ -193,19 +198,38 @@ export default function LessonPage() {
   const isAuthor =
     Boolean(user) && lesson?.authorId && lesson.authorId === user.id;
 
+  // Description shared by the social/SEO meta tags and the Course JSON-LD below,
+  // drawn from the lesson's own rendered text with a sensible fallback.
+  const description =
+    htmlToDescription(html) ||
+    (lesson
+      ? `A spelling lesson${lesson.author ? ` by ${lesson.author}` : ""}.`
+      : undefined);
+
   // Per-page title + social/SEO tags. Crawlers receive these in the Worker's
-  // prerendered snapshot; the description is drawn from the lesson's own text.
+  // prerendered snapshot.
   useDocumentMeta({
     type: "article",
     title:
       lesson?.title ||
       (loading ? "Lesson" : error ? "Lesson not found" : "Lesson"),
-    description:
-      htmlToDescription(html) ||
-      (lesson
-        ? `A spelling lesson${lesson.author ? ` by ${lesson.author}` : ""}.`
-        : undefined),
+    description,
   });
+
+  // schema.org Course structured data so Google can show this lesson as a rich
+  // result. Captured by the prerendered snapshot the same way the meta tags are.
+  // Only emit it once the lesson has loaded successfully (no markup for the
+  // loading/error states).
+  useJsonLd(
+    lesson && !error
+      ? buildLessonCourseSchema({
+          lesson,
+          description,
+          url: `${window.location.origin}/hub/${id}`,
+          origin: window.location.origin,
+        })
+      : null,
+  );
 
   return (
     <Box sx={{ minHeight: "100vh", pb: 8 }}>

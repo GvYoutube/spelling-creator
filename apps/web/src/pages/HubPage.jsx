@@ -48,7 +48,11 @@ import {
 } from "../lib/lessons.js";
 import { buildLessonIndex, searchLessons } from "../lib/lessonSearch.js";
 import { useAuth } from "../lib/auth.jsx";
-import { useDocumentMeta } from "../lib/seo.js";
+import {
+  useDocumentMeta,
+  useJsonLd,
+  buildLessonListSchema,
+} from "../lib/seo.js";
 
 function formatDate(value) {
   if (!value) return "";
@@ -103,6 +107,13 @@ export default function HubPage() {
   );
   const visibleLessons = searchResults ?? lessons;
   const searching = searchResults !== null;
+
+  // schema.org ItemList of the published lessons, each linking to its own page
+  // where the full Course markup lives — Google's summary-page list format. We
+  // always list the full published set (not the filtered search view) so the
+  // structured data describes the hub, not a transient query. Captured for
+  // crawlers via the Worker's prerendered snapshot.
+  useJsonLd(buildLessonListSchema({ lessons, origin: window.location.origin }));
 
   // Delete-confirmation dialog. `deleting` holds the lesson summary being
   // deleted (null when closed); the user must retype its title to confirm, which
