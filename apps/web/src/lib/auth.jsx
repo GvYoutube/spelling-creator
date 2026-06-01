@@ -15,6 +15,10 @@ export function AuthProvider({ children }) {
   // looked up from the Worker. Used only to decide which moderation controls to
   // render; every privileged action is independently authorised server-side.
   const [role, setRole] = useState(null);
+  // True while the role for the current token is being fetched. Pages that gate
+  // on the role (the moderation dashboard) wait for this so they don't flash a
+  // "no access" state — or bounce the user — before the lookup has resolved.
+  const [roleLoading, setRoleLoading] = useState(false);
   // `loading` is true until we know whether a session was restored from storage
   // (or parsed from a magic-link callback), so pages can avoid flashing a
   // signed-out state on first paint.
@@ -50,10 +54,14 @@ export function AuthProvider({ children }) {
     let active = true;
     if (!accessToken) {
       setRole(null);
+      setRoleLoading(false);
       return;
     }
+    setRoleLoading(true);
     fetchMyRole(accessToken).then((r) => {
-      if (active) setRole(r);
+      if (!active) return;
+      setRole(r);
+      setRoleLoading(false);
     });
     return () => {
       active = false;
@@ -71,6 +79,7 @@ export function AuthProvider({ children }) {
       // Moderation tier (see `role` state above) plus convenience flags. A mod or
       // admin is a "moderator+"; only an admin is an "admin".
       role,
+      roleLoading,
       isModerator: role === "moderator" || role === "admin",
       isAdmin: role === "admin",
 
@@ -92,7 +101,7 @@ export function AuthProvider({ children }) {
         await supabase.auth.signOut();
       },
     }),
-    [loading, session, role],
+    [loading, session, role, roleLoading],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

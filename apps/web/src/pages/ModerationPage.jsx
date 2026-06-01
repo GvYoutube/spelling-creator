@@ -10,7 +10,7 @@
 // Worker endpoint that re-derives the caller's role from the database.
 
 import { useEffect, useState } from "react";
-import { Link as RouterLink, useNavigate } from "react-router-dom";
+import { Link as RouterLink } from "react-router-dom";
 import AppBar from "@mui/material/AppBar";
 import Toolbar from "@mui/material/Toolbar";
 import Typography from "@mui/material/Typography";
@@ -509,19 +509,20 @@ function ModeratorsSection({ accessToken, onToast }) {
 }
 
 export default function ModerationPage() {
-  const { loading, user, accessToken, isModerator, isAdmin } = useAuth();
-  const navigate = useNavigate();
+  const { loading, user, accessToken, roleLoading, isModerator, isAdmin } =
+    useAuth();
   const [toast, setToast] = useState("");
 
-  // Once auth has settled, a signed-in non-moderator has no business here.
-  // (We wait for `loading` so a moderator isn't bounced before their role loads;
-  // the role itself resolves shortly after the token, and the API would 403
-  // anyway, so this is just to keep the UI honest.)
-  useEffect(() => {
-    if (!loading && !user) navigate("/login", { replace: true });
-  }, [loading, user, navigate]);
-
-  const showAccessNotice = !loading && user && !isModerator;
+  // Auth resolves in two async stages on a reload: first the Supabase session is
+  // restored from storage (`loading`), then the user's role is looked up from the
+  // Worker (`roleLoading`). We must wait for BOTH before judging access —
+  // otherwise a real moderator gets bounced/flashed in the gap. We deliberately
+  // do NOT redirect a signed-out user away: during hydration `user` is briefly
+  // null even for a signed-in person, so we show an inline prompt that self-heals
+  // once the session lands, rather than navigating off the page.
+  const resolvingAuth = loading || (user && roleLoading);
+  const showSignIn = !loading && !user;
+  const showAccessNotice = !resolvingAuth && user && !isModerator;
 
   return (
     <Box sx={{ minHeight: "100vh", pb: 8 }}>
@@ -544,10 +545,26 @@ export default function ModerationPage() {
       </AppBar>
 
       <Container maxWidth="md" sx={{ pt: 3 }}>
-        {loading ? (
+        {resolvingAuth ? (
           <Box sx={{ display: "flex", justifyContent: "center", py: 8 }}>
             <CircularProgress />
           </Box>
+        ) : showSignIn ? (
+          <Alert
+            severity="info"
+            action={
+              <Button
+                color="inherit"
+                size="small"
+                component={RouterLink}
+                to="/login"
+              >
+                Sign in
+              </Button>
+            }
+          >
+            Please sign in to access moderation tools.
+          </Alert>
         ) : showAccessNotice ? (
           <Alert
             severity="warning"
