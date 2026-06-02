@@ -2,6 +2,7 @@ import { env } from 'cloudflare:workers';
 import puppeteer from '@cloudflare/puppeteer';
 import { GoogleGenAI, Type } from '@google/genai';
 import { Filter } from 'glin-profanity';
+import { convertImageToWebp } from './imageConvert.js';
 
 const GEMINI_API_KEY = env.GEMINI_API_KEY;
 const ai = new GoogleGenAI({ apiKey: GEMINI_API_KEY });
@@ -257,6 +258,19 @@ async function sha256Hex(bytes) {
 	return [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, '0')).join('');
 }
 
+// Store image bytes in R2 under their content-hash key, first compressing them
+// to WEBP (convertImageToWebp falls back to the original bytes for formats it
+// can't transcode or when WEBP wouldn't be smaller). The key stays the ORIGINAL
+// hash — lesson docs reference images by the hash of their pre-conversion bytes,
+// so only the stored bytes and Content-Type change, transparently to readers.
+// Idempotent: an object already at this key holds a prior (converted) upload, so
+// skip both the conversion work and the write.
+async function putImageObject(env, hash, bytes, mime) {
+	if (await env.IMAGES.head(hash)) return;
+	const converted = await convertImageToWebp(bytes, mime);
+	await env.IMAGES.put(hash, converted.bytes, { httpMetadata: { contentType: converted.contentType } });
+}
+
 /**
  * GET/HEAD /images/:hash — serve a lesson image from R2 by its content hash.
  * Public: published lessons are viewed by anyone, and the og-image/prerender
@@ -342,11 +356,8 @@ async function handleImagePut(request, env, hash, cors) {
 		return textResponse('Upload does not match its content hash.', 422, cors);
 	}
 
-	// Idempotent: an existing object with this key already holds identical bytes.
-	const existing = await env.IMAGES.head(hash);
-	if (!existing) {
-		await env.IMAGES.put(hash, bytes, { httpMetadata: { contentType } });
-	}
+	// Idempotent + compresses to WEBP before storing (see putImageObject).
+	await putImageObject(env, hash, bytes, contentType);
 	return jsonResponse({ ok: true }, 200, cors);
 }
 
@@ -397,10 +408,7 @@ async function migrateDocImages(env, doc) {
 			const decoded = decodeDataUrl(block.src);
 			if (!decoded) continue;
 			const hash = await sha256Hex(decoded.bytes);
-			const existing = await env.IMAGES.head(hash);
-			if (!existing) {
-				await env.IMAGES.put(hash, decoded.bytes, { httpMetadata: { contentType: decoded.mime } });
-			}
+			await putImageObject(env, hash, decoded.bytes, decoded.mime);
 			block.image = { hash, mime: decoded.mime, ext: extFromMime(decoded.mime) };
 			delete block.src;
 			migrated += 1;
@@ -471,6 +479,86 @@ async function handleAdminMigrateImages(request, env, cors) {
 
 	const nextCursor = list.length < limit ? null : offset + list.length;
 	return jsonResponse({ processed: list.length, migrated, nextCursor }, 200, cors);
+}
+
+/**
+ * POST /admin/backfill-webp — one-time backfill that re-compresses images already
+ * in R2 (uploaded before the PUT handler started converting) to WEBP. Gated by
+ * the same secret `X-Admin-Token`. Pages through the bucket with R2's list
+ * cursor; for each PNG/JPEG object it decodes, encodes to WEBP, and overwrites
+ * the SAME key (the content hash stays the doc's reference) with a
+ * Content-Type of image/webp — but only when the WEBP is actually smaller.
+ *
+ * Already-WEBP objects (and formats we can't transcode) are skipped, so this is
+ * idempotent: a second pass converts nothing.
+ *
+ * Note: GET /images/:hash responses are edge-cached `immutable`, so any colo
+ * that already cached an object will keep serving the pre-conversion bytes until
+ * its cache evicts. We best-effort delete the current colo's cache entry; the
+ * bytes are visually identical regardless, so this only delays the size win.
+ *
+ *   body: { cursor?: string (R2 list cursor), limit?: number (default 10) }
+ *   ->    { processed, converted, skipped, nextCursor }  (nextCursor null at end)
+ */
+async function handleAdminBackfillWebp(request, env, ctx, cors) {
+	if (request.method !== 'POST') return textResponse('Method not allowed.', 405, cors);
+	if (!env.ADMIN_MIGRATE_TOKEN) return textResponse('Server misconfiguration: ADMIN_MIGRATE_TOKEN not set', 500, cors);
+	if (!env.IMAGES) return textResponse('Image store is not configured.', 500, cors);
+
+	const provided = request.headers.get('X-Admin-Token') || '';
+	if (!timingSafeEqual(provided, env.ADMIN_MIGRATE_TOKEN)) {
+		return textResponse('Forbidden.', 403, cors);
+	}
+
+	let body;
+	try {
+		body = await request.json();
+	} catch {
+		body = {};
+	}
+	// Each object is a decode+encode (CPU-heavy), so page in small batches.
+	const limit = Math.max(1, Math.min(Number(body.limit) || 10, 50));
+	const cursor = typeof body.cursor === 'string' && body.cursor ? body.cursor : undefined;
+
+	let listing;
+	try {
+		listing = await env.IMAGES.list({ limit, cursor, include: ['httpMetadata'] });
+	} catch (e) {
+		return textResponse('Could not list the image store.', 502, cors);
+	}
+
+	let converted = 0;
+	let skipped = 0;
+	for (const obj of listing.objects) {
+		const contentType = (obj.httpMetadata?.contentType || '').toLowerCase();
+		// Only raster formats convertImageToWebp knows how to decode; everything
+		// else (already-webp, gif, svg, bmp, unknown) is left as-is.
+		if (contentType !== 'image/png' && contentType !== 'image/jpeg' && contentType !== 'image/jpg') {
+			skipped += 1;
+			continue;
+		}
+		const stored = await env.IMAGES.get(obj.key);
+		if (!stored) {
+			skipped += 1;
+			continue;
+		}
+		const bytes = new Uint8Array(await stored.arrayBuffer());
+		const result = await convertImageToWebp(bytes, contentType);
+		// convertImageToWebp returns the original (same bytes) when WEBP wasn't
+		// smaller or decoding failed — only rewrite when it actually shrank.
+		if (result.contentType === 'image/webp') {
+			await env.IMAGES.put(obj.key, result.bytes, { httpMetadata: { contentType: 'image/webp' } });
+			// Best-effort: drop this colo's cached (pre-conversion) copy.
+			const cacheKey = new Request(new URL(`/images/${obj.key}`, request.url).toString());
+			ctx.waitUntil(caches.default.delete(cacheKey));
+			converted += 1;
+		} else {
+			skipped += 1;
+		}
+	}
+
+	const nextCursor = listing.truncated ? listing.cursor : null;
+	return jsonResponse({ processed: listing.objects.length, converted, skipped, nextCursor }, 200, cors);
 }
 
 /**
@@ -2408,6 +2496,12 @@ export default {
 		// to R2 objects + hash refs. Secret-gated (X-Admin-Token), POST-only.
 		if (path === '/admin/migrate-images') {
 			return handleAdminMigrateImages(request, env, cors);
+		}
+
+		// One-time admin backfill: re-compress pre-existing R2 images to WEBP.
+		// Secret-gated (X-Admin-Token), POST-only, pages via the R2 list cursor.
+		if (path === '/admin/backfill-webp') {
+			return handleAdminBackfillWebp(request, env, ctx, cors);
 		}
 
 		// Dynamic sitemap: the static pages plus one entry per published lesson

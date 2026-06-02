@@ -66,6 +66,51 @@ export async function resolveImageSrc(block) {
   return { url: imagePublicUrl(ref.hash), revoke: () => {} };
 }
 
+// Is this blob a WEBP? The server compresses uploaded images to WEBP, so bytes
+// fetched from R2 are WEBP regardless of the doc's original mime. Trust the
+// blob's type when present, and sniff the RIFF/WEBP magic as a fallback.
+async function isWebpBlob(blob) {
+  if ((blob.type || "").toLowerCase() === "image/webp") return true;
+  const head = new Uint8Array(await blob.slice(0, 12).arrayBuffer());
+  // "RIFF" .... "WEBP"
+  return (
+    head.length >= 12 &&
+    head[0] === 0x52 &&
+    head[1] === 0x49 &&
+    head[2] === 0x46 &&
+    head[3] === 0x46 &&
+    head[8] === 0x57 &&
+    head[9] === 0x45 &&
+    head[10] === 0x42 &&
+    head[11] === 0x50
+  );
+}
+
+// docx's ImageRun only accepts png/jpg/gif/bmp, never webp. Browsers decode
+// webp natively, so paint it onto a canvas and read PNG bytes back out.
+async function transcodeWebpToPng(blob) {
+  const url = URL.createObjectURL(blob);
+  try {
+    const img = new Image();
+    await new Promise((resolve, reject) => {
+      img.onload = resolve;
+      img.onerror = () => reject(new Error("Could not decode WEBP image."));
+      img.src = url;
+    });
+    const canvas = document.createElement("canvas");
+    canvas.width = img.naturalWidth;
+    canvas.height = img.naturalHeight;
+    canvas.getContext("2d").drawImage(img, 0, 0);
+    const png = await new Promise((resolve) =>
+      canvas.toBlob(resolve, "image/png"),
+    );
+    if (!png) throw new Error("Could not encode PNG image.");
+    return png;
+  } finally {
+    URL.revokeObjectURL(url);
+  }
+}
+
 // Raw bytes for export (docx ImageRun). Legacy → decode the data URL; ref →
 // local blob, else fetch from R2. Throws when the bytes can't be obtained so the
 // caller can fall back to an "[image could not be embedded]" placeholder.
@@ -81,6 +126,13 @@ export async function getImageBytes(block) {
     const res = await fetch(imagePublicUrl(ref.hash));
     if (!res.ok) throw new Error("Could not download image bytes.");
     blob = await res.blob();
+  }
+  // R2 serves WEBP (the server compresses on upload); docx can't embed it, so
+  // transcode back to a format ImageRun understands.
+  if (await isWebpBlob(blob)) {
+    blob = await transcodeWebpToPng(blob);
+    const bytes = new Uint8Array(await blob.arrayBuffer());
+    return { bytes, mime: "image/png", ext: "png" };
   }
   const bytes = new Uint8Array(await blob.arrayBuffer());
   const mime = ref.mime || blob.type || "image/png";
