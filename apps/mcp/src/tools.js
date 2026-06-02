@@ -12,6 +12,7 @@
 
 import { z } from "zod";
 import { buildDoc, lessonWarnings, QUESTION_TYPES } from "./doc.js";
+import { applyPatch } from "./patch.js";
 
 // One content block, described richly so the model fills the right fields per
 // type. buildDoc() does the strict per-type validation and returns clear errors
@@ -86,6 +87,62 @@ const sectionsSchema = z
       "user asks for more or fewer. Each section is self-contained: ~2 paragraphs " +
       "of prose followed by question(s) on that section.",
   );
+
+// One patch operation (for patch_lesson). Kept lenient — applyPatch (patch.js)
+// does the strict per-op validation and returns errors naming the operation.
+const operationSchema = z
+  .object({
+    op: z
+      .enum([
+        "set_title",
+        "set_section_name",
+        "add_section",
+        "remove_section",
+        "move_section",
+        "add_block",
+        "replace_block",
+        "remove_block",
+        "move_block",
+      ])
+      .describe("Which edit to make."),
+    title: z
+      .string()
+      .optional()
+      .describe("For set_title: the new lesson title."),
+    sectionId: z
+      .string()
+      .optional()
+      .describe(
+        "Target section id (from get_lesson). Required by *_section ops and add_block.",
+      ),
+    blockId: z
+      .string()
+      .optional()
+      .describe(
+        "Target block id (from get_lesson). Required by replace_block/remove_block/move_block.",
+      ),
+    name: z
+      .string()
+      .optional()
+      .describe("For set_section_name / add_section: the section heading."),
+    index: z
+      .number()
+      .int()
+      .optional()
+      .describe(
+        "0-based target position; omit to append. Used by add_section/move_section/add_block/move_block.",
+      ),
+    block: blockSchema
+      .optional()
+      .describe(
+        "A single block (same shape as create_lesson) for add_block / replace_block.",
+      ),
+    blocks: z
+      .array(blockSchema)
+      .optional()
+      .describe("Blocks for a new add_section."),
+  })
+  .describe("One edit operation, addressing sections/blocks by their id.");
 
 // Render a value as a text content result (the MCP content shape).
 function text(value) {
@@ -223,6 +280,57 @@ export function registerTools(server, ctx) {
   );
 
   server.registerTool(
+    "patch_lesson",
+    {
+      title: "Patch a lesson",
+      description:
+        "Edit a lesson you authored with a small list of operations, instead of resending the whole document. " +
+        "Prefer this over update_lesson for tweaks. Call get_lesson first to read the current sections/blocks and " +
+        "their ids; operations address them by id. The server fetches the lesson, applies the operations in order, " +
+        "then saves the result.\n\n" +
+        "Operations (each is { op, ... }):\n" +
+        "• set_title { title }\n" +
+        "• set_section_name { sectionId, name }\n" +
+        "• add_section { name?, blocks?, index? }   — append, or insert at index\n" +
+        "• remove_section { sectionId }\n" +
+        "• move_section { sectionId, index }\n" +
+        "• add_block { sectionId, block, index? }\n" +
+        "• replace_block { blockId, block }         — keeps the block's id\n" +
+        "• remove_block { blockId }\n" +
+        "• move_block { blockId, sectionId?, index? }\n\n" +
+        "`block`/`blocks` use the same shape as create_lesson. `index` is 0-based; omit it to append.",
+      inputSchema: {
+        id: z.string().describe("The id of the lesson to patch."),
+        operations: z
+          .array(operationSchema)
+          .min(1)
+          .describe("The edit operations, applied in order."),
+        published: z
+          .boolean()
+          .optional()
+          .describe(
+            "Omit to leave visibility unchanged; true/false to publish or unpublish.",
+          ),
+      },
+    },
+    tool(async ({ id, operations, published }) => {
+      // Fetch current content, apply the diff in memory, then save (the Worker
+      // only offers a full-replace PUT — see api.updateLesson).
+      const current = await api.getLesson(id);
+      const doc = applyPatch(current.doc, operations);
+      const warnings = lessonWarnings(doc);
+      const lesson = await api.updateLesson(id, {
+        title: doc.title || current.title,
+        doc,
+        published,
+      });
+      const result = { ...lesson, url: hubUrl(lesson.id) };
+      if (warnings.length) result.warnings = warnings;
+      return text(result);
+    }),
+  );
+
+  server.registerTool(
     "get_lesson",
     {
       title: "Get a lesson",
@@ -305,5 +413,5 @@ export function registerTools(server, ctx) {
 // The server's identifying metadata, shared by both transports.
 export const SERVER_INFO = {
   name: "spelling-creator-hub",
-  version: "0.1.2",
+  version: "0.1.3",
 };

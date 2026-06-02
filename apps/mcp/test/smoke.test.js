@@ -14,6 +14,7 @@ import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 
 import { createAuth } from "../src/auth.js";
 import { buildDoc, lessonWarnings } from "../src/doc.js";
+import { applyPatch } from "../src/patch.js";
 import { registerTools, SERVER_INFO } from "../src/tools.js";
 
 test("buildDoc maps every block type to the stored shape with ids", () => {
@@ -159,6 +160,88 @@ test("lessonWarnings flags sections that have no question, not ones that do", ()
   assert.match(warnings[0], /no question/i);
 });
 
+test("applyPatch edits by id without touching the original doc", () => {
+  const original = buildDoc({
+    title: "Original",
+    sections: [
+      {
+        name: "One",
+        blocks: [
+          { type: "text", text: "First WORD." },
+          {
+            type: "question",
+            questionType: "single",
+            prompt: "Q1?",
+            answer: "a",
+          },
+        ],
+      },
+      { name: "Two", blocks: [{ type: "text", text: "Second." }] },
+    ],
+  });
+  const s0 = original.sections[0].id;
+  const blockToReplace = original.sections[0].blocks[0].id;
+  const blockToMove = original.sections[0].blocks[1].id;
+
+  const patched = applyPatch(original, [
+    { op: "set_title", title: "Renamed" },
+    { op: "set_section_name", sectionId: s0, name: "Intro" },
+    {
+      op: "replace_block",
+      blockId: blockToReplace,
+      block: { type: "text", text: "Replaced TEXT." },
+    },
+    {
+      op: "add_block",
+      sectionId: s0,
+      index: 0,
+      block: { type: "spelling", words: ["WORD"] },
+    },
+    {
+      op: "move_block",
+      blockId: blockToMove,
+      sectionId: original.sections[1].id,
+    },
+  ]);
+
+  // Original is untouched (we only mutate a clone).
+  assert.equal(original.title, "Original");
+  assert.equal(original.sections[0].name, "One");
+  assert.equal(original.sections[0].blocks.length, 2);
+
+  // Patched reflects every op.
+  assert.equal(patched.title, "Renamed");
+  assert.equal(patched.sections[0].name, "Intro");
+  // add_block at index 0 → spelling first, then the replaced text block.
+  assert.equal(patched.sections[0].blocks[0].type, "spelling");
+  const replaced = patched.sections[0].blocks[1];
+  assert.equal(replaced.id, blockToReplace, "replace_block keeps the id");
+  assert.equal(replaced.text, "Replaced TEXT.");
+  // The question moved to section Two.
+  assert.ok(patched.sections[1].blocks.some((b) => b.id === blockToMove));
+  assert.ok(!patched.sections[0].blocks.some((b) => b.id === blockToMove));
+});
+
+test("applyPatch rejects bad ops and unknown ids", () => {
+  const doc = buildDoc({
+    title: "T",
+    sections: [{ name: "S", blocks: [{ type: "text", text: "x" }] }],
+  });
+  assert.throws(
+    () => applyPatch(doc, [{ op: "remove_section", sectionId: "nope" }]),
+    /no section with id/,
+  );
+  assert.throws(() => applyPatch(doc, [{ op: "frobnicate" }]), /unknown op/);
+  // Removing the only section is refused (a lesson needs ≥1).
+  assert.throws(
+    () =>
+      applyPatch(doc, [
+        { op: "remove_section", sectionId: doc.sections[0].id },
+      ]),
+    /at least one/,
+  );
+});
+
 // An unsigned JWT with a chosen expiry — enough for auth.js's expiry check,
 // which only decodes `exp` and never verifies the signature. A future expiry
 // means getAccessToken returns it directly without attempting a network refresh.
@@ -237,6 +320,7 @@ test("the MCP server exposes the full tool set", async () => {
     "get_lesson",
     "list_hub_lessons",
     "list_my_lessons",
+    "patch_lesson",
     "set_lesson_published",
     "update_lesson",
     "whoami",
@@ -279,6 +363,69 @@ test("create_lesson surfaces soft warnings in its result", async () => {
   assert.equal(res.isError, undefined); // saved fine — warning is non-blocking
   assert.equal(payload.warnings.length, 1);
   assert.match(payload.warnings[0], /Prose only/);
+
+  await client.close();
+  await server.close();
+});
+
+test("patch_lesson fetches, applies the diff, and PUTs the result", async () => {
+  const server = new McpServer(SERVER_INFO);
+  const stored = buildDoc({
+    title: "Before",
+    sections: [
+      {
+        name: "S",
+        blocks: [
+          { type: "text", text: "OLD text." },
+          {
+            type: "question",
+            questionType: "single",
+            prompt: "Q?",
+            answer: "a",
+          },
+        ],
+      },
+    ],
+  });
+  const blockId = stored.sections[0].blocks[0].id;
+  let putDoc = null;
+  const api = {
+    async getLesson() {
+      return { id: "L1", title: "Before", doc: stored };
+    },
+    async updateLesson(id, { doc }) {
+      putDoc = doc;
+      return { id, title: doc.title, sectionCount: doc.sections.length };
+    },
+  };
+  registerTools(server, { api, config: { apiUrl: "https://example.test" } });
+
+  const client = new Client({ name: "test", version: "0" });
+  const [clientT, serverT] = InMemoryTransport.createLinkedPair();
+  await Promise.all([server.connect(serverT), client.connect(clientT)]);
+
+  const res = await client.callTool({
+    name: "patch_lesson",
+    arguments: {
+      id: "L1",
+      operations: [
+        { op: "set_title", title: "After" },
+        {
+          op: "replace_block",
+          blockId,
+          block: { type: "text", text: "NEW text." },
+        },
+      ],
+    },
+  });
+
+  assert.equal(res.isError, undefined);
+  // The PUT received the patched doc — not a client-sent full replacement.
+  assert.equal(putDoc.title, "After");
+  assert.equal(putDoc.sections[0].blocks[0].text, "NEW text.");
+  assert.equal(putDoc.sections[0].blocks[0].id, blockId, "block id preserved");
+  // The original stored doc the stub handed out wasn't mutated.
+  assert.equal(stored.title, "Before");
 
   await client.close();
   await server.close();

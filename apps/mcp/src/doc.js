@@ -12,7 +12,7 @@
 // assistant driving them) never have to. Input is intentionally simpler than the
 // stored shape — e.g. spelling words are plain strings here, objects in the doc.
 
-function newId() {
+export function newId() {
   return crypto.randomUUID();
 }
 
@@ -25,8 +25,9 @@ export const QUESTION_TYPES = [
 ];
 
 // Map one input block to its stored form. Throws a descriptive Error on bad
-// input so the assistant gets actionable feedback it can correct.
-function buildBlock(block, where) {
+// input so the assistant gets actionable feedback it can correct. Exported so
+// the patch logic (patch.js) can build single blocks the same way.
+export function buildBlock(block, where) {
   if (!block || typeof block !== "object") {
     throw new Error(`${where}: each block must be an object.`);
   }
