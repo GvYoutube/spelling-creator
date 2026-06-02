@@ -58,4 +58,10 @@ export default defineConfig([
     files: ["apps/api/**/*.js"],
     languageOptions: { globals: { ...globals.worker, ...globals.node } },
   },
+
+  // MCP server — Node runtime (also uses Web-standard fetch/crypto globals)
+  {
+    files: ["apps/mcp/**/*.{js,mjs}"],
+    languageOptions: { globals: { ...globals.node } },
+  },
 ]);

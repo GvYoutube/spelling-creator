@@ -9,6 +9,8 @@
   "scripts": {
     "dev:web": "pnpm --filter @spelling-creator/web dev",
     "dev:api": "pnpm --filter @spelling-creator/api dev",
+    "dev:mcp": "pnpm --filter @spelling-creator/mcp start",
+    "mcp:login": "pnpm --filter @spelling-creator/mcp login",
     "build": "pnpm --filter @spelling-creator/web build",
     "preview": "pnpm --filter @spelling-creator/web preview",
     "deploy": "pnpm --filter @spelling-creator/api deploy",

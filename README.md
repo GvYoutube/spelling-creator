@@ -9,8 +9,10 @@ Worker API.
 | ---------- | ----------------------- | ----------------------------------------------------------------------------- |
 | `apps/web` | `@spelling-creator/web` | Vite + React frontend (MUI, Supabase, react-router). Deploys to GitHub Pages. |
 | `apps/api` | `@spelling-creator/api` | Cloudflare Worker backend (Gemini, profanity filter, KV rate limiting).       |
+| `apps/mcp` | `@spelling-creator/mcp` | MCP server — lets an AI assistant author and publish lessons to the hub.      |
 
-See `apps/web/README.md` for full app documentation.
+See `apps/web/README.md` for full app documentation, and `apps/mcp/README.md` for
+connecting an AI assistant to the hub.
 
 ## Getting started
 

@@ -1,0 +1,30 @@
+{
+  "name": "@spelling-creator/mcp",
+  "version": "0.1.2",
+  "private": true,
+  "type": "module",
+  "description": "MCP server for the Spelling Creator hub — lets any MCP-capable AI assistant author and publish spelling lessons.",
+  "license": "AGPL-3.0-only",
+  "bin": {
+    "spelling-creator-mcp": "src/stdio.js"
+  },
+  "exports": {
+    ".": "./src/tools.js",
+    "./worker": "./src/worker.js"
+  },
+  "scripts": {
+    "start": "node src/stdio.js",
+    "login": "node src/login.js",
+    "test": "node --test",
+    "icon": "node scripts/make-icon.mjs",
+    "validate": "mcpb validate manifest.json",
+    "pack": "node scripts/pack.mjs"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.18.0",
+    "zod": "^3.25.0"
+  },
+  "devDependencies": {
+    "@anthropic-ai/mcpb": "^1.1.0"
+  }
+}

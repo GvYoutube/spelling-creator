@@ -1,0 +1,11 @@
+# Files to exclude when packing the .mcpb bundle. (The supported build path is
+# `pnpm --filter @spelling-creator/mcp pack`, which vendors prod deps into a
+# clean staging dir; this list is a backstop for packing this folder directly.)
+build/
+dist/
+test/
+scripts/
+*.mcpb
+.env
+.env.example
+.mcpbignore

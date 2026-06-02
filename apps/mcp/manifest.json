@@ -1,0 +1,97 @@
+{
+  "manifest_version": "0.3",
+  "name": "spelling-creator-hub",
+  "display_name": "Spelling Creator Hub",
+  "version": "0.1.2",
+  "description": "Author and publish spelling lessons to the Spelling Creator hub from your AI assistant.",
+  "long_description": "Connects your AI assistant to the Spelling Creator hub so it can compose and publish spelling lessons for you. You describe the lesson; the assistant builds it (reading passages with ALL-CAPS spelling words, explicit word lists, and quiz questions) and saves it to the hub through the same API the web app uses — with all the usual validation and author attribution. Lessons default to private drafts; publish them when you're ready. Requires a Supabase refresh token (run the bundled `login` helper, or copy one from the web app) and a display name set on your account.",
+  "author": {
+    "name": "playforge-coding"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/playforge-coding/spelling-creator"
+  },
+  "homepage": "https://spellingcreator.org",
+  "documentation": "https://spellingcreator.org",
+  "license": "AGPL-3.0-only",
+  "icon": "icon.png",
+  "keywords": [
+    "spelling",
+    "lessons",
+    "education",
+    "teaching",
+    "spelling-creator"
+  ],
+  "server": {
+    "type": "node",
+    "entry_point": "src/stdio.js",
+    "mcp_config": {
+      "command": "node",
+      "args": ["${__dirname}/src/stdio.js"],
+      "env": {
+        "SPELLING_CREATOR_API_URL": "${user_config.api_url}",
+        "SUPABASE_REFRESH_TOKEN": "${user_config.supabase_refresh_token}"
+      }
+    }
+  },
+  "user_config": {
+    "supabase_refresh_token": {
+      "type": "string",
+      "title": "Supabase refresh token",
+      "description": "Your hub sign-in token. Get one by running the bundled `login` helper, or copy `refresh_token` from the web app's sb-…-auth-token localStorage entry. Long-lived: it's refreshed automatically.",
+      "sensitive": true,
+      "required": true
+    },
+    "api_url": {
+      "type": "string",
+      "title": "Hub API URL",
+      "description": "The Spelling Creator API to publish to. Leave as the default unless you run your own instance.",
+      "default": "https://spellingcreator.org",
+      "required": false
+    }
+  },
+  "tools": [
+    {
+      "name": "whoami",
+      "description": "Confirm the session is valid and show the publishing display name."
+    },
+    {
+      "name": "create_lesson",
+      "description": "Build and save a new lesson (a private draft by default)."
+    },
+    {
+      "name": "update_lesson",
+      "description": "Replace the title and content of a lesson you authored."
+    },
+    {
+      "name": "get_lesson",
+      "description": "Fetch one lesson including its full content document."
+    },
+    {
+      "name": "list_my_lessons",
+      "description": "List your own lessons (drafts and published)."
+    },
+    {
+      "name": "list_hub_lessons",
+      "description": "Browse published lessons on the public hub."
+    },
+    {
+      "name": "set_lesson_published",
+      "description": "Publish or unpublish a lesson without changing its content."
+    },
+    {
+      "name": "delete_lesson",
+      "description": "Permanently delete a lesson you authored."
+    }
+  ],
+  "tools_generated": false,
+  "compatibility": {
+    "claude_desktop": ">=0.10.0",
+    "platforms": ["darwin", "win32", "linux"],
+    "runtimes": {
+      "node": ">=18.0.0"
+    }
+  },
+  "privacy_policies": []
+}
