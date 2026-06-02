@@ -2199,7 +2199,7 @@ ${urls
  * host (custom domain or workers.dev).
  */
 function handleRobots(request, env, url) {
-	const body = `User-agent: *\nAllow: /\n\nSitemap: ${url.origin}/sitemap.xml\n`;
+	const body = `User-agent: *\nAllow: /\n\nSitemap: ${url.origin}/sitemap.xml\nDisallow: /moderation\n`;
 	return new Response(body, {
 		status: 200,
 		headers: {
