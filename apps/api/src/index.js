@@ -642,14 +642,24 @@ async function verifySupabaseUser(env, token) {
 }
 
 /**
- * Pick a human-friendly author label from a verified Supabase user. Prefers a
- * name from the user's metadata, falling back to the email so the hub listing
- * always has something to show. The author is taken from the verified user, never
- * from client-supplied input.
+ * The display name a user chose for themselves (stored in user_metadata by the
+ * profile endpoint), or '' if they haven't set one yet. Trimmed. This is the
+ * ONLY name shown to other users — we never expose the email address.
+ */
+function displayNameOf(user) {
+	const meta = (user && user.user_metadata) || {};
+	return (meta.display_name || '').toString().trim();
+}
+
+/**
+ * Pick a public author label from a verified Supabase user. Uses the display
+ * name the user chose; never the email address (the app forces every user to set
+ * a display name before posting, so this normally has a real value). Falls back
+ * to 'Anonymous' only for legacy rows that predate display names. The author is
+ * taken from the verified user, never from client-supplied input.
  */
 function authorFromUser(user) {
-	const meta = user.user_metadata || {};
-	return meta.full_name || meta.name || user.email || 'Anonymous';
+	return displayNameOf(user) || 'Anonymous';
 }
 
 /**
@@ -905,6 +915,12 @@ async function handleLessons(request, env, url, cors) {
 		const banned = await bannedResponse(env, base, request, user, cors);
 		if (banned) return banned;
 
+		// Every author needs a display name so we never expose an email on the hub.
+		// The client forces this at sign-up; re-check here so it can't be bypassed.
+		if (!displayNameOf(user)) {
+			return textResponse('Please choose a display name before publishing.', 403, cors);
+		}
+
 		let body;
 		try {
 			body = await request.json();
@@ -1158,6 +1174,12 @@ async function handleComments(request, env, lessonId, cors) {
 		const banned = await bannedResponse(env, base, request, user, cors);
 		if (banned) return banned;
 
+		// Every commenter needs a display name so we never expose an email in a
+		// thread. The client forces this at sign-up; re-check so it can't be bypassed.
+		if (!displayNameOf(user)) {
+			return textResponse('Please choose a display name before commenting.', 403, cors);
+		}
+
 		let body;
 		try {
 			body = await request.json();
@@ -1347,6 +1369,91 @@ async function getAuthUserById(env, id) {
 	}
 	if (!res.ok) return null;
 	return await res.json().catch(() => null);
+}
+
+// Display names are the only identity shown to other users (we never expose an
+// email). Bounded so a name stays readable in a comment header or hub card.
+const DISPLAY_NAME_MIN = 2;
+const DISPLAY_NAME_MAX = 40;
+
+/**
+ * Profile endpoint — lets a signed-in user set the display name that the rest of
+ * the hub shows in place of their email. The name is written to user_metadata via
+ * the Admin API (service-role), so the browser can't smuggle in an unvalidated
+ * name by calling supabase.auth.updateUser directly — this is the only path that
+ * sets it, and it validates length, profanity and name bans first.
+ *
+ *   POST /profile/display-name   Bearer  { displayName }  -> { displayName }
+ *
+ * On success it also backfills the caller's existing lessons/comments so any name
+ * they posted under previously (including an email captured before this feature)
+ * is overwritten with the chosen display name.
+ */
+async function handleProfile(request, env, url, cors) {
+	if (!env.SUPABASE_URL || !env.SUPABASE_SERVICE_ROLE_KEY) {
+		return textResponse('Server misconfiguration: Supabase is not configured', 500, cors);
+	}
+	const base = env.SUPABASE_URL.replace(/\/$/, '');
+	const path = url.pathname.replace(/\/$/, '');
+
+	if (request.method === 'POST' && path === '/profile/display-name') {
+		const user = await verifySupabaseUser(env, bearerToken(request));
+		if (!user) return textResponse('Please sign in.', 401, cors);
+
+		let body;
+		try {
+			body = await request.json();
+		} catch (e) {
+			return textResponse('Invalid JSON body', 400, cors);
+		}
+		const name = (body && typeof body.displayName === 'string' ? body.displayName : '').replace(/\s+/g, ' ').trim();
+		if (name.length < DISPLAY_NAME_MIN) {
+			return textResponse(`Please use at least ${DISPLAY_NAME_MIN} characters.`, 400, cors);
+		}
+		if (name.length > DISPLAY_NAME_MAX) {
+			return textResponse(`Display names are limited to ${DISPLAY_NAME_MAX} characters.`, 400, cors);
+		}
+		if (profanityFilter.checkProfanity(name).containsProfanity) {
+			return textResponse('That display name isn’t allowed. Please choose another.', 422, cors);
+		}
+		if (await isNameBanned(env, base, name)) {
+			return textResponse('That display name isn’t available. Please choose another.', 409, cors);
+		}
+
+		// Write the name into user_metadata, preserving any other metadata keys.
+		const merged = { ...(user.user_metadata || {}), display_name: name };
+		let res;
+		try {
+			res = await fetch(`${base}/auth/v1/admin/users/${encodeURIComponent(user.id)}`, {
+				method: 'PUT',
+				headers: { ...supabaseHeaders(env), 'Content-Type': 'application/json' },
+				body: JSON.stringify({ user_metadata: merged }),
+			});
+		} catch (e) {
+			return textResponse('Could not save your display name.', 502, cors);
+		}
+		if (!res.ok) return textResponse('Could not save your display name.', 502, cors);
+
+		// Backfill the denormalised author label on the caller's own past content so
+		// an older email (or previous name) is replaced everywhere it was shown.
+		// Best-effort: the metadata update above is what actually matters.
+		const patch = JSON.stringify({ author: name });
+		for (const table of ['lessons', 'comments']) {
+			try {
+				await fetch(`${base}/rest/v1/${table}?author_id=eq.${encodeURIComponent(user.id)}`, {
+					method: 'PATCH',
+					headers: { ...supabaseHeaders(env), 'Content-Type': 'application/json', Prefer: 'return=minimal' },
+					body: patch,
+				});
+			} catch (e) {
+				// Ignore — the name is set; the backfill can be retried by re-saving.
+			}
+		}
+
+		return jsonResponse({ displayName: name }, 200, cors);
+	}
+
+	return textResponse('Not found.', 404, cors);
 }
 
 /**
@@ -2281,6 +2388,12 @@ export default {
 		// Turnstile, so they are handled before the Turnstile/rate-limit AI flow.
 		if (path === '/notifications' || path.startsWith('/notifications/')) {
 			return handleNotifications(request, env, url, cors);
+		}
+
+		// Profile routes: setting the display name shown in place of an email.
+		// Supabase-JWT gated like the hub writes, so handled before the AI flow.
+		if (path === '/profile' || path.startsWith('/profile/')) {
+			return handleProfile(request, env, url, cors);
 		}
 
 		// Moderation routes: the admin/moderator privilege layer (role lookups,

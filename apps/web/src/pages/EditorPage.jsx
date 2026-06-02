@@ -161,6 +161,7 @@ export default function EditorPage() {
   const identity = useMemo(
     () => ({
       name:
+        user?.user_metadata?.display_name ||
         user?.user_metadata?.full_name ||
         user?.user_metadata?.name ||
         (user?.email ? user.email.split("@")[0] : ""),

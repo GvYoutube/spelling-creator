@@ -18,13 +18,15 @@ import ListItemIcon from "@mui/material/ListItemIcon";
 import CollectionsBookmarkIcon from "@mui/icons-material/CollectionsBookmark";
 import AccountCircleIcon from "@mui/icons-material/AccountCircle";
 import ShieldIcon from "@mui/icons-material/Shield";
+import BadgeIcon from "@mui/icons-material/Badge";
 import { useAuth } from "../lib/auth.jsx";
 import NotificationBell from "./NotificationBell.jsx";
+import DisplayNameDialog from "./DisplayNameDialog.jsx";
 
 const inheritBorder = { borderColor: "rgba(255,255,255,0.6)" };
 
 export default function NavActions({ current }) {
-  const { enabled, user, signOut, isModerator } = useAuth();
+  const { enabled, user, displayName, signOut, isModerator } = useAuth();
   const navigate = useNavigate();
   const theme = useTheme();
   // On narrow screens the AppBar can't fit full text buttons, so the hub and
@@ -33,6 +35,7 @@ export default function NavActions({ current }) {
   const compact = useMediaQuery(theme.breakpoints.down("md"));
   const [anchorEl, setAnchorEl] = useState(null);
   const menuOpen = Boolean(anchorEl);
+  const [nameDialogOpen, setNameDialogOpen] = useState(false);
 
   const handleSignOut = async () => {
     setAnchorEl(null);
@@ -87,12 +90,23 @@ export default function NavActions({ current }) {
           >
             <MenuItem disabled>
               <ListItemText
-                primary="Signed in"
+                primary={displayName || "Signed in"}
                 secondary={user.email}
                 secondaryTypographyProps={{ sx: { wordBreak: "break-all" } }}
               />
             </MenuItem>
             <Divider />
+            <MenuItem
+              onClick={() => {
+                setAnchorEl(null);
+                setNameDialogOpen(true);
+              }}
+            >
+              <ListItemIcon>
+                <BadgeIcon fontSize="small" />
+              </ListItemIcon>
+              <ListItemText>Edit display name</ListItemText>
+            </MenuItem>
             {isModerator && (
               <MenuItem
                 onClick={() => {
@@ -145,6 +159,13 @@ export default function NavActions({ current }) {
             </MenuItem>
           </Menu>
         </>
+      )}
+
+      {user && (
+        <DisplayNameDialog
+          open={nameDialogOpen}
+          onClose={() => setNameDialogOpen(false)}
+        />
       )}
     </>
   );

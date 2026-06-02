@@ -33,7 +33,8 @@ const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 export default function LoginPage() {
   useDocumentMeta({ title: "Sign in" });
-  const { enabled, user, loading, signInWithMagicLink, signOut } = useAuth();
+  const { enabled, user, displayName, loading, signInWithMagicLink, signOut } =
+    useAuth();
   const navigate = useNavigate();
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down("md"));
@@ -121,7 +122,7 @@ export default function LoginPage() {
                 color="text.secondary"
                 sx={{ wordBreak: "break-all" }}
               >
-                {user.email}
+                {displayName || user.email}
               </Typography>
               <Stack direction="row" spacing={1} sx={{ pt: 1 }}>
                 <Button variant="contained" onClick={() => navigate("/")}>

@@ -6,6 +6,7 @@ import { ThemeProvider } from "@mui/material/styles";
 import App from "./App.jsx";
 import theme from "./theme.js";
 import { AuthProvider } from "./lib/auth.jsx";
+import DisplayNameGate from "./components/DisplayNameGate.jsx";
 
 // BrowserRouter gives every page a real path (e.g. /hub/:id) so the Worker can
 // see which page a crawler requested and return a prerendered snapshot. The
@@ -18,7 +19,9 @@ ReactDOM.createRoot(document.getElementById("root")).render(
       <CssBaseline />
       <BrowserRouter>
         <AuthProvider>
-          <App />
+          <DisplayNameGate>
+            <App />
+          </DisplayNameGate>
         </AuthProvider>
       </BrowserRouter>
     </ThemeProvider>

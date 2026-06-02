@@ -68,14 +68,25 @@ export function AuthProvider({ children }) {
     };
   }, [accessToken]);
 
+  const user = session?.user ?? null;
+  // The public name the user chose (set via the Worker's /profile endpoint and
+  // stored in user_metadata). This — never the email — is what other users see.
+  const displayName = (user?.user_metadata?.display_name || "").trim() || null;
+
   const value = useMemo(
     () => ({
       enabled: supabaseEnabled,
       loading,
       session,
-      user: session?.user ?? null,
+      user,
       // The JWT the Worker verifies before accepting a publish.
       accessToken: session?.access_token ?? null,
+      // The user's chosen display name, or null if they haven't set one yet.
+      displayName,
+      // True once we know a signed-in user still needs to pick a display name, so
+      // the app can force the choice before letting them post. Waits for `loading`
+      // so we don't flash the prompt before the session is restored.
+      needsDisplayName: supabaseEnabled && !loading && !!user && !displayName,
       // Moderation tier (see `role` state above) plus convenience flags. A mod or
       // admin is a "moderator+"; only an admin is an "admin".
       role,
@@ -100,8 +111,18 @@ export function AuthProvider({ children }) {
         if (!supabaseEnabled) return;
         await supabase.auth.signOut();
       },
+
+      // Pull a fresh session from Supabase so newly-saved user_metadata (e.g. a
+      // display name just written by the Worker via the Admin API) is reflected in
+      // `user`. The Worker writes metadata out-of-band, so the cached session must
+      // be refreshed for the change to show up client-side.
+      async refreshSession() {
+        if (!supabaseEnabled) return;
+        const { data } = await supabase.auth.refreshSession();
+        setSession(data?.session ?? null);
+      },
     }),
-    [loading, session, role, roleLoading],
+    [loading, session, user, displayName, role, roleLoading],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
