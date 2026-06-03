@@ -5,8 +5,8 @@
 //
 // Two ways in:
 //   • default: email one-time-code. Sends a code to your email, you paste it back.
-//   • --paste : paste an access_token + refresh_token you already have (e.g.
-//               copied from the web app's localStorage `sb-<ref>-auth-token`).
+//   • --paste : paste the web app's localStorage `sb-<ref>-auth-token` value
+//               (the JSON blob); the tokens are extracted from it automatically.
 //               Use this if your project's email template doesn't show the code.
 //
 // Run with:  pnpm --filter @spelling-creator/mcp login
@@ -54,18 +54,42 @@ function authHeaders() {
   };
 }
 
+function extractTokens(raw) {
+  let text = raw.trim();
+  // Supabase may store the value base64-encoded with a `base64-` prefix.
+  if (text.startsWith("base64-")) {
+    text = Buffer.from(text.slice("base64-".length), "base64").toString("utf8");
+  }
+  let parsed;
+  try {
+    parsed = JSON.parse(text);
+  } catch {
+    throw new Error(
+      "That doesn't look like valid JSON. Paste the whole value.",
+    );
+  }
+  // The value may be the session object itself, or wrapped (e.g. { currentSession }).
+  const session =
+    parsed.currentSession || parsed.session || parsed.data?.session || parsed;
+  const access_token = session.access_token;
+  const refresh_token = session.refresh_token;
+  if (!access_token || !refresh_token) {
+    throw new Error(
+      "Couldn't find access_token and refresh_token in the pasted JSON.",
+    );
+  }
+  return { access_token, refresh_token, expires_at: session.expires_at };
+}
+
 async function pasteFlow() {
   console.log(
     "\nPaste an existing Supabase session. In the web app, open DevTools →\n" +
-      "Application → Local Storage → find the `sb-...-auth-token` entry; it's JSON\n" +
-      "with `access_token` and `refresh_token`.\n",
+      "Application → Local Storage → find the `sb-...-auth-token` entry and copy\n" +
+      "its full value (JSON with `access_token` and `refresh_token`).\n",
   );
-  const access_token = (await rl.question("access_token: ")).trim();
-  const refresh_token = (await rl.question("refresh_token: ")).trim();
-  if (!access_token || !refresh_token) {
-    throw new Error("Both tokens are required.");
-  }
-  await persist({ access_token, refresh_token });
+  const raw = (await rl.question("Paste the value: ")).trim();
+  if (!raw) throw new Error("Nothing pasted.");
+  await persist(extractTokens(raw));
 }
 
 async function otpFlow() {
