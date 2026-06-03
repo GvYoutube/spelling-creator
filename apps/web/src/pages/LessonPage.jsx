@@ -662,7 +662,21 @@ export default function LessonPage() {
                 )}
               </Stack>
               <Typography variant="body2" color="text.secondary">
-                {lesson.author || "Anonymous"}
+                {lesson.authorId ? (
+                  <Box
+                    component={RouterLink}
+                    to={`/users/${lesson.authorId}`}
+                    sx={{
+                      color: "inherit",
+                      textDecoration: "none",
+                      "&:hover": { textDecoration: "underline" },
+                    }}
+                  >
+                    {lesson.author || "Anonymous"}
+                  </Box>
+                ) : (
+                  lesson.author || "Anonymous"
+                )}
                 {typeof lesson.sectionCount === "number"
                   ? ` · ${lesson.sectionCount} section${lesson.sectionCount === 1 ? "" : "s"}`
                   : ""}

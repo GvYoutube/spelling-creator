@@ -19,6 +19,7 @@ import CollectionsBookmarkIcon from "@mui/icons-material/CollectionsBookmark";
 import AccountCircleIcon from "@mui/icons-material/AccountCircle";
 import ShieldIcon from "@mui/icons-material/Shield";
 import BadgeIcon from "@mui/icons-material/Badge";
+import PersonIcon from "@mui/icons-material/Person";
 import { useAuth } from "../lib/auth.jsx";
 import NotificationBell from "./NotificationBell.jsx";
 import DisplayNameDialog from "./DisplayNameDialog.jsx";
@@ -96,6 +97,17 @@ export default function NavActions({ current }) {
               />
             </MenuItem>
             <Divider />
+            <MenuItem
+              onClick={() => {
+                setAnchorEl(null);
+                navigate(`/users/${user.id}`);
+              }}
+            >
+              <ListItemIcon>
+                <PersonIcon fontSize="small" />
+              </ListItemIcon>
+              <ListItemText>My profile</ListItemText>
+            </MenuItem>
             <MenuItem
               onClick={() => {
                 setAnchorEl(null);

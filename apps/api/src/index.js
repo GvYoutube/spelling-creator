@@ -1203,6 +1203,9 @@ function rowToComment(row) {
 		// The comment this one replies to, or null for a top-level comment. The
 		// frontend uses it to nest replies under their parent.
 		parentId: row.parent_id || null,
+		// The commenter's Supabase user id — the frontend links the author name to
+		// their /users/:id profile when present.
+		authorId: row.author_id || null,
 		author: row.author,
 		body: row.body,
 		createdAt: row.created_at,
@@ -1238,7 +1241,7 @@ async function handleComments(request, env, lessonId, cors) {
 	// GET — public listing of a lesson's comments, oldest first so the thread
 	// reads top to bottom.
 	if (request.method === 'GET') {
-		const query = `lesson_id=eq.${encodeURIComponent(lessonId)}&select=id,parent_id,author,body,created_at&order=created_at.asc`;
+		const query = `lesson_id=eq.${encodeURIComponent(lessonId)}&select=id,parent_id,author_id,author,body,created_at&order=created_at.asc`;
 		let res;
 		try {
 			res = await fetch(`${base}/rest/v1/comments?${query}`, { headers: supabaseHeaders(env) });
@@ -1463,6 +1466,9 @@ async function getAuthUserById(env, id) {
 // email). Bounded so a name stays readable in a comment header or hub card.
 const DISPLAY_NAME_MIN = 2;
 const DISPLAY_NAME_MAX = 40;
+// A user's free-text "about me", stored in user_metadata.bio (no DB column).
+// Empty is allowed and clears the bio.
+const BIO_MAX = 500;
 
 /**
  * Profile endpoint — lets a signed-in user set the display name that the rest of
@@ -1472,10 +1478,12 @@ const DISPLAY_NAME_MAX = 40;
  * sets it, and it validates length, profanity and name bans first.
  *
  *   POST /profile/display-name   Bearer  { displayName }  -> { displayName }
+ *   POST /profile/bio            Bearer  { bio }          -> { bio }
  *
- * On success it also backfills the caller's existing lessons/comments so any name
- * they posted under previously (including an email captured before this feature)
- * is overwritten with the chosen display name.
+ * On success the display-name route also backfills the caller's existing
+ * lessons/comments so any name they posted under previously (including an email
+ * captured before this feature) is overwritten with the chosen display name. The
+ * bio is profile-only (not denormalised onto rows), so it needs no backfill.
  */
 async function handleProfile(request, env, url, cors) {
 	if (!env.SUPABASE_URL || !env.SUPABASE_SERVICE_ROLE_KEY) {
@@ -1541,7 +1549,216 @@ async function handleProfile(request, env, url, cors) {
 		return jsonResponse({ displayName: name }, 200, cors);
 	}
 
+	// POST /profile/bio — set (or clear) the caller's public "about me", shown on
+	// their profile page. Like the display name, it's written to user_metadata via
+	// the Admin API so the browser can't store an unvalidated bio: we cap the length
+	// and run it through the same profanity filter. An empty string clears it.
+	if (request.method === 'POST' && path === '/profile/bio') {
+		const user = await verifySupabaseUser(env, bearerToken(request));
+		if (!user) return textResponse('Please sign in.', 401, cors);
+
+		let body;
+		try {
+			body = await request.json();
+		} catch (e) {
+			return textResponse('Invalid JSON body', 400, cors);
+		}
+		const bio = (body && typeof body.bio === 'string' ? body.bio : '').trim();
+		if (bio.length > BIO_MAX) {
+			return textResponse(`Bios are limited to ${BIO_MAX} characters.`, 400, cors);
+		}
+		if (bio && profanityFilter.checkProfanity(bio).containsProfanity) {
+			return textResponse('That bio isn’t allowed. Please remove any inappropriate language.', 422, cors);
+		}
+
+		// Write the bio into user_metadata, preserving any other metadata keys.
+		const merged = { ...(user.user_metadata || {}), bio };
+		let res;
+		try {
+			res = await fetch(`${base}/auth/v1/admin/users/${encodeURIComponent(user.id)}`, {
+				method: 'PUT',
+				headers: { ...supabaseHeaders(env), 'Content-Type': 'application/json' },
+				body: JSON.stringify({ user_metadata: merged }),
+			});
+		} catch (e) {
+			return textResponse('Could not save your bio.', 502, cors);
+		}
+		if (!res.ok) return textResponse('Could not save your bio.', 502, cors);
+
+		return jsonResponse({ bio }, 200, cors);
+	}
+
 	return textResponse('Not found.', 404, cors);
+}
+
+/**
+ * Look up a user's public profile fields by id via the Admin API (service-role).
+ * Returns { id, displayName, bio } or null if there's no such user. We never
+ * expose the email — only the chosen display name and bio.
+ */
+async function fetchPublicUser(env, base, userId) {
+	let res;
+	try {
+		res = await fetch(`${base}/auth/v1/admin/users/${encodeURIComponent(userId)}`, {
+			headers: supabaseHeaders(env),
+		});
+	} catch (e) {
+		return null;
+	}
+	if (!res.ok) return null;
+	const user = await res.json().catch(() => null);
+	if (!user || !user.id) return null;
+	const meta = user.user_metadata || {};
+	return {
+		id: user.id,
+		displayName: (meta.display_name || '').toString().trim() || 'Anonymous',
+		bio: (meta.bio || '').toString().trim(),
+	};
+}
+
+/**
+ * Public user-profile endpoints. Profiles are keyed by the Supabase user id (the
+ * same `author_id` carried on every lesson/comment), so they stay valid even when
+ * a display name changes. All reads are public — no auth. The data lives under
+ * /profiles so it never collides with the SPA's /users/:id page (the same split
+ * the lesson data at /lessons / page at /hub already uses).
+ *
+ *   GET /profiles/:id            -> { user: { id, displayName, bio }, lessons: LessonSummary[] }
+ *   GET /profiles/:id/feed.xml   -> Atom feed of the user's lessons + comments ("RSS" in the UI)
+ *
+ * The profile lists only the user's published, non-shadowbanned lessons (the same
+ * visibility rule as the public hub). Errors are short plain-text reasons.
+ */
+async function handleUsers(request, env, url, cors) {
+	if (!env.SUPABASE_URL || !env.SUPABASE_SERVICE_ROLE_KEY) {
+		return textResponse('Server misconfiguration: Supabase is not configured', 500, cors);
+	}
+	if (request.method !== 'GET') return textResponse('Method not allowed.', 405, cors);
+
+	const base = env.SUPABASE_URL.replace(/\/$/, '');
+	// Everything after "/profiles": "/<id>" for a profile, "/<id>/feed.xml" for the feed.
+	const rest = url.pathname.replace(/\/$/, '').slice('/profiles'.length);
+	const feed = rest.endsWith('/feed.xml');
+	const idPart = feed ? rest.slice(0, -'/feed.xml'.length) : rest;
+	const id = idPart.startsWith('/') ? decodeURIComponent(idPart.slice(1)) : '';
+	if (!id) return textResponse('Missing user id.', 400, cors);
+
+	if (feed) return userFeed(env, base, url, id, cors);
+
+	// GET /profiles/:id — the profile: the user's public fields plus their published
+	// lessons, newest first (the doc is excluded, as in the public listing).
+	const user = await fetchPublicUser(env, base, id);
+	if (!user) return textResponse('Profile not found.', 404, cors);
+
+	const query = `author_id=eq.${encodeURIComponent(
+		id,
+	)}&published=eq.true&shadowbanned=eq.false&select=id,author_id,title,author,section_count,published,created_at&order=created_at.desc`;
+	let lessons = [];
+	try {
+		const res = await fetch(`${base}/rest/v1/lessons?${query}`, { headers: supabaseHeaders(env) });
+		if (res.ok) {
+			const rows = await res.json().catch(() => []);
+			lessons = (Array.isArray(rows) ? rows : []).map((r) => rowToLesson(r, false));
+		}
+	} catch (e) {
+		// Profile still loads without the lesson list; show what we have.
+	}
+
+	return jsonResponse({ user, lessons }, 200, cors);
+}
+
+/**
+ * GET /profiles/:id/feed.xml — an Atom 1.0 activity feed for one user, merging
+ * their published lessons and their comments, newest first (capped). Built and
+ * escaped the same way as the sitemap. Surfaced in the UI as "RSS" (the terms are
+ * used interchangeably). The <alternate> link points at the human /users/:id page.
+ * On a Supabase hiccup we still return a valid, empty-ish feed rather than failing,
+ * matching handleSitemap.
+ */
+async function userFeed(env, base, url, id, cors) {
+	const user = await fetchPublicUser(env, base, id);
+	if (!user) return textResponse('Profile not found.', 404, cors);
+
+	const origin = url.origin;
+	const selfUrl = `${origin}/profiles/${encodeURIComponent(id)}/feed.xml`;
+	const profileUrl = `${origin}/users/${encodeURIComponent(id)}`;
+	const entries = [];
+
+	// Lessons the user published.
+	try {
+		const q = `author_id=eq.${encodeURIComponent(id)}&published=eq.true&shadowbanned=eq.false&select=id,title,created_at&order=created_at.desc&limit=50`;
+		const res = await fetch(`${base}/rest/v1/lessons?${q}`, { headers: supabaseHeaders(env) });
+		if (res.ok) {
+			for (const row of (await res.json().catch(() => [])) || []) {
+				if (!row || !row.id) continue;
+				entries.push({
+					id: `urn:s2c:lesson:${row.id}`,
+					title: row.title || 'Untitled Lesson',
+					link: `${origin}/hub/${encodeURIComponent(row.id)}`,
+					summary: `${user.displayName} published the lesson “${row.title || 'Untitled Lesson'}”.`,
+					createdAt: row.created_at,
+				});
+			}
+		}
+	} catch (e) {
+		// Skip lessons on error; comments (and an empty feed) still render.
+	}
+
+	// Comments the user posted.
+	try {
+		const q = `author_id=eq.${encodeURIComponent(id)}&select=id,lesson_id,body,created_at&order=created_at.desc&limit=50`;
+		const res = await fetch(`${base}/rest/v1/comments?${q}`, { headers: supabaseHeaders(env) });
+		if (res.ok) {
+			for (const row of (await res.json().catch(() => [])) || []) {
+				if (!row || !row.id) continue;
+				entries.push({
+					id: `urn:s2c:comment:${row.id}`,
+					title: `Comment by ${user.displayName}`,
+					link: row.lesson_id ? `${origin}/hub/${encodeURIComponent(row.lesson_id)}` : profileUrl,
+					summary: row.body || '',
+					createdAt: row.created_at,
+				});
+			}
+		}
+	} catch (e) {
+		// Skip comments on error.
+	}
+
+	// Merge newest-first and cap the combined stream.
+	entries.sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0));
+	const top = entries.slice(0, 50);
+	// The feed's <updated> is the newest entry's timestamp (or epoch if empty).
+	const updated = new Date(top.length && top[0].createdAt ? top[0].createdAt : 0).toISOString();
+
+	const body = `<?xml version="1.0" encoding="UTF-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom">
+	<title>${xmlEscape(user.displayName)} — activity</title>
+	<subtitle>Lessons and comments from ${xmlEscape(user.displayName)}</subtitle>
+	<id>${xmlEscape(profileUrl)}</id>
+	<link rel="self" type="application/atom+xml" href="${xmlEscape(selfUrl)}"/>
+	<link rel="alternate" type="text/html" href="${xmlEscape(profileUrl)}"/>
+	<updated>${updated}</updated>
+	<author><name>${xmlEscape(user.displayName)}</name></author>
+${top
+	.map((e) => {
+		const ts = new Date(e.createdAt || 0).toISOString();
+		return `	<entry>
+		<id>${xmlEscape(e.id)}</id>
+		<title>${xmlEscape(e.title)}</title>
+		<link rel="alternate" type="text/html" href="${xmlEscape(e.link)}"/>
+		<updated>${ts}</updated>
+		<published>${ts}</published>
+		<author><name>${xmlEscape(user.displayName)}</name></author>
+		<summary>${xmlEscape(e.summary)}</summary>
+	</entry>`;
+	})
+	.join('\n')}
+</feed>`;
+
+	const headers = new Headers(cors);
+	headers.set('Content-Type', 'application/atom+xml; charset=utf-8');
+	headers.set('Cache-Control', 'public, max-age=3600');
+	return new Response(body, { status: 200, headers });
 }
 
 /**
@@ -2349,16 +2566,23 @@ async function handleSitemap(request, env, url) {
 
 	if (env.SUPABASE_URL && env.SUPABASE_SERVICE_ROLE_KEY) {
 		const base = env.SUPABASE_URL.replace(/\/$/, '');
-		const query = 'published=eq.true&select=id,created_at&order=created_at.desc';
+		const query = 'published=eq.true&select=id,author_id,created_at&order=created_at.desc';
 		try {
 			const res = await fetch(`${base}/rest/v1/lessons?${query}`, { headers: supabaseHeaders(env) });
 			if (res.ok) {
 				const rows = await res.json().catch(() => []);
+				// One entry per published lesson, plus one profile entry per distinct
+				// author so user pages are crawlable too.
+				const seenAuthors = new Set();
 				for (const row of Array.isArray(rows) ? rows : []) {
 					if (!row || !row.id) continue;
 					const entry = { loc: `${origin}/hub/${encodeURIComponent(row.id)}`, changefreq: 'weekly', priority: '0.6' };
 					if (row.created_at) entry.lastmod = new Date(row.created_at).toISOString().slice(0, 10);
 					urls.push(entry);
+					if (row.author_id && !seenAuthors.has(row.author_id)) {
+						seenAuthors.add(row.author_id);
+						urls.push({ loc: `${origin}/users/${encodeURIComponent(row.author_id)}`, changefreq: 'weekly', priority: '0.4' });
+					}
 				}
 			}
 		} catch (e) {
@@ -2482,6 +2706,14 @@ export default {
 		// Supabase-JWT gated like the hub writes, so handled before the AI flow.
 		if (path === '/profile' || path.startsWith('/profile/')) {
 			return handleProfile(request, env, url, cors);
+		}
+
+		// Public user-profile routes: a user's profile JSON and their Atom activity
+		// feed. These use the /profiles prefix so they don't collide with the SPA's
+		// /users/:id *page* (mirroring how the lesson data lives at /lessons while
+		// its page lives at /hub). Served before the frontend fall-through.
+		if (path === '/profiles' || path.startsWith('/profiles/')) {
+			return handleUsers(request, env, url, cors);
 		}
 
 		// Moderation routes: the admin/moderator privilege layer (role lookups,

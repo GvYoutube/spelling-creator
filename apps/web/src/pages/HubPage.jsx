@@ -555,7 +555,36 @@ export default function HubPage() {
                           {lesson.title || "Untitled Lesson"}
                         </Typography>
                         <Typography variant="body2" color="text.secondary">
-                          {lesson.author || "Anonymous"}
+                          {lesson.authorId ? (
+                            // The whole card is already a link, so the author can't
+                            // be a nested <a>. Use a clickable span that navigates
+                            // to the profile and stops the card's own navigation.
+                            <Box
+                              component="span"
+                              role="link"
+                              tabIndex={0}
+                              onClick={(e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                navigate(`/users/${lesson.authorId}`);
+                              }}
+                              onKeyDown={(e) => {
+                                if (e.key === "Enter") {
+                                  e.preventDefault();
+                                  e.stopPropagation();
+                                  navigate(`/users/${lesson.authorId}`);
+                                }
+                              }}
+                              sx={{
+                                cursor: "pointer",
+                                "&:hover": { textDecoration: "underline" },
+                              }}
+                            >
+                              {lesson.author || "Anonymous"}
+                            </Box>
+                          ) : (
+                            lesson.author || "Anonymous"
+                          )}
                         </Typography>
                         <Typography
                           variant="caption"

@@ -241,7 +241,25 @@ export default function CommentsSection({ lessonId }) {
           <Box sx={{ flexGrow: 1 }}>
             <Stack direction="row" spacing={1} alignItems="baseline">
               <Typography variant="subtitle2">
-                {c.author || "Anonymous"}
+                {c.authorId ? (
+                  <Box
+                    component="span"
+                    role="link"
+                    tabIndex={0}
+                    onClick={() => navigate(`/users/${c.authorId}`)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") navigate(`/users/${c.authorId}`);
+                    }}
+                    sx={{
+                      cursor: "pointer",
+                      "&:hover": { textDecoration: "underline" },
+                    }}
+                  >
+                    {c.author || "Anonymous"}
+                  </Box>
+                ) : (
+                  c.author || "Anonymous"
+                )}
               </Typography>
               <Typography variant="caption" color="text.secondary">
                 {formatDateTime(c.createdAt)}
