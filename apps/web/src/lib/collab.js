@@ -45,13 +45,20 @@ import { iceServers } from "./iceServers.js";
 //   any   -> any   { t: 'doc', doc }                 full document update
 //   host  -> guests{ t: 'presence', participants }   who is collaborating now
 //   any   -> any   { t: 'cursor', cursor }            where someone is editing
+//   any   -> any   { t: 'chat', msg }                 a chat message for everyone
 const MSG = {
   ADMITTED: "admitted",
   REMOVED: "removed",
   DOC: "doc",
   PRESENCE: "presence",
   CURSOR: "cursor",
+  CHAT: "chat",
 };
+
+// Cap on a single chat message so a peer can't flood the channel with a huge
+// string. Chat is ephemeral (kept only in memory for the session), so this is
+// purely a sanity bound, not a storage limit.
+const MAX_CHAT_LEN = 2000;
 
 // A short label for someone we don't have a name for yet (derived from their uid).
 function shortId(id) {
@@ -79,6 +86,10 @@ export function useCollaboration({ doc, onRemoteDoc, identity }) {
   // { [uid]: { uid, name, email, avatarUrl, color, field, start, end, ts } }.
   // Our own cursor is never stored here — we only render the people we receive.
   const [selections, setSelections] = useState({});
+  // Chat transcript for this session, oldest first. Each entry is
+  // { id, uid, name, email, avatarUrl, text, ts }. Ephemeral: it lives only in
+  // memory for the lifetime of the session and is cleared on leave.
+  const [messages, setMessages] = useState([]);
 
   // Live objects kept in refs (not state) so re-renders don't churn connections.
   const peerRef = useRef(null);
@@ -162,6 +173,17 @@ export function useCollaboration({ doc, onRemoteDoc, identity }) {
       if (!cursor.field) delete next[cursor.uid];
       else next[cursor.uid] = cursor;
       return next;
+    });
+  }, []);
+
+  // Append a received chat message to the transcript, ignoring duplicates (the
+  // host relays a guest's message back out, so a peer could in principle see the
+  // same id twice). Messages are deduped by their generated id.
+  const addMessage = useCallback((m) => {
+    if (!m || typeof m.text !== "string") return;
+    setMessages((prev) => {
+      if (m.id && prev.some((x) => x.id === m.id)) return prev;
+      return [...prev, m];
     });
   }, []);
 
@@ -257,6 +279,26 @@ export function useCollaboration({ doc, onRemoteDoc, identity }) {
               send(other.conn, { t: MSG.CURSOR, cursor });
             }
           }
+        } else if (msg.t === MSG.CHAT && rec.admitted) {
+          // A collaborator sent a chat message: stamp its identity from the
+          // connection (so a peer can't spoof who they are), show it locally,
+          // then relay it to every other admitted guest.
+          const chat = {
+            id: msg.msg?.id || newId(),
+            uid,
+            name: rec.info.name,
+            email: rec.info.email,
+            avatarUrl: rec.info.avatarUrl,
+            text: String(msg.msg?.text || "").slice(0, MAX_CHAT_LEN),
+            ts: msg.msg?.ts || Date.now(),
+          };
+          if (!chat.text) return;
+          addMessage(chat);
+          for (const [pid, other] of connsRef.current) {
+            if (pid !== uid && other.admitted) {
+              send(other.conn, { t: MSG.CHAT, msg: chat });
+            }
+          }
         }
         // Messages from a not-yet-admitted guest are ignored by design.
       });
@@ -277,6 +319,7 @@ export function useCollaboration({ doc, onRemoteDoc, identity }) {
   }, [
     applyRemote,
     applyCursor,
+    addMessage,
     forgetCursor,
     syncHostParticipants,
     isTrustedEmail,
@@ -359,6 +402,8 @@ export function useCollaboration({ doc, onRemoteDoc, identity }) {
             applyRemote(msg.doc);
           } else if (msg.t === MSG.CURSOR) {
             applyCursor(msg.cursor);
+          } else if (msg.t === MSG.CHAT) {
+            addMessage(msg.msg);
           } else if (msg.t === MSG.PRESENCE) {
             const list = Array.isArray(msg.participants)
               ? msg.participants
@@ -400,7 +445,7 @@ export function useCollaboration({ doc, onRemoteDoc, identity }) {
         setStatus("error");
       });
     },
-    [applyRemote, applyCursor],
+    [applyRemote, applyCursor, addMessage],
   );
 
   // ----- Teardown ---------------------------------------------------------
@@ -428,6 +473,7 @@ export function useCollaboration({ doc, onRemoteDoc, identity }) {
     lastSyncedRef.current = null;
     myCursorIdRef.current = null;
     setSelections({});
+    setMessages([]);
   }
 
   const leave = useCallback(() => {
@@ -471,6 +517,39 @@ export function useCollaboration({ doc, onRemoteDoc, identity }) {
     [role],
   );
 
+  // Send a chat message to everyone in the session. We show our own message
+  // immediately (optimistically) and ship it out: a host broadcasts to all
+  // admitted guests; a guest sends it to the host, which relays it onward.
+  const sendChat = useCallback(
+    (text) => {
+      const body = String(text || "")
+        .trim()
+        .slice(0, MAX_CHAT_LEN);
+      if (!body) return;
+      const id = myCursorIdRef.current;
+      if (!id || (role !== "host" && role !== "guest")) return;
+      const me = identityRef.current || {};
+      const msg = {
+        id: newId(),
+        uid: id,
+        name: me.name || "",
+        email: me.email || "",
+        avatarUrl: me.avatarUrl || "",
+        text: body,
+        ts: Date.now(),
+      };
+      addMessage(msg);
+      if (role === "host") {
+        for (const [, rec] of connsRef.current) {
+          if (rec.admitted) send(rec.conn, { t: MSG.CHAT, msg });
+        }
+      } else {
+        send(hostConnRef.current, { t: MSG.CHAT, msg });
+      }
+    },
+    [role, addMessage],
+  );
+
   // Tear down the peer when the component using this hook unmounts.
   useEffect(() => () => cleanup(), []);
 
@@ -503,12 +582,15 @@ export function useCollaboration({ doc, onRemoteDoc, identity }) {
     error,
     active,
     selections,
+    messages,
+    myId: myCursorIdRef.current,
     startHosting,
     joinSession,
     admit,
     removeParticipant,
     leave,
     setLocalSelection,
+    sendChat,
     clearError: () => setError(null),
   };
 }

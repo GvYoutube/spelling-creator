@@ -50,6 +50,19 @@ function initials(entry) {
   return src.trim().charAt(0).toUpperCase() || "?";
 }
 
+// Short clock label (e.g. "14:05") for a chat message timestamp.
+function formatTime(ts) {
+  if (!ts) return "";
+  try {
+    return new Date(ts).toLocaleTimeString([], {
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+  } catch {
+    return "";
+  }
+}
+
 // Loose client-side email check — just enough to keep obvious typos out of the
 // trusted list. The Worker re-validates on send, so this is only for UX.
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -69,11 +82,14 @@ export default function CollaborateDialog({
     participants,
     requests,
     error,
+    messages,
+    myId,
     startHosting,
     joinSession,
     admit,
     removeParticipant,
     leave,
+    sendChat,
     clearError,
   } = collab;
 
@@ -92,6 +108,21 @@ export default function CollaborateDialog({
 
   const inSession = status === "hosting" || status === "joined";
   const connecting = status === "connecting";
+
+  // Live chat. The transcript lives in the collab hook; here we only hold the
+  // in-progress draft and keep the message list scrolled to the newest entry.
+  const [chatDraft, setChatDraft] = useState("");
+  const chatEndRef = useRef(null);
+  useEffect(() => {
+    chatEndRef.current?.scrollIntoView({ block: "nearest" });
+  }, [messages]);
+
+  const submitChat = () => {
+    const text = chatDraft.trim();
+    if (!text) return;
+    sendChat(text);
+    setChatDraft("");
+  };
 
   // Auto-invite trusted collaborators. Once a host session is live we have a
   // shareable link, so we send it to each trusted collaborator's email — they
@@ -360,6 +391,10 @@ export default function CollaborateDialog({
 
       <Divider />
 
+      {renderChat()}
+
+      <Divider />
+
       {renderTrusted({ compact: true })}
     </Stack>
   );
@@ -385,6 +420,8 @@ export default function CollaborateDialog({
           </Alert>
         )}
         {admitted && renderRoster()}
+        {admitted && <Divider />}
+        {admitted && renderChat()}
       </Stack>
     );
   };
@@ -437,6 +474,122 @@ export default function CollaborateDialog({
         </List>
       </Box>
     );
+
+  // Live chat panel, shown to everyone collaborating in the session. The
+  // transcript is ephemeral (memory-only) — it isn't saved with the lesson.
+  const renderChat = () => (
+    <Box>
+      <Typography variant="subtitle2" gutterBottom>
+        Chat
+      </Typography>
+      <Box
+        sx={{
+          maxHeight: 220,
+          minHeight: 96,
+          overflowY: "auto",
+          border: 1,
+          borderColor: "divider",
+          borderRadius: 1,
+          p: 1,
+          mb: 1,
+          bgcolor: "action.hover",
+        }}
+      >
+        {messages.length === 0 ? (
+          <Typography
+            variant="body2"
+            color="text.secondary"
+            sx={{ textAlign: "center", py: 2 }}
+          >
+            No messages yet — say hello!
+          </Typography>
+        ) : (
+          <Stack spacing={1}>
+            {messages.map((m) => {
+              const mine = m.uid === myId;
+              return (
+                <Stack
+                  key={m.id}
+                  direction="row"
+                  spacing={1}
+                  sx={{ flexDirection: mine ? "row-reverse" : "row" }}
+                >
+                  <Avatar
+                    src={m.avatarUrl || undefined}
+                    sx={{
+                      width: 28,
+                      height: 28,
+                      fontSize: 14,
+                      bgcolor: mine ? "primary.main" : colorForId(m.uid),
+                    }}
+                  >
+                    {initials(m)}
+                  </Avatar>
+                  <Box sx={{ minWidth: 0, maxWidth: "75%" }}>
+                    <Typography
+                      variant="caption"
+                      color="text.secondary"
+                      sx={{
+                        display: "block",
+                        textAlign: mine ? "right" : "left",
+                      }}
+                    >
+                      {mine ? "You" : m.name || "Collaborator"} ·{" "}
+                      {formatTime(m.ts)}
+                    </Typography>
+                    <Box
+                      sx={{
+                        px: 1.25,
+                        py: 0.75,
+                        borderRadius: 1.5,
+                        bgcolor: mine ? "primary.main" : "background.paper",
+                        color: mine ? "primary.contrastText" : "text.primary",
+                        border: mine ? 0 : 1,
+                        borderColor: "divider",
+                        wordBreak: "break-word",
+                        whiteSpace: "pre-wrap",
+                      }}
+                    >
+                      <Typography variant="body2">{m.text}</Typography>
+                    </Box>
+                  </Box>
+                </Stack>
+              );
+            })}
+            <div ref={chatEndRef} />
+          </Stack>
+        )}
+      </Box>
+      <Stack direction="row" spacing={1} alignItems="flex-start">
+        <TextField
+          size="small"
+          fullWidth
+          placeholder="Type a message"
+          value={chatDraft}
+          onChange={(e) => setChatDraft(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" && !e.shiftKey) {
+              e.preventDefault();
+              submitChat();
+            }
+          }}
+          inputProps={{ maxLength: 2000 }}
+        />
+        <Tooltip title="Send">
+          <span>
+            <IconButton
+              color="primary"
+              onClick={submitChat}
+              disabled={!chatDraft.trim()}
+              sx={{ mt: 0.25 }}
+            >
+              <SendIcon fontSize="small" />
+            </IconButton>
+          </span>
+        </Tooltip>
+      </Stack>
+    </Box>
+  );
 
   // Manage the per-document trusted-collaborator list and explain the
   // auto-invite behaviour. `compact` drops the explanatory copy for the
