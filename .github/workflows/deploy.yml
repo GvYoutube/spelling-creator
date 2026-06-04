@@ -2,12 +2,14 @@ name: Deploy to Cloudflare
 
 # The Worker now hosts the SPA: it serves the built web app as static assets and
 # prerenders pages for crawlers with Browser Rendering. So a deploy builds the
-# web app, then `wrangler deploy` uploads the Worker together with apps/web/dist.
+# web app and the Docusaurus docs (into apps/web/dist/docs), then `wrangler
+# deploy` uploads the Worker together with apps/web/dist.
 on:
   push:
     paths:
       - "apps/web/**"
       - "apps/api/**"
+      - "apps/docs/**"
       - "pnpm-lock.yaml"
       - "pnpm-workspace.yaml"
       - ".github/workflows/deploy.yml"
@@ -71,6 +73,12 @@ jobs:
 
       - name: Build web app
         run: pnpm --filter @spelling-creator/web build
+
+      # Build the Docusaurus docs and copy them into apps/web/dist/docs so they
+      # ship in the same assets bundle and are served at /docs. Runs AFTER the
+      # web build because Vite empties apps/web/dist on each build.
+      - name: Build docs
+        run: pnpm --filter @spelling-creator/docs build
 
       # Deploys the Worker (apps/api) which bundles apps/web/dist as static
       # assets via the `assets` config in wrangler.jsonc.

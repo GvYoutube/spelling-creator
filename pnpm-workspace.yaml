@@ -9,3 +9,4 @@ allowBuilds:
   protobufjs: true
   sharp: true
   workerd: true
+  "@swc/core": true

@@ -1,1 +1,5 @@
 pnpm-lock.yaml
+
+# Docusaurus build output and generated files
+apps/docs/build
+apps/docs/.docusaurus
