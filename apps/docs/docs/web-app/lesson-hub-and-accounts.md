@@ -1,0 +1,142 @@
+---
+title: Lesson hub & accounts
+sidebar_position: 9
+---
+
+# Lesson hub & accounts
+
+The **Lesson hub** (`/hub`) is a public gallery of lessons users have shared.
+Anyone can browse and preview; saving to the cloud **and commenting** require a
+signed-in account. The editor's **Save to cloud** button is a dropdown with two
+choices: **Publish to hub** (shared publicly) or **Save as draft** (backed up to
+the database but kept private — only the author sees it, in a "Your drafts"
+section on the hub). A draft can be published later, or a published lesson pulled
+back to a draft; both go through the same `POST`/`PUT` with a `published` flag.
+Signed-in users see an **Edit** action on lessons they published — it
+opens the lesson back in the editor (warning first before it replaces any
+in-progress work), and saving sends a `PUT` that the Worker accepts only from the
+lesson's author. Comments appear beneath each lesson in its preview dialog and are
+**moderated server-side**: a comment containing profanity (detected with
+[`glin-profanity`](https://www.npmjs.com/package/glin-profanity)) is blocked
+entirely by the Worker — it is never stored, and the user is shown why.
+
+**Where the data lives.** Lessons are stored in **Supabase Postgres**, but — like
+the AI and Pixabay features — the browser never talks to the database directly.
+All lesson reads/writes go through the companion `spelling-creator-cf` Worker,
+which holds the privileged Supabase credentials server-side. The only thing the
+browser does directly with Supabase is **authentication**.
+
+**How sign-in works.** The login page (`/login`) uses
+[Supabase Auth](https://supabase.com/docs/guides/auth) magic links: enter an
+email, receive a one-time link, and the Supabase JS client (in `src/lib/supabase.js`)
+exchanges the callback for a session. We use the **PKCE** flow so the callback
+returns a `?code=` in the query string rather than tokens in the URL hash, which
+avoids colliding with the hash-based router. The session JWT is what authorises a
+publish: the app sends it to the Worker as a `Bearer` token, and the Worker
+verifies it (and derives the author) before inserting the row.
+
+```
+ Browser ──magic link / session (Supabase JS)──▶ Supabase Auth
+ Browser ──GET /lessons, GET /lessons/:id───────▶ Worker ──▶ Supabase Postgres   (public reads; published only in listing)
+ Browser ──GET /lessons/mine (Bearer JWT)────────▶ Worker ──verify JWT──▶ Postgres (own lessons + drafts)
+ Browser ──POST /lessons  (Bearer JWT)──────────▶ Worker ──verify JWT──▶ Postgres (publish or save draft)
+ Browser ──PUT  /lessons/:id (Bearer JWT)────────▶ Worker ──verify JWT + author──▶ Postgres (edit own; may flip draft↔hub)
+ Browser ──GET /lessons/:id/comments────────────▶ Worker ──▶ Supabase Postgres   (public reads)
+ Browser ──POST /lessons/:id/comments (Bearer)──▶ Worker ──verify JWT, profanity check──▶ Postgres
+```
+
+## Worker endpoints (contract)
+
+These live in the separate `spelling-creator-cf` repo. The frontend
+(`src/lib/lessons.js`) expects them at paths under `VITE_API_URL`:
+
+| Method & path                | Auth                    | Response                                                                                                              |
+| ---------------------------- | ----------------------- | --------------------------------------------------------------------------------------------------------------------- |
+| `GET /lessons`               | none (public)           | `{ "lessons": [{ id, authorId, title, author, sectionCount, published, createdAt }] }` (published only, newest first) |
+| `GET /lessons/mine`          | `Bearer <Supabase JWT>` | `{ "lessons": [{ id, authorId, title, author, sectionCount, published, createdAt }] }` (caller's own, incl. drafts)   |
+| `GET /lessons/:id`           | none (public)           | `{ "lesson": { id, authorId, title, author, sectionCount, published, createdAt, doc } }`                              |
+| `POST /lessons`              | `Bearer <Supabase JWT>` | `{ "lesson": { id, authorId, title, author, sectionCount, published, createdAt } }`                                   |
+| `PUT /lessons/:id`           | `Bearer <Supabase JWT>` | `{ "lesson": { id, authorId, title, author, sectionCount, published, createdAt } }` (author only; else `403`)         |
+| `GET /lessons/:id/comments`  | none (public)           | `{ "comments": [{ id, author, body, createdAt }] }` (oldest first)                                                    |
+| `POST /lessons/:id/comments` | `Bearer <Supabase JWT>` | `{ "comment": { id, author, body, createdAt } }`                                                                      |
+| `POST /ai-text/dislike`      | `Bearer <Supabase JWT>` | `{ "ok": true }` — evicts the cached text for `{ subject, documentName }`                                             |
+
+- `doc` is the editor document shape used throughout the app:
+  `{ title, sections: [{ id, name, blocks: [...] }] }`. Store it as `jsonb`.
+- `POST /lessons` body is `{ title, doc, published }`. The Worker should
+  **verify the JWT** (e.g. validate the HS256 signature with the Supabase JWT
+  secret, or call `GET {SUPABASE_URL}/auth/v1/user` with the token), reject if
+  invalid, take the author from the verified user (never trust a client-supplied
+  author), and insert with the service-role key. `published` (default `true` when
+  omitted) decides whether the lesson is shared on the hub or saved as a private
+  draft. The response includes `authorId` (the publisher's Supabase user id) so the
+  hub can tell which lessons belong to the signed-in user and offer **Edit**.
+- `GET /lessons/mine` verifies the JWT and returns the caller's own lessons
+  (drafts and published), scoped to `author_id = <verified user>`. It backs the
+  hub's "Your drafts" section, since drafts are filtered out of `GET /lessons`.
+- `PUT /lessons/:id` body is `{ title, doc, published? }`. The Worker verifies the
+  JWT the same way, then updates the row **only if the verified user is its author**
+  (the update is filtered on both `id` and `author_id`, so a non-author's request
+  matches no rows and is rejected with `403`). When `published` is present it is
+  updated too, so a draft can be published or a published lesson pulled back to a
+  draft; omitting it leaves the current state alone. `author` and `created_at` are
+  left unchanged. This backs the editor's **Save to cloud** actions when editing a
+  lesson loaded from the hub.
+- `POST /lessons/:id/comments` body is `{ body }`. The Worker verifies the JWT
+  the same way, derives the author from the verified user, then runs the text
+  through [`glin-profanity`](https://www.npmjs.com/package/glin-profanity); if any
+  profanity is found it **rejects the whole comment with `422`** (nothing is
+  stored). Otherwise it inserts the row with the service-role key. The check runs
+  on the Worker so it can't be bypassed by a crafted client request.
+- `POST /ai-text/dislike` body is `{ subject, documentName }`. The Worker
+  verifies the JWT the same way (sign-in required), then rebuilds the cache key
+  for that text suggestion and deletes it, so the next request for the same
+  subject is regenerated instead of served from cache.
+- On 4xx/5xx, return a short **plain-text** reason — the frontend surfaces it
+  directly (matching the existing AI/Pixabay error convention).
+
+## Supabase schema
+
+The canonical, ready-to-run schema lives in the Worker repo at
+`spelling-creator-cf/schema.sql`; this is the same thing for reference:
+
+```sql
+create table public.lessons (
+  id            uuid primary key default gen_random_uuid(),
+  author_id     uuid not null references auth.users (id) on delete cascade,
+  author        text,                       -- display name / email, denormalised for listing
+  title         text not null,
+  doc           jsonb not null,             -- the editor document { title, sections }
+  -- Maintained by Postgres so the public listing can return a section count
+  -- without the Worker downloading every (image-laden) doc.
+  section_count int generated always as (jsonb_array_length(doc -> 'sections')) stored,
+  -- false = a private draft, backed up but kept out of the public listing.
+  -- Defaults true so pre-draft rows (all of which were published) stay visible.
+  published     boolean not null default true,
+  created_at    timestamptz not null default now()
+);
+
+create index lessons_created_at_idx on public.lessons (created_at desc);
+
+-- The Worker connects with the service-role key, which bypasses RLS. RLS is
+-- still worth enabling as defence-in-depth in case the anon key is ever used:
+alter table public.lessons enable row level security;
+create policy "lessons are public to read"
+  on public.lessons for select using (true);
+-- (No insert policy for anon/auth roles: only the service-role Worker writes.)
+
+-- Comments on a lesson. Public to read; written only by the service-role Worker
+-- after it verifies the JWT and the profanity check passes.
+create table public.comments (
+  id          uuid primary key default gen_random_uuid(),
+  lesson_id   uuid not null references public.lessons (id) on delete cascade,
+  author_id   uuid not null references auth.users (id) on delete cascade,
+  author      text,
+  body        text not null,
+  created_at  timestamptz not null default now()
+);
+create index comments_lesson_id_idx on public.comments (lesson_id, created_at);
+alter table public.comments enable row level security;
+create policy "comments are public to read"
+  on public.comments for select using (true);
+```
