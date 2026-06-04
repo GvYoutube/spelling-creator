@@ -56,6 +56,7 @@ import SectionCard from "../components/SectionCard.jsx";
 import NavActions from "../components/NavActions.jsx";
 import CollaborateDialog from "../components/CollaborateDialog.jsx";
 import CollabCursors from "../components/CollabCursors.jsx";
+import CollabChat from "../components/CollabChat.jsx";
 import FirstLessonWizard from "../components/FirstLessonWizard.jsx";
 import AiLessonIdeaDialog from "../components/AiLessonIdeaDialog.jsx";
 import { AGE_RANGES } from "../lib/ageRanges.js";
@@ -1362,6 +1363,9 @@ export default function EditorPage() {
 
       {/* Floating avatars showing where each collaborator is editing. */}
       <CollabCursors selections={collab.selections} />
+
+      {/* Floating live-chat panel, pinned to the bottom-left while collaborating. */}
+      <CollabChat collab={collab} />
 
       <Backdrop open={editLoading} sx={{ zIndex: (t) => t.zIndex.modal + 1 }}>
         <CircularProgress color="inherit" />
