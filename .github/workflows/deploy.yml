@@ -55,8 +55,6 @@ jobs:
           test -n "${{ secrets.VITE_SUPABASE_URL }}" && echo "supabase url ok"
           test -n "${{ secrets.VITE_SUPABASE_ANON_KEY }}" && echo "supabase anon key ok"
           test -n "${{ secrets.CLOUDFLARE_API_TOKEN }}" && echo "cloudflare token ok"
-          test -n "${{ secrets.VITE_TURN_USER }}" && echo "turn server user ok"
-          test -n "${{ secrets.VITE_TURN_PASS }}" && echo "turn server password ok"
 
       - name: Inject env vars
         run: |
