@@ -55,6 +55,8 @@ jobs:
           test -n "${{ secrets.VITE_SUPABASE_URL }}" && echo "supabase url ok"
           test -n "${{ secrets.VITE_SUPABASE_ANON_KEY }}" && echo "supabase anon key ok"
           test -n "${{ secrets.CLOUDFLARE_API_TOKEN }}" && echo "cloudflare token ok"
+          test -n "${{ secrets.VITE_TURN_USER }}" && echo "turn server user ok"
+          test -n "${{ secrets.VITE_TURN_PASS }}" && echo "turn server password ok"
 
       - name: Inject env vars
         run: |
@@ -63,6 +65,8 @@ jobs:
           echo "VITE_GOOGLE_CLIENT_ID=${{ secrets.VITE_GOOGLE_CLIENT_ID }}" >> apps/web/.env
           echo "VITE_SUPABASE_URL=${{ secrets.VITE_SUPABASE_URL }}" >> apps/web/.env
           echo "VITE_SUPABASE_ANON_KEY=${{ secrets.VITE_SUPABASE_ANON_KEY }}" >> apps/web/.env
+          echo "VITE_TURN_USER=${{ secrets.VITE_TURN_USER }}" >> apps/web/.env
+          echo "VITE_TURN_PASS=${{ secrets.VITE_TURN_PASS }}" >> apps/web/.env
 
       - name: Lint
         run: pnpm lint
