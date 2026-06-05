@@ -14,23 +14,96 @@ import ImageList from "@mui/material/ImageList";
 import ImageListItem from "@mui/material/ImageListItem";
 import Typography from "@mui/material/Typography";
 import CircularProgress from "@mui/material/CircularProgress";
+import ToggleButton from "@mui/material/ToggleButton";
+import ToggleButtonGroup from "@mui/material/ToggleButtonGroup";
 import SearchIcon from "@mui/icons-material/Search";
 import { searchPixabayImages, fetchPixabayImage } from "../lib/pixabay.js";
+import {
+  searchWikimediaImages,
+  fetchWikimediaImage,
+} from "../lib/wikimedia.js";
 import { decodeDataUrl, storeImageBytes } from "../lib/imageRef.js";
 import { TURNSTILE_SITE_KEY, whenTurnstileReady } from "../lib/turnstile.js";
 
+// The image sources the dialog can search. Each provider hides where its search,
+// download, and attribution come from behind a common interface, so the dialog's
+// flow is identical regardless of which one is selected:
+//
+//   search(query, token)  -> hits[]            (each hit: { id, previewURL, ... })
+//   resolve(hit, token)   -> { bytes, mime, width, height }
+//   caption(hit)          -> attribution string to pre-fill the caption
+//
+// `needsToken` distinguishes Pixabay (proxied through the Worker, which enforces
+// a Turnstile check) from Wikimedia Commons (queried directly from the browser,
+// no key and no token needed — see web/src/lib/wikimedia.js).
+const PROVIDERS = [
+  {
+    id: "pixabay",
+    label: "Pixabay",
+    sourceName: "Pixabay",
+    sourceUrl: "https://pixabay.com",
+    needsToken: true,
+    async search(query, token) {
+      const { hits } = await searchPixabayImages(query, token);
+      return hits;
+    },
+    async resolve(hit, token) {
+      const dataUrl = await fetchPixabayImage(hit.webformatURL, token);
+      const { bytes, mime } = decodeDataUrl(dataUrl);
+      return {
+        bytes,
+        mime,
+        width: hit.webformatWidth,
+        height: hit.webformatHeight,
+      };
+    },
+    caption(hit) {
+      // Attribution (appreciated by Pixabay).
+      return hit.user
+        ? `Image by ${hit.user} from Pixabay`
+        : "Image from Pixabay";
+    },
+    alt(hit) {
+      return hit.tags || "Pixabay image";
+    },
+  },
+  {
+    id: "wikimedia",
+    label: "Wikimedia Commons",
+    sourceName: "Wikimedia Commons",
+    sourceUrl: "https://commons.wikimedia.org",
+    needsToken: false,
+    async search(query) {
+      const { hits } = await searchWikimediaImages(query);
+      return hits;
+    },
+    async resolve(hit) {
+      return fetchWikimediaImage(hit);
+    },
+    caption(hit) {
+      // Each Commons image is licensed individually; the hit carries a ready-made
+      // attribution string (author + licence + source).
+      return hit.caption;
+    },
+    alt(hit) {
+      return hit.tags || "Wikimedia Commons image";
+    },
+  },
+];
+
 /**
- * Dialog that searches Pixabay for images and inserts the chosen one as an
- * image block. Both the search and the per-image download go through the
- * apps/api Worker (so the API key stays server-side and Pixabay's
- * rate limit is enforced there), and each request carries a fresh Turnstile
- * token — exactly like the AI dialogs.
+ * Dialog that searches an image source and inserts the chosen one as an image
+ * block. Pixabay searches/downloads go through the apps/api Worker (so the API
+ * key stays server-side and the rate limit is enforced there), each carrying a
+ * fresh Turnstile token — exactly like the AI dialogs. Wikimedia Commons is
+ * queried directly from the browser (no key, no token).
  *
  * Turnstile tokens are single-use, so after every Worker call we reset the
  * widget to mint a new token for the next action (search again, or pick an
- * image to insert).
+ * image to insert). The widget is only mounted for sources that need a token.
  */
 export default function ImageSearchDialog({ open, onInsert, onClose }) {
+  const [providerId, setProviderId] = useState("pixabay");
   const [query, setQuery] = useState("");
   const [token, setToken] = useState("");
   const [hits, setHits] = useState(null); // null = no search yet; [] = no results
@@ -39,9 +112,11 @@ export default function ImageSearchDialog({ open, onInsert, onClose }) {
   const [error, setError] = useState("");
   const widgetRef = useRef(null);
 
+  const provider = PROVIDERS.find((p) => p.id === providerId) || PROVIDERS[0];
   const busy = searching || insertingId !== null;
 
-  // Reset the form each time the dialog opens.
+  // Reset the search state each time the dialog opens. The chosen source
+  // persists across opens (it lives outside this effect).
   useEffect(() => {
     if (open) {
       setQuery("");
@@ -53,9 +128,11 @@ export default function ImageSearchDialog({ open, onInsert, onClose }) {
     }
   }, [open]);
 
-  // Mount the Turnstile widget while the dialog is open; tear it down on close.
+  // Mount the Turnstile widget while the dialog is open AND the current source
+  // needs a token; tear it down on close or when switching to a source that
+  // doesn't (e.g. Wikimedia).
   useEffect(() => {
-    if (!open) return;
+    if (!open || !provider.needsToken) return;
     if (!TURNSTILE_SITE_KEY) {
       setError("VITE_TURNSTILE_SITE_KEY is not configured.");
       return;
@@ -85,7 +162,7 @@ export default function ImageSearchDialog({ open, onInsert, onClose }) {
         window.turnstile.remove(widgetId);
       }
     };
-  }, [open]);
+  }, [open, provider.needsToken]);
 
   // A used token can't be reused; mint a fresh one for the next action.
   const refreshToken = () => {
@@ -95,53 +172,59 @@ export default function ImageSearchDialog({ open, onInsert, onClose }) {
     }
   };
 
+  const handleProviderChange = (_e, next) => {
+    if (!next || next === providerId || busy) return;
+    setProviderId(next);
+    setHits(null);
+    setError("");
+    setToken("");
+  };
+
   const handleSearch = async () => {
     if (!query.trim()) {
       setError("Type something to search for first.");
       return;
     }
+    if (provider.needsToken && !token) {
+      setError("Please complete the verification challenge first.");
+      return;
+    }
     setSearching(true);
     setError("");
     try {
-      const { hits: found } = await searchPixabayImages(query, token);
+      const found = await provider.search(query, token);
       setHits(found);
     } catch (e) {
       setError(e.message || "Something went wrong.");
     } finally {
-      // Token is single-use whether the search succeeded or failed.
-      refreshToken();
+      // Pixabay's token is single-use whether the search succeeded or failed.
+      if (provider.needsToken) refreshToken();
       setSearching(false);
     }
   };
 
   const handlePick = async (hit) => {
     if (busy) return;
-    if (!token) {
+    if (provider.needsToken && !token) {
       setError("Verification expired — wait a moment and try again.");
       return;
     }
     setInsertingId(hit.id);
     setError("");
     try {
-      const dataUrl = await fetchPixabayImage(hit.webformatURL, token);
-      const { bytes, mime } = decodeDataUrl(dataUrl);
+      const { bytes, mime, width, height } = await provider.resolve(hit, token);
       const image = await storeImageBytes(bytes, mime);
-      onInsert({
-        image,
-        width: hit.webformatWidth,
-        height: hit.webformatHeight,
-        // Pre-fill the caption with attribution (appreciated by Pixabay).
-        caption: hit.user
-          ? `Image by ${hit.user} from Pixabay`
-          : "Image from Pixabay",
-      });
+      onInsert({ image, width, height, caption: provider.caption(hit) });
       onClose();
     } catch (e) {
       setError(e.message || "Could not add that image.");
-      refreshToken();
+      if (provider.needsToken) refreshToken();
       setInsertingId(null);
     }
   };
+
+  const canSearch =
+    !busy && !!query.trim() && (!provider.needsToken || !!token);
 
   return (
     <Dialog
@@ -153,10 +236,29 @@ export default function ImageSearchDialog({ open, onInsert, onClose }) {
       <DialogTitle>Search images</DialogTitle>
       <DialogContent>
         <Stack spacing={2} sx={{ mt: 0.5 }}>
+          <ToggleButtonGroup
+            value={providerId}
+            exclusive
+            onChange={handleProviderChange}
+            size="small"
+            color="primary"
+            disabled={busy}
+          >
+            {PROVIDERS.map((p) => (
+              <ToggleButton
+                key={p.id}
+                value={p.id}
+                sx={{ textTransform: "none" }}
+              >
+                {p.label}
+              </ToggleButton>
+            ))}
+          </ToggleButtonGroup>
+
           <DialogContentText>
             Search free images from{" "}
-            <Link href="https://pixabay.com" target="_blank" rel="noopener">
-              Pixabay
+            <Link href={provider.sourceUrl} target="_blank" rel="noopener">
+              {provider.sourceName}
             </Link>{" "}
             and add one to this section.
           </DialogContentText>
@@ -170,14 +272,14 @@ export default function ImageSearchDialog({ open, onInsert, onClose }) {
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               onKeyDown={(e) => {
-                if (e.key === "Enter" && token && !busy) handleSearch();
+                if (e.key === "Enter" && canSearch) handleSearch();
               }}
               disabled={busy}
             />
             <Button
               variant="contained"
               onClick={handleSearch}
-              disabled={busy || !token || !query.trim()}
+              disabled={!canSearch}
               startIcon={
                 searching ? (
                   <CircularProgress size={16} color="inherit" />
@@ -191,7 +293,10 @@ export default function ImageSearchDialog({ open, onInsert, onClose }) {
             </Button>
           </Stack>
 
-          <Box ref={widgetRef} sx={{ minHeight: 65 }} />
+          {/* Turnstile widget — only sources that proxy through the Worker need it. */}
+          {provider.needsToken && (
+            <Box ref={widgetRef} sx={{ minHeight: 65 }} />
+          )}
 
           {error && <Alert severity="error">{error}</Alert>}
 
@@ -202,7 +307,12 @@ export default function ImageSearchDialog({ open, onInsert, onClose }) {
           )}
 
           {hits && hits.length > 0 && (
-            <ImageList cols={3} gap={8} sx={{ m: 0, maxHeight: 360 }}>
+            <ImageList
+              cols={3}
+              gap={8}
+              rowHeight={170}
+              sx={{ m: 0, maxHeight: 360 }}
+            >
               {hits.map((hit) => (
                 <ImageListItem
                   key={hit.id}
@@ -215,19 +325,23 @@ export default function ImageSearchDialog({ open, onInsert, onClose }) {
                     "&:hover": {
                       borderColor: busy ? "divider" : "primary.main",
                     },
+                    // MUI's ImageListItem forces `> img { height:100%; object-fit:cover }`,
+                    // which crops the preview. Override with higher specificity (`&&`) so
+                    // the whole image shows, letterboxed against a subtle background.
+                    "&& > img": {
+                      objectFit: "contain",
+                      bgcolor: "action.hover",
+                    },
                   }}
                 >
                   <Box
                     component="img"
                     src={hit.previewURL}
-                    alt={hit.tags || "Pixabay image"}
+                    alt={provider.alt(hit)}
                     loading="lazy"
                     onClick={() => handlePick(hit)}
                     sx={{
                       display: "block",
-                      width: "100%",
-                      height: 110,
-                      objectFit: "cover",
                       opacity: insertingId === hit.id ? 0.4 : 1,
                     }}
                   />
