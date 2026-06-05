@@ -1,4 +1,4 @@
-// Profile API — talks to the same `spelling-creator-cf` Worker as the rest of the
+// Profile API — talks to the same `apps/api` Worker as the rest of the
 // hub. The display name is the only identity shown to other users; we set it via
 // the Worker (not supabase.auth.updateUser) so the name is validated server-side
 // — length, profanity and name bans — before it is stored in user_metadata.

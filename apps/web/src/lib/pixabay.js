@@ -1,4 +1,4 @@
-// Talks to the spelling-creator-cf Worker for Pixabay image search.
+// Talks to the apps/api Worker for Pixabay image search.
 //
 // Searching and downloading happen on the Worker rather than in the browser for
 // three reasons: the Pixabay API key stays secret, the Worker can enforce

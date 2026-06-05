@@ -12,9 +12,14 @@ an R2 bucket. The lesson doc only references images by hash.
 
 Worker endpoints (`apps/api/src/index.js`):
 
-- `GET /images/:hash` — public; serves the image bytes from R2 (immutable cache).
+- `GET /images/:hash` — public; serves the image bytes from R2 (immutable cache),
+  with whatever content type the stored object has.
 - `PUT /images/:hash` — authenticated (Supabase JWT); verifies the body hashes to
   `:hash` before storing. Called on save/publish to upload locally-drafted images.
+  On the way in, the Worker re-compresses raster images to **WEBP**
+  (`convertImageToWebp` in `apps/api/src/imageConvert.js`), falling back to the
+  original bytes for formats it can't decode or when the WEBP isn't smaller. The
+  key is still the original content hash, so dedup and references are unaffected.
 
 Setup:
 
@@ -44,6 +49,20 @@ Local drafts migrate automatically on first load (old `localStorage` doc → Ind
 Readers tolerate legacy base64 throughout, so the backfill can run any time after
 deploy. Deploy order: deploy the Worker (so `/images` exists) → ship the web build
 → run the backfill.
+
+A second, separate backfill **re-compresses images already in R2** to WEBP — for
+objects uploaded before the `PUT` handler started converting. It's gated by the
+same `ADMIN_MIGRATE_TOKEN` and pages through the bucket with R2's list cursor,
+overwriting each PNG/JPEG object at the same key (only when the WEBP is smaller).
+It's idempotent — already-WEBP and untranscodable objects are skipped:
+
+```bash
+# Repeat, passing the returned nextCursor each time, until nextCursor is null.
+curl -X POST https://<worker-host>/admin/backfill-webp \
+  -H "X-Admin-Token: $ADMIN_MIGRATE_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"limit": 10}'
+```
 
 ## Staying within R2's free tier
 

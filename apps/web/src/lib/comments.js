@@ -1,4 +1,4 @@
-// Lesson-comment API — talks to the same `spelling-creator-cf` Worker as the
+// Lesson-comment API — talks to the same `apps/api` Worker as the
 // rest of the hub (see lessons.js). The browser never touches the database
 // directly; it only calls these Worker endpoints.
 //

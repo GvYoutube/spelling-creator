@@ -22,7 +22,7 @@ import { TURNSTILE_SITE_KEY, whenTurnstileReady } from "../lib/turnstile.js";
 /**
  * Dialog that searches Pixabay for images and inserts the chosen one as an
  * image block. Both the search and the per-image download go through the
- * spelling-creator-cf Worker (so the API key stays server-side and Pixabay's
+ * apps/api Worker (so the API key stays server-side and Pixabay's
  * rate limit is enforced there), and each request carries a fresh Turnstile
  * token — exactly like the AI dialogs.
  *

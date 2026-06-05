@@ -7,8 +7,8 @@ sidebar_position: 6
 
 Press **Search images** on any section to open a dialog that searches
 [Pixabay](https://pixabay.com) for free images and inserts the one you pick as
-an image block. Like the AI features, it goes through the companion
-`spelling-creator-cf` Worker rather than calling Pixabay directly, which:
+an image block. Like the AI features, it goes through the companion Worker
+(`apps/api`) rather than calling Pixabay directly, which:
 
 - keeps the Pixabay API key server-side (it is never shipped to the browser),
 - lets the Worker enforce Pixabay's **100 requests/minute** limit centrally, and

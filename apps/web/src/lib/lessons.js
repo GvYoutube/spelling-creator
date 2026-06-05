@@ -1,4 +1,4 @@
-// Lesson-hub API — talks to the companion `spelling-creator-cf` Worker, which
+// Lesson-hub API — talks to the companion `apps/api` Worker, which
 // owns the Supabase Postgres connection. The browser never touches the database
 // directly; it only ever calls these Worker endpoints (mirroring how aiSuggest
 // and pixabay already proxy through the same Worker).

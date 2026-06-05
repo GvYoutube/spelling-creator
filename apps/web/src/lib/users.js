@@ -1,4 +1,4 @@
-// User-profile API — talks to the same `spelling-creator-cf` Worker as the rest
+// User-profile API — talks to the same `apps/api` Worker as the rest
 // of the hub. Profiles are keyed by the Supabase user id (the `authorId` already
 // carried on every lesson/comment), so a link stays valid even when a display
 // name changes. The data lives under /profiles (not /users) so it doesn't collide

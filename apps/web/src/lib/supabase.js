@@ -1,13 +1,12 @@
 // Supabase client — used in the browser for authentication ONLY (magic-link
 // sign-in). Lesson data never goes through this client; it is read from and
-// written to the companion `spelling-creator-cf` Worker (see lib/lessons.js),
+// written to the companion Worker (`apps/api`; see lib/lessons.js),
 // which talks to Supabase Postgres server-side with privileged credentials.
 //
 // The client manages the signed-in session (persisting it in localStorage) and
 // hands us a short-lived JWT that the Worker verifies before accepting a
 // publish. We use the PKCE flow so the magic-link callback returns a `?code=`
-// in the query string rather than tokens in the URL hash, which keeps it from
-// colliding with the HashRouter routes.
+// in the query string rather than access tokens in the URL fragment (hash).
 
 import { createClient } from "@supabase/supabase-js";
 

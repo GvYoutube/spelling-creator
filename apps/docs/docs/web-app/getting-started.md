@@ -1,6 +1,6 @@
 ---
 title: Getting started
-sidebar_position: 10
+sidebar_position: 13
 ---
 
 # Getting started
@@ -18,7 +18,7 @@ The AI text feature needs two variables in a `.env` file at the project root
 (Vite exposes `VITE_`-prefixed vars to the client):
 
 ```bash
-VITE_API_URL=https://your-worker.example.workers.dev   # spelling-creator-cf endpoint (AI, Pixabay, lesson hub)
+VITE_API_URL=https://your-worker.example.workers.dev   # apps/api Worker endpoint (AI, Pixabay, lesson hub)
 VITE_TURNSTILE_SITE_KEY=0x...                           # Cloudflare Turnstile site key
 VITE_GOOGLE_CLIENT_ID=...apps.googleusercontent.com     # OAuth client for Save to Google Docs
 VITE_SUPABASE_URL=https://xxxx.supabase.co              # Supabase project URL (magic-link sign-in)

@@ -15,23 +15,26 @@ back to a draft; both go through the same `POST`/`PUT` with a `published` flag.
 Signed-in users see an **Edit** action on lessons they published — it
 opens the lesson back in the editor (warning first before it replaces any
 in-progress work), and saving sends a `PUT` that the Worker accepts only from the
-lesson's author. Comments appear beneath each lesson in its preview dialog and are
+lesson's author. Clicking a lesson opens its own page at `/hub/:id`, where
+**comments** (including threaded replies) appear beneath it. Comments are
 **moderated server-side**: a comment containing profanity (detected with
 [`glin-profanity`](https://www.npmjs.com/package/glin-profanity)) is blocked
-entirely by the Worker — it is never stored, and the user is shown why.
+entirely by the Worker — it is never stored, and the user is shown why. Posting a
+reply sends a [notification](./notifications.md) to the parent commenter and the
+lesson author.
 
 **Where the data lives.** Lessons are stored in **Supabase Postgres**, but — like
 the AI and Pixabay features — the browser never talks to the database directly.
-All lesson reads/writes go through the companion `spelling-creator-cf` Worker,
-which holds the privileged Supabase credentials server-side. The only thing the
-browser does directly with Supabase is **authentication**.
+All lesson reads/writes go through the companion Worker (`apps/api` in this
+monorepo), which holds the privileged Supabase credentials server-side. The only
+thing the browser does directly with Supabase is **authentication**.
 
 **How sign-in works.** The login page (`/login`) uses
 [Supabase Auth](https://supabase.com/docs/guides/auth) magic links: enter an
 email, receive a one-time link, and the Supabase JS client (in `src/lib/supabase.js`)
 exchanges the callback for a session. We use the **PKCE** flow so the callback
-returns a `?code=` in the query string rather than tokens in the URL hash, which
-avoids colliding with the hash-based router. The session JWT is what authorises a
+returns a `?code=` in the query string rather than access tokens in the URL
+fragment (hash). The session JWT is what authorises a
 publish: the app sends it to the Worker as a `Bearer` token, and the Worker
 verifies it (and derives the author) before inserting the row.
 
@@ -47,8 +50,10 @@ verifies it (and derives the author) before inserting the row.
 
 ## Worker endpoints (contract)
 
-These live in the separate `spelling-creator-cf` repo. The frontend
-(`src/lib/lessons.js`) expects them at paths under `VITE_API_URL`:
+These live in the Worker (`apps/api`). The frontend
+(`src/lib/lessons.js`) expects them at paths under `VITE_API_URL`. (The Worker
+also exposes the profile, notification, and moderation endpoints documented on
+their own pages.)
 
 | Method & path                | Auth                    | Response                                                                                                              |
 | ---------------------------- | ----------------------- | --------------------------------------------------------------------------------------------------------------------- |
@@ -97,8 +102,14 @@ These live in the separate `spelling-creator-cf` repo. The frontend
 
 ## Supabase schema
 
-The canonical, ready-to-run schema lives in the Worker repo at
-`spelling-creator-cf/schema.sql`; this is the same thing for reference:
+The canonical, ready-to-run schema lives in the monorepo at
+[`apps/api/schema.sql`](https://github.com/playforge-coding/spelling-creator/blob/master/apps/api/schema.sql).
+Run it once in the Supabase SQL editor. Besides the `lessons` and `comments`
+tables shown below, that file also defines the `notifications` table (see
+[Notifications](./notifications.md)) and the moderation tables — `user_roles`,
+`banned_names`, `banned_ips`, and `lesson_delete_requests` — plus the
+`shadowbanned` / `author_ip` columns (see [Moderation](./moderation.md)). The two
+core tables, for reference:
 
 ```sql
 create table public.lessons (
@@ -126,10 +137,13 @@ create policy "lessons are public to read"
 -- (No insert policy for anon/auth roles: only the service-role Worker writes.)
 
 -- Comments on a lesson. Public to read; written only by the service-role Worker
--- after it verifies the JWT and the profanity check passes.
+-- after it verifies the JWT and the profanity check passes. parent_id threads a
+-- reply under another comment (null for a top-level comment); posting a reply
+-- notifies the parent comment's author and the lesson author.
 create table public.comments (
   id          uuid primary key default gen_random_uuid(),
   lesson_id   uuid not null references public.lessons (id) on delete cascade,
+  parent_id   uuid references public.comments (id) on delete cascade,
   author_id   uuid not null references auth.users (id) on delete cascade,
   author      text,
   body        text not null,

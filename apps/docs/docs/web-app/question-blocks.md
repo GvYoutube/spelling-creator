@@ -10,13 +10,13 @@ from the **Add question** menu; every type is colour-coded so it's easy to scan
 the lesson at a glance. The types, their shape, and their colours live in one
 place, `src/lib/questions.js`, so the editor and both exporters stay in sync.
 
-| Type                     | Colour | What it captures                                                          |
-| ------------------------ | ------ | ------------------------------------------------------------------------- |
-| **Number answer**        | purple | A single numeric answer.                                                  |
-| **Single answer**        | green  | A list of options with exactly one correct choice.                        |
-| **Multiple answers**     | orange | A list of options with any number of correct choices.                     |
-| **Open ended**           | pink   | A free written response with a configurable number of blank answer lines. |
-| **Background knowledge** | blue   | A prompt plus the prior knowledge a student needs to answer it.           |
+| Type                     | Colour | What it captures                                                             |
+| ------------------------ | ------ | ---------------------------------------------------------------------------- |
+| **Number answer**        | purple | A single numeric answer.                                                     |
+| **Single answer**        | green  | A list of options with exactly one correct choice.                           |
+| **Multiple answers**     | orange | A list of options with any number of correct choices.                        |
+| **Open ended**           | pink   | A free written response (exported with a blank line to write the answer on). |
+| **Background knowledge** | blue   | A prompt plus the prior knowledge a student needs to answer it.              |
 
 Questions are rendered into the DOCX (and therefore the printed PDF) with their
 prompt, options, answer markers, and blank lines, so the exported lesson is ready

@@ -63,7 +63,7 @@ A lesson is **sections** of **blocks**. Block types:
   - `number` → `answer` (numeric)
   - `single` → `answer` (one text answer)
   - `multiple` → `answers` (array of accepted answers)
-  - `open` → `exampleAnswer` (free response)
+  - `open` → free response (no answer field; just the `prompt`)
   - `background` → `background` + `answer` (needs prior knowledge)
 
 Image blocks aren't supported over MCP yet (they need a separate binary upload).

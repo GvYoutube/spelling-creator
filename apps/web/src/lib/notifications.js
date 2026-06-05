@@ -1,4 +1,4 @@
-// Notification API — talks to the same `spelling-creator-cf` Worker as the rest
+// Notification API — talks to the same `apps/api` Worker as the rest
 // of the hub (see lessons.js / comments.js). The browser never touches the
 // database directly; it only calls these Worker endpoints. Every route needs a
 // signed-in Supabase session: the access token is passed in and sent as a Bearer

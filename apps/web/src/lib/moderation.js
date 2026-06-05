@@ -1,4 +1,4 @@
-// Moderation API — talks to the same `spelling-creator-cf` Worker as the rest of
+// Moderation API — talks to the same `apps/api` Worker as the rest of
 // the hub (see lessons.js / comments.js). Every endpoint here is privileged: the
 // Worker re-derives the caller's role from the database on each request, so these
 // functions just send the Supabase JWT as a Bearer credential and surface the

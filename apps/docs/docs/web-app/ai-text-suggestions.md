@@ -11,8 +11,8 @@ lesson text about that section's title. The flow:
 1. The section title is used as the subject — there's no separate prompt to fill in.
 2. A [Cloudflare Turnstile](https://www.cloudflare.com/products/turnstile/) widget
    verifies the request is coming from a real browser on our domain.
-3. The verified token, subject, and document title are POSTed to a companion
-   Cloudflare Worker (`spelling-creator-cf`), which re-checks the token
+3. The verified token, subject, and document title are POSTed to the companion
+   Cloudflare Worker (`apps/api`), which re-checks the token
    server-side before doing any AI work and returns the generated text.
 4. The generated text is shown for review; pressing **Insert** adds it as a new
    text block in the section, ready to edit.
@@ -26,4 +26,5 @@ dislike the dialog offers an immediate **Generate fresh** from the now-cleared
 cache. Sign-in is required because the action mutates the shared server cache.
 
 This feature requires two environment variables (see [Getting started](./getting-started.md)). The
-Worker itself lives in a separate repository; this app only talks to its endpoint.
+Worker lives alongside this app in the monorepo at `apps/api`; the frontend only
+talks to its HTTP endpoint.

@@ -27,6 +27,8 @@ PDF printing.
   title with one click (see [AI text suggestions](./ai-text-suggestions.md)).
 - **AI question suggestions** - generate a structured question of any type from
   a section's title and existing text (see [AI question suggestions](./ai-question-suggestions.md)).
+- **AI lesson ideas** - get a batch of lesson topic suggestions for an age range
+  to start from a blank document (see [AI lesson ideas](./ai-lesson-ideas.md)).
 - **Reorder / delete** sections and blocks with inline controls.
 - **Export DOCX** - downloads a formatted `.docx`.
 - **Print PDF** - builds the docx, converts it to HTML with mammoth, then renders
@@ -37,7 +39,15 @@ PDF printing.
   and publish your own once signed in (see [Lesson hub & accounts](./lesson-hub-and-accounts.md)).
 - **Accounts** - passwordless magic-link sign-in (Supabase Auth) on a dedicated
   login page; required only to publish to the hub (see [Lesson hub & accounts](./lesson-hub-and-accounts.md)).
+- **Profiles & display names** - every user picks a public display name and an
+  optional bio, with a public profile page listing their lessons (see
+  [Profiles & display names](./profiles-and-display-names.md)).
+- **Notifications** - an in-app bell for replies, comments on your lessons, and
+  links sent to you (see [Notifications](./notifications.md)).
+- **Moderation** - moderator/admin tools for comments, shadowbanning, and bans
+  (see [Moderation](./moderation.md)).
 - **Live collaboration** - invite others to edit a lesson with you in real time
-  over a peer-to-peer (PeerJS/WebRTC) connection. People you invite only start
-  collaborating once you add them to the lesson (see [Live collaboration](./live-collaboration.md)).
+  over a peer-to-peer (PeerJS/WebRTC) connection, with live cursors and an
+  in-session chat panel. People you invite only start collaborating once you add
+  them to the lesson (see [Live collaboration](./live-collaboration.md)).
 - **Auto-save** - your work is kept in `localStorage` between reloads.

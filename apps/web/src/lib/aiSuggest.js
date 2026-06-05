@@ -1,4 +1,4 @@
-// Calls the spelling-creator-cf Worker to generate suggested lesson text.
+// Calls the apps/api Worker to generate suggested lesson text.
 //
 // The Worker validates the Turnstile token server-side (verifying both that the
 // challenge passed and that it was solved on an allowed domain) before doing any
