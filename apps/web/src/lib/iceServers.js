@@ -19,45 +19,51 @@ const stunServers = [
   { urls: "stun:stun.nextcloud.com:443" },
 ];
 
+// A sensible default the user can keep or replace. Bring-your-own-domain is
+// supported — see the recommended providers in the Collaborate dialog.
+export const DEFAULT_TURN_URL = "turn:free.expressturn.com:3478";
+
 // Read the saved TURN credentials (if any) from localStorage.
 export function getTurnCreds() {
   try {
     const parsed = JSON.parse(localStorage.getItem(STORAGE_KEY) || "{}");
     return {
+      url: parsed.url || "",
       username: parsed.username || "",
       credential: parsed.credential || "",
     };
   } catch {
-    return { username: "", credential: "" };
+    return { url: "", username: "", credential: "" };
   }
 }
 
-// Save TURN credentials to localStorage, or clear them when both are blank.
-export function setTurnCreds({ username, credential }) {
-  const u = (username || "").trim();
-  const c = (credential || "").trim();
+// Save TURN credentials to localStorage, or clear them when all are blank.
+export function setTurnCreds({ url, username, credential }) {
+  const next = {
+    url: (url || "").trim(),
+    username: (username || "").trim(),
+    credential: (credential || "").trim(),
+  };
   try {
-    if (!u && !c) {
+    if (!next.url && !next.username && !next.credential) {
       localStorage.removeItem(STORAGE_KEY);
     } else {
-      localStorage.setItem(
-        STORAGE_KEY,
-        JSON.stringify({ username: u, credential: c }),
-      );
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
     }
   } catch {
     /* localStorage unavailable — credentials just won't persist */
   }
 }
 
-// Build the ICE server list for a new connection. The ExpressTURN relay is
-// included only when the user has supplied both a username and credential;
-// otherwise we rely on STUN alone, which is enough for most networks.
+// Build the ICE server list for a new connection. A TURN relay is included only
+// when the user has supplied a username and credential (the URL falls back to
+// the default); otherwise we rely on STUN alone, which is enough for most
+// networks.
 export function getIceServers() {
-  const { username, credential } = getTurnCreds();
+  const { url, username, credential } = getTurnCreds();
   if (username && credential) {
     return [
-      { urls: "turn:free.expressturn.com:3478", username, credential },
+      { urls: url || DEFAULT_TURN_URL, username, credential },
       ...stunServers,
     ];
   }

@@ -40,7 +40,12 @@ import StarIcon from "@mui/icons-material/Star";
 import { colorForId } from "../lib/presence.js";
 import { useAuth } from "../lib/auth.jsx";
 import { sendLink } from "../lib/notifications.js";
-import { getTurnCreds, setTurnCreds } from "../lib/iceServers.js";
+import Link from "@mui/material/Link";
+import {
+  getTurnCreds,
+  setTurnCreds,
+  DEFAULT_TURN_URL,
+} from "../lib/iceServers.js";
 
 // Build a shareable invite link that deep-links into the editor with the host's
 // session code, so a recipient just clicks and lands on the join screen.
@@ -231,9 +236,34 @@ export default function CollaborateDialog({
         <Typography variant="body2" color="text.secondary" sx={{ mb: 1.5 }}>
           You only need these if collaboration doesn&apos;t connect without
           them. They add a TURN relay server for networks that block direct
-          peer-to-peer connections. Saved on this device only.
+          peer-to-peer connections. Bring your own server — we recommend{" "}
+          <Link
+            href="https://www.expressturn.com/"
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            ExpressTURN
+          </Link>{" "}
+          or{" "}
+          <Link
+            href="https://www.metered.ca/tools/openrelay/"
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            Metered OpenRelay
+          </Link>
+          . Saved on this device only.
         </Typography>
         <Stack spacing={1.5}>
+          <TextField
+            size="small"
+            fullWidth
+            label="TURN server URL"
+            placeholder={DEFAULT_TURN_URL}
+            value={turn.url}
+            onChange={(e) => setTurn({ ...turn, url: e.target.value })}
+            helperText="Leave blank to use the default server."
+          />
           <TextField
             size="small"
             fullWidth
@@ -260,8 +290,10 @@ export default function CollaborateDialog({
             <Button
               size="small"
               color="inherit"
-              disabled={!turn.username && !turn.credential}
-              onClick={() => saveTurn({ username: "", credential: "" })}
+              disabled={!turn.url && !turn.username && !turn.credential}
+              onClick={() =>
+                saveTurn({ url: "", username: "", credential: "" })
+              }
             >
               Clear
             </Button>
