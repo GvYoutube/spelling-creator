@@ -22,6 +22,10 @@ import ListItemAvatar from "@mui/material/ListItemAvatar";
 import Avatar from "@mui/material/Avatar";
 import Chip from "@mui/material/Chip";
 import Alert from "@mui/material/Alert";
+import Accordion from "@mui/material/Accordion";
+import AccordionSummary from "@mui/material/AccordionSummary";
+import AccordionDetails from "@mui/material/AccordionDetails";
+import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
 import CircularProgress from "@mui/material/CircularProgress";
 import IconButton from "@mui/material/IconButton";
 import Tooltip from "@mui/material/Tooltip";
@@ -36,6 +40,7 @@ import StarIcon from "@mui/icons-material/Star";
 import { colorForId } from "../lib/presence.js";
 import { useAuth } from "../lib/auth.jsx";
 import { sendLink } from "../lib/notifications.js";
+import { getTurnCreds, setTurnCreds } from "../lib/iceServers.js";
 
 // Build a shareable invite link that deep-links into the editor with the host's
 // session code, so a recipient just clicks and lands on the join screen.
@@ -79,6 +84,9 @@ export default function CollaborateDialog({
 
   const { accessToken, user } = useAuth();
   const [joinCode, setJoinCode] = useState(initialJoinCode);
+  // Optional TURN relay credentials, persisted in localStorage. Most networks
+  // connect fine over STUN, so these are only needed as a fallback.
+  const [turn, setTurn] = useState(() => getTurnCreds());
   const [copied, setCopied] = useState(null); // 'code' | 'link' | null
   const [sendOpen, setSendOpen] = useState(false);
   // Status of the automatic invite send to trusted collaborators when a session
@@ -196,6 +204,73 @@ export default function CollaborateDialog({
     );
   };
 
+  // Optional TURN relay credentials. Tucked into a collapsed section because
+  // most people never need them — they're only a fallback when a direct peer
+  // connection can't be established. Saving writes straight to localStorage so
+  // the next host/join attempt picks them up.
+  const saveTurn = (next) => {
+    setTurn(next);
+    setTurnCreds(next);
+  };
+
+  const renderTurnSettings = () => (
+    <Accordion
+      disableGutters
+      elevation={0}
+      sx={{ "&:before": { display: "none" }, bgcolor: "transparent" }}
+    >
+      <AccordionSummary
+        expandIcon={<ExpandMoreIcon />}
+        sx={{ px: 0, minHeight: "auto" }}
+      >
+        <Typography variant="subtitle2">
+          Connection settings (optional)
+        </Typography>
+      </AccordionSummary>
+      <AccordionDetails sx={{ px: 0, pt: 0 }}>
+        <Typography variant="body2" color="text.secondary" sx={{ mb: 1.5 }}>
+          You only need these if collaboration doesn&apos;t connect without
+          them. They add a TURN relay server for networks that block direct
+          peer-to-peer connections. Saved on this device only.
+        </Typography>
+        <Stack spacing={1.5}>
+          <TextField
+            size="small"
+            fullWidth
+            label="TURN username"
+            value={turn.username}
+            onChange={(e) => setTurn({ ...turn, username: e.target.value })}
+          />
+          <TextField
+            size="small"
+            fullWidth
+            type="password"
+            label="TURN password"
+            value={turn.credential}
+            onChange={(e) => setTurn({ ...turn, credential: e.target.value })}
+          />
+          <Stack direction="row" spacing={1}>
+            <Button
+              size="small"
+              variant="outlined"
+              onClick={() => saveTurn(turn)}
+            >
+              Save
+            </Button>
+            <Button
+              size="small"
+              color="inherit"
+              disabled={!turn.username && !turn.credential}
+              onClick={() => saveTurn({ username: "", credential: "" })}
+            >
+              Clear
+            </Button>
+          </Stack>
+        </Stack>
+      </AccordionDetails>
+    </Accordion>
+  );
+
   // The pre-session landing: choose to host or to join.
   const renderLanding = () => (
     <Stack spacing={3} sx={{ pt: 1 }}>
@@ -252,6 +327,10 @@ export default function CollaborateDialog({
       <Divider />
 
       {renderTrusted()}
+
+      <Divider />
+
+      {renderTurnSettings()}
     </Stack>
   );
 

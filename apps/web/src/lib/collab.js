@@ -30,7 +30,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import Peer from "peerjs";
 import { newId } from "./id.js";
 import { colorForId } from "./presence.js";
-import { iceServers } from "./iceServers.js";
+import { getIceServers } from "./iceServers.js";
 
 // We identify peers by a UUID we generate ourselves and pass in the PeerJS
 // connection `metadata`, NOT by the PeerJS peer id. Per the PeerJS docs the peer
@@ -219,7 +219,7 @@ export function useCollaboration({ doc, onRemoteDoc, identity }) {
 
     const peer = new Peer({
       config: {
-        iceServers: iceServers,
+        iceServers: getIceServers(),
       },
     });
     peerRef.current = peer;
@@ -374,7 +374,11 @@ export function useCollaboration({ doc, onRemoteDoc, identity }) {
       const myUid = newId();
       myCursorIdRef.current = myUid;
 
-      const peer = new Peer();
+      const peer = new Peer({
+        config: {
+          iceServers: getIceServers(),
+        },
+      });
       peerRef.current = peer;
 
       peer.on("open", () => {
