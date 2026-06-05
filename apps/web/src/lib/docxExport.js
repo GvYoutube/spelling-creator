@@ -159,13 +159,7 @@ function questionBlockParagraphs(block) {
     paragraphs.push(
       new Paragraph({
         spacing: { after: 120 },
-        children: [
-          new TextRun({ text: "Example answer: ", italics: true, size: 24 }),
-          new TextRun({
-            text: block.exampleAnswer || "____________",
-            size: 24,
-          }),
-        ],
+        children: [new TextRun({ text: "____________", size: 24 })],
       }),
     );
   } else if (block.questionType === "background") {

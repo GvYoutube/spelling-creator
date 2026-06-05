@@ -279,13 +279,6 @@ function readQuestion(nodes, i, { type, prompt }) {
     if (block.answers.length === 0) {
       block.answers.push({ id: newId(), text: "" });
     }
-  } else if (type === "open") {
-    block.exampleAnswer = "";
-    const n = peek(i + 1);
-    if (n && n.tag === "p" && /^example answer\s*:/i.test(n.text)) {
-      block.exampleAnswer = stripLabel(n.text);
-      last = i + 1;
-    }
   }
 
   return { block, next: last };

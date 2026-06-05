@@ -109,11 +109,7 @@ function buildQuestionBlock(block, where) {
     }
 
     case "open":
-      return {
-        ...base,
-        exampleAnswer:
-          typeof block.exampleAnswer === "string" ? block.exampleAnswer : "",
-      };
+      return { ...base };
 
     case "background":
       if (typeof block.answer !== "string" || !block.answer.trim()) {

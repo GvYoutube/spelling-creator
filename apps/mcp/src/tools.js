@@ -41,7 +41,7 @@ const blockSchema = z
       .enum(QUESTION_TYPES)
       .optional()
       .describe(
-        'For type "question": number (numeric answer), single (one text answer), multiple (several accepted answers), open (free response with an example), background (needs prior knowledge).',
+        'For type "question": number (numeric answer), single (one text answer), multiple (several accepted answers), open (free response), background (needs prior knowledge).',
       ),
     prompt: z
       .string()
@@ -55,10 +55,6 @@ const blockSchema = z
       .array(z.string())
       .optional()
       .describe('Accepted answers for a "multiple" question.'),
-    exampleAnswer: z
-      .string()
-      .optional()
-      .describe('Example answer for an "open" question.'),
     background: z
       .string()
       .optional()

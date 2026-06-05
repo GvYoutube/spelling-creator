@@ -491,28 +491,6 @@ function QuestionBlock({ block, onChange, controls }) {
             </Stack>
           )}
 
-          {block.questionType === "open" && (
-            <TextField
-              fullWidth
-              multiline
-              minRows={2}
-              size="small"
-              label="Example answer"
-              placeholder="An example of a good response…"
-              value={block.exampleAnswer ?? ""}
-              onChange={(e) =>
-                onChange({ ...block, exampleAnswer: e.target.value })
-              }
-              sx={{ mt: 1.5 }}
-              helperText="A model response to guide marking"
-              slotProps={{
-                htmlInput: {
-                  "data-collab-field": `block:${block.id}:exampleAnswer`,
-                },
-              }}
-            />
-          )}
-
           {block.questionType === "background" && (
             <>
               <TextField

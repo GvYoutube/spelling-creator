@@ -48,7 +48,6 @@ test("buildDoc maps every block type to the stored shape with ids", () => {
             type: "question",
             questionType: "open",
             prompt: "Explain",
-            exampleAnswer: "...",
           },
           {
             type: "question",
@@ -87,7 +86,9 @@ test("buildDoc maps every block type to the stored shape with ids", () => {
     multiB.answers.map((a) => a.text),
     ["ash", "lava"],
   );
-  assert.equal(openB.exampleAnswer, "...");
+  assert.equal(openB.type, "question");
+  assert.equal(openB.questionType, "open");
+  assert.equal(openB.prompt, "Explain");
   assert.equal(bgB.background, "ctx");
   assert.equal(bgB.answer, "heat");
 
