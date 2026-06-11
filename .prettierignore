@@ -1,5 +1,5 @@
 pnpm-lock.yaml
 
-# Docusaurus build output and generated files
-apps/docs/build
-apps/docs/.docusaurus
+# Rspress build output and generated files
+apps/docs/doc_build
+apps/docs/.rspress

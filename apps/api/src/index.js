@@ -2409,7 +2409,7 @@ function shouldPrerender(request, url) {
 	if (request.method !== 'GET') return false;
 	if (url.searchParams.has(PRERENDER_BYPASS)) return false;
 	if (!isCrawler(request)) return false;
-	// The /docs Docusaurus site is statically pre-rendered at build time, so its
+	// The /docs Rspress site is statically pre-rendered at build time, so its
 	// HTML is already crawler-ready — no need to spin up a browser for it.
 	if (url.pathname === '/docs' || url.pathname.startsWith('/docs/')) return false;
 	const accept = request.headers.get('accept') || '';

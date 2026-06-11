@@ -10,7 +10,7 @@ export default defineConfig([
     "**/build/**",
     "**/node_modules/**",
     "**/.wrangler/**",
-    "**/.docusaurus/**",
+    "**/doc_build/**",
   ]),
 
   // Base JS rules for every file
@@ -51,20 +51,6 @@ export default defineConfig([
       // intentional, well-contained pattern here, not the cascading-render
       // smell this (new, strict) rule targets.
       "react-hooks/set-state-in-effect": "off",
-    },
-  },
-
-  // Docs — Docusaurus site (React JSX, runs in both Node build + browser)
-  {
-    files: ["apps/docs/**/*.{js,jsx}"],
-    extends: [
-      pluginReact.configs.flat.recommended,
-      pluginReact.configs.flat["jsx-runtime"],
-    ],
-    languageOptions: { globals: { ...globals.browser, ...globals.node } },
-    settings: { react: { version: "19.0" } },
-    rules: {
-      "react/prop-types": "off",
     },
   },
 

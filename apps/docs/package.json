@@ -6,42 +6,13 @@
   "license": "AGPL-3.0-only",
   "packageManager": "pnpm@11.1.3",
   "scripts": {
-    "docusaurus": "docusaurus",
-    "start": "docusaurus start",
-    "dev": "docusaurus start",
-    "build": "docusaurus build && node -e \"const fs=require('fs');fs.rmSync('../web/dist/docs',{recursive:true,force:true});fs.cpSync('build','../web/dist/docs',{recursive:true})\"",
-    "swizzle": "docusaurus swizzle",
-    "deploy": "docusaurus deploy",
-    "clear": "docusaurus clear",
-    "serve": "docusaurus serve",
-    "write-translations": "docusaurus write-translations",
-    "write-heading-ids": "docusaurus write-heading-ids"
+    "dev": "rspress dev",
+    "start": "rspress dev",
+    "build": "rspress build && node -e \"const fs=require('fs');fs.rmSync('../web/dist/docs',{recursive:true,force:true});fs.cpSync('doc_build','../web/dist/docs',{recursive:true})\"",
+    "preview": "rspress preview"
   },
   "dependencies": {
-    "@docusaurus/core": "3.10.1",
-    "@docusaurus/faster": "3.10.1",
-    "@docusaurus/preset-classic": "3.10.1",
-    "@mdx-js/react": "^3.0.0",
-    "clsx": "^2.0.0",
-    "prism-react-renderer": "^2.3.0",
-    "react": "^19.0.0",
-    "react-dom": "^19.0.0"
-  },
-  "devDependencies": {
-    "@docusaurus/module-type-aliases": "3.10.1",
-    "@docusaurus/types": "3.10.1"
-  },
-  "browserslist": {
-    "production": [
-      ">0.5%",
-      "not dead",
-      "not op_mini all"
-    ],
-    "development": [
-      "last 3 chrome version",
-      "last 3 firefox version",
-      "last 5 safari version"
-    ]
+    "@rspress/core": "^2.0.14"
   },
   "engines": {
     "node": ">=20.0"
