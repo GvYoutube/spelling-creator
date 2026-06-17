@@ -38,9 +38,16 @@ export default function ContentBlock({
   isFirst,
   isLast,
   capitalizedWords = [],
+  dragHandle = null,
 }) {
   const controls = (
-    <Stack direction="row" spacing={0.5} sx={{ flexShrink: 0 }}>
+    <Stack
+      direction="row"
+      spacing={0.5}
+      alignItems="center"
+      sx={{ flexShrink: 0 }}
+    >
+      {dragHandle}
       <Tooltip title="Move up">
         <span>
           <IconButton size="small" onClick={onMoveUp} disabled={isFirst}>
@@ -80,6 +87,7 @@ export default function ContentBlock({
         isFirst={isFirst}
         isLast={isLast}
         capitalizedWords={capitalizedWords}
+        dragHandle={dragHandle}
       />
     );
   }
@@ -239,6 +247,7 @@ function SpellingBlock({
   isFirst,
   isLast,
   capitalizedWords = [],
+  dragHandle = null,
 }) {
   const words = block.words || [];
 
@@ -322,7 +331,13 @@ function SpellingBlock({
             </Box>
           </Stack>
         </Box>
-        <Stack direction="row" spacing={0.5} sx={{ flexShrink: 0 }}>
+        <Stack
+          direction="row"
+          spacing={0.5}
+          alignItems="center"
+          sx={{ flexShrink: 0 }}
+        >
+          {dragHandle}
           <Tooltip title="Move up">
             <span>
               <IconButton size="small" onClick={onMoveUp} disabled={isFirst}>

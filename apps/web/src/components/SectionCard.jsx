@@ -21,6 +21,7 @@ import AutoAwesomeIcon from "@mui/icons-material/AutoAwesome";
 import DeleteOutlineIcon from "@mui/icons-material/DeleteOutline";
 import ArrowUpwardIcon from "@mui/icons-material/ArrowUpward";
 import ArrowDownwardIcon from "@mui/icons-material/ArrowDownward";
+import DragIndicatorIcon from "@mui/icons-material/DragIndicator";
 import ContentBlock from "./ContentBlock.jsx";
 import AiTextDialog from "./AiTextDialog.jsx";
 import AiQuestionDialog from "./AiQuestionDialog.jsx";
@@ -59,6 +60,12 @@ export default function SectionCard({
   // deliberately NOT broadcast to collaborators, so each peer's toolbar follows
   // their own cursor, not everyone else's.
   const [activeBlockId, setActiveBlockId] = useState(null);
+  // Drag-to-reorder state (all local, never broadcast). `dragId` is the block
+  // being dragged; `overId`/`overPos` mark where it would drop so we can draw an
+  // insertion line above or below the hovered block.
+  const [dragId, setDragId] = useState(null);
+  const [overId, setOverId] = useState(null);
+  const [overPos, setOverPos] = useState(null); // "before" | "after"
 
   const updateBlocks = (blocks) => onChange({ ...section, blocks });
 
@@ -153,6 +160,52 @@ export default function SectionCard({
     const [moved] = blocks.splice(from, 1);
     blocks.splice(to, 0, moved);
     updateBlocks(blocks);
+  };
+
+  const clearDrag = () => {
+    setDragId(null);
+    setOverId(null);
+    setOverPos(null);
+  };
+
+  // Drag starts from a block's grab handle (not the whole block, so text
+  // selection and field editing never trigger a drag). The drag image is set to
+  // the whole block element so the user drags a ghost of the entire block.
+  const handleDragStart = (e, block) => {
+    const wrapper = e.currentTarget.closest("[data-block-id]");
+    if (wrapper) e.dataTransfer.setDragImage(wrapper, 16, 16);
+    e.dataTransfer.effectAllowed = "move";
+    e.dataTransfer.setData("text/plain", block.id); // Firefox needs some payload
+    setDragId(block.id);
+  };
+
+  // Hovering a block while dragging: mark whether we'd drop above or below it,
+  // based on which half of the block the cursor is over.
+  const handleDragOver = (e, block) => {
+    if (!dragId || block.id === dragId) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = "move";
+    const rect = e.currentTarget.getBoundingClientRect();
+    const pos = e.clientY < rect.top + rect.height / 2 ? "before" : "after";
+    setOverId(block.id);
+    setOverPos(pos);
+  };
+
+  // Drop onto a block: move the dragged block to just before/after it.
+  const handleDrop = (e, block) => {
+    if (!dragId || block.id === dragId) return clearDrag();
+    e.preventDefault();
+    const blocks = [...section.blocks];
+    const from = blocks.findIndex((b) => b.id === dragId);
+    if (from === -1) return clearDrag();
+    const [moved] = blocks.splice(from, 1);
+    // Recompute the target index on the array with the dragged block removed.
+    let to = blocks.findIndex((b) => b.id === block.id);
+    if (to === -1) to = blocks.length;
+    else if (overPos === "after") to += 1;
+    blocks.splice(to, 0, moved);
+    updateBlocks(blocks);
+    clearDrag();
   };
 
   // Where the "add block" toolbar sits: directly under the block being edited,
@@ -285,8 +338,29 @@ export default function SectionCard({
             {section.blocks.map((block, i) => [
               // Focusing any field inside a block makes it the active block, so
               // the toolbar follows the user's edit point. onFocus bubbles from
-              // the inner inputs.
-              <Box key={block.id} onFocus={() => setActiveBlockId(block.id)}>
+              // the inner inputs. The same wrapper is the drop target while a
+              // block is being dragged.
+              <Box
+                key={block.id}
+                data-block-id={block.id}
+                onFocus={() => setActiveBlockId(block.id)}
+                onDragOver={(e) => handleDragOver(e, block)}
+                onDrop={(e) => handleDrop(e, block)}
+                sx={{
+                  opacity: dragId === block.id ? 0.4 : 1,
+                  // Insertion line above/below the hovered block.
+                  borderTop: "2px solid",
+                  borderBottom: "2px solid",
+                  borderTopColor:
+                    overId === block.id && overPos === "before"
+                      ? "primary.main"
+                      : "transparent",
+                  borderBottomColor:
+                    overId === block.id && overPos === "after"
+                      ? "primary.main"
+                      : "transparent",
+                }}
+              >
                 <ContentBlock
                   block={block}
                   onChange={(next) => updateBlock(block.id, next)}
@@ -296,6 +370,31 @@ export default function SectionCard({
                   isFirst={i === 0}
                   isLast={i === section.blocks.length - 1}
                   capitalizedWords={capitalizedWords}
+                  // The grab handle lives inside the block (in its controls row),
+                  // so it reads as part of the card rather than a bar above it.
+                  // Drag must start here so editing fields never drags by accident.
+                  dragHandle={
+                    <Tooltip title="Drag to reorder">
+                      <Box
+                        component="span"
+                        draggable
+                        onDragStart={(e) => handleDragStart(e, block)}
+                        onDragEnd={clearDrag}
+                        role="button"
+                        aria-label="Drag to reorder block"
+                        sx={{
+                          display: "inline-flex",
+                          alignItems: "center",
+                          color: "text.disabled",
+                          cursor: "grab",
+                          "&:active": { cursor: "grabbing" },
+                          "&:hover": { color: "text.secondary" },
+                        }}
+                      >
+                        <DragIndicatorIcon fontSize="small" />
+                      </Box>
+                    </Tooltip>
+                  }
                 />
               </Box>,
               // The toolbar sits directly beneath the block being edited.
