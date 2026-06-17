@@ -50,6 +50,7 @@ import HelpOutlineIcon from "@mui/icons-material/HelpOutline";
 import AutoAwesomeIcon from "@mui/icons-material/AutoAwesome";
 import GitHubIcon from "@mui/icons-material/GitHub";
 import UploadFileIcon from "@mui/icons-material/UploadFile";
+import DataObjectIcon from "@mui/icons-material/DataObject";
 import WarningAmberIcon from "@mui/icons-material/WarningAmber";
 import Badge from "@mui/material/Badge";
 import SectionCard from "../components/SectionCard.jsx";
@@ -77,6 +78,8 @@ import { convertDocImages } from "../lib/imageRef.js";
 import { ensureImagesUploaded } from "../lib/imagesClient.js";
 import { exportDocx } from "../lib/docxExport.js";
 import { importDocxFile } from "../lib/docxImport.js";
+import { exportJson } from "../lib/jsonExport.js";
+import { importJsonFile } from "../lib/jsonImport.js";
 import { exportPdf } from "../lib/pdfExport.js";
 import { previewHtml, PREVIEW_STYLES } from "../lib/htmlPreview.js";
 import { saveToGoogleDrive, googleDriveEnabled } from "../lib/googleDrive.js";
@@ -127,7 +130,13 @@ export default function EditorPage() {
   // file input is triggered programmatically from the warning dialog.
   const [importWarnOpen, setImportWarnOpen] = useState(false);
   const [importError, setImportError] = useState(null);
+  // Which picker the rejection dialog's "Try another file" should re-open.
+  const [importErrorSource, setImportErrorSource] = useState("word");
   const importInputRef = useRef(null);
+  // JSON import reuses the same rejection dialog (importError) and overwrite
+  // confirmation, but skips the best-effort warning — the JSON format is a
+  // lossless round-trip of our own model. Its own hidden picker.
+  const jsonInputRef = useRef(null);
 
   // Hub-editing state. `editingId` is the id of a published lesson currently
   // loaded for editing (so "Publish" becomes "Update"); null when authoring a
@@ -272,11 +281,11 @@ export default function EditorPage() {
   // "Publish" becomes "Update" on the original row. For a fork, load it as a
   // fresh, unattached draft (editingId stays null) titled "… (copy)", so
   // publishing creates a separate lesson and the original is left untouched.
-  const applyEdit = ({ id, doc: nextDoc, mode, published }) => {
+  const applyEdit = ({ id, doc: nextDoc, mode, source, published }) => {
     if (mode === "import") {
-      // An imported Word doc loads as a fresh, unattached lesson (like a fork,
-      // but keeping the document's own title): saving it later creates a new
-      // cloud lesson rather than overwriting anything.
+      // An imported doc loads as a fresh, unattached lesson (like a fork, but
+      // keeping the document's own title): saving it later creates a new cloud
+      // lesson rather than overwriting anything.
       setDoc(nextDoc);
       setEditingId(null);
       setEditingPublished(true);
@@ -284,7 +293,9 @@ export default function EditorPage() {
       setToast({
         severity: "info",
         message:
-          "Imported from Word. Word import is best-effort — review the lesson, as some formatting or content may have been lost.",
+          source === "json"
+            ? "Imported from JSON. Review the lesson, then save it to the cloud when you're ready."
+            : "Imported from Word. Word import is best-effort — review the lesson, as some formatting or content may have been lost.",
       });
       return;
     }
@@ -440,6 +451,9 @@ export default function EditorPage() {
       if (kind === "docx") {
         await exportDocx(doc);
         setToast({ severity: "success", message: "Word document downloaded." });
+      } else if (kind === "json") {
+        exportJson(doc);
+        setToast({ severity: "success", message: "Lesson JSON downloaded." });
       } else {
         await exportPdf(doc);
         setToast({
@@ -610,13 +624,53 @@ export default function EditorPage() {
       const imported = await importDocxFile(file);
       // Reuse the overwrite-confirmation flow when there's in-progress work to
       // lose; otherwise load straight away.
-      const incoming = { doc: imported, title: imported.title, mode: "import" };
+      const incoming = {
+        doc: imported,
+        title: imported.title,
+        mode: "import",
+        source: "word",
+      };
       if (docHasContent(doc)) setPendingEdit(incoming);
       else applyEdit(incoming);
     } catch (err) {
+      setImportErrorSource("word");
       setImportError(
         err?.message ||
           "This Word document couldn't be imported. Please check it and try again.",
+      );
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  // JSON import. No lossy warning (the format is our own), so the picker opens
+  // straight away; a chosen file is parsed and validated by importJsonFile,
+  // which rejects anything that isn't a lesson — surfaced in the same dialog.
+  const triggerJsonImportPicker = () => {
+    jsonInputRef.current?.click();
+  };
+
+  const handleImportJsonFile = async (e) => {
+    const file = e.target.files?.[0];
+    // Reset the input so picking the same file again still fires onChange.
+    e.target.value = "";
+    if (!file) return;
+    setBusy("import");
+    try {
+      const imported = await importJsonFile(file);
+      const incoming = {
+        doc: imported,
+        title: imported.title,
+        mode: "import",
+        source: "json",
+      };
+      if (docHasContent(doc)) setPendingEdit(incoming);
+      else applyEdit(incoming);
+    } catch (err) {
+      setImportErrorSource("json");
+      setImportError(
+        err?.message ||
+          "This JSON file couldn't be imported. Please check it and try again.",
       );
     } finally {
       setBusy(null);
@@ -675,6 +729,16 @@ export default function EditorPage() {
             >
               <UploadFileIcon sx={{ mr: 1, fontSize: 20 }} />
               Import Word document
+            </MenuItem>
+            <MenuItem
+              onClick={() => {
+                setAnchorEl(null);
+                triggerJsonImportPicker();
+              }}
+              disabled={busy !== null}
+            >
+              <DataObjectIcon sx={{ mr: 1, fontSize: 20 }} />
+              Import JSON
             </MenuItem>
             <Divider />
             <MenuItem
@@ -757,6 +821,18 @@ export default function EditorPage() {
                     </ListItemIcon>
                     <ListItemText>Import Word document</ListItemText>
                   </MenuItem>
+                  <MenuItem
+                    onClick={() => {
+                      closeMobileMenu();
+                      triggerJsonImportPicker();
+                    }}
+                    disabled={busy !== null}
+                  >
+                    <ListItemIcon>
+                      <DataObjectIcon fontSize="small" />
+                    </ListItemIcon>
+                    <ListItemText>Import JSON</ListItemText>
+                  </MenuItem>
                   <Divider />
                   <MenuItem
                     onClick={() => {
@@ -769,6 +845,18 @@ export default function EditorPage() {
                       <DescriptionIcon fontSize="small" />
                     </ListItemIcon>
                     <ListItemText>Export DOCX</ListItemText>
+                  </MenuItem>
+                  <MenuItem
+                    onClick={() => {
+                      closeMobileMenu();
+                      handleExport("json");
+                    }}
+                    disabled={busy !== null}
+                  >
+                    <ListItemIcon>
+                      <DataObjectIcon fontSize="small" />
+                    </ListItemIcon>
+                    <ListItemText>Export JSON</ListItemText>
                   </MenuItem>
                   <MenuItem
                     onClick={() => {
@@ -875,7 +963,10 @@ export default function EditorPage() {
                   color="inherit"
                   variant="outlined"
                   startIcon={
-                    busy === "docx" || busy === "pdf" || busy === "gdocs" ? (
+                    busy === "docx" ||
+                    busy === "json" ||
+                    busy === "pdf" ||
+                    busy === "gdocs" ? (
                       <CircularProgress size={16} color="inherit" />
                     ) : (
                       <IosShareIcon />
@@ -905,6 +996,20 @@ export default function EditorPage() {
                       <DescriptionIcon fontSize="small" />
                     </ListItemIcon>
                     <ListItemText>Export DOCX</ListItemText>
+                  </MenuItem>
+                  <MenuItem
+                    onClick={() => {
+                      setExportAnchor(null);
+                      handleExport("json");
+                    }}
+                  >
+                    <ListItemIcon>
+                      <DataObjectIcon fontSize="small" />
+                    </ListItemIcon>
+                    <ListItemText
+                      primary="Export JSON"
+                      secondary="Re-importable lesson file"
+                    />
                   </MenuItem>
                   <MenuItem
                     onClick={() => {
@@ -1157,6 +1262,14 @@ export default function EditorPage() {
               >
                 Import Word document
               </Button>
+              <Button
+                variant="outlined"
+                startIcon={<DataObjectIcon />}
+                onClick={triggerJsonImportPicker}
+                disabled={busy !== null}
+              >
+                Import JSON
+              </Button>
             </Stack>
           </Paper>
         )}
@@ -1276,6 +1389,15 @@ export default function EditorPage() {
         onChange={handleImportFile}
       />
 
+      {/* Hidden picker for JSON import (no warning dialog — the format is ours). */}
+      <input
+        ref={jsonInputRef}
+        type="file"
+        accept=".json,application/json"
+        hidden
+        onChange={handleImportJsonFile}
+      />
+
       {/* Warn before importing: the docx → lesson conversion is best-effort. */}
       <Dialog
         open={importWarnOpen}
@@ -1335,7 +1457,9 @@ export default function EditorPage() {
             startIcon={<UploadFileIcon />}
             onClick={() => {
               setImportError(null);
-              importInputRef.current?.click();
+              const ref =
+                importErrorSource === "json" ? jsonInputRef : importInputRef;
+              ref.current?.click();
             }}
           >
             Try another file

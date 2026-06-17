@@ -11,7 +11,12 @@
 // checks (we never set the author; the Worker derives it from the token).
 
 import { z } from "zod";
-import { buildDoc, lessonWarnings, QUESTION_TYPES } from "./doc.js";
+import {
+  buildDoc,
+  buildLessonFile,
+  lessonWarnings,
+  QUESTION_TYPES,
+} from "./doc.js";
 import { applyPatch } from "./patch.js";
 
 // One content block, described richly so the model fills the right fields per
@@ -147,6 +152,16 @@ function text(value) {
   return { content: [{ type: "text", text: body }] };
 }
 
+// A safe-ish .json filename derived from the lesson title (mirrors the web
+// exporter's safeFileName). Falls back to "lesson" when nothing usable remains.
+function lessonFileName(title) {
+  const base = (title || "lesson")
+    .trim()
+    .replace(/[^a-z0-9\-_ ]/gi, "")
+    .replace(/\s+/g, "-");
+  return `${base || "lesson"}.json`;
+}
+
 function errorResult(err) {
   return {
     content: [{ type: "text", text: `Error: ${err.message || String(err)}` }],
@@ -236,6 +251,41 @@ export function registerTools(server, ctx) {
       };
       // Soft warnings: the lesson saved fine, but flag shape issues (e.g. a
       // section with no question) so the assistant can offer to fix them.
+      if (warnings.length) result.warnings = warnings;
+      return text(result);
+    }),
+  );
+
+  server.registerTool(
+    "create_lesson_file",
+    {
+      title: "Create a lesson file (offline)",
+      description:
+        "Build a spelling lesson entirely offline — no account, network, or sign-in needed. You compose the content " +
+        "(same structure as create_lesson); this validates it, generates all ids, and returns a self-contained lesson " +
+        "FILE. Save the returned `lessonFile` object verbatim as a `.json` file, then open the Spelling Creator editor " +
+        "(spellingcreator.org) and load it with the “Import JSON” button (next to “Import Word " +
+        "document”). Use this when you can't (or don't want to) publish to the hub; use create_lesson when you " +
+        "want it saved to the cloud directly.\n\n" +
+        "A lesson is sections of blocks. Block types: text (prose — put words being taught in ALL CAPS), spelling (an " +
+        "explicit word list), and question (number/single/multiple/open/background). DEFAULT STRUCTURE (unless asked " +
+        "otherwise): about 3 sections; each has roughly 2 text paragraphs and ENDS with one or more question blocks " +
+        "about that section.",
+      inputSchema: {
+        title: z.string().describe("The lesson title / topic."),
+        sections: sectionsSchema,
+      },
+    },
+    tool(async ({ title, sections }) => {
+      const doc = buildDoc({ title, sections });
+      const warnings = lessonWarnings(doc);
+      const result = {
+        lessonFile: buildLessonFile(doc),
+        filename: lessonFileName(doc.title),
+        note:
+          "Save the `lessonFile` object as a .json file (suggested name in `filename`), then import it in the " +
+          'Spelling Creator editor via the "Import JSON" button. This works fully offline — no account needed.',
+      };
       if (warnings.length) result.warnings = warnings;
       return text(result);
     }),

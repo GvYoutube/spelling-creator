@@ -317,6 +317,7 @@ test("the MCP server exposes the full tool set", async () => {
   const names = tools.map((t) => t.name).sort();
   assert.deepEqual(names, [
     "create_lesson",
+    "create_lesson_file",
     "delete_lesson",
     "get_lesson",
     "list_hub_lessons",
@@ -364,6 +365,57 @@ test("create_lesson surfaces soft warnings in its result", async () => {
   assert.equal(res.isError, undefined); // saved fine — warning is non-blocking
   assert.equal(payload.warnings.length, 1);
   assert.match(payload.warnings[0], /Prose only/);
+
+  await client.close();
+  await server.close();
+});
+
+test("create_lesson_file builds an importable lesson file offline", async () => {
+  const server = new McpServer(SERVER_INFO);
+  // No api needed — the tool never touches the network. Pass a throwing stub to
+  // prove that.
+  const api = new Proxy(
+    {},
+    {
+      get() {
+        throw new Error("create_lesson_file must not call the API");
+      },
+    },
+  );
+  registerTools(server, { api, config: { apiUrl: "https://example.test" } });
+
+  const client = new Client({ name: "test", version: "0" });
+  const [clientT, serverT] = InMemoryTransport.createLinkedPair();
+  await Promise.all([server.connect(serverT), client.connect(clientT)]);
+
+  const res = await client.callTool({
+    name: "create_lesson_file",
+    arguments: {
+      title: "Volcanoes!",
+      sections: [
+        {
+          name: "Reading",
+          blocks: [
+            { type: "text", text: "A volcano ERUPTS." },
+            {
+              type: "question",
+              questionType: "single",
+              prompt: "What erupts?",
+              answer: "volcano",
+            },
+          ],
+        },
+      ],
+    },
+  });
+  assert.equal(res.isError, undefined);
+  const payload = JSON.parse(res.content[0].text);
+  assert.equal(payload.lessonFile.format, "spelling-creator-lesson");
+  assert.equal(payload.lessonFile.version, 1);
+  assert.equal(payload.lessonFile.doc.title, "Volcanoes!");
+  assert.equal(payload.lessonFile.doc.sections[0].name, "Reading");
+  assert.ok(payload.lessonFile.doc.sections[0].blocks[0].id);
+  assert.equal(payload.filename, "Volcanoes.json");
 
   await client.close();
   await server.close();

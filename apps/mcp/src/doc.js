@@ -165,6 +165,25 @@ export function buildDoc(input) {
   return { title, sections: builtSections };
 }
 
+// The on-disk lesson-file format produced by create_lesson_file (here) and by
+// the web editor's "Export JSON". The web app's "Import JSON" button reads it
+// back. Keep this format marker and shape in sync with apps/web/src/lib/
+// jsonImport.js and jsonExport.js so a file from either side imports cleanly.
+export const LESSON_FILE_FORMAT = "spelling-creator-lesson";
+export const LESSON_FILE_VERSION = 1;
+
+/**
+ * Wrap a built doc in the importable lesson-file envelope.
+ * @param {{ title: string, sections: any[] }} doc
+ */
+export function buildLessonFile(doc) {
+  return {
+    format: LESSON_FILE_FORMAT,
+    version: LESSON_FILE_VERSION,
+    doc,
+  };
+}
+
 /**
  * Soft, non-blocking checks on a built doc. Returns human-readable warnings the
  * tools surface back in their result so the assistant can fix the lesson's shape
