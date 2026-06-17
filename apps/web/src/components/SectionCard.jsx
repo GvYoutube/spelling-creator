@@ -54,8 +54,26 @@ export default function SectionCard({
   const [aiOpen, setAiOpen] = useState(false);
   const [aiQuestionOpen, setAiQuestionOpen] = useState(false);
   const [imageSearchOpen, setImageSearchOpen] = useState(false);
+  // The block this user is currently editing, so the "add block" toolbar can sit
+  // directly beneath it (and new blocks insert there). Purely local UI state —
+  // deliberately NOT broadcast to collaborators, so each peer's toolbar follows
+  // their own cursor, not everyone else's.
+  const [activeBlockId, setActiveBlockId] = useState(null);
 
   const updateBlocks = (blocks) => onChange({ ...section, blocks });
+
+  // Insert new block(s) immediately after the block being edited (or append when
+  // nothing is active), then keep the toolbar with the freshly added content so
+  // successive adds stack in order.
+  const insertBlocks = (newBlocks) => {
+    if (!newBlocks.length) return;
+    const blocks = [...section.blocks];
+    const activeIndex = blocks.findIndex((b) => b.id === activeBlockId);
+    const at = activeIndex === -1 ? blocks.length : activeIndex + 1;
+    blocks.splice(at, 0, ...newBlocks);
+    updateBlocks(blocks);
+    setActiveBlockId(newBlocks[newBlocks.length - 1].id);
+  };
 
   // The section's existing text, used to ground AI question suggestions.
   const sectionText = section.blocks
@@ -70,27 +88,24 @@ export default function SectionCard({
     .map((b) => b.prompt);
 
   const addTextBlock = () => {
-    updateBlocks([...section.blocks, { id: newId(), type: "text", text: "" }]);
+    insertBlocks([{ id: newId(), type: "text", text: "" }]);
   };
 
   const addSuggestedTextBlock = (text) => {
-    updateBlocks([...section.blocks, { id: newId(), type: "text", text }]);
+    insertBlocks([{ id: newId(), type: "text", text }]);
   };
 
   const addQuestionBlock = (questionType) => {
     setQuestionMenuAnchor(null);
-    updateBlocks([...section.blocks, createQuestionBlock(newId, questionType)]);
+    insertBlocks([createQuestionBlock(newId, questionType)]);
   };
 
   const addSpellingBlock = () => {
-    updateBlocks([...section.blocks, createSpellingBlock(newId)]);
+    insertBlocks([createSpellingBlock(newId)]);
   };
 
   const addSuggestedQuestionBlock = (questionType, data) => {
-    updateBlocks([
-      ...section.blocks,
-      buildQuestionBlock(newId, questionType, data),
-    ]);
+    insertBlocks([buildQuestionBlock(newId, questionType, data)]);
   };
 
   const handleImageFiles = async (files) => {
@@ -112,7 +127,7 @@ export default function SectionCard({
         onError?.(err.message || "Failed to add image.");
       }
     }
-    if (newBlocks.length) updateBlocks([...section.blocks, ...newBlocks]);
+    insertBlocks(newBlocks);
   };
 
   const onPickImages = (e) => {
@@ -121,8 +136,7 @@ export default function SectionCard({
   };
 
   const addSearchedImage = ({ image, width, height, caption = "" }) => {
-    updateBlocks([
-      ...section.blocks,
+    insertBlocks([
       { id: newId(), type: "image", image, width, height, caption },
     ]);
   };
@@ -140,6 +154,72 @@ export default function SectionCard({
     blocks.splice(to, 0, moved);
     updateBlocks(blocks);
   };
+
+  // Where the "add block" toolbar sits: directly under the block being edited,
+  // or — when nothing is active (or the active block was deleted/lives in
+  // another section) — at the bottom of the section.
+  const activeIndex = section.blocks.findIndex((b) => b.id === activeBlockId);
+
+  const addToolbar = (
+    <Stack direction="row" spacing={1} useFlexGap flexWrap="wrap">
+      <Button
+        startIcon={<TextFieldsIcon />}
+        onClick={addTextBlock}
+        variant="outlined"
+        size="small"
+      >
+        Add text
+      </Button>
+      <Button
+        startIcon={<ImageIcon />}
+        onClick={() => fileInputRef.current?.click()}
+        variant="outlined"
+        size="small"
+      >
+        Add image
+      </Button>
+      <Button
+        startIcon={<ImageSearchIcon />}
+        onClick={() => setImageSearchOpen(true)}
+        variant="outlined"
+        size="small"
+      >
+        Search images
+      </Button>
+      <Button
+        startIcon={<QuizIcon />}
+        onClick={(e) => setQuestionMenuAnchor(e.currentTarget)}
+        variant="outlined"
+        size="small"
+      >
+        Add question
+      </Button>
+      <Button
+        startIcon={<SpellcheckIcon />}
+        onClick={addSpellingBlock}
+        variant="outlined"
+        size="small"
+      >
+        Spelling words
+      </Button>
+      <Button
+        startIcon={<AutoAwesomeIcon />}
+        onClick={(e) => setAiMenuAnchor(e.currentTarget)}
+        variant="outlined"
+        size="small"
+      >
+        Generate with AI
+      </Button>
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept="image/*"
+        multiple
+        hidden
+        onChange={onPickImages}
+      />
+    </Stack>
+  );
 
   return (
     <Card elevation={2}>
@@ -202,80 +282,33 @@ export default function SectionCard({
           </Typography>
         ) : (
           <Stack spacing={1.5} sx={{ mb: 2 }}>
-            {section.blocks.map((block, i) => (
-              <ContentBlock
-                key={block.id}
-                block={block}
-                onChange={(next) => updateBlock(block.id, next)}
-                onDelete={() => deleteBlock(block.id)}
-                onMoveUp={() => moveBlock(i, i - 1)}
-                onMoveDown={() => moveBlock(i, i + 1)}
-                isFirst={i === 0}
-                isLast={i === section.blocks.length - 1}
-                capitalizedWords={capitalizedWords}
-              />
-            ))}
+            {section.blocks.map((block, i) => [
+              // Focusing any field inside a block makes it the active block, so
+              // the toolbar follows the user's edit point. onFocus bubbles from
+              // the inner inputs.
+              <Box key={block.id} onFocus={() => setActiveBlockId(block.id)}>
+                <ContentBlock
+                  block={block}
+                  onChange={(next) => updateBlock(block.id, next)}
+                  onDelete={() => deleteBlock(block.id)}
+                  onMoveUp={() => moveBlock(i, i - 1)}
+                  onMoveDown={() => moveBlock(i, i + 1)}
+                  isFirst={i === 0}
+                  isLast={i === section.blocks.length - 1}
+                  capitalizedWords={capitalizedWords}
+                />
+              </Box>,
+              // The toolbar sits directly beneath the block being edited.
+              i === activeIndex ? (
+                <Box key={`${block.id}-toolbar`}>{addToolbar}</Box>
+              ) : null,
+            ])}
           </Stack>
         )}
 
-        <Stack direction="row" spacing={1} useFlexGap flexWrap="wrap">
-          <Button
-            startIcon={<TextFieldsIcon />}
-            onClick={addTextBlock}
-            variant="outlined"
-            size="small"
-          >
-            Add text
-          </Button>
-          <Button
-            startIcon={<ImageIcon />}
-            onClick={() => fileInputRef.current?.click()}
-            variant="outlined"
-            size="small"
-          >
-            Add image
-          </Button>
-          <Button
-            startIcon={<ImageSearchIcon />}
-            onClick={() => setImageSearchOpen(true)}
-            variant="outlined"
-            size="small"
-          >
-            Search images
-          </Button>
-          <Button
-            startIcon={<QuizIcon />}
-            onClick={(e) => setQuestionMenuAnchor(e.currentTarget)}
-            variant="outlined"
-            size="small"
-          >
-            Add question
-          </Button>
-          <Button
-            startIcon={<SpellcheckIcon />}
-            onClick={addSpellingBlock}
-            variant="outlined"
-            size="small"
-          >
-            Spelling words
-          </Button>
-          <Button
-            startIcon={<AutoAwesomeIcon />}
-            onClick={(e) => setAiMenuAnchor(e.currentTarget)}
-            variant="outlined"
-            size="small"
-          >
-            Generate with AI
-          </Button>
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept="image/*"
-            multiple
-            hidden
-            onChange={onPickImages}
-          />
-        </Stack>
+        {/* When no block in this section is active, the toolbar stays at the
+            bottom (its original home). */}
+        {activeIndex === -1 && addToolbar}
 
         <Menu
           anchorEl={questionMenuAnchor}
