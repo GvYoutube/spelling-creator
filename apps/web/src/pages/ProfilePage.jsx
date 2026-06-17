@@ -22,11 +22,19 @@ import Alert from "@mui/material/Alert";
 import CircularProgress from "@mui/material/CircularProgress";
 import Tooltip from "@mui/material/Tooltip";
 import IconButton from "@mui/material/IconButton";
+import Menu from "@mui/material/Menu";
+import MenuItem from "@mui/material/MenuItem";
+import ListItemText from "@mui/material/ListItemText";
 import EditIcon from "@mui/icons-material/Edit";
 import RssFeedIcon from "@mui/icons-material/RssFeed";
+import HistoryIcon from "@mui/icons-material/History";
 import NavActions from "../components/NavActions.jsx";
 import BioDialog from "../components/BioDialog.jsx";
-import { fetchUserProfile, userFeedUrl } from "../lib/users.js";
+import {
+  fetchUserProfile,
+  fetchUserActivity,
+  userFeedUrl,
+} from "../lib/users.js";
 import { useAuth } from "../lib/auth.jsx";
 import { useDocumentMeta } from "../lib/seo.js";
 
@@ -56,6 +64,27 @@ export default function ProfilePage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [bioOpen, setBioOpen] = useState(false);
+
+  // Activity menu: lazily parsed from the user's Atom feed on first open.
+  const [activityAnchor, setActivityAnchor] = useState(null);
+  const [activity, setActivity] = useState([]);
+  const [activityLoaded, setActivityLoaded] = useState(false);
+  const [activityLoading, setActivityLoading] = useState(false);
+  const [activityError, setActivityError] = useState("");
+
+  const openActivity = (e) => {
+    setActivityAnchor(e.currentTarget);
+    if (activityLoaded) return;
+    setActivityLoaded(true);
+    setActivityLoading(true);
+    setActivityError("");
+    fetchUserActivity(id)
+      .then(setActivity)
+      .catch((err) =>
+        setActivityError(err.message || "Could not load activity."),
+      )
+      .finally(() => setActivityLoading(false));
+  };
 
   const load = useCallback(() => {
     if (!id) return;
@@ -142,19 +171,33 @@ export default function ProfilePage() {
                 </Typography>
               </Box>
               {feedUrl && (
-                <Tooltip title="Subscribe to this user's activity (RSS)">
-                  <Button
-                    variant="outlined"
-                    size="small"
-                    component="a"
-                    href={feedUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    startIcon={<RssFeedIcon />}
-                  >
-                    RSS
-                  </Button>
-                </Tooltip>
+                <Stack direction="row" spacing={1} alignItems="center">
+                  <Tooltip title="Recent activity (lessons & comments)">
+                    <Button
+                      variant="outlined"
+                      size="small"
+                      startIcon={<HistoryIcon />}
+                      onClick={openActivity}
+                      aria-haspopup="true"
+                      aria-expanded={Boolean(activityAnchor)}
+                    >
+                      Activity
+                    </Button>
+                  </Tooltip>
+                  <Tooltip title="Subscribe to this user's activity (RSS)">
+                    <Button
+                      variant="outlined"
+                      size="small"
+                      component="a"
+                      href={feedUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      startIcon={<RssFeedIcon />}
+                    >
+                      RSS
+                    </Button>
+                  </Tooltip>
+                </Stack>
               )}
             </Stack>
 
@@ -234,6 +277,64 @@ export default function ProfilePage() {
           </>
         )}
       </Container>
+
+      {/* Scrollable activity menu — parsed from the same Atom feed as the RSS button. */}
+      <Menu
+        anchorEl={activityAnchor}
+        open={Boolean(activityAnchor)}
+        onClose={() => setActivityAnchor(null)}
+        anchorOrigin={{ vertical: "bottom", horizontal: "right" }}
+        transformOrigin={{ vertical: "top", horizontal: "right" }}
+        slotProps={{
+          paper: { sx: { width: 340, maxWidth: "90vw", maxHeight: 360 } },
+        }}
+      >
+        {activityLoading ? (
+          <Box sx={{ display: "flex", justifyContent: "center", py: 2 }}>
+            <CircularProgress size={24} />
+          </Box>
+        ) : activityError ? (
+          <Box sx={{ px: 2, py: 1.5 }}>
+            <Typography variant="body2" color="error">
+              {activityError}
+            </Typography>
+          </Box>
+        ) : activity.length === 0 ? (
+          <Box sx={{ px: 2, py: 1.5 }}>
+            <Typography variant="body2" color="text.secondary">
+              No recent activity.
+            </Typography>
+          </Box>
+        ) : (
+          activity.map((item) => (
+            <MenuItem
+              key={item.id}
+              component="a"
+              href={item.link}
+              onClick={() => setActivityAnchor(null)}
+              sx={{ whiteSpace: "normal", alignItems: "flex-start" }}
+            >
+              <ListItemText
+                primary={item.title}
+                secondary={
+                  [item.summary, formatDate(item.updated)]
+                    .filter(Boolean)
+                    .join(" · ") || undefined
+                }
+                primaryTypographyProps={{ noWrap: true }}
+                secondaryTypographyProps={{
+                  sx: {
+                    display: "-webkit-box",
+                    WebkitLineClamp: 2,
+                    WebkitBoxOrient: "vertical",
+                    overflow: "hidden",
+                  },
+                }}
+              />
+            </MenuItem>
+          ))
+        )}
+      </Menu>
 
       {isOwner && (
         <BioDialog

@@ -54,3 +54,52 @@ export function userFeedUrl(id) {
   if (!API_URL || !id) return "";
   return `${API_URL.replace(/\/$/, "")}/profiles/${encodeURIComponent(id)}/feed.xml`;
 }
+
+// Pull the trimmed text of the first descendant with the given local name
+// (namespace-agnostic, so the Atom default xmlns doesn't get in the way).
+function entryText(el, tag) {
+  const node = el.getElementsByTagNameNS("*", tag)[0];
+  return node ? (node.textContent || "").trim() : "";
+}
+
+/**
+ * Fetch a user's recent activity for the in-page activity menu. Rather than add a
+ * second backend route, this reads the very same Atom feed the "RSS" button points
+ * at and parses it client-side with DOMParser — so the Worker only maintains the
+ * one feed.xml endpoint.
+ * @param {string} id  The user's Supabase id.
+ * @returns {Promise<Array<{ id, title, summary, updated, link }>>} Newest first.
+ */
+export async function fetchUserActivity(id) {
+  const url = userFeedUrl(id);
+  if (!url) throw new Error("Profiles are not configured.");
+
+  let res;
+  try {
+    res = await fetch(url, { method: "GET" });
+  } catch {
+    throw new Error("Could not reach the server.");
+  }
+  if (!res.ok) throw new Error(`Request failed (${res.status}).`);
+
+  const doc = new DOMParser().parseFromString(
+    await res.text(),
+    "application/xml",
+  );
+  if (doc.getElementsByTagName("parsererror").length) {
+    throw new Error("Could not read the activity feed.");
+  }
+
+  return Array.from(doc.getElementsByTagNameNS("*", "entry")).map((entry) => {
+    const links = Array.from(entry.getElementsByTagNameNS("*", "link"));
+    const alternate =
+      links.find((l) => l.getAttribute("rel") === "alternate") || links[0];
+    return {
+      id: entryText(entry, "id"),
+      title: entryText(entry, "title"),
+      summary: entryText(entry, "summary"),
+      updated: entryText(entry, "updated"),
+      link: alternate ? alternate.getAttribute("href") || "" : "",
+    };
+  });
+}
