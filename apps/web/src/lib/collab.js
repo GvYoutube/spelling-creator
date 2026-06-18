@@ -537,15 +537,20 @@ export function useCollaboration({ doc, onRemoteDoc, identity, accessToken }) {
   // Tear down the socket when the component using this hook unmounts.
   useEffect(() => () => cleanup(), []);
 
-  // Broadcast local edits. Runs whenever `doc` changes; sends only when the doc
-  // actually differs from the last one we synced (which both prevents echoing a
-  // just-received doc and de-dupes no-op renders).
+  // Broadcast local edits. Debounced (~250ms): serialising the whole doc with
+  // JSON.stringify on every keystroke janks low-end machines editing large
+  // lessons, so we coalesce bursts of edits and send once they briefly pause.
+  // Sends only when the doc actually differs from the last one we synced (which
+  // both prevents echoing a just-received doc and de-dupes no-op renders).
   useEffect(() => {
     if (status !== "hosting" && status !== "joined") return;
-    const json = JSON.stringify(doc);
-    if (json === lastSyncedRef.current) return;
-    lastSyncedRef.current = json;
-    sendFrame(jsonFrame(T.DOC, doc));
+    const id = setTimeout(() => {
+      const json = JSON.stringify(doc);
+      if (json === lastSyncedRef.current) return;
+      lastSyncedRef.current = json;
+      sendFrame(jsonFrame(T.DOC, doc));
+    }, 250);
+    return () => clearTimeout(id);
   }, [doc, status]);
 
   const active =

@@ -1,3 +1,4 @@
+import { memo } from "react";
 import Box from "@mui/material/Box";
 import Stack from "@mui/material/Stack";
 import TextField from "@mui/material/TextField";
@@ -29,7 +30,7 @@ import { useImageSrc } from "../lib/useImageSrc.js";
 import { questionMeta } from "../lib/questions.js";
 import { SPELLING_COLOR } from "../lib/spelling.js";
 
-export default function ContentBlock({
+function ContentBlock({
   block,
   onChange,
   onDelete,
@@ -547,3 +548,8 @@ function QuestionBlock({ block, onChange, controls }) {
     </Paper>
   );
 }
+
+// Memoized so an unedited block skips re-rendering when a sibling block (or the
+// rest of the lesson) changes. SectionCard hands each block stable, id-based
+// callbacks, so only the block whose data actually changed re-renders.
+export default memo(ContentBlock);

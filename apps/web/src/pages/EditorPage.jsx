@@ -1,4 +1,11 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import {
+  useCallback,
+  useDeferredValue,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { useDocumentMeta } from "../lib/seo.js";
 import AppBar from "@mui/material/AppBar";
@@ -267,9 +274,26 @@ export default function EditorPage() {
     editingIdRef.current = editingId;
   }, [editingId]);
 
+  // Persist the working doc to IndexedDB, debounced: typing into a large lesson
+  // shouldn't rewrite the whole document on every keystroke (the synchronous
+  // write janks low-end machines). We save ~600ms after edits pause, and flush a
+  // pending save on unmount so the last keystrokes aren't lost.
+  const pendingSaveRef = useRef(null);
   useEffect(() => {
-    if (hydrated) saveDocument(doc);
+    if (!hydrated) return;
+    pendingSaveRef.current = doc;
+    const id = setTimeout(() => {
+      pendingSaveRef.current = null;
+      saveDocument(doc);
+    }, 600);
+    return () => clearTimeout(id);
   }, [doc, hydrated]);
+  useEffect(
+    () => () => {
+      if (pendingSaveRef.current) saveDocument(pendingSaveRef.current);
+    },
+    [],
+  );
 
   // Persist the editing-published status so it survives reloads/tab closes.
   useEffect(() => {
@@ -410,25 +434,47 @@ export default function EditorPage() {
   const setTrustedCollaborators = (next) =>
     setDoc((d) => ({ ...d, trustedCollaborators: next }));
 
-  const updateSection = (id, next) =>
-    setDoc((d) => ({
-      ...d,
-      sections: d.sections.map((s) => (s.id === id ? next : s)),
-    }));
+  // Section callbacks are passed to memoized <SectionCard>s, so they must keep a
+  // stable identity across renders — otherwise every keystroke would hand each
+  // card new props and re-render the whole tree. They take an id (not an array
+  // index) so the closure never goes stale, and use functional setDoc so they
+  // never close over `doc`. `dir` is -1 (up) / +1 (down).
+  const updateSection = useCallback(
+    (id, next) =>
+      setDoc((d) => ({
+        ...d,
+        sections: d.sections.map((s) => (s.id === id ? next : s)),
+      })),
+    [],
+  );
 
-  const deleteSection = (id) =>
-    setDoc((d) => ({ ...d, sections: d.sections.filter((s) => s.id !== id) }));
+  const deleteSection = useCallback(
+    (id) =>
+      setDoc((d) => ({
+        ...d,
+        sections: d.sections.filter((s) => s.id !== id),
+      })),
+    [],
+  );
 
-  const moveSection = (from, to) => {
-    if (to < 0) return;
-    setDoc((d) => {
-      if (to >= d.sections.length) return d;
-      const sections = [...d.sections];
-      const [moved] = sections.splice(from, 1);
-      sections.splice(to, 0, moved);
-      return { ...d, sections };
-    });
-  };
+  const moveSection = useCallback(
+    (id, dir) =>
+      setDoc((d) => {
+        const from = d.sections.findIndex((s) => s.id === id);
+        const to = from + dir;
+        if (from === -1 || to < 0 || to >= d.sections.length) return d;
+        const sections = [...d.sections];
+        const [moved] = sections.splice(from, 1);
+        sections.splice(to, 0, moved);
+        return { ...d, sections };
+      }),
+    [],
+  );
+
+  const handleSectionError = useCallback(
+    (message) => setToast({ severity: "error", message }),
+    [],
+  );
 
   const openAddDialog = () => {
     setNewSectionName("");
@@ -690,8 +736,24 @@ export default function EditorPage() {
   );
 
   // Every capitalized word across the lesson's text blocks. Feeds the spelling
-  // block's "fill" button, so it can populate the list from the passage.
-  const capitalizedWords = useMemo(() => extractCapitalizedWords(doc), [doc]);
+  // block's "fill" button, so it can populate the list from the passage. The
+  // scan is O(whole lesson), so defer it: it runs at low priority on a snapshot
+  // that lags `doc`, instead of blocking the keystroke that triggered the edit.
+  // `deferredDoc` gets a fresh reference on every edit, so the raw scan result
+  // would too — and a new array each keystroke would bust the memoized cards
+  // (capitalizedWords is passed to all of them). Keep the previous array when its
+  // contents are unchanged, so the reference only changes when the word set does.
+  const deferredDoc = useDeferredValue(doc);
+  const capWordsRef = useRef([]);
+  const capitalizedWords = useMemo(() => {
+    const next = extractCapitalizedWords(deferredDoc);
+    const prev = capWordsRef.current;
+    if (prev.length === next.length && prev.every((w, i) => w === next[i])) {
+      return prev;
+    }
+    capWordsRef.current = next;
+    return next;
+  }, [deferredDoc]);
 
   const [anchorEl, setAnchorEl] = useState(null);
   const menuOpen = Boolean(anchorEl);
@@ -1224,13 +1286,12 @@ export default function EditorPage() {
               section={section}
               documentName={doc.title}
               index={i}
-              onChange={(next) => updateSection(section.id, next)}
-              onDelete={() => deleteSection(section.id)}
-              onMoveUp={() => moveSection(i, i - 1)}
-              onMoveDown={() => moveSection(i, i + 1)}
+              onChange={updateSection}
+              onDelete={deleteSection}
+              onMove={moveSection}
               isFirst={i === 0}
               isLast={i === sectionCount - 1}
-              onError={(message) => setToast({ severity: "error", message })}
+              onError={handleSectionError}
               capitalizedWords={capitalizedWords}
             />
           ))}
