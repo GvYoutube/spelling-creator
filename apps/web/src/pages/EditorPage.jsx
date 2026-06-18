@@ -165,9 +165,10 @@ export default function EditorPage() {
   const closeMobileMenu = () => setMobileMenuAnchor(null);
   const showPublish = lessonHubEnabled && authEnabled;
 
-  // Real-time collaboration over PeerJS. The hook watches `doc` to broadcast
-  // local edits and calls setDoc with documents received from collaborators.
-  // Identity is shared as presence so collaborators see who's in the lesson.
+  // Real-time collaboration over a Cloudflare Durable Object. The hook watches
+  // `doc` to broadcast local edits and calls setDoc with documents received from
+  // the room. Identity labels our own chat bubbles; the access token authenticates
+  // the WebSocket (only signed-in users may host or join).
   const identity = useMemo(
     () => ({
       name:
@@ -183,7 +184,12 @@ export default function EditorPage() {
     }),
     [user],
   );
-  const collab = useCollaboration({ doc, onRemoteDoc: setDoc, identity });
+  const collab = useCollaboration({
+    doc,
+    onRemoteDoc: setDoc,
+    identity,
+    accessToken,
+  });
   const [collabOpen, setCollabOpen] = useState(false);
 
   // First-lesson wizard. Auto-shows once for newcomers (tracked by a

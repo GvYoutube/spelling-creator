@@ -57,7 +57,14 @@ export default defineConfig([
   // API — Cloudflare Worker runtime
   {
     files: ["apps/api/**/*.js"],
-    languageOptions: { globals: { ...globals.worker, ...globals.node } },
+    languageOptions: {
+      globals: {
+        ...globals.worker,
+        ...globals.node,
+        // Cloudflare-specific runtime global (Durable Object WebSockets).
+        WebSocketPair: "readonly",
+      },
+    },
   },
 
   // MCP server — Node runtime (also uses Web-standard fetch/crypto globals)

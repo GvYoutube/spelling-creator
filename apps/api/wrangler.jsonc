@@ -39,6 +39,15 @@
 		},
 	],
 
+	// Live-collaboration coordinator. One CollabRoom Durable Object per session
+	// (addressed by the host's share code) relays edits/cursors/chat over a single
+	// WebSocket and enforces per-room/per-connection limits. See src/collab-room.js
+	// and handleCollab in src/index.js. SQLite-backed (the room caches the doc).
+	"durable_objects": {
+		"bindings": [{ "name": "COLLAB_ROOM", "class_name": "CollabRoom" }],
+	},
+	"migrations": [{ "tag": "v1", "new_sqlite_classes": ["CollabRoom"] }],
+
 	// R2 bucket holding lesson images as binary objects, keyed by their SHA-256
 	// content hash. Served publicly by GET /images/:hash and written by the
 	// authenticated PUT /images/:hash (see src/index.js). Create it once with:

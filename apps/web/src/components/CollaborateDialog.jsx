@@ -1,7 +1,9 @@
-// Collaboration control panel. Drives the PeerJS session exposed by
-// useCollaboration: start hosting and share an invite, or join someone else's
-// session by code. The host admits ("adds") pending guests to the lesson before
-// they can collaborate, matching the admission model in lib/collab.js.
+// Collaboration control panel. Drives the WebSocket session exposed by
+// useCollaboration (a Cloudflare Durable Object relays it server-side): start
+// hosting and share an invite, or join someone else's session by code. The host
+// admits ("adds") pending guests to the lesson before they can collaborate,
+// matching the admission model in lib/collab.js. Hosting and joining require a
+// signed-in account.
 
 import { useEffect, useRef, useState } from "react";
 import Dialog from "@mui/material/Dialog";
@@ -22,10 +24,6 @@ import ListItemAvatar from "@mui/material/ListItemAvatar";
 import Avatar from "@mui/material/Avatar";
 import Chip from "@mui/material/Chip";
 import Alert from "@mui/material/Alert";
-import Accordion from "@mui/material/Accordion";
-import AccordionSummary from "@mui/material/AccordionSummary";
-import AccordionDetails from "@mui/material/AccordionDetails";
-import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
 import CircularProgress from "@mui/material/CircularProgress";
 import IconButton from "@mui/material/IconButton";
 import Tooltip from "@mui/material/Tooltip";
@@ -40,12 +38,6 @@ import StarIcon from "@mui/icons-material/Star";
 import { colorForId } from "../lib/presence.js";
 import { useAuth } from "../lib/auth.jsx";
 import { sendLink } from "../lib/notifications.js";
-import Link from "@mui/material/Link";
-import {
-  getTurnCreds,
-  setTurnCreds,
-  DEFAULT_TURN_URL,
-} from "../lib/iceServers.js";
 
 // Build a shareable invite link that deep-links into the editor with the host's
 // session code, so a recipient just clicks and lands on the join screen.
@@ -89,9 +81,6 @@ export default function CollaborateDialog({
 
   const { accessToken, user } = useAuth();
   const [joinCode, setJoinCode] = useState(initialJoinCode);
-  // Optional TURN relay credentials, persisted in localStorage. Most networks
-  // connect fine over STUN, so these are only needed as a fallback.
-  const [turn, setTurn] = useState(() => getTurnCreds());
   const [copied, setCopied] = useState(null); // 'code' | 'link' | null
   const [sendOpen, setSendOpen] = useState(false);
   // Status of the automatic invite send to trusted collaborators when a session
@@ -209,103 +198,16 @@ export default function CollaborateDialog({
     );
   };
 
-  // Optional TURN relay credentials. Tucked into a collapsed section because
-  // most people never need them — they're only a fallback when a direct peer
-  // connection can't be established. Saving writes straight to localStorage so
-  // the next host/join attempt picks them up.
-  const saveTurn = (next) => {
-    setTurn(next);
-    setTurnCreds(next);
-  };
-
-  const renderTurnSettings = () => (
-    <Accordion
-      disableGutters
-      elevation={0}
-      sx={{ "&:before": { display: "none" }, bgcolor: "transparent" }}
-    >
-      <AccordionSummary
-        expandIcon={<ExpandMoreIcon />}
-        sx={{ px: 0, minHeight: "auto" }}
-      >
-        <Typography variant="subtitle2">
-          Connection settings (optional)
-        </Typography>
-      </AccordionSummary>
-      <AccordionDetails sx={{ px: 0, pt: 0 }}>
-        <Typography variant="body2" color="text.secondary" sx={{ mb: 1.5 }}>
-          You only need these if collaboration doesn&apos;t connect without
-          them. They add a TURN relay server for networks that block direct
-          peer-to-peer connections. Bring your own server — we recommend{" "}
-          <Link
-            href="https://www.expressturn.com/"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            ExpressTURN
-          </Link>{" "}
-          or{" "}
-          <Link
-            href="https://www.metered.ca/tools/openrelay/"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Metered OpenRelay
-          </Link>
-          . Saved on this device only.
-        </Typography>
-        <Stack spacing={1.5}>
-          <TextField
-            size="small"
-            fullWidth
-            label="TURN server URL"
-            placeholder={DEFAULT_TURN_URL}
-            value={turn.url}
-            onChange={(e) => setTurn({ ...turn, url: e.target.value })}
-            helperText="Leave blank to use the default server."
-          />
-          <TextField
-            size="small"
-            fullWidth
-            label="TURN username"
-            value={turn.username}
-            onChange={(e) => setTurn({ ...turn, username: e.target.value })}
-          />
-          <TextField
-            size="small"
-            fullWidth
-            type="password"
-            label="TURN password"
-            value={turn.credential}
-            onChange={(e) => setTurn({ ...turn, credential: e.target.value })}
-          />
-          <Stack direction="row" spacing={1}>
-            <Button
-              size="small"
-              variant="outlined"
-              onClick={() => saveTurn(turn)}
-            >
-              Save
-            </Button>
-            <Button
-              size="small"
-              color="inherit"
-              disabled={!turn.url && !turn.username && !turn.credential}
-              onClick={() =>
-                saveTurn({ url: "", username: "", credential: "" })
-              }
-            >
-              Clear
-            </Button>
-          </Stack>
-        </Stack>
-      </AccordionDetails>
-    </Accordion>
-  );
-
-  // The pre-session landing: choose to host or to join.
+  // The pre-session landing: choose to host or to join. Collaboration requires a
+  // signed-in account (the WebSocket is authenticated server-side), so when the
+  // user isn't signed in we explain that and disable the host/join controls.
   const renderLanding = () => (
     <Stack spacing={3} sx={{ pt: 1 }}>
+      {!accessToken && (
+        <Alert severity="info" variant="outlined">
+          Sign in to start or join a live collaboration session.
+        </Alert>
+      )}
       <Box>
         <Typography variant="subtitle2" gutterBottom>
           Invite people to this lesson
@@ -319,6 +221,7 @@ export default function CollaborateDialog({
           variant="contained"
           startIcon={<GroupAddIcon />}
           onClick={startHosting}
+          disabled={!accessToken}
         >
           Start a collaboration session
         </Button>
@@ -337,6 +240,7 @@ export default function CollaborateDialog({
             label="Session code"
             placeholder="Paste the code you were given"
             value={joinCode}
+            disabled={!accessToken}
             onChange={(e) => setJoinCode(e.target.value)}
             onKeyDown={(e) => {
               if (e.key === "Enter") joinSession(joinCode);
@@ -346,6 +250,7 @@ export default function CollaborateDialog({
             variant="outlined"
             startIcon={<LoginIcon />}
             onClick={() => joinSession(joinCode)}
+            disabled={!accessToken}
             sx={{ flexShrink: 0, mt: 0.25 }}
           >
             Join
@@ -359,10 +264,6 @@ export default function CollaborateDialog({
       <Divider />
 
       {renderTrusted()}
-
-      <Divider />
-
-      {renderTurnSettings()}
     </Stack>
   );
 
