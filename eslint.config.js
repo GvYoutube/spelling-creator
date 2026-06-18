@@ -61,8 +61,9 @@ export default defineConfig([
       globals: {
         ...globals.worker,
         ...globals.node,
-        // Cloudflare-specific runtime global (Durable Object WebSockets).
+        // Cloudflare-specific runtime globals (Durable Object WebSockets).
         WebSocketPair: "readonly",
+        WebSocketRequestResponsePair: "readonly",
       },
     },
   },

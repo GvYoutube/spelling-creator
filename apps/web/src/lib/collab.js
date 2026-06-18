@@ -122,6 +122,11 @@ export function useCollaboration({ doc, onRemoteDoc, identity, accessToken }) {
   // True while we're intentionally tearing down, so the close handler doesn't
   // surface a spurious "disconnected" error.
   const closingRef = useRef(false);
+  // setInterval id for the keep-alive heartbeat. A backgrounded tab stops sending
+  // cursor/doc traffic, so without this its idle socket gets dropped — the bug
+  // where leaving the tab ends the session. The room auto-answers our "ping" with
+  // "pong" (see apps/api/src/collab-room.js) without un-hibernating.
+  const pingRef = useRef(null);
   // Latest doc/identity/callback/role mirrored for use inside the long-lived
   // message handler.
   const docRef = useRef(doc);
@@ -417,6 +422,24 @@ export function useCollaboration({ doc, onRemoteDoc, identity, accessToken }) {
       ws.binaryType = "arraybuffer";
       wsRef.current = ws;
 
+      ws.onopen = () => {
+        // Heartbeat so an idle (backgrounded-tab) connection isn't dropped. A
+        // text "ping" the room auto-answers with "pong"; we send a string (not a
+        // binary frame) so the auto-response matches and the reply is ignored by
+        // onmessage below (it only handles ArrayBuffers). Background tabs throttle
+        // timers to ~once/min, so 20s keeps us comfortably under idle timeouts.
+        if (pingRef.current) clearInterval(pingRef.current);
+        pingRef.current = setInterval(() => {
+          const sock = wsRef.current;
+          if (sock && sock.readyState === WebSocket.OPEN) {
+            try {
+              sock.send("ping");
+            } catch {
+              /* a socket mid-close; the close handler cleans up */
+            }
+          }
+        }, 20000);
+      };
       ws.onmessage = (ev) => {
         if (ev.data instanceof ArrayBuffer) handleFrame(ev.data);
       };
@@ -472,6 +495,10 @@ export function useCollaboration({ doc, onRemoteDoc, identity, accessToken }) {
   // ----- teardown -----------------------------------------------------------
   function cleanup() {
     closingRef.current = true;
+    if (pingRef.current) {
+      clearInterval(pingRef.current);
+      pingRef.current = null;
+    }
     try {
       wsRef.current?.close();
     } catch {

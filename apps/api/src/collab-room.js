@@ -110,6 +110,13 @@ export class CollabRoom extends DurableObject {
 		ctx.blockConcurrencyWhile(async () => {
 			ctx.storage.sql.exec('CREATE TABLE IF NOT EXISTS room (k TEXT PRIMARY KEY, v BLOB)');
 		});
+		// Keep-alive. A backgrounded tab stops sending cursor/doc traffic, so its
+		// otherwise-idle WebSocket gets dropped as inactive — the bug where leaving
+		// the tab ends the session. Browsers can't send protocol-level ping frames
+		// from JS, so the client sends a "ping" text message on a timer (see
+		// collab.js) and the runtime answers "pong" here automatically — without
+		// waking this object from hibernation — which keeps the connection alive.
+		ctx.setWebSocketAutoResponse(new WebSocketRequestResponsePair('ping', 'pong'));
 	}
 
 	// ----- document cache (SQLite) -------------------------------------------
