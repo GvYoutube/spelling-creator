@@ -1,7 +1,7 @@
 import { memo } from "react";
 import Box from "@mui/material/Box";
 import Stack from "@mui/material/Stack";
-import TextField from "@mui/material/TextField";
+import LiveTextField from "./LiveTextField.jsx";
 import IconButton from "@mui/material/IconButton";
 import Tooltip from "@mui/material/Tooltip";
 import Paper from "@mui/material/Paper";
@@ -101,13 +101,13 @@ function ContentBlock({
   return (
     <Paper variant="outlined" sx={{ p: 2 }}>
       <Stack direction="row" alignItems="flex-start" spacing={1}>
-        <TextField
+        <LiveTextField
           fullWidth
           multiline
           minRows={2}
           placeholder="Type lesson text here…"
           value={block.text || ""}
-          onChange={(e) => onChange({ ...block, text: e.target.value })}
+          onCommit={(text) => onChange({ ...block, text })}
           slotProps={{
             htmlInput: { "data-collab-field": `block:${block.id}:text` },
           }}
@@ -222,12 +222,12 @@ function ImageBlock({ block, onChange, controls }) {
               ))}
             </ToggleButtonGroup>
           </Stack>
-          <TextField
+          <LiveTextField
             fullWidth
             size="small"
             label="Caption (optional)"
             value={block.caption || ""}
-            onChange={(e) => onChange({ ...block, caption: e.target.value })}
+            onCommit={(caption) => onChange({ ...block, caption })}
             slotProps={{
               htmlInput: { "data-collab-field": `block:${block.id}:caption` },
             }}
@@ -300,12 +300,12 @@ function SpellingBlock({
                 alignItems="center"
                 spacing={0.5}
               >
-                <TextField
+                <LiveTextField
                   fullWidth
                   size="small"
                   placeholder={`Word ${i + 1}`}
                   value={w.text}
-                  onChange={(e) => setWord(w.id, e.target.value)}
+                  onCommit={(text) => setWord(w.id, text)}
                   slotProps={{
                     htmlInput: {
                       "data-collab-field": `block:${block.id}:word:${w.id}`,
@@ -415,26 +415,26 @@ function QuestionBlock({ block, onChange, controls }) {
               mb: 1.5,
             }}
           />
-          <TextField
+          <LiveTextField
             fullWidth
             multiline
             minRows={1}
             label="Question"
             placeholder="Type the question…"
             value={block.prompt || ""}
-            onChange={(e) => onChange({ ...block, prompt: e.target.value })}
+            onCommit={(prompt) => onChange({ ...block, prompt })}
             slotProps={{
               htmlInput: { "data-collab-field": `block:${block.id}:prompt` },
             }}
           />
 
           {block.questionType === "number" && (
-            <TextField
+            <LiveTextField
               type="number"
               size="small"
               label="Answer"
               value={block.answer ?? ""}
-              onChange={(e) => onChange({ ...block, answer: e.target.value })}
+              onCommit={(answer) => onChange({ ...block, answer })}
               sx={{ mt: 1.5, maxWidth: 200 }}
               slotProps={{
                 htmlInput: { "data-collab-field": `block:${block.id}:answer` },
@@ -443,13 +443,13 @@ function QuestionBlock({ block, onChange, controls }) {
           )}
 
           {block.questionType === "single" && (
-            <TextField
+            <LiveTextField
               fullWidth
               size="small"
               label="Answer"
               placeholder="The correct answer…"
               value={block.answer ?? ""}
-              onChange={(e) => onChange({ ...block, answer: e.target.value })}
+              onCommit={(answer) => onChange({ ...block, answer })}
               sx={{ mt: 1.5 }}
               slotProps={{
                 htmlInput: { "data-collab-field": `block:${block.id}:answer` },
@@ -466,12 +466,12 @@ function QuestionBlock({ block, onChange, controls }) {
                   alignItems="center"
                   spacing={0.5}
                 >
-                  <TextField
+                  <LiveTextField
                     fullWidth
                     size="small"
                     placeholder={`Answer ${i + 1}`}
                     value={ans.text}
-                    onChange={(e) => setAnswer(ans.id, e.target.value)}
+                    onCommit={(text) => setAnswer(ans.id, text)}
                     slotProps={{
                       htmlInput: {
                         "data-collab-field": `block:${block.id}:answer:${ans.id}`,
@@ -509,16 +509,14 @@ function QuestionBlock({ block, onChange, controls }) {
 
           {block.questionType === "background" && (
             <>
-              <TextField
+              <LiveTextField
                 fullWidth
                 multiline
                 minRows={2}
                 label="Background knowledge"
                 placeholder="Knowledge the student needs to answer this…"
                 value={block.background || ""}
-                onChange={(e) =>
-                  onChange({ ...block, background: e.target.value })
-                }
+                onCommit={(background) => onChange({ ...block, background })}
                 sx={{ mt: 1.5 }}
                 slotProps={{
                   htmlInput: {
@@ -526,13 +524,13 @@ function QuestionBlock({ block, onChange, controls }) {
                   },
                 }}
               />
-              <TextField
+              <LiveTextField
                 fullWidth
                 size="small"
                 label="Answer"
                 placeholder="The correct answer…"
                 value={block.answer ?? ""}
-                onChange={(e) => onChange({ ...block, answer: e.target.value })}
+                onCommit={(answer) => onChange({ ...block, answer })}
                 sx={{ mt: 1.5 }}
                 slotProps={{
                   htmlInput: {

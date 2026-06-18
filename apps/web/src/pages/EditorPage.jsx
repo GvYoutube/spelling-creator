@@ -1,11 +1,4 @@
-import {
-  useCallback,
-  useDeferredValue,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-} from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { useDocumentMeta } from "../lib/seo.js";
 import AppBar from "@mui/material/AppBar";
@@ -61,6 +54,7 @@ import DataObjectIcon from "@mui/icons-material/DataObject";
 import WarningAmberIcon from "@mui/icons-material/WarningAmber";
 import Badge from "@mui/material/Badge";
 import SectionCard from "../components/SectionCard.jsx";
+import LiveTextField from "../components/LiveTextField.jsx";
 import NavActions from "../components/NavActions.jsx";
 import CollaborateDialog from "../components/CollaborateDialog.jsx";
 import CollabCursors from "../components/CollabCursors.jsx";
@@ -739,21 +733,20 @@ export default function EditorPage() {
   // block's "fill" button, so it can populate the list from the passage. The
   // scan is O(whole lesson), so defer it: it runs at low priority on a snapshot
   // that lags `doc`, instead of blocking the keystroke that triggered the edit.
-  // `deferredDoc` gets a fresh reference on every edit, so the raw scan result
-  // would too — and a new array each keystroke would bust the memoized cards
-  // (capitalizedWords is passed to all of them). Keep the previous array when its
-  // contents are unchanged, so the reference only changes when the word set does.
-  const deferredDoc = useDeferredValue(doc);
+  // The scan result would be a fresh array on every edit, and a new array each
+  // keystroke would bust the memoized cards (capitalizedWords is passed to all
+  // of them). Keep the previous array when its contents are unchanged, so the
+  // reference only changes when the word set actually does.
   const capWordsRef = useRef([]);
   const capitalizedWords = useMemo(() => {
-    const next = extractCapitalizedWords(deferredDoc);
+    const next = extractCapitalizedWords(doc);
     const prev = capWordsRef.current;
     if (prev.length === next.length && prev.every((w, i) => w === next[i])) {
       return prev;
     }
     capWordsRef.current = next;
     return next;
-  }, [deferredDoc]);
+  }, [doc]);
 
   const [anchorEl, setAnchorEl] = useState(null);
   const menuOpen = Boolean(anchorEl);
@@ -1182,12 +1175,12 @@ export default function EditorPage() {
           <Typography variant="overline" color="text.secondary">
             Document title
           </Typography>
-          <TextField
+          <LiveTextField
             fullWidth
             variant="standard"
             placeholder="Untitled Lesson"
             value={doc.title}
-            onChange={(e) => setTitle(e.target.value)}
+            onCommit={setTitle}
             slotProps={{
               input: { sx: { fontSize: 28, fontWeight: 700 } },
               htmlInput: { "data-collab-field": "doc:title" },

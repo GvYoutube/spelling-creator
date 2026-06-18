@@ -3,7 +3,6 @@ import Card from "@mui/material/Card";
 import CardContent from "@mui/material/CardContent";
 import Stack from "@mui/material/Stack";
 import Box from "@mui/material/Box";
-import TextField from "@mui/material/TextField";
 import Button from "@mui/material/Button";
 import IconButton from "@mui/material/IconButton";
 import Tooltip from "@mui/material/Tooltip";
@@ -23,6 +22,7 @@ import ArrowUpwardIcon from "@mui/icons-material/ArrowUpward";
 import ArrowDownwardIcon from "@mui/icons-material/ArrowDownward";
 import DragIndicatorIcon from "@mui/icons-material/DragIndicator";
 import ContentBlock from "./ContentBlock.jsx";
+import LiveTextField from "./LiveTextField.jsx";
 import AiTextDialog from "./AiTextDialog.jsx";
 import AiQuestionDialog from "./AiQuestionDialog.jsx";
 import ImageSearchDialog from "./ImageSearchDialog.jsx";
@@ -347,14 +347,12 @@ function SectionCard({
           >
             {index + 1}
           </Box>
-          <TextField
+          <LiveTextField
             fullWidth
             variant="standard"
             placeholder="Section name"
             value={section.name}
-            onChange={(e) =>
-              onChange(section.id, { ...section, name: e.target.value })
-            }
+            onCommit={(name) => onChange(section.id, { ...section, name })}
             slotProps={{
               input: { sx: { fontSize: 20, fontWeight: 600 } },
               htmlInput: { "data-collab-field": `section:${section.id}:name` },
