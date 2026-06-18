@@ -169,11 +169,21 @@ export default function SectionCard({
   };
 
   // Drag starts from a block's grab handle (not the whole block, so text
-  // selection and field editing never trigger a drag). The drag image is set to
-  // the whole block element so the user drags a ghost of the entire block.
+  // selection and field editing never trigger a drag). The drag image is the
+  // whole block element, and we anchor it to the cursor's real position within
+  // the block so the ghost stays exactly under the pointer where it was grabbed
+  // (rather than pinned to a fixed top-left offset, which left the cursor
+  // floating in a corner of these wide blocks).
   const handleDragStart = (e, block) => {
     const wrapper = e.currentTarget.closest("[data-block-id]");
-    if (wrapper) e.dataTransfer.setDragImage(wrapper, 16, 16);
+    if (wrapper) {
+      const rect = wrapper.getBoundingClientRect();
+      e.dataTransfer.setDragImage(
+        wrapper,
+        e.clientX - rect.left,
+        e.clientY - rect.top,
+      );
+    }
     e.dataTransfer.effectAllowed = "move";
     e.dataTransfer.setData("text/plain", block.id); // Firefox needs some payload
     setDragId(block.id);
@@ -347,18 +357,44 @@ export default function SectionCard({
                 onDragOver={(e) => handleDragOver(e, block)}
                 onDrop={(e) => handleDrop(e, block)}
                 sx={{
-                  opacity: dragId === block.id ? 0.4 : 1,
-                  // Insertion line above/below the hovered block.
-                  borderTop: "2px solid",
-                  borderBottom: "2px solid",
-                  borderTopColor:
-                    overId === block.id && overPos === "before"
-                      ? "primary.main"
-                      : "transparent",
-                  borderBottomColor:
-                    overId === block.id && overPos === "after"
-                      ? "primary.main"
-                      : "transparent",
+                  position: "relative",
+                  borderRadius: 1,
+                  transition:
+                    "opacity 0.15s ease, box-shadow 0.15s ease, transform 0.15s ease",
+                  // The block being dragged collapses to a faint, dashed
+                  // placeholder so the gap it leaves behind reads as "this is
+                  // moving" rather than just dimming in place.
+                  ...(dragId === block.id && {
+                    opacity: 0.5,
+                    transform: "scale(0.99)",
+                    outline: "2px dashed",
+                    outlineColor: "primary.light",
+                    outlineOffset: 2,
+                    "& > *": { boxShadow: "none" },
+                  }),
+                  // A rounded insertion bar sits above/below the hovered block
+                  // (via ::before / ::after), fading in only on the side the
+                  // drop would land, marking exactly where the block goes.
+                  "&::before, &::after": {
+                    content: '""',
+                    position: "absolute",
+                    left: 0,
+                    right: 0,
+                    height: 4,
+                    borderRadius: 2,
+                    bgcolor: "primary.main",
+                    transition: "opacity 0.1s ease",
+                    pointerEvents: "none",
+                  },
+                  "&::before": {
+                    top: -5,
+                    opacity:
+                      overId === block.id && overPos === "before" ? 1 : 0,
+                  },
+                  "&::after": {
+                    bottom: -5,
+                    opacity: overId === block.id && overPos === "after" ? 1 : 0,
+                  },
                 }}
               >
                 <ContentBlock
@@ -385,10 +421,22 @@ export default function SectionCard({
                         sx={{
                           display: "inline-flex",
                           alignItems: "center",
+                          justifyContent: "center",
+                          borderRadius: 1,
+                          p: 0.25,
                           color: "text.disabled",
                           cursor: "grab",
-                          "&:active": { cursor: "grabbing" },
-                          "&:hover": { color: "text.secondary" },
+                          touchAction: "none",
+                          transition:
+                            "color 0.12s ease, background-color 0.12s ease",
+                          "&:active": {
+                            cursor: "grabbing",
+                            bgcolor: "action.selected",
+                          },
+                          "&:hover": {
+                            color: "text.primary",
+                            bgcolor: "action.hover",
+                          },
                         }}
                       >
                         <DragIndicatorIcon fontSize="small" />
