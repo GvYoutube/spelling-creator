@@ -741,9 +741,11 @@ export default function EditorPage() {
   const capitalizedWords = useMemo(() => {
     const next = extractCapitalizedWords(doc);
     const prev = capWordsRef.current;
+    // eslint-disable-next-line react-hooks/refs -- intentional referential-stability cache of the previous result
     if (prev.length === next.length && prev.every((w, i) => w === next[i])) {
       return prev;
     }
+    // eslint-disable-next-line react-hooks/refs -- intentional referential-stability cache of the previous result
     capWordsRef.current = next;
     return next;
   }, [doc]);
@@ -1273,6 +1275,7 @@ export default function EditorPage() {
         </Paper>
 
         <Stack spacing={3}>
+          {/* eslint-disable-next-line react-hooks/refs -- capitalizedWords is a stable cached array, safe to read here */}
           {doc.sections.map((section, i) => (
             <SectionCard
               key={section.id}

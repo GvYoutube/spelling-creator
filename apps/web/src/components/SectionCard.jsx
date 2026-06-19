@@ -53,6 +53,7 @@ function SectionCard({
   // current blocks without being re-created on every edit (which would defeat
   // the memoized <BlockRow>s). Assigning during render is fine for a mirror ref.
   const sectionRef = useRef(section);
+  // eslint-disable-next-line react-hooks/refs -- intentional mirror ref, read only in stable callbacks below
   sectionRef.current = section;
   const [questionMenuAnchor, setQuestionMenuAnchor] = useState(null);
   const [aiMenuAnchor, setAiMenuAnchor] = useState(null);
@@ -73,7 +74,9 @@ function SectionCard({
   // Mirror drag state too, so the stable drag handlers can read the in-flight
   // drag without being re-created (and without re-rendering every BlockRow).
   const dragRef = useRef({ dragId: null, overPos: null });
+  // eslint-disable-next-line react-hooks/refs -- intentional mirror ref, read only in stable drag handlers
   dragRef.current.dragId = dragId;
+  // eslint-disable-next-line react-hooks/refs -- intentional mirror ref, read only in stable drag handlers
   dragRef.current.overPos = overPos;
 
   // Replace the whole block list. Reads the current section from the ref and
