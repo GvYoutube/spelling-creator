@@ -54,6 +54,7 @@ import DataObjectIcon from "@mui/icons-material/DataObject";
 import WarningAmberIcon from "@mui/icons-material/WarningAmber";
 import Badge from "@mui/material/Badge";
 import SectionCard from "../components/SectionCard.jsx";
+import { SectionsSkeleton } from "../components/Skeletons.jsx";
 import LiveTextField from "../components/LiveTextField.jsx";
 import NavActions from "../components/NavActions.jsx";
 import CollaborateDialog from "../components/CollaborateDialog.jsx";
@@ -1274,67 +1275,90 @@ export default function EditorPage() {
           )}
         </Paper>
 
-        <Stack spacing={3}>
-          {/* eslint-disable-next-line react-hooks/refs -- capitalizedWords is a stable cached array, safe to read here */}
-          {doc.sections.map((section, i) => (
-            <SectionCard
-              key={section.id}
-              section={section}
-              documentName={doc.title}
-              index={i}
-              onChange={updateSection}
-              onDelete={deleteSection}
-              onMove={moveSection}
-              isFirst={i === 0}
-              isLast={i === sectionCount - 1}
-              onError={handleSectionError}
-              capitalizedWords={capitalizedWords}
-            />
-          ))}
-        </Stack>
-
-        {sectionCount === 0 && (
-          <Paper
-            variant="outlined"
-            sx={{ p: 6, textAlign: "center", borderStyle: "dashed", mt: 1 }}
-          >
-            <Typography variant="h6" gutterBottom>
-              No sections yet
-            </Typography>
-            <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-              Tap the <strong>+</strong> button to create your first lesson
-              section.
-            </Typography>
-            <Stack
-              direction={{ xs: "column", sm: "row" }}
-              spacing={1.5}
-              justifyContent="center"
-            >
-              <Button
-                variant="contained"
-                startIcon={<AddIcon />}
-                onClick={openAddDialog}
-              >
-                Add section
-              </Button>
-              <Button
-                variant="outlined"
-                startIcon={<UploadFileIcon />}
-                onClick={openImportWarning}
-                disabled={busy !== null}
-              >
-                Import Word document
-              </Button>
-              <Button
-                variant="outlined"
-                startIcon={<DataObjectIcon />}
-                onClick={triggerJsonImportPicker}
-                disabled={busy !== null}
-              >
-                Import JSON
-              </Button>
+        {/* Until the saved draft has hydrated from storage, show section
+            placeholders rather than the doc's empty starter state — otherwise the
+            "No sections yet" panel flashes for a beat before the real sections pop
+            in. The same applies while a hub lesson is being fetched into an as-yet
+            empty editor (sectionCount === 0 && editLoading). */}
+        {!hydrated ? (
+          <SectionsSkeleton />
+        ) : (
+          <>
+            <Stack spacing={3}>
+              {/* eslint-disable-next-line react-hooks/refs -- capitalizedWords is a stable cached array, safe to read here */}
+              {doc.sections.map((section, i) => (
+                <SectionCard
+                  key={section.id}
+                  section={section}
+                  documentName={doc.title}
+                  index={i}
+                  onChange={updateSection}
+                  onDelete={deleteSection}
+                  onMove={moveSection}
+                  isFirst={i === 0}
+                  isLast={i === sectionCount - 1}
+                  onError={handleSectionError}
+                  capitalizedWords={capitalizedWords}
+                />
+              ))}
             </Stack>
-          </Paper>
+
+            {sectionCount === 0 &&
+              (editLoading ? (
+                <SectionsSkeleton />
+              ) : (
+                <Paper
+                  variant="outlined"
+                  sx={{
+                    p: 6,
+                    textAlign: "center",
+                    borderStyle: "dashed",
+                    mt: 1,
+                  }}
+                >
+                  <Typography variant="h6" gutterBottom>
+                    No sections yet
+                  </Typography>
+                  <Typography
+                    variant="body2"
+                    color="text.secondary"
+                    sx={{ mb: 2 }}
+                  >
+                    Tap the <strong>+</strong> button to create your first
+                    lesson section.
+                  </Typography>
+                  <Stack
+                    direction={{ xs: "column", sm: "row" }}
+                    spacing={1.5}
+                    justifyContent="center"
+                  >
+                    <Button
+                      variant="contained"
+                      startIcon={<AddIcon />}
+                      onClick={openAddDialog}
+                    >
+                      Add section
+                    </Button>
+                    <Button
+                      variant="outlined"
+                      startIcon={<UploadFileIcon />}
+                      onClick={openImportWarning}
+                      disabled={busy !== null}
+                    >
+                      Import Word document
+                    </Button>
+                    <Button
+                      variant="outlined"
+                      startIcon={<DataObjectIcon />}
+                      onClick={triggerJsonImportPicker}
+                      disabled={busy !== null}
+                    >
+                      Import JSON
+                    </Button>
+                  </Stack>
+                </Paper>
+              ))}
+          </>
         )}
       </Container>
 

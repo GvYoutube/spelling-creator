@@ -30,6 +30,7 @@ import Link from "@mui/material/Link";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import DeleteOutlineIcon from "@mui/icons-material/DeleteOutline";
 import NavActions from "../components/NavActions.jsx";
+import { ListRowsSkeleton } from "../components/Skeletons.jsx";
 import { useAuth } from "../lib/auth.jsx";
 import {
   listBans,
@@ -141,7 +142,7 @@ function BansSection({ accessToken, isAdmin, onToast }) {
   return (
     <Section title="Bans">
       {loading ? (
-        <CircularProgress size={20} />
+        <ListRowsSkeleton />
       ) : error ? (
         <Alert severity="error">{error}</Alert>
       ) : (
@@ -266,7 +267,7 @@ function ShadowbannedSection({ accessToken, onToast }) {
   return (
     <Section title="Shadowbanned lessons">
       {loading ? (
-        <CircularProgress size={20} />
+        <ListRowsSkeleton />
       ) : error ? (
         <Alert severity="error">{error}</Alert>
       ) : lessons.length === 0 ? (
@@ -342,7 +343,7 @@ function DeleteRequestsSection({ accessToken, onToast }) {
   return (
     <Section title="Pending deletion requests">
       {loading ? (
-        <CircularProgress size={20} />
+        <ListRowsSkeleton />
       ) : error ? (
         <Alert severity="error">{error}</Alert>
       ) : requests.length === 0 ? (
@@ -473,7 +474,7 @@ function ModeratorsSection({ accessToken, onToast }) {
         </Button>
       </Stack>
       {loading ? (
-        <CircularProgress size={20} />
+        <ListRowsSkeleton />
       ) : error ? (
         <Alert severity="error">{error}</Alert>
       ) : moderators.length === 0 ? (

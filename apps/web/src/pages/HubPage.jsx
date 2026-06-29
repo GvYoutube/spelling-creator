@@ -48,6 +48,7 @@ import {
   lessonsFeedUrl,
   EDIT_REQUEST_KEY,
 } from "../lib/lessons.js";
+import { LessonGridSkeleton } from "../components/Skeletons.jsx";
 import { buildLessonIndex, searchLessons } from "../lib/lessonSearch.js";
 import { useAuth } from "../lib/auth.jsx";
 import {
@@ -462,11 +463,7 @@ export default function HubPage() {
           </Alert>
         )}
 
-        {lessonHubEnabled && loading && (
-          <Box sx={{ display: "flex", justifyContent: "center", py: 8 }}>
-            <CircularProgress />
-          </Box>
-        )}
+        {lessonHubEnabled && loading && <LessonGridSkeleton />}
 
         {lessonHubEnabled && !loading && !error && lessons.length === 0 && (
           <Paper

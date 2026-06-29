@@ -19,7 +19,7 @@ import CardActionArea from "@mui/material/CardActionArea";
 import CardContent from "@mui/material/CardContent";
 import Avatar from "@mui/material/Avatar";
 import Alert from "@mui/material/Alert";
-import CircularProgress from "@mui/material/CircularProgress";
+import Skeleton from "@mui/material/Skeleton";
 import Tooltip from "@mui/material/Tooltip";
 import IconButton from "@mui/material/IconButton";
 import Menu from "@mui/material/Menu";
@@ -30,6 +30,7 @@ import RssFeedIcon from "@mui/icons-material/RssFeed";
 import HistoryIcon from "@mui/icons-material/History";
 import NavActions from "../components/NavActions.jsx";
 import BioDialog from "../components/BioDialog.jsx";
+import { LessonGridSkeleton } from "../components/Skeletons.jsx";
 import {
   fetchUserProfile,
   fetchUserActivity,
@@ -142,9 +143,21 @@ export default function ProfilePage() {
 
       <Container maxWidth="lg" sx={{ pt: 3 }}>
         {loading ? (
-          <Box sx={{ display: "flex", justifyContent: "center", py: 8 }}>
-            <CircularProgress />
-          </Box>
+          <>
+            {/* Header placeholder: avatar + name/bio lines, then the lessons grid. */}
+            <Stack direction="row" spacing={2} sx={{ mb: 4 }}>
+              <Skeleton variant="circular" width={56} height={56} />
+              <Box sx={{ flexGrow: 1 }}>
+                <Skeleton
+                  variant="text"
+                  sx={{ fontSize: "1.5rem" }}
+                  width="40%"
+                />
+                <Skeleton variant="text" width="60%" />
+              </Box>
+            </Stack>
+            <LessonGridSkeleton count={3} />
+          </>
         ) : error ? (
           <Alert severity="error" sx={{ mt: 2 }}>
             {error}
@@ -290,8 +303,13 @@ export default function ProfilePage() {
         }}
       >
         {activityLoading ? (
-          <Box sx={{ display: "flex", justifyContent: "center", py: 2 }}>
-            <CircularProgress size={24} />
+          <Box sx={{ px: 2, py: 1 }}>
+            {Array.from({ length: 4 }, (_, i) => (
+              <Box key={i} sx={{ py: 0.75 }}>
+                <Skeleton variant="text" width="70%" />
+                <Skeleton variant="text" width="40%" />
+              </Box>
+            ))}
           </Box>
         ) : activityError ? (
           <Box sx={{ px: 2, py: 1.5 }}>

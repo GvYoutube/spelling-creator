@@ -30,6 +30,7 @@ import Snackbar from "@mui/material/Snackbar";
 import MoreVertIcon from "@mui/icons-material/MoreVert";
 import DeleteOutlineIcon from "@mui/icons-material/DeleteOutline";
 import BlockIcon from "@mui/icons-material/Block";
+import { CommentsSkeleton } from "./Skeletons.jsx";
 import { useAuth } from "../lib/auth.jsx";
 import {
   fetchComments,
@@ -383,11 +384,7 @@ export default function CommentsSection({ lessonId }) {
         {!loading && !error ? ` (${comments.length})` : ""}
       </Typography>
 
-      {loading && (
-        <Box sx={{ display: "flex", justifyContent: "center", py: 3 }}>
-          <CircularProgress size={24} />
-        </Box>
-      )}
+      {loading && <CommentsSkeleton />}
 
       {!loading && error && (
         <Alert

@@ -8,6 +8,32 @@ import { bannedResponse } from '../lib/bans.js';
 import { rowToLesson } from '../lib/lesson.js';
 import { textResponse, jsonResponse } from '../lib/http.js';
 
+// A user may keep at most this many private drafts (published = false) at once.
+// Published lessons stay unlimited — the cap only bounds unpublished backups.
+const MAX_DRAFTS = 8;
+
+/**
+ * Count a user's private drafts (published = false), optionally excluding one
+ * lesson id. PUT passes the lesson being edited as `excludeId` so re-saving an
+ * existing draft never counts against its author — only turning an *additional*
+ * lesson into a draft beyond the cap is blocked. Returns the count, or null if the
+ * store couldn't be reached, so callers fail with a 502 rather than letting the cap
+ * be silently bypassed.
+ */
+async function countUserDrafts(env, base, userId, excludeId) {
+	const filters = [`author_id=eq.${encodeURIComponent(userId)}`, 'published=eq.false', 'select=id'];
+	if (excludeId) filters.push(`id=neq.${encodeURIComponent(excludeId)}`);
+	let res;
+	try {
+		res = await fetch(`${base}/rest/v1/lessons?${filters.join('&')}`, { headers: supabaseHeaders(env) });
+	} catch (e) {
+		return null;
+	}
+	if (!res.ok) return null;
+	const rows = await res.json().catch(() => null);
+	return Array.isArray(rows) ? rows.length : null;
+}
+
 /**
  * Lesson-hub endpoints, backed by Supabase Postgres via its REST API. The
  * browser never touches the database directly — it calls these Worker routes,
@@ -20,6 +46,8 @@ import { textResponse, jsonResponse } from '../lib/http.js';
  *   PUT  /lessons/:id    Bearer  -> { lesson: LessonSummary }      (author only; body.published may flip draft<->hub)
  *
  * A LessonSummary carries `published` (false = draft, kept out of the public listing).
+ * Each user may hold at most MAX_DRAFTS private drafts at once (published lessons are
+ * unlimited); a save that would exceed it is rejected with 409.
  * Errors are short plain-text reasons so the frontend can surface res.text().
  */
 export async function handleLessons(request, env, url, cors) {
@@ -145,6 +173,16 @@ export async function handleLessons(request, env, url, cors) {
 		const title = (body.title || doc.title || 'Untitled Lesson').toString().slice(0, 300);
 		const published = body.published !== false;
 
+		// Cap private drafts: a new draft is rejected once the author already has
+		// MAX_DRAFTS. Published lessons are unlimited, so this only runs for drafts.
+		if (!published) {
+			const drafts = await countUserDrafts(env, base, user.id);
+			if (drafts === null) return textResponse('Could not reach the lesson store.', 502, cors);
+			if (drafts >= MAX_DRAFTS) {
+				return textResponse(`You can keep at most ${MAX_DRAFTS} private drafts. Publish or delete one before saving another.`, 409, cors);
+			}
+		}
+
 		const insert = {
 			author_id: user.id,
 			author: authorFromUser(user),
@@ -208,6 +246,18 @@ export async function handleLessons(request, env, url, cors) {
 		const title = (body.title || doc.title || 'Untitled Lesson').toString().slice(0, 300);
 		const patch = { title, doc };
 		if (typeof body.published === 'boolean') patch.published = body.published;
+
+		// Cap private drafts: block an update that would leave this lesson a draft once
+		// the author is already at MAX_DRAFTS *other* drafts. Excluding this lesson lets
+		// an existing draft be re-saved freely; only pulling an additional published
+		// lesson back to a draft beyond the cap is rejected.
+		if (patch.published === false) {
+			const drafts = await countUserDrafts(env, base, user.id, id);
+			if (drafts === null) return textResponse('Could not reach the lesson store.', 502, cors);
+			if (drafts >= MAX_DRAFTS) {
+				return textResponse(`You can keep at most ${MAX_DRAFTS} private drafts. Publish or delete one before saving another.`, 409, cors);
+			}
+		}
 
 		let res;
 		try {

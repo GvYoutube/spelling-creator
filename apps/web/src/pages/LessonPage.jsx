@@ -47,6 +47,7 @@ import BlockIcon from "@mui/icons-material/Block";
 import WifiOffIcon from "@mui/icons-material/WifiOff";
 import NavActions from "../components/NavActions.jsx";
 import CommentsSection from "../components/CommentsSection.jsx";
+import { LessonContentSkeleton } from "../components/Skeletons.jsx";
 import {
   fetchLesson,
   deleteLesson,
@@ -619,11 +620,7 @@ export default function LessonPage() {
           </Alert>
         )}
 
-        {lessonHubEnabled && loading && (
-          <Box sx={{ display: "flex", justifyContent: "center", py: 8 }}>
-            <CircularProgress />
-          </Box>
-        )}
+        {lessonHubEnabled && loading && <LessonContentSkeleton />}
 
         {lessonHubEnabled && !loading && error && (
           <Alert
