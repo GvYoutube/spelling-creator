@@ -179,8 +179,6 @@ function normalizeQuestion(block) {
     case "background":
       return {
         ...base,
-        background:
-          typeof block.background === "string" ? block.background : "",
         answer: typeof block.answer === "string" ? block.answer : "",
       };
     default:

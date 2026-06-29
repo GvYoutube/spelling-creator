@@ -246,19 +246,11 @@ function readQuestion(nodes, i, { type, prompt }) {
       last = i + 1;
     }
   } else if (type === "background") {
-    block.background = "";
     block.answer = "";
-    let k = i + 1;
-    const bg = peek(k);
-    if (bg && bg.tag === "p" && /^background\s*:/i.test(bg.text)) {
-      block.background = stripLabel(bg.text);
-      last = k;
-      k += 1;
-    }
-    const ans = peek(k);
+    const ans = peek(i + 1);
     if (ans && ans.tag === "p" && /^answer\s*:/i.test(ans.text)) {
       block.answer = stripLabel(ans.text);
-      last = k;
+      last = i + 1;
     }
   } else if (type === "multiple") {
     block.answers = [];

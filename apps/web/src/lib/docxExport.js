@@ -165,28 +165,6 @@ function questionBlockParagraphs(block) {
       }),
     );
   } else if (block.questionType === "background") {
-    if (block.background) {
-      paragraphs.push(
-        new Paragraph({
-          spacing: { after: 120 },
-          indent: { left: 360 },
-          children: [
-            new TextRun({
-              text: "Background: ",
-              italics: true,
-              bold: true,
-              size: 22,
-            }),
-            new TextRun({
-              text: block.background,
-              italics: true,
-              size: 22,
-              color: "555555",
-            }),
-          ],
-        }),
-      );
-    }
     paragraphs.push(
       new Paragraph({
         spacing: { after: 120 },

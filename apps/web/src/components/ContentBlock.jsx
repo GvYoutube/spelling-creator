@@ -508,37 +508,20 @@ function QuestionBlock({ block, onChange, controls }) {
           )}
 
           {block.questionType === "background" && (
-            <>
-              <LiveTextField
-                fullWidth
-                multiline
-                minRows={2}
-                label="Background knowledge"
-                placeholder="Knowledge the student needs to answer this…"
-                value={block.background || ""}
-                onCommit={(background) => onChange({ ...block, background })}
-                sx={{ mt: 1.5 }}
-                slotProps={{
-                  htmlInput: {
-                    "data-collab-field": `block:${block.id}:background`,
-                  },
-                }}
-              />
-              <LiveTextField
-                fullWidth
-                size="small"
-                label="Answer"
-                placeholder="The correct answer…"
-                value={block.answer ?? ""}
-                onCommit={(answer) => onChange({ ...block, answer })}
-                sx={{ mt: 1.5 }}
-                slotProps={{
-                  htmlInput: {
-                    "data-collab-field": `block:${block.id}:answer`,
-                  },
-                }}
-              />
-            </>
+            <LiveTextField
+              fullWidth
+              size="small"
+              label="Answer"
+              placeholder="The correct answer…"
+              value={block.answer ?? ""}
+              onCommit={(answer) => onChange({ ...block, answer })}
+              sx={{ mt: 1.5 }}
+              slotProps={{
+                htmlInput: {
+                  "data-collab-field": `block:${block.id}:answer`,
+                },
+              }}
+            />
           )}
         </Box>
         {controls}

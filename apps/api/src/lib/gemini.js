@@ -57,10 +57,9 @@ export const QUESTION_SCHEMAS = {
 		type: Type.OBJECT,
 		properties: {
 			prompt: { type: Type.STRING },
-			background: { type: Type.STRING },
 			answer: { type: Type.STRING },
 		},
-		required: ['prompt', 'background', 'answer'],
+		required: ['prompt', 'answer'],
 	},
 };
 
@@ -82,7 +81,7 @@ export const QUESTION_INSTRUCTIONS = {
 		'The question must have several distinct correct answers, any one of which a student could type to be marked correct (the student only needs to give one). If you generate a single answer, consider that a failure. Do not provide answer options. Put each accepted answer as a separate string in "answers".',
 	open: 'Write a question that invites a free, written response. Do not provide answer options or a model answer. Put the question in "prompt".',
 	background:
-		'The question must test prior knowledge that is NOT explained anywhere in the lesson text — the student is expected to already know it. Do not ask about anything the lesson text covers. Put the question in "prompt", a short paragraph of the prior knowledge a student needs to answer it in "background", and the correct answer (a word or brief phrase) in "answer".',
+		'The question must test prior knowledge that is NOT explained anywhere in the lesson text — the student is expected to already know it. Do not ask about anything the lesson text covers. Put the question in "prompt" and the correct answer (a word or brief phrase) in "answer".',
 };
 
 // Structured-output schema for the lesson-idea suggester: a short list of lesson

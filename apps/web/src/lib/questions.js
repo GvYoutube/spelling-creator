@@ -60,7 +60,7 @@ export function createQuestionBlock(newId, questionType) {
     case "open":
       return { ...base };
     case "background":
-      return { ...base, background: "", answer: "" };
+      return { ...base, answer: "" };
     default:
       return base;
   }
@@ -92,7 +92,6 @@ export function buildQuestionBlock(newId, questionType, data = {}) {
     case "background":
       return {
         ...base,
-        background: typeof data.background === "string" ? data.background : "",
         answer: typeof data.answer === "string" ? data.answer : "",
       };
     default:
