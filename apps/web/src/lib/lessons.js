@@ -42,6 +42,17 @@ function endpoint(path = "") {
   return `${API_URL.replace(/\/$/, "")}/lessons${path}`;
 }
 
+/**
+ * The absolute URL of the hub's "latest lessons" Atom feed, for the "RSS"
+ * subscribe link on the hub. Served by the Worker at /feed.xml (a site-wide feed,
+ * not under /lessons). Returns "" when no backend is configured.
+ * @returns {string}
+ */
+export function lessonsFeedUrl() {
+  if (!API_URL) return "";
+  return `${API_URL.replace(/\/$/, "")}/feed.xml`;
+}
+
 async function readError(res) {
   // The Worker returns a plain-text reason for 4xx/5xx; surface it directly.
   const detail = await res.text().catch(() => "");

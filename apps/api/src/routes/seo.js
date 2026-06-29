@@ -1,6 +1,6 @@
-// Dynamic SEO endpoints: a sitemap covering the static pages plus one URL per
-// published lesson (and one per distinct author), and a robots.txt that points
-// crawlers at it.
+// Dynamic SEO / discovery endpoints: a sitemap covering the static pages plus one
+// URL per published lesson (and one per distinct author), a robots.txt that points
+// crawlers at it, and an Atom feed of the latest published lessons ("RSS" in the UI).
 
 import { supabaseHeaders } from '../lib/supabase.js';
 import { xmlEscape } from '../lib/xml.js';
@@ -68,6 +68,79 @@ ${urls
 			'Cache-Control': 'public, max-age=3600',
 		},
 	});
+}
+
+/**
+ * GET /feed.xml — an Atom 1.0 feed of the most recently published lessons across
+ * the whole hub (newest first, capped). Built and escaped exactly like the sitemap
+ * and the per-user activity feed in routes/users.js; surfaced in the UI as "RSS"
+ * (the terms are used interchangeably here). Visibility matches the public hub
+ * listing: published, non-shadowbanned lessons only. The <alternate> links point at
+ * the human /hub page and each lesson's /hub/:id page. On a Supabase hiccup we still
+ * return a valid, empty-ish feed rather than failing, matching handleSitemap.
+ */
+export async function handleLessonsFeed(request, env, url, cors) {
+	const origin = url.origin;
+	const selfUrl = `${origin}/feed.xml`;
+	const hubUrl = `${origin}/hub`;
+	const entries = [];
+
+	if (env.SUPABASE_URL && env.SUPABASE_SERVICE_ROLE_KEY) {
+		const base = env.SUPABASE_URL.replace(/\/$/, '');
+		const query = 'published=eq.true&shadowbanned=eq.false&select=id,title,author,created_at&order=created_at.desc&limit=50';
+		try {
+			const res = await fetch(`${base}/rest/v1/lessons?${query}`, { headers: supabaseHeaders(env) });
+			if (res.ok) {
+				for (const row of (await res.json().catch(() => [])) || []) {
+					if (!row || !row.id) continue;
+					const title = row.title || 'Untitled Lesson';
+					const author = (row.author || '').toString().trim() || 'Anonymous';
+					entries.push({
+						id: `urn:s2c:lesson:${row.id}`,
+						title,
+						author,
+						link: `${origin}/hub/${encodeURIComponent(row.id)}`,
+						summary: `${author} published the lesson “${title}”.`,
+						createdAt: row.created_at,
+					});
+				}
+			}
+		} catch (e) {
+			// Supabase unreachable: serve a valid empty feed rather than failing.
+		}
+	}
+
+	// The feed's <updated> is the newest entry's timestamp (or epoch if empty).
+	const updated = new Date(entries.length && entries[0].createdAt ? entries[0].createdAt : 0).toISOString();
+
+	const body = `<?xml version="1.0" encoding="UTF-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom">
+	<title>Spelling Creator — latest lessons</title>
+	<subtitle>The most recently published lessons on the hub</subtitle>
+	<id>${xmlEscape(hubUrl)}</id>
+	<link rel="self" type="application/atom+xml" href="${xmlEscape(selfUrl)}"/>
+	<link rel="alternate" type="text/html" href="${xmlEscape(hubUrl)}"/>
+	<updated>${updated}</updated>
+${entries
+	.map((e) => {
+		const ts = new Date(e.createdAt || 0).toISOString();
+		return `	<entry>
+		<id>${xmlEscape(e.id)}</id>
+		<title>${xmlEscape(e.title)}</title>
+		<link rel="alternate" type="text/html" href="${xmlEscape(e.link)}"/>
+		<updated>${ts}</updated>
+		<published>${ts}</published>
+		<author><name>${xmlEscape(e.author)}</name></author>
+		<summary>${xmlEscape(e.summary)}</summary>
+	</entry>`;
+	})
+	.join('\n')}
+</feed>`;
+
+	const headers = new Headers(cors);
+	headers.set('Content-Type', 'application/atom+xml; charset=utf-8');
+	headers.set('Cache-Control', 'public, max-age=3600');
+	return new Response(body, { status: 200, headers });
 }
 
 /**

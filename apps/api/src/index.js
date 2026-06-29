@@ -14,7 +14,7 @@ import { handleProfile } from './routes/profile.js';
 import { handleUsers } from './routes/users.js';
 import { handleModeration } from './routes/moderation.js';
 import { handleAdminMigrateImages, handleAdminBackfillWebp } from './routes/admin.js';
-import { handleSitemap, handleRobots } from './routes/seo.js';
+import { handleSitemap, handleRobots, handleLessonsFeed } from './routes/seo.js';
 import { ogImage, handleFrontend } from './routes/render.js';
 import { handleCollab } from './routes/collab.js';
 
@@ -81,6 +81,9 @@ app.post('/admin/backfill-webp', (c) => handleAdminBackfillWebp(req(c), c.env, c
 // Dynamic sitemap + robots.txt, built from the same Supabase listing the hub uses.
 app.get('/sitemap.xml', (c) => handleSitemap(req(c), c.env, urlOf(c)));
 app.get('/robots.txt', (c) => handleRobots(req(c), c.env, urlOf(c)));
+
+// Atom feed of the latest published lessons across the hub ("RSS" in the UI).
+app.get('/feed.xml', (c) => handleLessonsFeed(req(c), c.env, urlOf(c), cors(c)));
 
 // Open Graph preview image: a headless-Chromium screenshot of an in-site page.
 app.get('/og-image', (c) => ogImage(req(c), c.env, c.executionCtx, urlOf(c)));

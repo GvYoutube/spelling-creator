@@ -29,6 +29,14 @@
     <meta property="og:image:type" content="image/png" />
     <meta name="twitter:card" content="summary_large_image" />
     <title>Spelling Lesson Maker</title>
+    <!-- Autodiscovery for the hub's "latest lessons" Atom feed, served same-origin
+         by the Worker at /feed.xml (surfaced as "RSS" in the UI). -->
+    <link
+      rel="alternate"
+      type="application/atom+xml"
+      title="Spelling Creator — latest lessons"
+      href="/feed.xml"
+    />
     <!-- Cloudflare Turnstile. Explicit render so we can mount the widget
          inside the AI dialog on demand and read its verified token. -->
     <script

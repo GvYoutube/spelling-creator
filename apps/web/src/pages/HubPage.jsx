@@ -32,6 +32,7 @@ import Chip from "@mui/material/Chip";
 import EditIcon from "@mui/icons-material/Edit";
 import DeleteOutlineIcon from "@mui/icons-material/DeleteOutline";
 import RefreshIcon from "@mui/icons-material/Refresh";
+import RssFeedIcon from "@mui/icons-material/RssFeed";
 import SearchIcon from "@mui/icons-material/Search";
 import ClearIcon from "@mui/icons-material/Clear";
 import CloudQueueIcon from "@mui/icons-material/CloudQueue";
@@ -44,6 +45,7 @@ import {
   fetchMyLessons,
   deleteLesson,
   lessonHubEnabled,
+  lessonsFeedUrl,
   EDIT_REQUEST_KEY,
 } from "../lib/lessons.js";
 import { buildLessonIndex, searchLessons } from "../lib/lessonSearch.js";
@@ -277,16 +279,29 @@ export default function HubPage() {
             Browse lessons shared by the community. Open one to preview it.
           </Typography>
           {lessonHubEnabled && (
-            <IconButton
-              onClick={() => {
-                load();
-                loadDrafts();
-              }}
-              disabled={loading}
-              aria-label="refresh"
-            >
-              <RefreshIcon />
-            </IconButton>
+            <Stack direction="row" spacing={0.5} alignItems="center">
+              <Tooltip title="Subscribe to the latest lessons (RSS)">
+                <IconButton
+                  component="a"
+                  href={lessonsFeedUrl()}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  aria-label="latest lessons RSS feed"
+                >
+                  <RssFeedIcon />
+                </IconButton>
+              </Tooltip>
+              <IconButton
+                onClick={() => {
+                  load();
+                  loadDrafts();
+                }}
+                disabled={loading}
+                aria-label="refresh"
+              >
+                <RefreshIcon />
+              </IconButton>
+            </Stack>
           )}
         </Stack>
 
