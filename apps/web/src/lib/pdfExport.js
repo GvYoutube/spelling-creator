@@ -23,10 +23,10 @@ const PRINT_STYLES = `
     margin: 22px 0 12px;
   }
   .s2c-pdf-root p { margin: 0 0 10px; }
+  .s2c-pdf-root figure { margin: 0; }
   .s2c-pdf-root img {
     display: block;
-    max-width: 100%;
-    margin: 12px auto;
+    width: 100%;
     height: auto;
   }
 `;

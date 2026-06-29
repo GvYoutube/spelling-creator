@@ -1,7 +1,7 @@
 import { Packer } from "docx";
 import mammoth from "mammoth";
-import { buildDocument } from "./docxExport.js";
-import { imageSizeScale } from "./image.js";
+import { buildDocument, DOCX_MAX_IMAGE_WIDTH } from "./docxExport.js";
+import { fitWithin, imageSizeScale } from "./image.js";
 import { QUESTION_TYPES } from "./questions.js";
 
 // Styles applied to the mammoth-generated HTML shown in the preview dialog.
@@ -27,50 +27,76 @@ export const PREVIEW_STYLES = `
     margin: 22px 0 12px;
   }
   .s2c-preview-root p { margin: 0 0 10px; }
+  .s2c-preview-root figure { margin: 0; }
   .s2c-preview-root img {
     display: block;
-    max-width: 100%;
-    margin: 12px auto;
+    width: 100%;
     height: auto;
   }
 `;
 
-// Inline style for one image in the converted HTML, derived from the block's
-// picked size + alignment. Since the image is display:block, the side margins
-// decide its horizontal alignment.
-function imageStyle(block) {
-  const scale = imageSizeScale(block?.size);
-  const align = block?.align || "center";
-  const margin =
-    align === "left"
-      ? "12px auto 12px 0"
-      : align === "right"
-        ? "12px 0 12px auto"
-        : "12px auto";
-  return `display:block;height:auto;max-width:${Math.round(
-    scale * 100,
-  )}%;margin:${margin};`;
-}
-
-// mammoth drops image size and alignment when it converts the docx to HTML, so
-// we re-apply them here. Images are emitted in the same order as the image
-// blocks in the lesson, so we walk that ordered list as each image is converted.
-function imageLayoutOptions(doc) {
-  const imageBlocks = doc.sections
+// The image blocks of a lesson, in document order — the same order mammoth emits
+// their <img> tags, so we can match each tag to its block by position.
+function orderedImageBlocks(doc) {
+  return doc.sections
     .flatMap((s) => s.blocks)
     .filter((b) => b.type === "image" && (b.image || b.src));
+}
+
+// mammoth converts each image to a natural-size <img> in its own <p> and drops the
+// block's picked size + alignment (and the caption's alignment). Re-apply both by
+// wrapping each image — and its caption, if any — in a fixed-width <figure>:
+//
+//   - The figure's width is the SAME px size the docx uses (fitWithin against
+//     DOCX_MAX_IMAGE_WIDTH × the picked scale), so the image is identical in the
+//     preview, the published view and the PDF — not stretched to the container.
+//   - max-width:100% lets it shrink on a narrow screen; the image fills the figure.
+//   - The figure is aligned via auto side-margins (it's block-level with a set
+//     width), and the caption lives inside it, so the caption always tracks the
+//     image instead of floating left across the full width.
+//
+// Caption text comes from the <p> mammoth emits right after the image; buildDocument
+// only emits that paragraph when the block has a caption, so we consume the trailing
+// paragraph only then and leave following content untouched otherwise.
+function layoutImageFigures(html, doc) {
+  const imageBlocks = orderedImageBlocks(doc);
   let index = 0;
-  return {
-    convertImage: mammoth.images.imgElement((image) =>
-      image.read("base64").then((data) => {
-        const block = imageBlocks[index++];
-        return {
-          src: `data:${image.contentType};base64,${data}`,
-          style: imageStyle(block),
-        };
-      }),
-    ),
-  };
+  return html.replace(
+    /<p>\s*(<img\b[^>]*>)\s*<\/p>(\s*<p>([\s\S]*?)<\/p>)?/g,
+    (match, imgTag, trailingParagraph, captionInner) => {
+      const block = imageBlocks[index++];
+      if (!block) return match;
+
+      const scale = imageSizeScale(block.size);
+      const { width } = fitWithin(
+        block.width,
+        block.height,
+        DOCX_MAX_IMAGE_WIDTH * scale,
+      );
+      const align = block.align || "center";
+      const figMargin =
+        align === "left"
+          ? "16px auto 16px 0"
+          : align === "right"
+            ? "16px 0 16px auto"
+            : "16px auto";
+
+      // Strip mammoth's own width/height/style so the figure controls the size.
+      const img = imgTag.replace(/\s(?:width|height|style)="[^"]*"/g, "");
+
+      const hasCaption = Boolean(block.caption);
+      const caption = hasCaption
+        ? `<figcaption style="text-align:center;font-style:italic;color:#555;font-size:12px;margin-top:6px;">${captionInner}</figcaption>`
+        : "";
+      const figure = `<figure style="display:block;width:${Math.round(
+        width,
+      )}px;max-width:100%;margin:${figMargin};">${img}${caption}</figure>`;
+
+      // If the block has no caption, the optional trailing paragraph we matched is
+      // real content (the next block) — put it back rather than swallowing it.
+      return hasCaption ? figure : figure + (trailingParagraph || "");
+    },
+  );
 }
 
 // mammoth discards the run colour we set on each question-type label, so the
@@ -96,11 +122,10 @@ export async function docToHtml(doc) {
   const document = await buildDocument(doc);
   const blob = await Packer.toBlob(document);
   const arrayBuffer = await blob.arrayBuffer();
-  const { value: html } = await mammoth.convertToHtml(
-    { arrayBuffer },
-    imageLayoutOptions(doc),
-  );
-  return colorizeQuestionLabels(html);
+  // mammoth inlines images as base64 data URIs by default; layoutImageFigures then
+  // restores each image's picked size + alignment (and its caption's placement).
+  const { value: html } = await mammoth.convertToHtml({ arrayBuffer });
+  return colorizeQuestionLabels(layoutImageFigures(html, doc));
 }
 
 // Back-compat alias used by the preview dialog.
