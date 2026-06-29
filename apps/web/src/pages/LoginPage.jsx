@@ -71,7 +71,7 @@ export default function LoginPage() {
               <IconButton
                 color="inherit"
                 component={RouterLink}
-                to="/"
+                to="/editor"
                 aria-label="editor"
                 sx={{ mr: 0.5 }}
               >
@@ -82,7 +82,7 @@ export default function LoginPage() {
             <Button
               color="inherit"
               component={RouterLink}
-              to="/"
+              to="/editor"
               startIcon={<EditIcon />}
               sx={{ mr: 1 }}
             >
@@ -125,7 +125,7 @@ export default function LoginPage() {
                 {displayName || user.email}
               </Typography>
               <Stack direction="row" spacing={1} sx={{ pt: 1 }}>
-                <Button variant="contained" onClick={() => navigate("/")}>
+                <Button variant="contained" onClick={() => navigate("/editor")}>
                   Go to editor
                 </Button>
                 <Button onClick={() => signOut()}>Sign out</Button>

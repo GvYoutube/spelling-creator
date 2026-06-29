@@ -165,7 +165,7 @@ export default function LessonPage() {
     } catch {
       /* ignore — navigation below still works, the editor just won't preload */
     }
-    navigate("/");
+    navigate("/editor");
   };
 
   // Fork this lesson: hand the editor the lesson id (via sessionStorage, consumed
@@ -179,7 +179,7 @@ export default function LessonPage() {
     } catch {
       /* ignore — the editor just won't preload if storage is unavailable */
     }
-    navigate("/");
+    navigate("/editor");
   };
 
   // Export the lesson document — same pipeline the editor uses. 'docx' downloads

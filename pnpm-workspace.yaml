@@ -10,3 +10,6 @@ allowBuilds:
   sharp: true
   workerd: true
   "@swc/core": true
+  # tsParticles' install script only warns about conflicting legacy particle
+  # packages (we have none), so there's nothing for it to do here.
+  "@tsparticles/engine": false

@@ -15,6 +15,7 @@ import { handleUsers } from './routes/users.js';
 import { handleModeration } from './routes/moderation.js';
 import { handleAdminMigrateImages, handleAdminBackfillWebp } from './routes/admin.js';
 import { handleSitemap, handleRobots, handleLessonsFeed } from './routes/seo.js';
+import { handleSpellingWords } from './routes/spelling-words.js';
 import { ogImage, handleFrontend } from './routes/render.js';
 import { handleCollab } from './routes/collab.js';
 
@@ -84,6 +85,11 @@ app.get('/robots.txt', (c) => handleRobots(req(c), c.env, urlOf(c)));
 
 // Atom feed of the latest published lessons across the hub ("RSS" in the UI).
 app.get('/feed.xml', (c) => handleLessonsFeed(req(c), c.env, urlOf(c), cors(c)));
+
+// Aggregated list of every spelling word taught across the hub, for the
+// homepage's floating-words animation. Rebuilt at most once every couple of days
+// (cached in KV); see routes/spelling-words.js.
+app.get('/spelling-words.json', (c) => handleSpellingWords(req(c), c.env, urlOf(c), cors(c)));
 
 // Open Graph preview image: a headless-Chromium screenshot of an in-site page.
 app.get('/og-image', (c) => ogImage(req(c), c.env, c.executionCtx, urlOf(c)));

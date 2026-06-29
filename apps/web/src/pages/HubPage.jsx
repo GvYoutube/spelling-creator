@@ -187,7 +187,7 @@ export default function HubPage() {
     } catch {
       /* ignore — navigation below still works, the editor just won't preload */
     }
-    navigate("/");
+    navigate("/editor");
   };
 
   // Open the delete-confirmation dialog for one of the user's own lessons.
@@ -238,7 +238,7 @@ export default function HubPage() {
               <IconButton
                 color="inherit"
                 component={RouterLink}
-                to="/"
+                to="/editor"
                 aria-label="editor"
                 sx={{ mr: 0.5 }}
               >
@@ -249,7 +249,7 @@ export default function HubPage() {
             <Button
               color="inherit"
               component={RouterLink}
-              to="/"
+              to="/editor"
               startIcon={<EditIcon />}
               sx={{ mr: 1 }}
             >

@@ -53,6 +53,57 @@ export function lessonsFeedUrl() {
   return `${API_URL.replace(/\/$/, "")}/feed.xml`;
 }
 
+// Pull the trimmed text of the first descendant with the given local name
+// (namespace-agnostic, so the Atom default xmlns doesn't get in the way). Mirrors
+// the helper in lib/users.js used for the per-user activity feed.
+function entryText(el, tag) {
+  const node = el.getElementsByTagNameNS("*", tag)[0];
+  return node ? (node.textContent || "").trim() : "";
+}
+
+/**
+ * Fetch the hub's "latest lessons" Atom feed and parse it client-side with
+ * DOMParser — the same approach lib/users.js uses for a user's activity feed, so
+ * the Worker only maintains the one feed.xml endpoint. The homepage dashboard
+ * renders these for signed-in users. Each entry's <link rel="alternate"> points
+ * at the lesson's /hub/:id page.
+ * @returns {Promise<Array<{ id, title, author, summary, updated, link }>>} Newest first.
+ */
+export async function fetchLatestLessons() {
+  const url = lessonsFeedUrl();
+  if (!url) throw new Error("The lesson hub is not configured.");
+
+  let res;
+  try {
+    res = await fetch(url, { method: "GET" });
+  } catch {
+    throw new Error("Could not reach the lesson hub.");
+  }
+  if (!res.ok) throw new Error(`Request failed (${res.status}).`);
+
+  const doc = new DOMParser().parseFromString(
+    await res.text(),
+    "application/xml",
+  );
+  if (doc.getElementsByTagName("parsererror").length) {
+    throw new Error("Could not read the latest-lessons feed.");
+  }
+
+  return Array.from(doc.getElementsByTagNameNS("*", "entry")).map((entry) => {
+    const links = Array.from(entry.getElementsByTagNameNS("*", "link"));
+    const alternate =
+      links.find((l) => l.getAttribute("rel") === "alternate") || links[0];
+    return {
+      id: entryText(entry, "id"),
+      title: entryText(entry, "title"),
+      author: entryText(entry, "author"),
+      summary: entryText(entry, "summary"),
+      updated: entryText(entry, "updated"),
+      link: alternate ? alternate.getAttribute("href") || "" : "",
+    };
+  });
+}
+
 async function readError(res) {
   // The Worker returns a plain-text reason for 4xx/5xx; surface it directly.
   const detail = await res.text().catch(() => "");
