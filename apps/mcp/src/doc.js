@@ -12,9 +12,13 @@
 // assistant driving them) never have to. Input is intentionally simpler than the
 // stored shape — e.g. spelling words are plain strings here, objects in the doc.
 
+import { extFromMime } from "./images.js";
+
 export function newId() {
   return crypto.randomUUID();
 }
+
+const IMAGE_ALIGNS = ["left", "center", "right"];
 
 export const QUESTION_TYPES = [
   "number",
@@ -56,13 +60,11 @@ export function buildBlock(block, where) {
       return buildQuestionBlock(block, where);
 
     case "image":
-      throw new Error(
-        `${where}: image blocks aren't supported over MCP yet (they need a separate binary upload). Use text and spelling/question blocks.`,
-      );
+      return buildImageBlock(block, where);
 
     default:
       throw new Error(
-        `${where}: unknown block type "${block.type}". Use one of: text, spelling, question.`,
+        `${where}: unknown block type "${block.type}". Use one of: text, spelling, question, image.`,
       );
   }
 }
@@ -127,6 +129,43 @@ function buildQuestionBlock(block, where) {
     default:
       return base;
   }
+}
+
+// An image block references its bytes by content hash. The bytes are uploaded
+// out of band by the add_image tool (which talks to Wikimedia Commons + R2), so
+// here we only validate and normalise the resulting ref — the model never
+// hand-writes one. Existing image blocks (from get_lesson) round-trip through
+// this unchanged.
+function buildImageBlock(block, where) {
+  const ref = block.image;
+  if (
+    !ref ||
+    typeof ref !== "object" ||
+    typeof ref.hash !== "string" ||
+    !ref.hash
+  ) {
+    throw new Error(
+      `${where}: image blocks must carry an { image: { hash, mime, ext } } reference. ` +
+        "Don't write these by hand — use the search_images and add_image tools, which download the image and upload its bytes.",
+    );
+  }
+  const mime =
+    typeof ref.mime === "string" && ref.mime ? ref.mime : "image/jpeg";
+  const out = {
+    id: newId(),
+    type: "image",
+    image: {
+      hash: ref.hash,
+      mime,
+      ext: typeof ref.ext === "string" && ref.ext ? ref.ext : extFromMime(mime),
+    },
+  };
+  if (Number.isFinite(block.width)) out.width = block.width;
+  if (Number.isFinite(block.height)) out.height = block.height;
+  if (typeof block.caption === "string") out.caption = block.caption;
+  if (IMAGE_ALIGNS.includes(block.align)) out.align = block.align;
+  if (typeof block.size === "string" && block.size) out.size = block.size;
+  return out;
 }
 
 /**

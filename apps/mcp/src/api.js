@@ -7,6 +7,8 @@
 // token. On a 401 we transparently refresh the token once and retry, so a
 // long-lived server survives the access token expiring between calls.
 
+import { sha256Hex, extFromMime } from "./images.js";
+
 /**
  * @param {ReturnType<import('./config.js').loadConfig>} config
  * @param {ReturnType<import('./auth.js').createAuth>} auth
@@ -134,6 +136,58 @@ export function createApi(config, auth) {
         method: "DELETE",
       });
       return { ok: true };
+    },
+
+    /**
+     * Upload raw image bytes to R2 by their content hash and return the image
+     * ref to put on an image block ({ hash, mime, ext }). PUT /images/:hash is
+     * authenticated and verifies the body hashes to :hash, so the bytes can only
+     * land at the key they actually address. Idempotent — re-uploading identical
+     * bytes is a harmless no-op. Refreshes + retries once on a 401, like `call`.
+     * @param {Uint8Array} bytes
+     * @param {string} mime
+     */
+    async uploadImage(bytes, mime) {
+      const hash = await sha256Hex(bytes);
+      const url = `${config.apiUrl}/images/${hash}`;
+      const send = (token) =>
+        fetch(url, {
+          method: "PUT",
+          headers: {
+            "Content-Type": mime || "application/octet-stream",
+            Authorization: `Bearer ${token}`,
+          },
+          body: bytes,
+        });
+
+      let token = await auth.getAccessToken();
+      let res;
+      try {
+        res = await send(token);
+      } catch {
+        throw new Error(`Could not reach the lesson hub at ${config.apiUrl}.`);
+      }
+      if (res.status === 401) {
+        const refreshed = await auth.forceRefresh();
+        if (refreshed) {
+          try {
+            res = await send(refreshed);
+          } catch {
+            throw new Error(
+              `Could not reach the lesson hub at ${config.apiUrl}.`,
+            );
+          }
+        }
+      }
+      if (!res.ok) {
+        const detail = await res.text().catch(() => "");
+        throw new Error(detail || `Image upload failed (${res.status}).`);
+      }
+      return {
+        hash,
+        mime: mime || "application/octet-stream",
+        ext: extFromMime(mime),
+      };
     },
   };
 }

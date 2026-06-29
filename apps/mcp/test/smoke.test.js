@@ -124,7 +124,7 @@ test("buildDoc rejects bad input with actionable errors", () => {
   );
   assert.throws(
     () => buildDoc({ sections: [{ blocks: [{ type: "image" }] }] }),
-    /image blocks aren't supported/,
+    /must carry an { image: { hash, mime, ext } } reference/,
   );
   assert.throws(
     () => buildDoc({ sections: [{ blocks: [{ type: "nope" }] }] }),
@@ -223,6 +223,44 @@ test("applyPatch edits by id without touching the original doc", () => {
   assert.ok(!patched.sections[0].blocks.some((b) => b.id === blockToMove));
 });
 
+test("buildDoc accepts an image block carrying a stored bytes reference", () => {
+  const doc = buildDoc({
+    title: "Space",
+    sections: [
+      {
+        name: "Planets",
+        blocks: [
+          {
+            type: "image",
+            image: { hash: "abc123", mime: "image/jpeg" },
+            width: 800,
+            height: 600,
+            caption: "Saturn via Wikimedia Commons",
+            align: "center",
+          },
+          {
+            type: "question",
+            questionType: "single",
+            prompt: "Which planet?",
+            answer: "Saturn",
+          },
+        ],
+      },
+    ],
+  });
+  const img = doc.sections[0].blocks[0];
+  assert.equal(img.type, "image");
+  assert.ok(img.id, "image block gets an id");
+  assert.deepEqual(img.image, {
+    hash: "abc123",
+    mime: "image/jpeg",
+    ext: "jpg",
+  });
+  assert.equal(img.width, 800);
+  assert.equal(img.caption, "Saturn via Wikimedia Commons");
+  assert.equal(img.align, "center");
+});
+
 test("applyPatch rejects bad ops and unknown ids", () => {
   const doc = buildDoc({
     title: "T",
@@ -316,6 +354,7 @@ test("the MCP server exposes the full tool set", async () => {
   const { tools } = await client.listTools();
   const names = tools.map((t) => t.name).sort();
   assert.deepEqual(names, [
+    "add_image",
     "create_lesson",
     "create_lesson_file",
     "delete_lesson",
@@ -323,6 +362,7 @@ test("the MCP server exposes the full tool set", async () => {
     "list_hub_lessons",
     "list_my_lessons",
     "patch_lesson",
+    "search_images",
     "set_lesson_published",
     "update_lesson",
     "whoami",
@@ -419,6 +459,119 @@ test("create_lesson_file builds an importable lesson file offline", async () => 
 
   await client.close();
   await server.close();
+});
+
+test("add_image resolves a Commons ref, uploads it, and inserts an image block", async () => {
+  const server = new McpServer(SERVER_INFO);
+  const stored = buildDoc({
+    title: "Space",
+    sections: [
+      {
+        name: "Saturn",
+        blocks: [
+          { type: "text", text: "SATURN has rings." },
+          {
+            type: "question",
+            questionType: "single",
+            prompt: "Which planet?",
+            answer: "Saturn",
+          },
+        ],
+      },
+    ],
+  });
+
+  let uploaded = null;
+  let putDoc = null;
+  const api = {
+    async getLesson() {
+      return { id: "L1", title: "Space", doc: stored };
+    },
+    async uploadImage(bytes, mime) {
+      uploaded = { length: bytes.length, mime };
+      return { hash: "deadbeef", mime, ext: "jpg" };
+    },
+    async updateLesson(id, { doc }) {
+      putDoc = doc;
+      return { id, title: doc.title, sectionCount: doc.sections.length };
+    },
+  };
+  registerTools(server, { api, config: { apiUrl: "https://example.test" } });
+
+  // Mock Commons: the metadata query returns one File page; the image URL
+  // returns a few bytes. resolveWikimediaImage hits both in turn.
+  const realFetch = globalThis.fetch;
+  globalThis.fetch = async (url) => {
+    const u = String(url);
+    if (u.includes("commons.wikimedia.org")) {
+      return new Response(
+        JSON.stringify({
+          query: {
+            pages: {
+              42: {
+                title: "File:Saturn.jpg",
+                imageinfo: [
+                  {
+                    thumburl: "https://upload.wikimedia.org/saturn-1600.jpg",
+                    url: "https://upload.wikimedia.org/saturn.jpg",
+                    thumbwidth: 1600,
+                    thumbheight: 1200,
+                    width: 4000,
+                    height: 3000,
+                    mime: "image/jpeg",
+                    descriptionurl:
+                      "https://commons.wikimedia.org/wiki/File:Saturn.jpg",
+                    extmetadata: {
+                      Artist: { value: "<a href='#'>NASA</a>" },
+                      LicenseShortName: { value: "CC BY 2.0" },
+                    },
+                  },
+                ],
+              },
+            },
+          },
+        }),
+        { status: 200, headers: { "Content-Type": "application/json" } },
+      );
+    }
+    // The image bytes.
+    return new Response(new Uint8Array([1, 2, 3, 4]), {
+      status: 200,
+      headers: { "Content-Type": "image/jpeg" },
+    });
+  };
+
+  try {
+    const client = new Client({ name: "test", version: "0" });
+    const [clientT, serverT] = InMemoryTransport.createLinkedPair();
+    await Promise.all([server.connect(serverT), client.connect(clientT)]);
+
+    const res = await client.callTool({
+      name: "add_image",
+      arguments: { lessonId: "L1", ref: "File:Saturn.jpg", sectionIndex: 0 },
+    });
+
+    assert.equal(res.isError, undefined);
+    // Bytes were uploaded.
+    assert.equal(uploaded.length, 4);
+    assert.equal(uploaded.mime, "image/jpeg");
+    // The lesson got an image block appended to section 0, with the attribution.
+    const blocks = putDoc.sections[0].blocks;
+    const img = blocks[blocks.length - 1];
+    assert.equal(img.type, "image");
+    assert.equal(img.image.hash, "deadbeef");
+    assert.equal(img.width, 1600);
+    assert.match(img.caption, /NASA/);
+    assert.match(img.caption, /Wikimedia Commons/);
+    // The result echoes the attribution caption.
+    const payload = JSON.parse(res.content[0].text);
+    assert.match(payload.caption, /NASA/);
+
+    await client.close();
+    await server.close();
+  } finally {
+    globalThis.fetch = realFetch;
+  }
 });
 
 test("patch_lesson fetches, applies the diff, and PUTs the result", async () => {

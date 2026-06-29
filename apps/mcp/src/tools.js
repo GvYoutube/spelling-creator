@@ -18,6 +18,7 @@ import {
   QUESTION_TYPES,
 } from "./doc.js";
 import { applyPatch } from "./patch.js";
+import { searchWikimediaImages, resolveWikimediaImage } from "./wikimedia.js";
 
 // One content block, described richly so the model fills the right fields per
 // type. buildDoc() does the strict per-type validation and returns clear errors
@@ -25,10 +26,11 @@ import { applyPatch } from "./patch.js";
 const blockSchema = z
   .object({
     type: z
-      .enum(["text", "spelling", "question"])
+      .enum(["text", "spelling", "question", "image"])
       .describe(
         "text = a paragraph of lesson prose (put any words you're teaching the spelling of in ALL CAPS); " +
-          "spelling = an explicit list of spelling words; question = a quiz question.",
+          "spelling = an explicit list of spelling words; question = a quiz question; " +
+          "image = a picture (don't write these by hand — add them with the add_image tool, which uploads the bytes).",
       ),
     text: z
       .string()
@@ -64,6 +66,35 @@ const blockSchema = z
       .string()
       .optional()
       .describe('The prior-knowledge context for a "background" question.'),
+    image: z
+      .object({
+        hash: z.string(),
+        mime: z.string().optional(),
+        ext: z.string().optional(),
+      })
+      .optional()
+      .describe(
+        'For type "image": the stored bytes reference produced by add_image. Pass existing ' +
+          "image blocks through unchanged when editing a lesson; never invent a hash.",
+      ),
+    width: z.number().optional().describe('For type "image": pixel width.'),
+    height: z.number().optional().describe('For type "image": pixel height.'),
+    caption: z
+      .string()
+      .optional()
+      .describe(
+        'For type "image": the caption shown under it. Keep the attribution add_image supplies.',
+      ),
+    align: z
+      .enum(["left", "center", "right"])
+      .optional()
+      .describe('For type "image": horizontal alignment (default center).'),
+    size: z
+      .string()
+      .optional()
+      .describe(
+        'For type "image": display size key (e.g. "small", "medium", "full").',
+      ),
   })
   .describe("A lesson content block.");
 
@@ -453,6 +484,178 @@ export function registerTools(server, ctx) {
       await api.deleteLesson(id);
       return text(`Deleted lesson ${id}.`);
     }),
+  );
+
+  server.registerTool(
+    "search_images",
+    {
+      title: "Search images",
+      description:
+        "Search Wikimedia Commons for freely-licensed images to illustrate a lesson. Returns a list of candidates, " +
+        "each with a `ref` (its File: title), a `caption` carrying the required attribution, the licence/author, " +
+        "dimensions, a `previewURL`, and a `source` page link.\n\n" +
+        "Pick the most relevant result and call add_image with its `ref` to download it, store it, and place it in a " +
+        "lesson. Pixabay is not available over MCP (it needs a human verification step); only Wikimedia Commons is. " +
+        "If the user doesn't like a chosen image, swap it later with add_image (after remove_block) or replace it in " +
+        "the web editor, which keeps it in the same place.",
+      inputSchema: {
+        query: z
+          .string()
+          .describe(
+            "What to find a picture of, e.g. 'Saturn', 'red fox', 'Roman aqueduct'.",
+          ),
+        limit: z
+          .number()
+          .int()
+          .optional()
+          .describe("How many candidates to return (default 12, max 30)."),
+      },
+    },
+    tool(async ({ query, limit }) => {
+      const perPage = Math.max(3, Math.min(Number(limit) || 12, 30));
+      const hits = await searchWikimediaImages(query, { perPage });
+      if (!hits.length) {
+        return text(
+          `No images found on Wikimedia Commons for "${query}". Try more general or different terms.`,
+        );
+      }
+      return text({
+        query,
+        count: hits.length,
+        images: hits,
+        note:
+          "Choose the best `ref` and call add_image to insert it. The `caption` carries the licence attribution " +
+          "Commons requires — keep it on the image.",
+      });
+    }),
+  );
+
+  server.registerTool(
+    "add_image",
+    {
+      title: "Add an image to a lesson",
+      description:
+        "Download a Wikimedia Commons image (from a search_images `ref`), store its bytes, and insert it as an image " +
+        "block in a lesson you authored. The picture's attribution is set as the caption automatically.\n\n" +
+        "Choose the target section by either `sectionId` (from get_lesson) or `sectionIndex` (0-based); if you give " +
+        "neither, the image is appended to the LAST section. `index` sets the block's position within the section " +
+        "(omit to append). Run search_images first to get a `ref`. To change an image later, remove_block it and " +
+        "add_image again, or have the user replace it in the editor (which keeps its place).",
+      inputSchema: {
+        lessonId: z
+          .string()
+          .describe("The id of the lesson to add the image to."),
+        ref: z
+          .string()
+          .describe(
+            "The image's File: title, taken from a search_images result's `ref`.",
+          ),
+        sectionId: z
+          .string()
+          .optional()
+          .describe(
+            "Target section id (from get_lesson). Takes precedence over sectionIndex.",
+          ),
+        sectionIndex: z
+          .number()
+          .int()
+          .optional()
+          .describe(
+            "0-based target section. Used when sectionId is omitted; defaults to the last section.",
+          ),
+        index: z
+          .number()
+          .int()
+          .optional()
+          .describe(
+            "0-based position for the image within the section; omit to append.",
+          ),
+        caption: z
+          .string()
+          .optional()
+          .describe(
+            "Override the auto attribution caption. Leave unset to keep the Commons attribution.",
+          ),
+        align: z
+          .enum(["left", "center", "right"])
+          .optional()
+          .describe("Horizontal alignment (default center)."),
+        size: z
+          .string()
+          .optional()
+          .describe(
+            'Display size key, e.g. "small", "medium", "full" (default full).',
+          ),
+      },
+    },
+    tool(
+      async ({
+        lessonId,
+        ref,
+        sectionId,
+        sectionIndex,
+        index,
+        caption,
+        align,
+        size,
+      }) => {
+        // Download the chosen image (+ its attribution) and store the bytes in R2.
+        const resolved = await resolveWikimediaImage(ref);
+        const imageRef = await api.uploadImage(resolved.bytes, resolved.mime);
+        const finalCaption =
+          typeof caption === "string" && caption.trim()
+            ? caption
+            : resolved.caption;
+
+        // Resolve the target section: explicit id wins, else an index, else last.
+        const current = await api.getLesson(lessonId);
+        const sections = current.doc?.sections || [];
+        if (!sections.length) {
+          throw new Error("That lesson has no sections to add an image to.");
+        }
+        let targetSectionId = sectionId;
+        if (!targetSectionId) {
+          const i = Number.isInteger(sectionIndex)
+            ? sectionIndex
+            : sections.length - 1;
+          const section = sections[i];
+          if (!section) {
+            throw new Error(
+              `sectionIndex ${sectionIndex} is out of range — the lesson has ${sections.length} section(s) (0–${sections.length - 1}).`,
+            );
+          }
+          targetSectionId = section.id;
+        }
+
+        // Insert via the same patch path as everything else, then save.
+        const block = {
+          type: "image",
+          image: imageRef,
+          width: resolved.width,
+          height: resolved.height,
+          caption: finalCaption,
+        };
+        if (align) block.align = align;
+        if (size) block.size = size;
+
+        const doc = applyPatch(current.doc, [
+          { op: "add_block", sectionId: targetSectionId, block, index },
+        ]);
+        const lesson = await api.updateLesson(lessonId, {
+          title: doc.title || current.title,
+          doc,
+        });
+        return text({
+          ...lesson,
+          url: hubUrl(lesson.id),
+          caption: finalCaption,
+          source: resolved.source,
+          note:
+            "Image added to the lesson. If it's not a good fit, remove_block it and add_image another, or replace " +
+            "it in the web editor — the editor keeps a replaced image in the same place.",
+        });
+      },
+    ),
   );
 }
 

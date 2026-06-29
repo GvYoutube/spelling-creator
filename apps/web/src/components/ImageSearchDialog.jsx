@@ -102,7 +102,12 @@ const PROVIDERS = [
  * widget to mint a new token for the next action (search again, or pick an
  * image to insert). The widget is only mounted for sources that need a token.
  */
-export default function ImageSearchDialog({ open, onInsert, onClose }) {
+export default function ImageSearchDialog({
+  open,
+  replacing = false,
+  onInsert,
+  onClose,
+}) {
   const [providerId, setProviderId] = useState("pixabay");
   const [query, setQuery] = useState("");
   const [token, setToken] = useState("");
@@ -233,7 +238,7 @@ export default function ImageSearchDialog({ open, onInsert, onClose }) {
       fullWidth
       maxWidth="sm"
     >
-      <DialogTitle>Search images</DialogTitle>
+      <DialogTitle>{replacing ? "Replace image" : "Search images"}</DialogTitle>
       <DialogContent>
         <Stack spacing={2} sx={{ mt: 0.5 }}>
           <ToggleButtonGroup
@@ -260,7 +265,11 @@ export default function ImageSearchDialog({ open, onInsert, onClose }) {
             <Link href={provider.sourceUrl} target="_blank" rel="noopener">
               {provider.sourceName}
             </Link>{" "}
-            and add one to this section.
+            and{" "}
+            {replacing
+              ? "swap it in for the current one"
+              : "add one to this section"}
+            .
           </DialogContentText>
 
           <Stack direction="row" spacing={1} alignItems="flex-start">

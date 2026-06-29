@@ -1,4 +1,4 @@
-import { memo } from "react";
+import { memo, useRef, useState } from "react";
 import Box from "@mui/material/Box";
 import Stack from "@mui/material/Stack";
 import LiveTextField from "./LiveTextField.jsx";
@@ -7,6 +7,9 @@ import Tooltip from "@mui/material/Tooltip";
 import Paper from "@mui/material/Paper";
 import Chip from "@mui/material/Chip";
 import Button from "@mui/material/Button";
+import Menu from "@mui/material/Menu";
+import MenuItem from "@mui/material/MenuItem";
+import ListItemText from "@mui/material/ListItemText";
 import Typography from "@mui/material/Typography";
 import ToggleButton from "@mui/material/ToggleButton";
 import ToggleButtonGroup from "@mui/material/ToggleButtonGroup";
@@ -17,6 +20,7 @@ import AddIcon from "@mui/icons-material/Add";
 import FormatAlignLeftIcon from "@mui/icons-material/FormatAlignLeft";
 import FormatAlignCenterIcon from "@mui/icons-material/FormatAlignCenter";
 import FormatAlignRightIcon from "@mui/icons-material/FormatAlignRight";
+import SwapHorizIcon from "@mui/icons-material/SwapHoriz";
 import AutoFixHighIcon from "@mui/icons-material/AutoFixHigh";
 import {
   fitWithin,
@@ -40,6 +44,8 @@ function ContentBlock({
   isLast,
   capitalizedWords = [],
   dragHandle = null,
+  onReplaceImageFile = null,
+  onReplaceImageSearch = null,
 }) {
   const controls = (
     <Stack
@@ -94,7 +100,15 @@ function ContentBlock({
   }
 
   if (block.type === "image") {
-    return <ImageBlock block={block} onChange={onChange} controls={controls} />;
+    return (
+      <ImageBlock
+        block={block}
+        onChange={onChange}
+        controls={controls}
+        onReplaceFile={onReplaceImageFile}
+        onReplaceSearch={onReplaceImageSearch}
+      />
+    );
   }
 
   // text block
@@ -122,8 +136,24 @@ function ContentBlock({
 // to a usable URL (a local blob URL, or the public R2 URL once uploaded). It's
 // its own component so the hook is always called for an image block, never
 // conditionally inside ContentBlock.
-function ImageBlock({ block, onChange, controls }) {
+function ImageBlock({
+  block,
+  onChange,
+  controls,
+  onReplaceFile = null,
+  onReplaceSearch = null,
+}) {
   const src = useImageSrc(block);
+  const [menuAnchor, setMenuAnchor] = useState(null);
+  const fileRef = useRef(null);
+  const canReplace = Boolean(onReplaceFile || onReplaceSearch);
+
+  const onPickReplacement = (e) => {
+    const file = e.target.files?.[0];
+    e.target.value = ""; // allow re-selecting the same file
+    if (file) onReplaceFile?.(file);
+  };
+
   const align = block.align || DEFAULT_IMAGE_ALIGN;
   const size = block.size || DEFAULT_IMAGE_SIZE;
   const preview = fitWithin(
@@ -221,6 +251,57 @@ function ImageBlock({ block, onChange, controls }) {
                 </ToggleButton>
               ))}
             </ToggleButtonGroup>
+            {canReplace && (
+              <>
+                <Button
+                  size="small"
+                  variant="outlined"
+                  startIcon={<SwapHorizIcon fontSize="small" />}
+                  onClick={(e) => setMenuAnchor(e.currentTarget)}
+                >
+                  Replace
+                </Button>
+                <Menu
+                  anchorEl={menuAnchor}
+                  open={Boolean(menuAnchor)}
+                  onClose={() => setMenuAnchor(null)}
+                >
+                  {onReplaceFile && (
+                    <MenuItem
+                      onClick={() => {
+                        setMenuAnchor(null);
+                        fileRef.current?.click();
+                      }}
+                    >
+                      <ListItemText
+                        primary="Upload file"
+                        secondary="Swap in an image from your device"
+                      />
+                    </MenuItem>
+                  )}
+                  {onReplaceSearch && (
+                    <MenuItem
+                      onClick={() => {
+                        setMenuAnchor(null);
+                        onReplaceSearch();
+                      }}
+                    >
+                      <ListItemText
+                        primary="Search online"
+                        secondary="Find a replacement from Pixabay or Wikimedia"
+                      />
+                    </MenuItem>
+                  )}
+                </Menu>
+                <input
+                  ref={fileRef}
+                  type="file"
+                  accept="image/*"
+                  hidden
+                  onChange={onPickReplacement}
+                />
+              </>
+            )}
           </Stack>
           <LiveTextField
             fullWidth

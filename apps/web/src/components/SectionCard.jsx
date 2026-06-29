@@ -60,6 +60,9 @@ function SectionCard({
   const [aiOpen, setAiOpen] = useState(false);
   const [aiQuestionOpen, setAiQuestionOpen] = useState(false);
   const [imageSearchOpen, setImageSearchOpen] = useState(false);
+  // When set, the image search dialog replaces this existing image block in
+  // place rather than inserting a new one. Null = the dialog adds a new block.
+  const [replaceTarget, setReplaceTarget] = useState(null);
   // The block this user is currently editing, so the "add block" toolbar can sit
   // directly beneath it (and new blocks insert there). Purely local UI state —
   // deliberately NOT broadcast to collaborators, so each peer's toolbar follows
@@ -163,10 +166,51 @@ function SectionCard({
   };
 
   const addSearchedImage = ({ image, width, height, caption = "" }) => {
+    // Replacing an existing block: swap its image bytes (and the searched
+    // image's attribution caption) while keeping the block where it is, along
+    // with its alignment and size.
+    if (replaceTarget) {
+      const blocks = sectionRef.current.blocks;
+      updateBlocks(
+        blocks.map((b) =>
+          b.id === replaceTarget ? { ...b, image, width, height, caption } : b,
+        ),
+      );
+      return;
+    }
     insertBlocks([
       { id: newId(), type: "image", image, width, height, caption },
     ]);
   };
+
+  // Replace an image block's bytes from a freshly picked file, in place: the
+  // block keeps its id, position, alignment, size, and caption.
+  const replaceImageFile = useCallback(
+    async (blockId, file) => {
+      if (!file || !file.type.startsWith("image/")) return;
+      try {
+        const img = await readImageFile(file);
+        const image = await storeImageBytes(img.bytes, img.mime);
+        const blocks = sectionRef.current.blocks;
+        updateBlocks(
+          blocks.map((b) =>
+            b.id === blockId
+              ? { ...b, image, width: img.width, height: img.height }
+              : b,
+          ),
+        );
+      } catch (err) {
+        onError?.(err.message || "Failed to replace image.");
+      }
+    },
+    [updateBlocks, onError],
+  );
+
+  // Open the image search dialog aimed at replacing an existing block.
+  const startReplaceSearch = useCallback((blockId) => {
+    setReplaceTarget(blockId);
+    setImageSearchOpen(true);
+  }, []);
 
   // Per-block callbacks handed to memoized <BlockRow>s — all stable (read the
   // live section from sectionRef), so editing one block never re-renders its
@@ -419,6 +463,8 @@ function SectionCard({
                 onUpdate={updateBlock}
                 onDelete={deleteBlock}
                 onMove={moveBlock}
+                onReplaceImageFile={replaceImageFile}
+                onReplaceImageSearch={startReplaceSearch}
                 onDragStart={handleDragStart}
                 onDragOver={handleDragOver}
                 onDrop={handleDrop}
@@ -507,8 +553,12 @@ function SectionCard({
 
         <ImageSearchDialog
           open={imageSearchOpen}
+          replacing={Boolean(replaceTarget)}
           onInsert={addSearchedImage}
-          onClose={() => setImageSearchOpen(false)}
+          onClose={() => {
+            setImageSearchOpen(false);
+            setReplaceTarget(null);
+          }}
         />
       </CardContent>
     </Card>
@@ -534,6 +584,8 @@ const BlockRow = memo(function BlockRow({
   onUpdate,
   onDelete,
   onMove,
+  onReplaceImageFile,
+  onReplaceImageSearch,
   onDragStart,
   onDragOver,
   onDrop,
@@ -588,6 +640,8 @@ const BlockRow = memo(function BlockRow({
         onDelete={() => onDelete(block.id)}
         onMoveUp={() => onMove(block.id, -1)}
         onMoveDown={() => onMove(block.id, 1)}
+        onReplaceImageFile={(file) => onReplaceImageFile(block.id, file)}
+        onReplaceImageSearch={() => onReplaceImageSearch(block.id)}
         isFirst={isFirst}
         isLast={isLast}
         capitalizedWords={capitalizedWords}

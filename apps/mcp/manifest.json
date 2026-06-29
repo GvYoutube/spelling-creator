@@ -61,12 +61,28 @@
       "description": "Build and save a new lesson (a private draft by default)."
     },
     {
+      "name": "create_lesson_file",
+      "description": "Build an importable lesson file offline, with no account or network."
+    },
+    {
       "name": "update_lesson",
       "description": "Replace the title and content of a lesson you authored."
     },
     {
+      "name": "patch_lesson",
+      "description": "Edit a lesson with a small list of id-addressed operations."
+    },
+    {
       "name": "get_lesson",
       "description": "Fetch one lesson including its full content document."
+    },
+    {
+      "name": "search_images",
+      "description": "Search Wikimedia Commons for freely-licensed images to illustrate a lesson."
+    },
+    {
+      "name": "add_image",
+      "description": "Download a Wikimedia Commons image and insert it into a lesson you authored."
     },
     {
       "name": "list_my_lessons",
