@@ -12,6 +12,7 @@ import { handleTextFeedback } from './routes/feedback.js';
 import { handleNotifications } from './routes/notifications.js';
 import { handleProfile } from './routes/profile.js';
 import { handleUsers } from './routes/users.js';
+import { handleFollow, handleFollowList, handleFollowingFeed } from './routes/follows.js';
 import { handleModeration } from './routes/moderation.js';
 import { handleAdminMigrateImages, handleAdminBackfillWebp } from './routes/admin.js';
 import { handleSitemap, handleRobots, handleLessonsFeed } from './routes/seo.js';
@@ -65,6 +66,16 @@ app.all('/notifications/*', (c) => handleNotifications(req(c), c.env, urlOf(c), 
 // Profile routes: setting the display name shown in place of an email, and bio.
 app.all('/profile', (c) => handleProfile(req(c), c.env, urlOf(c), cors(c)));
 app.all('/profile/*', (c) => handleProfile(req(c), c.env, urlOf(c), cors(c)));
+
+// Following routes. /profiles/:id/follow (POST to follow, DELETE to unfollow) and
+// the followers/following lists are their own handlers, so — like
+// /lessons/:id/comments — they must be registered before the broader /profiles/*
+// match below. /following/activity is the signed-in user's home feed of activity
+// from the people they follow.
+app.all('/profiles/:id/follow', (c) => handleFollow(req(c), c.env, c.req.param('id'), cors(c)));
+app.all('/profiles/:id/followers', (c) => handleFollowList(req(c), c.env, c.req.param('id'), 'followers', cors(c)));
+app.all('/profiles/:id/following', (c) => handleFollowList(req(c), c.env, c.req.param('id'), 'following', cors(c)));
+app.get('/following/activity', (c) => handleFollowingFeed(req(c), c.env, urlOf(c), cors(c)));
 
 // Public user-profile routes: a user's profile JSON and their Atom activity feed.
 // The /profiles prefix avoids colliding with the SPA's /users/:id page.

@@ -35,12 +35,19 @@ is profile-only (never denormalised onto rows).
 ## Profile pages
 
 `ProfilePage.jsx` renders a user's public profile at `/users/:id`. It reads from
-the Worker's `GET /profiles/:id`, which returns the user's display name and bio
-plus their **published** lessons:
+the Worker's `GET /profiles/:id`, which returns the user's display name, bio and
+follower/following counts, plus their **published** lessons:
 
 ```json
 {
-  "user": { "id": "…", "displayName": "Jordan", "bio": "Speller & teacher." },
+  "user": {
+    "id": "…",
+    "displayName": "Jordan",
+    "bio": "Speller & teacher.",
+    "followerCount": 12,
+    "followingCount": 4,
+    "isFollowing": false
+  },
   "lessons": [
     {
       "id": "…",
@@ -56,7 +63,51 @@ plus their **published** lessons:
 The Worker resolves the profile via the Supabase Admin API and **never returns the
 email** — only the display name (falling back to `"Anonymous"`) and bio. The
 endpoint is served under `/profiles/:id` on the Worker so it doesn't collide with
-the SPA's own `/users/:id` page.
+the SPA's own `/users/:id` page. The read stays public; `isFollowing` is only
+meaningful when the request carries a session token (it reflects whether _you_
+follow this profile, and is `false` for an anonymous view).
 
 Each profile also has a feed at `GET /profiles/:id/feed.xml` — an Atom feed of the
 user's lessons and comments (surfaced as "RSS" in the UI).
+
+## Following
+
+Any signed-in user can **follow** another user from their profile page. A follow
+is one row in the `follows` table (`follower_id → following_id`, defined in
+`apps/api/schema.sql`), keyed by Supabase user id on both sides so it survives a
+display-name change. The profile header shows the Follow / Following button (never
+for your own profile) plus the follower and following counts.
+
+- **`POST /profiles/:id/follow`** (Bearer) — follow the user. Idempotent
+  (`ON CONFLICT DO NOTHING`): re-following is a no-op, so it doesn't create a
+  second row or re-notify. A genuinely new follow drops a `follow`
+  [notification](./notifications.md) into the followed user's bell. You can't
+  follow yourself (`400`) or a user who doesn't exist (`404`).
+- **`DELETE /profiles/:id/follow`** (Bearer) — unfollow.
+
+Both return `{ following, followerCount }` so the button and count update without a
+refetch. The follower is always taken from the verified session, never the request
+body.
+
+The follower/following counts in the profile header are clickable: they open a
+**connections dialog** (`FollowListDialog.jsx`) with **Followers** and **Following**
+tabs, each row linking to that user's profile. The lists are public:
+
+- **`GET /profiles/:id/followers`** — the users who follow `:id`.
+- **`GET /profiles/:id/following`** — the users `:id` follows.
+
+Both return `{ users: [{ id, displayName, bio }] }`, newest-follow first and capped
+(each id is resolved to its public profile via the Admin API, so no email leaks).
+
+### Your following feed
+
+The signed-in home dashboard (`HomePage.jsx`) shows a **"From people you follow"**
+panel: the recent lessons and comments of everyone you follow, merged newest-first.
+It reads `GET /following/activity` (Bearer), which looks up the `following_id`s for
+the caller and merges those users' published lessons and comments into the same
+`{ id, title, summary, link, updated }` shape the other dashboard feeds use. It
+returns an empty feed when you follow no one.
+
+The frontend wrappers are `setFollowing()`, `fetchFollowList()` and
+`fetchFollowingActivity()` in `src/lib/users.js`; the Worker handlers are in
+`apps/api/src/routes/follows.js`.

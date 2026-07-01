@@ -10,15 +10,15 @@ The app is a single-page app with real-path client-side routes (served by
 so the Worker can return a prerendered snapshot to crawlers and serves
 `index.html` for unknown paths so deep links resolve:
 
-| Route         | Page             | What it does                                                                                                                                                         |
-| ------------- | ---------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `/`           | **Home**         | Landing page. Signed out: a marketing splash (animated floating words + feature blurbs). Signed in: a dashboard (latest-lessons feed, your activity, notifications). |
-| `/editor`     | **Editor**       | The lesson builder (the original app). The "Save to cloud" dropdown (publish or save as draft) lives here.                                                           |
-| `/hub`        | **Lesson hub**   | Public gallery of published lessons (plus your own drafts), with search.                                                                                             |
-| `/hub/:id`    | **Lesson page**  | A single published lesson's page: preview, comments, and author link.                                                                                                |
-| `/users/:id`  | **User profile** | A user's public profile — their bio and published lessons.                                                                                                           |
-| `/login`      | **Sign in**      | Magic-link sign-in / account status.                                                                                                                                 |
-| `/moderation` | **Moderation**   | Moderator/admin queue for reviewing reported content (gated to mods/admins).                                                                                         |
+| Route         | Page             | What it does                                                                                                                                                                                          |
+| ------------- | ---------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `/`           | **Home**         | Landing page. Signed out: a marketing splash (animated floating words + feature blurbs). Signed in: a dashboard (latest-lessons feed, your activity, activity from people you follow, notifications). |
+| `/editor`     | **Editor**       | The lesson builder (the original app). The "Save to cloud" dropdown (publish or save as draft) lives here.                                                                                            |
+| `/hub`        | **Lesson hub**   | Public gallery of published lessons (plus your own drafts), with search.                                                                                                                              |
+| `/hub/:id`    | **Lesson page**  | A single published lesson's page: preview, comments, and author link.                                                                                                                                 |
+| `/users/:id`  | **User profile** | A user's public profile — their bio, follower/following counts, a Follow button, and published lessons.                                                                                               |
+| `/login`      | **Sign in**      | Magic-link sign-in / account status.                                                                                                                                                                  |
+| `/moderation` | **Moderation**   | Moderator/admin queue for reviewing reported content (gated to mods/admins).                                                                                                                          |
 
 Unknown paths redirect to the home page (`/`).
 
@@ -43,4 +43,6 @@ The home page (`src/pages/HomePage.jsx`) has two faces, chosen from the auth sta
 - **Signed in** — a dashboard showing the hub's latest-lessons Atom feed and the
   user's own activity feed (both parsed client-side from Atom with `DOMParser`,
   reusing the same `feed.xml` / `profiles/:id/feed.xml` endpoints the "RSS"
-  links point at), plus a roomier list of the user's notifications.
+  links point at), a **"From people you follow"** feed (from the Worker's
+  `GET /following/activity`; see [Following](./profiles-and-display-names.md#following)),
+  plus a roomier list of the user's notifications.

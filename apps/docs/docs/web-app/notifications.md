@@ -20,6 +20,10 @@ queries the table directly — everything goes through the Worker's
   (an optional short message can ride along, and is profanity-checked server-side).
   Because the recipient may not have an account id yet, a `link` notification is
   addressed by **email**, so it's waiting for them the next time they sign in.
+- **`follow`** — someone started following you. The Worker creates this inside its
+  follow handler (`POST /profiles/:id/follow`) when a _new_ follow edge is added;
+  re-following is a no-op and doesn't re-notify. Its link opens the follower's
+  profile. See [Following](./profiles-and-display-names.md#following).
 
 ## How it's stored
 

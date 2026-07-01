@@ -5,7 +5,8 @@
 //     run of feature blurbs, each with an illustration beside it.
 //   • Signed in — a personal dashboard: the hub's latest-lessons feed and the
 //     user's own activity feed side by side (both parsed from Atom with
-//     DOMParser), plus a roomier list of the user's notifications.
+//     DOMParser), a feed of activity from the people they follow, plus a roomier
+//     list of the user's notifications.
 //
 // The editor itself now lives at /editor; this page is what greets visitors.
 
@@ -37,12 +38,14 @@ import DescriptionIcon from "@mui/icons-material/Description";
 import RssFeedIcon from "@mui/icons-material/RssFeed";
 import NotificationsNoneIcon from "@mui/icons-material/NotificationsNone";
 import HistoryIcon from "@mui/icons-material/History";
+import PeopleAltIcon from "@mui/icons-material/PeopleAlt";
 import NavActions from "../components/NavActions.jsx";
 import FloatingWords from "../components/FloatingWords.jsx";
+import { FeedListSkeleton } from "../components/Skeletons.jsx";
 import { useAuth } from "../lib/auth.jsx";
 import { useDocumentMeta } from "../lib/seo.js";
 import { fetchLatestLessons, lessonHubEnabled } from "../lib/lessons.js";
-import { fetchUserActivity } from "../lib/users.js";
+import { fetchUserActivity, fetchFollowingActivity } from "../lib/users.js";
 import { fetchNotifications } from "../lib/notifications.js";
 
 // The features shown to signed-out visitors. `image` points at a file under
@@ -406,19 +409,23 @@ function DashboardView() {
 
   const [latest, setLatest] = useState([]);
   const [activity, setActivity] = useState([]);
+  const [following, setFollowing] = useState([]);
   const [notifications, setNotifications] = useState([]);
   const [loading, setLoading] = useState(true);
 
   const load = useCallback(async () => {
     setLoading(true);
     // Each feed is independent; one failing shouldn't blank the others.
-    const [latestRes, activityRes, notifRes] = await Promise.allSettled([
-      lessonHubEnabled ? fetchLatestLessons() : Promise.resolve([]),
-      user ? fetchUserActivity(user.id) : Promise.resolve([]),
-      accessToken ? fetchNotifications(accessToken) : Promise.resolve([]),
-    ]);
+    const [latestRes, activityRes, followingRes, notifRes] =
+      await Promise.allSettled([
+        lessonHubEnabled ? fetchLatestLessons() : Promise.resolve([]),
+        user ? fetchUserActivity(user.id) : Promise.resolve([]),
+        accessToken ? fetchFollowingActivity(accessToken) : Promise.resolve([]),
+        accessToken ? fetchNotifications(accessToken) : Promise.resolve([]),
+      ]);
     setLatest(latestRes.status === "fulfilled" ? latestRes.value : []);
     setActivity(activityRes.status === "fulfilled" ? activityRes.value : []);
+    setFollowing(followingRes.status === "fulfilled" ? followingRes.value : []);
     setNotifications(notifRes.status === "fulfilled" ? notifRes.value : []);
     setLoading(false);
   }, [user, accessToken]);
@@ -464,139 +471,160 @@ function DashboardView() {
         </Stack>
       </Stack>
 
-      {loading ? (
-        <Box sx={{ display: "flex", justifyContent: "center", py: 8 }}>
-          <CircularProgress />
-        </Box>
-      ) : (
-        <Stack spacing={3}>
-          {/* Latest lessons + your activity, together in one section. */}
-          <Paper
-            variant="outlined"
-            sx={{ p: { xs: 2, md: 3 }, borderRadius: 3 }}
-          >
-            <Grid container spacing={{ xs: 3, md: 4 }}>
-              <Grid size={{ xs: 12, md: 6 }}>
-                <Stack
-                  direction="row"
-                  spacing={1}
-                  alignItems="center"
-                  sx={{ mb: 1.5 }}
-                >
-                  <RssFeedIcon color="primary" fontSize="small" />
-                  <Typography variant="h6">Latest from the hub</Typography>
-                </Stack>
+      {/* The dashboard layout renders immediately; each feed shows skeleton rows
+          until its data arrives, so panels don't jump in as a spinner clears. */}
+      <Stack spacing={3}>
+        {/* Latest lessons + your activity, together in one section. */}
+        <Paper variant="outlined" sx={{ p: { xs: 2, md: 3 }, borderRadius: 3 }}>
+          <Grid container spacing={{ xs: 3, md: 4 }}>
+            <Grid size={{ xs: 12, md: 6 }}>
+              <Stack
+                direction="row"
+                spacing={1}
+                alignItems="center"
+                sx={{ mb: 1.5 }}
+              >
+                <RssFeedIcon color="primary" fontSize="small" />
+                <Typography variant="h6">Latest from the hub</Typography>
+              </Stack>
+              {loading ? (
+                <FeedListSkeleton count={5} />
+              ) : (
                 <FeedList
                   entries={latest.slice(0, 8)}
                   emptyText="No published lessons yet — be the first to share one."
                 />
-              </Grid>
-              <Grid size={{ xs: 12, md: 6 }}>
-                <Stack
-                  direction="row"
-                  spacing={1}
-                  alignItems="center"
-                  sx={{ mb: 1.5 }}
-                >
-                  <HistoryIcon color="primary" fontSize="small" />
-                  <Typography variant="h6">Your recent activity</Typography>
-                </Stack>
+              )}
+            </Grid>
+            <Grid size={{ xs: 12, md: 6 }}>
+              <Stack
+                direction="row"
+                spacing={1}
+                alignItems="center"
+                sx={{ mb: 1.5 }}
+              >
+                <HistoryIcon color="primary" fontSize="small" />
+                <Typography variant="h6">Your recent activity</Typography>
+              </Stack>
+              {loading ? (
+                <FeedListSkeleton count={5} />
+              ) : (
                 <FeedList
                   entries={activity.slice(0, 8)}
                   emptyText="You haven't published or commented yet. Your activity will show up here."
                 />
-              </Grid>
+              )}
             </Grid>
-          </Paper>
+          </Grid>
+        </Paper>
 
-          {/* Notifications, in a roomier view than the AppBar bell. */}
-          <Paper
-            variant="outlined"
-            sx={{ p: { xs: 2, md: 3 }, borderRadius: 3 }}
+        {/* Activity from the people this user follows (lessons + comments). */}
+        <Paper variant="outlined" sx={{ p: { xs: 2, md: 3 }, borderRadius: 3 }}>
+          <Stack
+            direction="row"
+            spacing={1}
+            alignItems="center"
+            sx={{ mb: 1.5 }}
           >
-            <Stack
-              direction="row"
-              spacing={1}
-              alignItems="center"
-              sx={{ mb: 1.5 }}
-            >
-              <NotificationsNoneIcon color="primary" fontSize="small" />
-              <Typography variant="h6">Notifications</Typography>
-            </Stack>
-            {notifications.length === 0 ? (
-              <Typography variant="body2" color="text.secondary" sx={{ py: 2 }}>
-                You&apos;re all caught up — no notifications.
-              </Typography>
-            ) : (
-              <Stack divider={<Divider flexItem />} spacing={0}>
-                {notifications.map((n) => {
-                  const path = n.link?.startsWith("/") ? n.link : null;
-                  const content = (
-                    <>
-                      <Stack
-                        direction="row"
-                        spacing={1}
-                        alignItems="center"
-                        sx={{ mb: 0.25 }}
-                      >
-                        {!n.read && (
-                          <Box
-                            sx={{
-                              width: 8,
-                              height: 8,
-                              borderRadius: "50%",
-                              bgcolor: "error.main",
-                              flexShrink: 0,
-                            }}
-                          />
-                        )}
-                        <Typography
-                          variant="subtitle2"
-                          sx={{ fontWeight: n.read ? 500 : 700 }}
-                        >
-                          {n.title}
-                        </Typography>
-                      </Stack>
-                      {n.body && (
-                        <Typography
-                          variant="body2"
-                          color="text.secondary"
-                          sx={{
-                            whiteSpace: "pre-wrap",
-                            wordBreak: "break-word",
-                          }}
-                        >
-                          {n.body}
-                        </Typography>
-                      )}
-                      <Typography variant="caption" color="text.secondary">
-                        {formatDateTime(n.createdAt)}
-                      </Typography>
-                    </>
-                  );
-                  return n.link ? (
-                    <CardActionArea
-                      key={n.id}
-                      onClick={() =>
-                        path
-                          ? navigate(path)
-                          : window.open(n.link, "_blank", "noopener")
-                      }
-                      sx={{ px: 1, py: 1.5, borderRadius: 2 }}
+            <PeopleAltIcon color="primary" fontSize="small" />
+            <Typography variant="h6">From people you follow</Typography>
+          </Stack>
+          {loading ? (
+            <FeedListSkeleton count={4} />
+          ) : (
+            <FeedList
+              entries={following.slice(0, 10)}
+              emptyText="Follow people from their profile to see their latest lessons and comments here."
+            />
+          )}
+        </Paper>
+
+        {/* Notifications, in a roomier view than the AppBar bell. */}
+        <Paper variant="outlined" sx={{ p: { xs: 2, md: 3 }, borderRadius: 3 }}>
+          <Stack
+            direction="row"
+            spacing={1}
+            alignItems="center"
+            sx={{ mb: 1.5 }}
+          >
+            <NotificationsNoneIcon color="primary" fontSize="small" />
+            <Typography variant="h6">Notifications</Typography>
+          </Stack>
+          {loading ? (
+            <FeedListSkeleton count={4} />
+          ) : notifications.length === 0 ? (
+            <Typography variant="body2" color="text.secondary" sx={{ py: 2 }}>
+              You&apos;re all caught up — no notifications.
+            </Typography>
+          ) : (
+            <Stack divider={<Divider flexItem />} spacing={0}>
+              {notifications.map((n) => {
+                const path = n.link?.startsWith("/") ? n.link : null;
+                const content = (
+                  <>
+                    <Stack
+                      direction="row"
+                      spacing={1}
+                      alignItems="center"
+                      sx={{ mb: 0.25 }}
                     >
-                      {content}
-                    </CardActionArea>
-                  ) : (
-                    <Box key={n.id} sx={{ px: 1, py: 1.5 }}>
-                      {content}
-                    </Box>
-                  );
-                })}
-              </Stack>
-            )}
-          </Paper>
-        </Stack>
-      )}
+                      {!n.read && (
+                        <Box
+                          sx={{
+                            width: 8,
+                            height: 8,
+                            borderRadius: "50%",
+                            bgcolor: "error.main",
+                            flexShrink: 0,
+                          }}
+                        />
+                      )}
+                      <Typography
+                        variant="subtitle2"
+                        sx={{ fontWeight: n.read ? 500 : 700 }}
+                      >
+                        {n.title}
+                      </Typography>
+                    </Stack>
+                    {n.body && (
+                      <Typography
+                        variant="body2"
+                        color="text.secondary"
+                        sx={{
+                          whiteSpace: "pre-wrap",
+                          wordBreak: "break-word",
+                        }}
+                      >
+                        {n.body}
+                      </Typography>
+                    )}
+                    <Typography variant="caption" color="text.secondary">
+                      {formatDateTime(n.createdAt)}
+                    </Typography>
+                  </>
+                );
+                return n.link ? (
+                  <CardActionArea
+                    key={n.id}
+                    onClick={() =>
+                      path
+                        ? navigate(path)
+                        : window.open(n.link, "_blank", "noopener")
+                    }
+                    sx={{ px: 1, py: 1.5, borderRadius: 2 }}
+                  >
+                    {content}
+                  </CardActionArea>
+                ) : (
+                  <Box key={n.id} sx={{ px: 1, py: 1.5 }}>
+                    {content}
+                  </Box>
+                );
+              })}
+            </Stack>
+          )}
+        </Paper>
+      </Stack>
     </Container>
   );
 }

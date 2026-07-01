@@ -40,10 +40,11 @@ PDF printing.
 - **Accounts** - passwordless magic-link sign-in (Supabase Auth) on a dedicated
   login page; required only to publish to the hub (see [Lesson hub & accounts](./lesson-hub-and-accounts.md)).
 - **Profiles & display names** - every user picks a public display name and an
-  optional bio, with a public profile page listing their lessons (see
-  [Profiles & display names](./profiles-and-display-names.md)).
-- **Notifications** - an in-app bell for replies, comments on your lessons, and
-  links sent to you (see [Notifications](./notifications.md)).
+  optional bio, with a public profile page listing their lessons. Signed-in users
+  can **follow** each other, and a home-page feed shows the activity of people you
+  follow (see [Profiles & display names](./profiles-and-display-names.md#following)).
+- **Notifications** - an in-app bell for replies, comments on your lessons, new
+  followers, and links sent to you (see [Notifications](./notifications.md)).
 - **Moderation** - moderator/admin tools for comments, shadowbanning, and bans
   (see [Moderation](./moderation.md)).
 - **Live collaboration** - invite others to edit a lesson with you in real time

@@ -136,6 +136,33 @@ export function SectionsSkeleton({ count = 2 }) {
   );
 }
 
+// A single feed-row placeholder, matching a row in HomePage's <FeedList>: a title
+// line, a wrapped summary, and a short meta line.
+function FeedRowSkeleton() {
+  return (
+    <Box sx={{ px: 1, py: 1.25 }}>
+      <Skeleton variant="text" width="65%" />
+      <Skeleton variant="text" width="90%" />
+      <Skeleton variant="text" width="35%" />
+    </Box>
+  );
+}
+
+/**
+ * A short stack of placeholder feed rows separated by dividers, mirroring the
+ * dashboard's <FeedList>. Used while the home-page feeds (latest lessons, your
+ * activity, people you follow, notifications) load.
+ */
+export function FeedListSkeleton({ count = 4 }) {
+  return (
+    <Stack divider={<Divider flexItem />} spacing={0}>
+      {Array.from({ length: count }, (_, i) => (
+        <FeedRowSkeleton key={i} />
+      ))}
+    </Stack>
+  );
+}
+
 /**
  * A short stack of single-line placeholders, for the moderation panels' simple row
  * lists (bans, shadowbanned lessons, pending requests, moderators).

@@ -87,7 +87,7 @@ create table if not exists public.notifications (
   id              uuid primary key default gen_random_uuid(),
   user_id         uuid references auth.users (id) on delete cascade,
   recipient_email text,
-  type            text not null,            -- 'comment' | 'link'
+  type            text not null,            -- 'comment' | 'link' | 'follow'
   title           text not null,
   body            text,
   link            text,
@@ -101,6 +101,33 @@ create index if not exists notifications_recipient_email_idx on public.notificat
 
 -- Only the service-role Worker reads/writes these, so no anon/authenticated policies.
 alter table public.notifications enable row level security;
+
+
+-- Follows: one row per "follower_id follows following_id" edge. Keyed by the
+-- Supabase user id on both sides (the same `author_id` carried on lessons and
+-- comments), so a follow survives a display-name change. A user's follower and
+-- following counts, and whether the signed-in caller follows a given profile, are
+-- derived from this table; the "activity from people you follow" feed reads the
+-- following_ids here and merges those users' lessons and comments. Creating a
+-- follow notifies the followed user (a `follow` notification). Reads and writes go
+-- through the Worker's /profiles/:id/follow and /following endpoints (service role).
+create table if not exists public.follows (
+  -- Composite primary key makes a follow idempotent: re-following is a no-op
+  -- (ON CONFLICT DO NOTHING) rather than a duplicate row, so we don't re-notify.
+  follower_id  uuid not null references auth.users (id) on delete cascade,
+  following_id uuid not null references auth.users (id) on delete cascade,
+  created_at   timestamptz not null default now(),
+  primary key (follower_id, following_id)
+);
+
+-- Two lookup directions: "who does X follow" (the following feed, follower_id ->)
+-- and "who follows X" (a profile's follower count, following_id ->). The PK covers
+-- the first prefix; add an index for the reverse lookup.
+create index if not exists follows_following_id_idx on public.follows (following_id);
+
+-- Same posture as notifications: only the service-role Worker reads/writes, so
+-- enable RLS with no anon/authenticated policies.
+alter table public.follows enable row level security;
 
 
 -- ============================================================================

@@ -2,7 +2,9 @@
 // same `author_id` carried on every lesson/comment), so they stay valid even when
 // a display name changes. All reads are public — no auth.
 
-import { supabaseHeaders, fetchPublicUser } from '../lib/supabase.js';
+import { supabaseHeaders, fetchPublicUser, verifySupabaseUser } from '../lib/supabase.js';
+import { bearerToken } from '../lib/auth.js';
+import { countFollows, isFollowing } from './follows.js';
 import { rowToLesson } from '../lib/lesson.js';
 import { xmlEscape } from '../lib/xml.js';
 import { textResponse, jsonResponse } from '../lib/http.js';
@@ -14,11 +16,14 @@ import { textResponse, jsonResponse } from '../lib/http.js';
  * /profiles so it never collides with the SPA's /users/:id page (the same split
  * the lesson data at /lessons / page at /hub already uses).
  *
- *   GET /profiles/:id            -> { user: { id, displayName, bio }, lessons: LessonSummary[] }
+ *   GET /profiles/:id            -> { user: { id, displayName, bio, followerCount, followingCount, isFollowing }, lessons: LessonSummary[] }
  *   GET /profiles/:id/feed.xml   -> Atom feed of the user's lessons + comments ("RSS" in the UI)
  *
  * The profile lists only the user's published, non-shadowbanned lessons (the same
- * visibility rule as the public hub). Errors are short plain-text reasons.
+ * visibility rule as the public hub). The `user` object also carries follower and
+ * following counts; `isFollowing` reflects whether the *caller* follows this
+ * profile and is only meaningful when a Bearer token is supplied (false otherwise,
+ * since the profile read is public). Errors are short plain-text reasons.
  */
 export async function handleUsers(request, env, url, cors) {
 	if (!env.SUPABASE_URL || !env.SUPABASE_SERVICE_ROLE_KEY) {
@@ -40,6 +45,20 @@ export async function handleUsers(request, env, url, cors) {
 	// lessons, newest first (the doc is excluded, as in the public listing).
 	const user = await fetchPublicUser(env, base, id);
 	if (!user) return textResponse('Profile not found.', 404, cors);
+
+	// Follower/following counts, and — when the request carries a session — whether
+	// the caller already follows this profile (so the UI can show Follow vs
+	// Following). The profile read stays public: no token just means isFollowing is
+	// false. Run these alongside the lesson list; a follow-count hiccup returns 0.
+	const caller = await verifySupabaseUser(env, bearerToken(request));
+	const [followerCount, followingCount, following] = await Promise.all([
+		countFollows(env, base, `following_id=eq.${encodeURIComponent(id)}`),
+		countFollows(env, base, `follower_id=eq.${encodeURIComponent(id)}`),
+		caller ? isFollowing(env, base, caller.id, id) : Promise.resolve(false),
+	]);
+	user.followerCount = followerCount;
+	user.followingCount = followingCount;
+	user.isFollowing = following;
 
 	const query = `author_id=eq.${encodeURIComponent(
 		id,

@@ -1,8 +1,10 @@
-// A user's public profile (/users/:id). Shows their chosen display name, bio, and
-// the lessons they've published; the owner can edit their bio in place. Profiles
-// are keyed by the Supabase user id (the same `authorId` on every lesson), so a
-// link survives a display-name change. The "RSS" button points at the user's Atom
-// activity feed (lessons + comments) served by the Worker.
+// A user's public profile (/users/:id). Shows their chosen display name, bio,
+// follower/following counts, and the lessons they've published; the owner can edit
+// their bio in place, and any other signed-in user can follow/unfollow them (which
+// notifies the followed user and surfaces their activity in the follower's home
+// feed). Profiles are keyed by the Supabase user id (the same `authorId` on every
+// lesson), so a link survives a display-name change. The "RSS" button points at
+// the user's Atom activity feed (lessons + comments) served by the Worker.
 
 import { useCallback, useEffect, useState } from "react";
 import { Link as RouterLink, useParams } from "react-router-dom";
@@ -18,6 +20,7 @@ import Card from "@mui/material/Card";
 import CardActionArea from "@mui/material/CardActionArea";
 import CardContent from "@mui/material/CardContent";
 import Avatar from "@mui/material/Avatar";
+import Link from "@mui/material/Link";
 import Alert from "@mui/material/Alert";
 import Skeleton from "@mui/material/Skeleton";
 import Tooltip from "@mui/material/Tooltip";
@@ -25,15 +28,20 @@ import IconButton from "@mui/material/IconButton";
 import Menu from "@mui/material/Menu";
 import MenuItem from "@mui/material/MenuItem";
 import ListItemText from "@mui/material/ListItemText";
+import CircularProgress from "@mui/material/CircularProgress";
 import EditIcon from "@mui/icons-material/Edit";
 import RssFeedIcon from "@mui/icons-material/RssFeed";
 import HistoryIcon from "@mui/icons-material/History";
+import PersonAddIcon from "@mui/icons-material/PersonAdd";
+import HowToRegIcon from "@mui/icons-material/HowToReg";
 import NavActions from "../components/NavActions.jsx";
 import BioDialog from "../components/BioDialog.jsx";
+import FollowListDialog from "../components/FollowListDialog.jsx";
 import { LessonGridSkeleton } from "../components/Skeletons.jsx";
 import {
   fetchUserProfile,
   fetchUserActivity,
+  setFollowing,
   userFeedUrl,
 } from "../lib/users.js";
 import { useAuth } from "../lib/auth.jsx";
@@ -57,7 +65,7 @@ function initial(name) {
 
 export default function ProfilePage() {
   const { id } = useParams();
-  const { user: me } = useAuth();
+  const { user: me, accessToken, enabled } = useAuth();
   const isOwner = Boolean(me && me.id === id);
 
   const [profile, setProfile] = useState(null);
@@ -65,6 +73,16 @@ export default function ProfilePage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [bioOpen, setBioOpen] = useState(false);
+
+  // Follow state. `followBusy` disables the button (and shows a spinner) while a
+  // follow/unfollow request is in flight; `followError` surfaces a failure. The
+  // follow flag and counts live on `profile` so a successful toggle just patches
+  // it (the server returns the fresh follower count).
+  const [followBusy, setFollowBusy] = useState(false);
+  const [followError, setFollowError] = useState("");
+  // Which connections list the follower/following-count dialog is showing, or null
+  // when it's closed.
+  const [followListTab, setFollowListTab] = useState(null);
 
   // Activity menu: lazily parsed from the user's Atom feed on first open.
   const [activityAnchor, setActivityAnchor] = useState(null);
@@ -91,21 +109,50 @@ export default function ProfilePage() {
     if (!id) return;
     setLoading(true);
     setError("");
-    fetchUserProfile(id)
+    // Pass the token so the server can tell us whether *we* follow this profile.
+    fetchUserProfile(id, accessToken)
       .then(({ user, lessons }) => {
         setProfile(user);
         setLessons(lessons);
       })
       .catch((err) => setError(err.message || "Could not load this profile."))
       .finally(() => setLoading(false));
-  }, [id]);
+  }, [id, accessToken]);
 
   useEffect(() => {
     load();
   }, [load]);
 
+  // Follow or unfollow this profile, then patch the local follow flag + count
+  // from the server's response so the button and header update immediately.
+  const toggleFollow = async () => {
+    if (!profile || followBusy) return;
+    const next = !profile.isFollowing;
+    setFollowBusy(true);
+    setFollowError("");
+    try {
+      const { following, followerCount } = await setFollowing(
+        id,
+        next,
+        accessToken,
+      );
+      setProfile((p) =>
+        p ? { ...p, isFollowing: following, followerCount } : p,
+      );
+    } catch (err) {
+      setFollowError(err.message || "Could not update follow.");
+    } finally {
+      setFollowBusy(false);
+    }
+  };
+
+  // The Follow control shows only to a signed-in user viewing someone else.
+  const canFollow = Boolean(enabled && me && !isOwner);
+
   const displayName = profile?.displayName || "Anonymous";
   const bio = profile?.bio || "";
+  const followerCount = profile?.followerCount ?? 0;
+  const followingCount = profile?.followingCount ?? 0;
 
   useDocumentMeta({
     title: profile ? `${displayName}` : "Profile",
@@ -164,7 +211,8 @@ export default function ProfilePage() {
           </Alert>
         ) : (
           <>
-            {/* Profile header: avatar, display name, bio, and the RSS button. */}
+            {/* Profile header: avatar, display name, follower/following counts,
+                the Follow button, and the Activity/RSS buttons. */}
             <Stack
               direction={{ xs: "column", sm: "row" }}
               spacing={2}
@@ -178,41 +226,99 @@ export default function ProfilePage() {
                 <Typography variant="h5" noWrap>
                   {displayName}
                 </Typography>
-                <Typography variant="body2" color="text.secondary">
-                  {lessons.length} published lesson
-                  {lessons.length === 1 ? "" : "s"}
-                </Typography>
-              </Box>
-              {feedUrl && (
-                <Stack direction="row" spacing={1} alignItems="center">
-                  <Tooltip title="Recent activity (lessons & comments)">
-                    <Button
-                      variant="outlined"
-                      size="small"
-                      startIcon={<HistoryIcon />}
-                      onClick={openActivity}
-                      aria-haspopup="true"
-                      aria-expanded={Boolean(activityAnchor)}
-                    >
-                      Activity
-                    </Button>
-                  </Tooltip>
-                  <Tooltip title="Subscribe to this user's activity (RSS)">
-                    <Button
-                      variant="outlined"
-                      size="small"
-                      component="a"
-                      href={feedUrl}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      startIcon={<RssFeedIcon />}
-                    >
-                      RSS
-                    </Button>
-                  </Tooltip>
+                <Stack
+                  direction="row"
+                  spacing={1.5}
+                  alignItems="baseline"
+                  sx={{ flexWrap: "wrap" }}
+                >
+                  <Typography variant="body2" color="text.secondary">
+                    {lessons.length} published lesson
+                    {lessons.length === 1 ? "" : "s"}
+                  </Typography>
+                  {/* Counts open the connections dialog on the matching tab. */}
+                  <Link
+                    component="button"
+                    type="button"
+                    variant="body2"
+                    color="text.secondary"
+                    underline="hover"
+                    onClick={() => setFollowListTab("followers")}
+                  >
+                    {followerCount} follower{followerCount === 1 ? "" : "s"}
+                  </Link>
+                  <Link
+                    component="button"
+                    type="button"
+                    variant="body2"
+                    color="text.secondary"
+                    underline="hover"
+                    onClick={() => setFollowListTab("following")}
+                  >
+                    {followingCount} following
+                  </Link>
                 </Stack>
-              )}
+              </Box>
+              <Stack direction="row" spacing={1} alignItems="center">
+                {canFollow && (
+                  <Button
+                    variant={profile?.isFollowing ? "outlined" : "contained"}
+                    size="small"
+                    onClick={toggleFollow}
+                    disabled={followBusy}
+                    startIcon={
+                      followBusy ? (
+                        <CircularProgress size={16} color="inherit" />
+                      ) : profile?.isFollowing ? (
+                        <HowToRegIcon />
+                      ) : (
+                        <PersonAddIcon />
+                      )
+                    }
+                  >
+                    {profile?.isFollowing ? "Following" : "Follow"}
+                  </Button>
+                )}
+                {feedUrl && (
+                  <>
+                    <Tooltip title="Recent activity (lessons & comments)">
+                      <Button
+                        variant="outlined"
+                        size="small"
+                        startIcon={<HistoryIcon />}
+                        onClick={openActivity}
+                        aria-haspopup="true"
+                        aria-expanded={Boolean(activityAnchor)}
+                      >
+                        Activity
+                      </Button>
+                    </Tooltip>
+                    <Tooltip title="Subscribe to this user's activity (RSS)">
+                      <Button
+                        variant="outlined"
+                        size="small"
+                        component="a"
+                        href={feedUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        startIcon={<RssFeedIcon />}
+                      >
+                        RSS
+                      </Button>
+                    </Tooltip>
+                  </>
+                )}
+              </Stack>
             </Stack>
+            {followError && (
+              <Alert
+                severity="error"
+                sx={{ mb: 1 }}
+                onClose={() => setFollowError("")}
+              >
+                {followError}
+              </Alert>
+            )}
 
             {/* Bio. The owner can edit it (or add one when empty). */}
             <Box sx={{ mb: 4 }}>
@@ -362,6 +468,14 @@ export default function ProfilePage() {
           onSaved={(saved) => setProfile((p) => (p ? { ...p, bio: saved } : p))}
         />
       )}
+
+      <FollowListDialog
+        open={Boolean(followListTab)}
+        userId={id}
+        displayName={displayName}
+        initialTab={followListTab || "followers"}
+        onClose={() => setFollowListTab(null)}
+      />
     </Box>
   );
 }
