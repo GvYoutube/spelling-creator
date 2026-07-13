@@ -24,7 +24,7 @@ src/
     DisplayNameDialog.jsx pick / change your public display name
     BioDialog.jsx         edit your public profile bio
     FirstLessonWizard.jsx dismissable step-by-step welcome guide for newcomers
-    CommentsSection.jsx   lesson comments list + post box (shown on the lesson page)
+    CommentsSection.jsx   lesson comments list + post box, incl. the 1–5 star rating input
     LessonView.jsx        read-only renderer for the lesson page (blocks straight to React, lazy images)
     SectionCard.jsx       a named section with its content blocks + add buttons
     ContentBlock.jsx      a single text, spelling, image, or question block

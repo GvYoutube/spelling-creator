@@ -23,6 +23,11 @@ entirely by the Worker — it is never stored, and the user is shown why. Postin
 reply sends a [notification](./notifications.md) to the parent commenter and the
 lesson author.
 
+A commenter can also leave a **1–5 star rating** for the lesson (a MUI Rating in
+the comment box). Ratings are one-per-user-per-lesson — re-rating updates your
+existing star count rather than adding a second vote — and the lesson page shows
+the **average** rating and how many ratings it has.
+
 **Where the data lives.** Lessons are stored in **Supabase Postgres**, but — like
 the AI and Pixabay features — the browser never talks to the database directly.
 All lesson reads/writes go through the companion Worker (`apps/api` in this
@@ -59,11 +64,11 @@ their own pages.)
 | ---------------------------- | ----------------------- | --------------------------------------------------------------------------------------------------------------------- |
 | `GET /lessons`               | none (public)           | `{ "lessons": [{ id, authorId, title, author, sectionCount, published, createdAt }] }` (published only, newest first) |
 | `GET /lessons/mine`          | `Bearer <Supabase JWT>` | `{ "lessons": [{ id, authorId, title, author, sectionCount, published, createdAt }] }` (caller's own, incl. drafts)   |
-| `GET /lessons/:id`           | none (public)           | `{ "lesson": { id, authorId, title, author, sectionCount, published, createdAt, doc } }`                              |
+| `GET /lessons/:id`           | none (public)           | `{ "lesson": { id, authorId, title, author, sectionCount, published, createdAt, doc, avgRating, ratingCount } }`      |
 | `POST /lessons`              | `Bearer <Supabase JWT>` | `{ "lesson": { id, authorId, title, author, sectionCount, published, createdAt } }`                                   |
 | `PUT /lessons/:id`           | `Bearer <Supabase JWT>` | `{ "lesson": { id, authorId, title, author, sectionCount, published, createdAt } }` (author only; else `403`)         |
 | `GET /lessons/:id/comments`  | none (public)           | `{ "comments": [{ id, author, body, createdAt }] }` (oldest first)                                                    |
-| `POST /lessons/:id/comments` | `Bearer <Supabase JWT>` | `{ "comment": { id, author, body, createdAt } }`                                                                      |
+| `POST /lessons/:id/comments` | `Bearer <Supabase JWT>` | `{ "comment": { id, author, body, createdAt }, "rating": { average, count } \| null }`                                |
 | `POST /ai-text/dislike`      | `Bearer <Supabase JWT>` | `{ "ok": true }` — evicts the cached text for `{ subject, documentName }`                                             |
 
 - `doc` is the editor document shape used throughout the app:
@@ -87,12 +92,16 @@ their own pages.)
   draft; omitting it leaves the current state alone. `author` and `created_at` are
   left unchanged. This backs the editor's **Save to cloud** actions when editing a
   lesson loaded from the hub.
-- `POST /lessons/:id/comments` body is `{ body }`. The Worker verifies the JWT
-  the same way, derives the author from the verified user, then runs the text
-  through [`glin-profanity`](https://www.npmjs.com/package/glin-profanity); if any
-  profanity is found it **rejects the whole comment with `422`** (nothing is
+- `POST /lessons/:id/comments` body is `{ body, parentId?, rating? }`. The Worker
+  verifies the JWT the same way, derives the author from the verified user, then
+  runs the text through [`glin-profanity`](https://www.npmjs.com/package/glin-profanity);
+  if any profanity is found it **rejects the whole comment with `422`** (nothing is
   stored). Otherwise it inserts the row with the service-role key. The check runs
-  on the Worker so it can't be bypassed by a crafted client request.
+  on the Worker so it can't be bypassed by a crafted client request. An optional
+  `rating` (integer 1–5) rates the lesson alongside the comment: the Worker upserts
+  it into the `ratings` table keyed by `(lesson_id, author_id)` — one rating per
+  user, re-rating updates it — and returns the lesson's new `{ average, count }` as
+  `rating` (or `null` when no rating was sent). A `rating` outside 1–5 is `400`.
 - `POST /ai-text/dislike` body is `{ subject, documentName }`. The Worker
   verifies the JWT the same way (sign-in required), then rebuilds the cache key
   for that text suggestion and deletes it, so the next request for the same
@@ -105,7 +114,8 @@ their own pages.)
 The canonical, ready-to-run schema lives in the monorepo at
 [`apps/api/schema.sql`](https://github.com/playforge-coding/spelling-creator/blob/master/apps/api/schema.sql).
 Run it once in the Supabase SQL editor. Besides the `lessons` and `comments`
-tables shown below, that file also defines the `notifications` table (see
+tables shown below, that file also defines the `ratings` table (1–5 stars, one
+row per `(lesson_id, author_id)`), the `notifications` table (see
 [Notifications](./notifications.md)) and the moderation tables — `user_roles`,
 `banned_names`, `banned_ips`, and `lesson_delete_requests` — plus the
 `shadowbanned` / `author_ip` columns (see [Moderation](./moderation.md)). The two

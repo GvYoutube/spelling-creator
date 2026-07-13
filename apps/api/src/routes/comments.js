@@ -7,6 +7,7 @@ import { authorFromUser, clientIp, displayNameOf } from '../lib/auth.js';
 import { bannedResponse } from '../lib/bans.js';
 import { profanityFilter } from '../lib/profanity.js';
 import { textResponse, jsonResponse } from '../lib/http.js';
+import { fetchRatingStats, upsertRating } from '../lib/ratings.js';
 import { createNotification } from './notifications.js';
 
 // The longest comment we accept. Comments are short discussion, not documents.
@@ -47,6 +48,12 @@ function rowToComment(row) {
  * author (deduplicated to a single notification when they're the same person, and
  * never notifying the replier themselves). Notification failures are swallowed so
  * they can't fail the reply itself.
+ *
+ * A POST may also carry `rating` (1–5) to rate the lesson alongside the comment.
+ * The rating is upserted into the `ratings` table keyed by (lesson, user), so a
+ * user has a single, updatable rating per lesson. When a rating is included the
+ * response carries the lesson's new `{ average, count }` so the page can update
+ * its displayed average without re-fetching; otherwise `rating` is null.
  */
 export async function handleComments(request, env, lessonId, cors) {
 	if (!env.SUPABASE_URL || !env.SUPABASE_SERVICE_ROLE_KEY) {
@@ -104,6 +111,19 @@ export async function handleComments(request, env, lessonId, cors) {
 		// Optional: the comment being replied to. Empty/missing means a top-level
 		// comment. We validate it (below) belongs to this lesson before inserting.
 		const parentId = (body && body.parentId ? String(body.parentId) : '').trim();
+
+		// Optional: a 1–5 star rating for the lesson, submitted alongside the
+		// comment. Absent/null means "comment without a rating". Anything present
+		// must be a whole number in range — reject rather than silently clamp so a
+		// buggy client is caught.
+		let stars = null;
+		if (body && body.rating != null) {
+			const n = Number(body.rating);
+			if (!Number.isInteger(n) || n < 1 || n > 5) {
+				return textResponse('A rating must be a whole number of stars from 1 to 5.', 400, cors);
+			}
+			stars = n;
+		}
 
 		// Moderation: block the entire comment if it contains profanity. Done
 		// server-side so it can't be bypassed by a crafted client request.
@@ -201,7 +221,17 @@ export async function handleComments(request, env, lessonId, cors) {
 			);
 		}
 
-		return jsonResponse({ comment }, 201, cors);
+		// If a rating rode along with the comment, upsert it (one per user per
+		// lesson) and return the lesson's fresh average so the page can update the
+		// stars it shows without re-fetching. A rating write that fails shouldn't
+		// fail the comment that already landed, so we just report no rating back.
+		let rating = null;
+		if (stars != null) {
+			const ok = await upsertRating(env, base, lessonId, user.id, stars);
+			if (ok) rating = await fetchRatingStats(env, base, lessonId);
+		}
+
+		return jsonResponse({ comment, rating }, 201, cors);
 	}
 
 	return textResponse('Method not allowed.', 405, cors);

@@ -33,6 +33,7 @@ import Tooltip from "@mui/material/Tooltip";
 import useMediaQuery from "@mui/material/useMediaQuery";
 import { useTheme } from "@mui/material/styles";
 import Chip from "@mui/material/Chip";
+import Rating from "@mui/material/Rating";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import EditIcon from "@mui/icons-material/Edit";
 import DeleteOutlineIcon from "@mui/icons-material/DeleteOutline";
@@ -179,6 +180,16 @@ export default function LessonPage() {
       /* ignore — the editor just won't preload if storage is unavailable */
     }
     navigate("/editor");
+  };
+
+  // A rating was left with a comment (from CommentsSection): update the lesson's
+  // displayed average in place so the stars refresh without re-fetching.
+  const handleRated = (stats) => {
+    setLesson((prev) =>
+      prev
+        ? { ...prev, avgRating: stats.average, ratingCount: stats.count }
+        : prev,
+    );
   };
 
   // Export the lesson document — same pipeline the editor uses. 'docx' downloads
@@ -678,6 +689,27 @@ export default function LessonPage() {
                   : ""}
                 {lesson.createdAt ? ` · ${formatDate(lesson.createdAt)}` : ""}
               </Typography>
+              {/* Average star rating, once the lesson has any ratings. Ratings are
+                  left from the comments box below; this updates live via onRated. */}
+              {lesson.ratingCount > 0 && (
+                <Stack
+                  direction="row"
+                  spacing={0.75}
+                  alignItems="center"
+                  sx={{ mt: 0.5 }}
+                >
+                  <Rating
+                    value={lesson.avgRating || 0}
+                    precision={0.1}
+                    readOnly
+                    size="small"
+                  />
+                  <Typography variant="body2" color="text.secondary">
+                    {(lesson.avgRating || 0).toFixed(1)} · {lesson.ratingCount}{" "}
+                    rating{lesson.ratingCount === 1 ? "" : "s"}
+                  </Typography>
+                </Stack>
+              )}
             </Stack>
 
             <Paper variant="outlined" sx={{ overflow: "hidden" }}>
@@ -685,7 +717,7 @@ export default function LessonPage() {
             </Paper>
 
             <Box sx={{ mt: 3 }}>
-              <CommentsSection lessonId={lesson.id} />
+              <CommentsSection lessonId={lesson.id} onRated={handleRated} />
             </Box>
           </>
         )}

@@ -13,6 +13,11 @@
 // outright (HTTP 422) and the Worker's plain-text reason is surfaced to the user.
 // A reply (parentId set) also notifies the parent comment's author and the lesson
 // author — handled entirely server-side.
+//
+// A comment may also carry a 1–5 star `rating` for the lesson (see the MUI Rating
+// in CommentsSection). The Worker stores one rating per user per lesson and, when
+// a rating is included, returns the lesson's new average so the page can update
+// its displayed stars. See postComment's return shape.
 
 const API_URL = import.meta.env.VITE_API_URL;
 
@@ -61,13 +66,24 @@ export async function fetchComments(lessonId) {
  * the access token is sent as a Bearer credential and the Worker verifies it
  * (and derives the author) before inserting the row. The Worker also rejects the
  * comment if it contains profanity.
+ *
+ * An optional 1–5 star `rating` rates the lesson alongside the comment; the
+ * Worker stores one rating per user (re-rating updates it) and returns the
+ * lesson's new average when a rating is included.
  * @param {string} lessonId
  * @param {string} body          The comment text.
  * @param {string} accessToken   Supabase session JWT.
  * @param {string} [parentId]    The comment being replied to; omit for a top-level comment.
- * @returns {Promise<{id, parentId, author, body, createdAt}>}
+ * @param {number} [rating]      A 1–5 star rating for the lesson; omit to comment without rating.
+ * @returns {Promise<{comment: {id, parentId, author, body, createdAt}, rating: {average, count}|null}>}
  */
-export async function postComment(lessonId, body, accessToken, parentId) {
+export async function postComment(
+  lessonId,
+  body,
+  accessToken,
+  parentId,
+  rating,
+) {
   if (!API_URL) throw new Error("The lesson hub is not configured.");
   if (!lessonId) throw new Error("Missing lesson id.");
   if (!accessToken) throw new Error("Please sign in before commenting.");
@@ -77,6 +93,7 @@ export async function postComment(lessonId, body, accessToken, parentId) {
 
   const payload = { body: text };
   if (parentId) payload.parentId = parentId;
+  if (rating != null) payload.rating = rating;
 
   let res;
   try {
@@ -94,7 +111,7 @@ export async function postComment(lessonId, body, accessToken, parentId) {
   if (!res.ok) throw await readError(res);
 
   const data = await res.json().catch(() => ({}));
-  return data.comment || {};
+  return { comment: data.comment || {}, rating: data.rating || null };
 }
 
 /**

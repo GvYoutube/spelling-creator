@@ -77,6 +77,36 @@ create policy "comments are public to read"
 -- service-role Worker writes.)
 
 
+-- Star ratings on published lessons (1–5). A rating is submitted alongside a
+-- comment through the Worker's POST /lessons/:id/comments, which upserts the row
+-- (one rating per user per lesson, keyed by the composite primary key) so
+-- re-rating updates the existing star count rather than adding a second vote. The
+-- lesson page shows the average and how many ratings a lesson has. Reads are
+-- public, like comments.
+create table if not exists public.ratings (
+  lesson_id  uuid not null references public.lessons (id) on delete cascade,
+  author_id  uuid not null references auth.users (id) on delete cascade,
+  stars      smallint not null check (stars between 1 and 5),
+  created_at timestamptz not null default now(),
+  -- One rating per user per lesson: the upsert (POST … on_conflict) merges onto
+  -- this key so a user can change their rating but never double-count.
+  primary key (lesson_id, author_id)
+);
+
+-- Averages are computed per lesson; index the group/lookup key.
+create index if not exists ratings_lesson_id_idx on public.ratings (lesson_id);
+
+-- Same posture as lessons/comments: service-role Worker is the only writer;
+-- enable RLS as defence-in-depth and allow public reads.
+alter table public.ratings enable row level security;
+
+drop policy if exists "ratings are public to read" on public.ratings;
+create policy "ratings are public to read"
+  on public.ratings for select using (true);
+-- (No insert/update/delete policy for anon/authenticated roles: only the
+-- service-role Worker writes.)
+
+
 -- Notifications delivered to a user. A notification reaches its recipient by their
 -- auth user id (`user_id`, e.g. "someone commented on your lesson") or by their
 -- email (`recipient_email`, used by "send link to user" so a link can be sent

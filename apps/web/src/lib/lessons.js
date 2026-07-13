@@ -14,8 +14,11 @@
 // LessonSummary: { id, authorId, title, author, sectionCount, published, createdAt }
 //                `published` is false for a draft — a lesson backed up to the
 //                database but kept out of the public hub listing.
-// Lesson:        LessonSummary & { doc }   where `doc` is the editor document
-//                shape { title, sections: [...] } used everywhere else.
+// Lesson:        LessonSummary & { doc, avgRating, ratingCount }
+//                `doc` is the editor document shape { title, sections: [...] } used
+//                everywhere else. `avgRating` is the mean of its 1–5 star ratings
+//                (null when unrated) and `ratingCount` how many it has — shown on
+//                the lesson page (see CommentsSection for how ratings are left).
 //                `authorId` is the publisher's Supabase user id — the hub compares
 //                it with the signed-in user to decide whether to offer "Edit".
 
@@ -159,7 +162,7 @@ export async function fetchMyLessons(accessToken) {
  * Fetch a single lesson, including its full editor `doc`. Public for published
  * lessons; an author can also load their own draft by id (e.g. to edit it).
  * @param {string} id
- * @returns {Promise<{id, title, author, sectionCount, published, createdAt, doc}>}
+ * @returns {Promise<{id, title, author, sectionCount, published, createdAt, doc, avgRating, ratingCount}>}
  */
 export async function fetchLesson(id) {
   if (!API_URL) throw new Error("The lesson hub is not configured.");

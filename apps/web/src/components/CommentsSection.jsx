@@ -16,6 +16,7 @@ import Stack from "@mui/material/Stack";
 import Typography from "@mui/material/Typography";
 import TextField from "@mui/material/TextField";
 import Button from "@mui/material/Button";
+import Rating from "@mui/material/Rating";
 import Divider from "@mui/material/Divider";
 import Alert from "@mui/material/Alert";
 import AlertTitle from "@mui/material/AlertTitle";
@@ -63,7 +64,7 @@ function initial(name) {
   return s ? s[0].toUpperCase() : "?";
 }
 
-export default function CommentsSection({ lessonId }) {
+export default function CommentsSection({ lessonId, onRated }) {
   const navigate = useNavigate();
   const { enabled: authEnabled, user, accessToken, isModerator } = useAuth();
 
@@ -72,6 +73,8 @@ export default function CommentsSection({ lessonId }) {
   const [error, setError] = useState("");
 
   const [draft, setDraft] = useState("");
+  // Optional 1–5 star rating posted with a top-level comment. null = not rating.
+  const [ratingValue, setRatingValue] = useState(null);
   const [posting, setPosting] = useState(false);
   // A notice shown under the post box after a failed submit. `severity` is
   // "warning" when the comment was blocked for profanity (an expected,
@@ -123,6 +126,7 @@ export default function CommentsSection({ lessonId }) {
     if (lessonId) load();
     // Reset the in-progress draft state when switching lessons.
     setDraft("");
+    setRatingValue(null);
     setPostNotice(null);
     setReplyTo(null);
     setReplyDraft("");
@@ -138,10 +142,22 @@ export default function CommentsSection({ lessonId }) {
     setPosting(true);
     setPostNotice(null);
     try {
-      const comment = await postComment(lessonId, text, accessToken);
+      const { comment, rating } = await postComment(
+        lessonId,
+        text,
+        accessToken,
+        undefined,
+        ratingValue,
+      );
       // Append the new comment to the (oldest-first) list and clear the box.
       setComments((prev) => [...prev, comment]);
       setDraft("");
+      // If a rating rode along, hand the lesson page its new average and reset
+      // the stars so a follow-up comment doesn't re-submit the same rating.
+      if (rating) {
+        onRated?.(rating);
+        setRatingValue(null);
+      }
     } catch (err) {
       // A profanity block is an expected, fixable outcome — show it as a warning
       // (and keep the draft so the user can edit it). Everything else is an error.
@@ -174,7 +190,12 @@ export default function CommentsSection({ lessonId }) {
     setReplyPosting(true);
     setReplyNotice(null);
     try {
-      const reply = await postComment(lessonId, text, accessToken, replyTo);
+      const { comment: reply } = await postComment(
+        lessonId,
+        text,
+        accessToken,
+        replyTo,
+      );
       // Append; the render derives the thread from parentId, so it lands under
       // the comment it replies to.
       setComments((prev) => [...prev, reply]);
@@ -440,7 +461,27 @@ export default function CommentsSection({ lessonId }) {
                   {postNotice.message}
                 </Alert>
               )}
-              <Stack direction="row" justifyContent="flex-end" sx={{ mt: 1 }}>
+              <Stack
+                direction="row"
+                spacing={2}
+                alignItems="center"
+                justifyContent="space-between"
+                flexWrap="wrap"
+                useFlexGap
+                sx={{ mt: 1 }}
+              >
+                {/* Optional star rating for the lesson, posted with the comment. */}
+                <Stack direction="row" spacing={1} alignItems="center">
+                  <Typography variant="body2" color="text.secondary">
+                    Rate this lesson
+                  </Typography>
+                  <Rating
+                    value={ratingValue}
+                    onChange={(e, value) => setRatingValue(value)}
+                    disabled={posting}
+                    aria-label="lesson rating"
+                  />
+                </Stack>
                 <Button
                   type="submit"
                   variant="contained"

@@ -6,6 +6,7 @@ import { supabaseHeaders, verifySupabaseUser } from '../lib/supabase.js';
 import { authorFromUser, clientIp, displayNameOf, isModeratorRole, verifyUserAndRole } from '../lib/auth.js';
 import { bannedResponse } from '../lib/bans.js';
 import { rowToLesson } from '../lib/lesson.js';
+import { fetchRatingStats } from '../lib/ratings.js';
 import { textResponse, jsonResponse } from '../lib/http.js';
 
 // A user may keep at most this many private drafts (published = false) at once.
@@ -107,6 +108,9 @@ export async function handleLessons(request, env, url, cors) {
 			return textResponse('Lesson not found.', 404, cors);
 		}
 		const row = rows[0];
+		// The lesson's average star rating + how many ratings it has, shown on the
+		// lesson page. A store hiccup degrades to "no ratings" inside the helper.
+		const { average: avgRating, count: ratingCount } = await fetchRatingStats(env, base, id);
 		if (row.shadowbanned) {
 			const { user, role } = await verifyUserAndRole(env, base, request);
 			const isOwner = user && user.id === row.author_id;
@@ -115,9 +119,9 @@ export async function handleLessons(request, env, url, cors) {
 			}
 			// Moderators/admins get the author IP (for the "ban by IP" action); the
 			// author themselves does not.
-			return jsonResponse({ lesson: rowToLesson(row, true, isModeratorRole(role)) }, 200, cors);
+			return jsonResponse({ lesson: { ...rowToLesson(row, true, isModeratorRole(role)), avgRating, ratingCount } }, 200, cors);
 		}
-		return jsonResponse({ lesson: rowToLesson(row, true) }, 200, cors);
+		return jsonResponse({ lesson: { ...rowToLesson(row, true), avgRating, ratingCount } }, 200, cors);
 	}
 
 	// GET /lessons — public listing, newest first. Only published lessons appear;

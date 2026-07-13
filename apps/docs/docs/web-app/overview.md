@@ -37,6 +37,9 @@ PDF printing.
   the user's Drive, converting it to a native Google Doc (see [Save to Google Docs](./save-to-google-docs.md)).
 - **Lesson hub** - browse lessons other users have published, preview any of them,
   and publish your own once signed in (see [Lesson hub & accounts](./lesson-hub-and-accounts.md)).
+- **Comments & ratings** - discuss a published lesson in a threaded comment box,
+  and leave a 1–5 star rating with your comment; the lesson page shows the average
+  (see [Lesson hub & accounts](./lesson-hub-and-accounts.md)).
 - **Accounts** - passwordless magic-link sign-in (Supabase Auth) on a dedicated
   login page; required only to publish to the hub (see [Lesson hub & accounts](./lesson-hub-and-accounts.md)).
 - **Profiles & display names** - every user picks a public display name and an
