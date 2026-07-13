@@ -7,7 +7,11 @@ import { pluginReact } from "@rsbuild/plugin-react";
 const { publicVars } = loadEnv({ prefixes: ["VITE_"] });
 
 export default defineConfig({
-  plugins: [pluginReact()],
+  plugins: [
+    pluginReact({
+      reactCompiler: true,
+    }),
+  ],
   source: {
     entry: {
       index: "./src/main.jsx",
