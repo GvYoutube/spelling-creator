@@ -48,6 +48,7 @@ import WifiOffIcon from "@mui/icons-material/WifiOff";
 import NavActions from "../components/NavActions.jsx";
 import CommentsSection from "../components/CommentsSection.jsx";
 import { LessonContentSkeleton } from "../components/Skeletons.jsx";
+import LessonView, { lessonPlainText } from "../components/LessonView.jsx";
 import {
   fetchLesson,
   deleteLesson,
@@ -69,7 +70,6 @@ import {
   buildLessonCourseSchema,
   htmlToDescription,
 } from "../lib/seo.js";
-import { previewHtml, PREVIEW_STYLES } from "../lib/htmlPreview.js";
 import { exportDocx } from "../lib/docxExport.js";
 import { exportPdf } from "../lib/pdfExport.js";
 
@@ -95,7 +95,6 @@ export default function LessonPage() {
   const closeMobileMenu = () => setMobileMenuAnchor(null);
 
   const [lesson, setLesson] = useState(null);
-  const [html, setHtml] = useState("");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
@@ -136,14 +135,14 @@ export default function LessonPage() {
     setLoading(true);
     setError("");
     setLesson(null);
-    setHtml("");
     (async () => {
       try {
         const full = await fetchLesson(id);
-        const rendered = await previewHtml(full.doc);
         if (cancelled) return;
+        // Render happens directly from the doc via <LessonView>; images
+        // lazy-load in the browser, so there's no up-front render step to wait
+        // on here — the page shows as soon as the lesson JSON arrives.
         setLesson(full);
-        setHtml(rendered);
       } catch (err) {
         if (!cancelled) setError(err.message || "Could not open this lesson.");
       } finally {
@@ -308,9 +307,9 @@ export default function LessonPage() {
   };
 
   // Description shared by the social/SEO meta tags and the Course JSON-LD below,
-  // drawn from the lesson's own rendered text with a sensible fallback.
+  // drawn from the lesson's own text with a sensible fallback.
   const description =
-    htmlToDescription(html) ||
+    (lesson && htmlToDescription(lessonPlainText(lesson.doc))) ||
     (lesson
       ? `A spelling lesson${lesson.author ? ` by ${lesson.author}` : ""}.`
       : undefined);
@@ -682,13 +681,7 @@ export default function LessonPage() {
             </Stack>
 
             <Paper variant="outlined" sx={{ overflow: "hidden" }}>
-              <Box
-                className="s2c-preview-root"
-                sx={{ bgcolor: "#fff", color: "#1a1a1a", p: { xs: 2, sm: 3 } }}
-                dangerouslySetInnerHTML={{
-                  __html: `<style>${PREVIEW_STYLES}</style>${html}`,
-                }}
-              />
+              <LessonView doc={lesson.doc} />
             </Paper>
 
             <Box sx={{ mt: 3 }}>

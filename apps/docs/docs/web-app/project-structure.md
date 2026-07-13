@@ -13,7 +13,7 @@ src/
   pages/
     EditorPage.jsx        the lesson builder (toolbar, section list, + button, publish, collaborate)
     HubPage.jsx           public gallery of published lessons + client-side search
-    LessonPage.jsx        a single published lesson: preview, comments, author link
+    LessonPage.jsx        a single published lesson: renders via LessonView, plus comments + author link
     ProfilePage.jsx       a user's public profile: bio + their published lessons
     LoginPage.jsx         magic-link sign-in / account status
     ModerationPage.jsx    moderator/admin queue for reported content
@@ -25,6 +25,7 @@ src/
     BioDialog.jsx         edit your public profile bio
     FirstLessonWizard.jsx dismissable step-by-step welcome guide for newcomers
     CommentsSection.jsx   lesson comments list + post box (shown on the lesson page)
+    LessonView.jsx        read-only renderer for the lesson page (blocks straight to React, lazy images)
     SectionCard.jsx       a named section with its content blocks + add buttons
     ContentBlock.jsx      a single text, spelling, image, or question block
     AiTextDialog.jsx       Turnstile-verified "suggest text with AI" dialog
@@ -38,7 +39,7 @@ src/
     docxExport.js         build + download the .docx (text, images, questions)
     docxImport.js         best-effort import of a .docx back into the lesson model
     pdfExport.js          docx -> html (mammoth) -> pdf (html2pdf.js)
-    htmlPreview.js        docx -> html (mammoth) for in-app preview / hub viewer
+    htmlPreview.js        docx -> html (mammoth) for the editor's in-app preview dialog + the PDF path (the hub lesson page renders directly via LessonView.jsx)
     questions.js          question type definitions, colours, block factories
     spelling.js           helpers for the explicit "spelling words" block
     ageRanges.js          the age ranges a lesson can be pitched at
