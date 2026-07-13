@@ -47,8 +47,27 @@ function SectionCard({
   isLast,
   onError,
   capitalizedWords = [],
+  // Block drag-and-drop is owned by the editor page (a block can be dragged from
+  // one section into another, so no single card can hold the in-flight drag).
+  // This card only measures the pointer against its own rows and reports where
+  // the block would land. `dragBlockId` is the block in flight anywhere in the
+  // document; `overId`/`overPos` are non-null only while it hovers *this*
+  // section, and `isDropSection` covers an empty section, which has no row for
+  // the insertion line to sit against.
+  dragBlockId = null,
+  overId = null,
+  overPos = null,
+  isDropSection = false,
+  onBlockDragStart,
+  onBlockDragOver,
+  onBlockDragLeave,
+  onBlockDrop,
+  onBlockDragEnd,
 }) {
   const fileInputRef = useRef(null);
+  // The element wrapping this section's block rows; drop targeting measures the
+  // rows inside it against the pointer.
+  const listRef = useRef(null);
   // Mirror the latest section into a ref so the stable callbacks below can read
   // current blocks without being re-created on every edit (which would defeat
   // the memoized <BlockRow>s). Assigning during render is fine for a mirror ref.
@@ -68,19 +87,14 @@ function SectionCard({
   // deliberately NOT broadcast to collaborators, so each peer's toolbar follows
   // their own cursor, not everyone else's.
   const [activeBlockId, setActiveBlockId] = useState(null);
-  // Drag-to-reorder state (all local, never broadcast). `dragId` is the block
-  // being dragged; `overId`/`overPos` mark where it would drop so we can draw an
-  // insertion line above or below the hovered block.
-  const [dragId, setDragId] = useState(null);
-  const [overId, setOverId] = useState(null);
-  const [overPos, setOverPos] = useState(null); // "before" | "after"
-  // Mirror drag state too, so the stable drag handlers can read the in-flight
-  // drag without being re-created (and without re-rendering every BlockRow).
-  const dragRef = useRef({ dragId: null, overPos: null });
+  // Mirror the id of the block in flight (and this section's id) so the drag
+  // handlers below stay stable — re-creating them on every dragover would hand
+  // every <BlockRow> new props mid-drag.
+  const dragRef = useRef({ dragBlockId: null, sectionId: null });
   // eslint-disable-next-line react-hooks/refs -- intentional mirror ref, read only in stable drag handlers
-  dragRef.current.dragId = dragId;
+  dragRef.current.dragBlockId = dragBlockId;
   // eslint-disable-next-line react-hooks/refs -- intentional mirror ref, read only in stable drag handlers
-  dragRef.current.overPos = overPos;
+  dragRef.current.sectionId = section.id;
 
   // Replace the whole block list. Reads the current section from the ref and
   // routes through the (stable) parent onChange(id, next).
@@ -246,65 +260,68 @@ function SectionCard({
 
   const activateBlock = useCallback((blockId) => setActiveBlockId(blockId), []);
 
-  const clearDrag = useCallback(() => {
-    setDragId(null);
-    setOverId(null);
-    setOverPos(null);
-  }, []);
-
   // Drag starts from a block's grab handle (not the whole block, so text
   // selection and field editing never trigger a drag). The drag image is the
   // whole block element, and we anchor it to the cursor's real position within
   // the block so the ghost stays exactly under the pointer where it was grabbed
   // (rather than pinned to a fixed top-left offset, which left the cursor
   // floating in a corner of these wide blocks).
-  const handleDragStart = useCallback((e, blockId) => {
-    const wrapper = e.currentTarget.closest("[data-block-id]");
-    if (wrapper) {
-      const rect = wrapper.getBoundingClientRect();
-      e.dataTransfer.setDragImage(
-        wrapper,
-        e.clientX - rect.left,
-        e.clientY - rect.top,
-      );
-    }
-    e.dataTransfer.effectAllowed = "move";
-    e.dataTransfer.setData("text/plain", blockId); // Firefox needs some payload
-    setDragId(blockId);
-  }, []);
-
-  // Hovering a block while dragging: mark whether we'd drop above or below it,
-  // based on which half of the block the cursor is over.
-  const handleDragOver = useCallback((e, blockId) => {
-    const { dragId } = dragRef.current;
-    if (!dragId || blockId === dragId) return;
-    e.preventDefault();
-    e.dataTransfer.dropEffect = "move";
-    const rect = e.currentTarget.getBoundingClientRect();
-    const pos = e.clientY < rect.top + rect.height / 2 ? "before" : "after";
-    setOverId(blockId);
-    setOverPos(pos);
-  }, []);
-
-  // Drop onto a block: move the dragged block to just before/after it.
-  const handleDrop = useCallback(
+  const handleDragStart = useCallback(
     (e, blockId) => {
-      const { dragId, overPos } = dragRef.current;
-      if (!dragId || blockId === dragId) return clearDrag();
-      e.preventDefault();
-      const blocks = [...sectionRef.current.blocks];
-      const from = blocks.findIndex((b) => b.id === dragId);
-      if (from === -1) return clearDrag();
-      const [moved] = blocks.splice(from, 1);
-      // Recompute the target index on the array with the dragged block removed.
-      let to = blocks.findIndex((b) => b.id === blockId);
-      if (to === -1) to = blocks.length;
-      else if (overPos === "after") to += 1;
-      blocks.splice(to, 0, moved);
-      updateBlocks(blocks);
-      clearDrag();
+      const wrapper = e.currentTarget.closest("[data-block-id]");
+      if (wrapper) {
+        const rect = wrapper.getBoundingClientRect();
+        e.dataTransfer.setDragImage(
+          wrapper,
+          e.clientX - rect.left,
+          e.clientY - rect.top,
+        );
+      }
+      e.dataTransfer.effectAllowed = "move";
+      e.dataTransfer.setData("text/plain", blockId); // Firefox needs some payload
+      onBlockDragStart(dragRef.current.sectionId, blockId);
     },
-    [updateBlocks, clearDrag],
+    [onBlockDragStart],
+  );
+
+  // Dragging anywhere over this section — whether the block came from here or
+  // from another section: work out where it would land from the pointer's height
+  // alone, rather than only reacting when it happens to be over another block.
+  // The gaps between blocks, the section header, and the card's padding all
+  // resolve to a real insertion point, so a drop never silently fails just
+  // because the pointer landed a few pixels off a row. A section with no blocks
+  // to measure against (an empty one) reports a null target: land at the end.
+  const handleDragOver = useCallback(
+    (e) => {
+      const { dragBlockId, sectionId } = dragRef.current;
+      if (!dragBlockId) return;
+      e.preventDefault();
+      e.dataTransfer.dropEffect = "move";
+      const target = dropTargetAt(listRef.current, e.clientY, dragBlockId);
+      onBlockDragOver(sectionId, target?.id ?? null, target?.pos ?? null);
+    },
+    [onBlockDragOver],
+  );
+
+  // Drop: the editor page holds the in-flight drag and applies the move, since
+  // it may span two sections.
+  const handleDrop = useCallback(
+    (e) => {
+      if (!dragRef.current.dragBlockId) return;
+      e.preventDefault();
+      onBlockDrop();
+    },
+    [onBlockDrop],
+  );
+
+  // The pointer left this card entirely (not just moved between its children):
+  // hide the insertion line, since releasing out here shouldn't move anything.
+  const handleDragLeave = useCallback(
+    (e) => {
+      if (e.currentTarget.contains(e.relatedTarget)) return;
+      onBlockDragLeave(dragRef.current.sectionId);
+    },
+    [onBlockDragLeave],
   );
 
   // Where the "add block" toolbar sits: directly under the block being edited,
@@ -375,7 +392,11 @@ function SectionCard({
 
   return (
     <Card elevation={2}>
-      <CardContent>
+      <CardContent
+        onDragOver={handleDragOver}
+        onDrop={handleDrop}
+        onDragLeave={handleDragLeave}
+      >
         <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 2 }}>
           <Box
             sx={{
@@ -441,11 +462,35 @@ function SectionCard({
         <Divider sx={{ mb: 2 }} />
 
         {section.blocks.length === 0 ? (
-          <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-            No content yet. Add a text block or an image below.
-          </Typography>
+          // An empty section has no row for the insertion line to sit against,
+          // so while a block is in flight the placeholder text becomes the drop
+          // zone itself — otherwise there'd be nothing telling the user that an
+          // empty section will happily take the block.
+          <Box
+            sx={{
+              mb: 2,
+              ...(dragBlockId && {
+                p: 2,
+                borderRadius: 1,
+                border: "2px dashed",
+                borderColor: isDropSection ? "primary.main" : "divider",
+                bgcolor: isDropSection ? "action.hover" : "transparent",
+                transition:
+                  "border-color 0.12s ease, background-color 0.12s ease",
+              }),
+            }}
+          >
+            <Typography
+              variant="body2"
+              color={isDropSection ? "primary.main" : "text.secondary"}
+            >
+              {dragBlockId
+                ? "Drop the block here to move it into this section."
+                : "No content yet. Add a text block or an image below."}
+            </Typography>
+          </Box>
         ) : (
-          <Stack spacing={1.5} sx={{ mb: 2 }}>
+          <Stack ref={listRef} spacing={1.5} sx={{ mb: 2 }}>
             {section.blocks.map((block, i) => [
               <BlockRow
                 key={block.id}
@@ -455,7 +500,7 @@ function SectionCard({
                 // Drag state is passed as plain booleans so a block that isn't
                 // involved in the current drag keeps identical props (and stays
                 // memoized) while another block is being dragged over.
-                isDragging={dragId === block.id}
+                isDragging={dragBlockId === block.id}
                 dropBefore={overId === block.id && overPos === "before"}
                 dropAfter={overId === block.id && overPos === "after"}
                 capitalizedWords={capitalizedWords}
@@ -466,9 +511,7 @@ function SectionCard({
                 onReplaceImageFile={replaceImageFile}
                 onReplaceImageSearch={startReplaceSearch}
                 onDragStart={handleDragStart}
-                onDragOver={handleDragOver}
-                onDrop={handleDrop}
-                onDragEnd={clearDrag}
+                onDragEnd={onBlockDragEnd}
               />,
               // The toolbar sits directly beneath the block being edited.
               i === activeIndex ? (
@@ -565,6 +608,30 @@ function SectionCard({
   );
 }
 
+// Which insertion point a pointer at `clientY` is asking for: the first block
+// whose bottom edge is still below the pointer, dropping before or after it
+// depending on the half the pointer is in. The block being dragged is skipped —
+// it's a hole in the list, not somewhere to land. A pointer above the first
+// block resolves to "before the first"; one past the last block, to "after the
+// last". Returns null for a section whose only block is the one in flight.
+function dropTargetAt(list, clientY, dragId) {
+  if (!list) return null;
+  const rows = Array.from(list.querySelectorAll("[data-block-id]")).filter(
+    (el) => el.dataset.blockId !== dragId,
+  );
+  if (!rows.length) return null;
+  for (const el of rows) {
+    const rect = el.getBoundingClientRect();
+    if (clientY < rect.bottom) {
+      return {
+        id: el.dataset.blockId,
+        pos: clientY < rect.top + rect.height / 2 ? "before" : "after",
+      };
+    }
+  }
+  return { id: rows[rows.length - 1].dataset.blockId, pos: "after" };
+}
+
 // Memoized so typing in one block doesn't re-render every other block in the
 // section (each block is a deep MUI tree, the dominant cost on large lessons).
 // All callback props it receives are stable and id-based, and drag state arrives
@@ -587,19 +654,16 @@ const BlockRow = memo(function BlockRow({
   onReplaceImageFile,
   onReplaceImageSearch,
   onDragStart,
-  onDragOver,
-  onDrop,
   onDragEnd,
 }) {
   return (
     // Focusing any field inside a block makes it the active block, so the
     // toolbar follows the user's edit point. onFocus bubbles from the inner
-    // inputs. The same wrapper is the drop target while a block is being dragged.
+    // inputs. `data-block-id` is what the section's drop targeting measures
+    // against the pointer while a block is in flight.
     <Box
       data-block-id={block.id}
       onFocus={() => onActivate(block.id)}
-      onDragOver={(e) => onDragOver(e, block.id)}
-      onDrop={(e) => onDrop(e, block.id)}
       sx={{
         position: "relative",
         borderRadius: 1,

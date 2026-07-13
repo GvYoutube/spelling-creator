@@ -27,7 +27,7 @@ src/
     CommentsSection.jsx   lesson comments list + post box, incl. the 1–5 star rating input
     LessonView.jsx        read-only renderer for the lesson page (blocks straight to React, lazy images)
     LessonSummary.jsx     on-device AI summary card on the lesson page (hidden unless the browser supports it)
-    SectionCard.jsx       a named section with its content blocks + add buttons
+    SectionCard.jsx       a named section with its content blocks + add buttons; measures the pointer against its own rows during a block drag, but the drag itself is owned by EditorPage (blocks can move between sections)
     ContentBlock.jsx      a single text, spelling, image, or question block
     AiTextDialog.jsx       Turnstile-verified "suggest text with AI" dialog
     AiQuestionDialog.jsx   Turnstile-verified "suggest a question with AI" dialog
@@ -58,6 +58,7 @@ src/
     iceServers.js         STUN list + optional TURN credentials for WebRTC
     presence.js           per-collaborator colour + selection presence helpers
     useSelectionBroadcast.js broadcasts the local editor selection to peers
+    useDragAutoScroll.js  scrolls the page while a block drag hovers near a window edge (the browser only auto-scrolls a native drag while the pointer keeps moving)
     imageStore.js         IndexedDB storage for the working lesson + its images
     imageRef.js           binary image-ref model (a block references its bytes)
     imagesClient.js       uploads a lesson's images to the Worker (R2) on publish

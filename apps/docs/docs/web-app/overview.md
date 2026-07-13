@@ -33,7 +33,13 @@ PDF printing.
   AI, running entirely on the reader's own device (no server, no cost). Only
   appears on browsers that can actually run it (see
   [Lesson summaries](./lesson-summaries.md)).
-- **Reorder / delete** sections and blocks with inline controls.
+- **Reorder / delete** sections and blocks with inline controls. Blocks can also
+  be dragged by their grab handle, both within a section and **from one section
+  into another** (an empty section shows a drop zone that takes the block). An
+  insertion line shows where the block will land — anywhere in a section,
+  including the gaps between blocks — and holding the pointer near the top or
+  bottom of the window scrolls the page on its own, so a block can be carried to
+  a section well past the visible part of a long lesson.
 - **Export DOCX** - downloads a formatted `.docx`.
 - **Print PDF** - builds the docx, converts it to HTML with mammoth, then renders
   a PDF with html2pdf.js so the printout mirrors the Word document.

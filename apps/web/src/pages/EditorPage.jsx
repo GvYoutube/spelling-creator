@@ -96,6 +96,7 @@ import {
 import { useAuth } from "../lib/auth.jsx";
 import { useCollaboration } from "../lib/collab.js";
 import { useSelectionBroadcast } from "../lib/useSelectionBroadcast.js";
+import { useDragAutoScroll } from "../lib/useDragAutoScroll.js";
 
 // The starter document a fresh editor opens with. Any persisted draft is loaded
 // asynchronously from IndexedDB on mount (see the hydration effect) and replaces
@@ -110,6 +111,49 @@ function createInitialDoc() {
 // warning.
 function docHasContent(d) {
   return Boolean(d && Array.isArray(d.sections) && d.sections.length > 0);
+}
+
+// Apply a finished block drag to the document: pull the dragged block out of the
+// section it came from and slot it into the section it was dropped on, before or
+// after the block the insertion line was showing. The two sections are often the
+// same (a plain reorder), but need not be — a block can be dragged into any
+// section, including an empty one, where `overId` is null and it simply lands at
+// the end. Returns the document unchanged if the drag was a no-op, so a drag that
+// ends where it started doesn't dirty the draft (or churn collaborators).
+function applyBlockDrag(
+  doc,
+  { blockId, fromSectionId, overSectionId, overId, overPos },
+) {
+  const from = doc.sections.find((s) => s.id === fromSectionId);
+  const block = from?.blocks.find((b) => b.id === blockId);
+  if (!block) return doc;
+
+  const sections = doc.sections.map((s) =>
+    s.id === fromSectionId
+      ? { ...s, blocks: s.blocks.filter((b) => b.id !== blockId) }
+      : s,
+  );
+  const targetIndex = sections.findIndex((s) => s.id === overSectionId);
+  if (targetIndex === -1) return doc;
+
+  // The insertion index is measured against the target's blocks with the dragged
+  // block already removed, so a within-section move can't be off by one.
+  const target = sections[targetIndex];
+  const blocks = [...target.blocks];
+  let at = blocks.length;
+  if (overId) {
+    const i = blocks.findIndex((b) => b.id === overId);
+    if (i !== -1) at = overPos === "after" ? i + 1 : i;
+  }
+  blocks.splice(at, 0, block);
+
+  const unchanged =
+    fromSectionId === overSectionId &&
+    blocks.every((b, i) => b.id === from.blocks[i].id);
+  if (unchanged) return doc;
+
+  sections[targetIndex] = { ...target, blocks };
+  return { ...doc, sections };
 }
 
 const inheritBorder = { borderColor: "rgba(255,255,255,0.6)" };
@@ -470,6 +514,66 @@ export default function EditorPage() {
     (message) => setToast({ severity: "error", message }),
     [],
   );
+
+  // Block drag-and-drop. The in-flight drag lives here, above the sections,
+  // rather than inside a single <SectionCard> — that's what lets a block be
+  // dragged out of one section and into another. A card reports which of its
+  // blocks the insertion line should sit against; the drop then rewrites the doc.
+  // Purely local UI state (never broadcast): only the resulting move is shared.
+  const [drag, setDrag] = useState(null);
+  // { blockId, fromSectionId, overSectionId, overId, overPos } | null
+  const dragRef = useRef(null);
+  // eslint-disable-next-line react-hooks/refs -- intentional mirror ref, read only in the stable drop handler
+  dragRef.current = drag;
+
+  // Hovering near the top or bottom of the window while dragging scrolls the
+  // page, so a block can be carried to a section far off screen without the
+  // mouse-jiggling the browser's own drag auto-scroll would need.
+  useDragAutoScroll(drag !== null);
+
+  const startBlockDrag = useCallback((sectionId, blockId) => {
+    setDrag({
+      blockId,
+      fromSectionId: sectionId,
+      overSectionId: null,
+      overId: null,
+      overPos: null,
+    });
+  }, []);
+
+  // Where the block would land right now. Bails out when nothing actually moved,
+  // so a drag that lingers over one spot doesn't re-render on every dragover.
+  const hoverBlockDrag = useCallback((sectionId, overId, overPos) => {
+    setDrag((d) => {
+      if (!d) return d;
+      if (
+        d.overSectionId === sectionId &&
+        d.overId === overId &&
+        d.overPos === overPos
+      )
+        return d;
+      return { ...d, overSectionId: sectionId, overId, overPos };
+    });
+  }, []);
+
+  // The pointer left this section: drop the insertion line, since releasing
+  // outside any section shouldn't move the block.
+  const leaveBlockDrag = useCallback((sectionId) => {
+    setDrag((d) =>
+      d && d.overSectionId === sectionId
+        ? { ...d, overSectionId: null, overId: null, overPos: null }
+        : d,
+    );
+  }, []);
+
+  const dropBlockDrag = useCallback(() => {
+    const d = dragRef.current;
+    setDrag(null);
+    if (!d?.overSectionId) return;
+    setDoc((doc) => applyBlockDrag(doc, d));
+  }, []);
+
+  const endBlockDrag = useCallback(() => setDrag(null), []);
 
   const openAddDialog = () => {
     setNewSectionName("");
@@ -1299,6 +1403,21 @@ export default function EditorPage() {
                   isLast={i === sectionCount - 1}
                   onError={handleSectionError}
                   capitalizedWords={capitalizedWords}
+                  // Drag state reaches each card as plain values scoped to that
+                  // card, so hovering one section doesn't re-render the others.
+                  dragBlockId={drag?.blockId ?? null}
+                  overId={
+                    drag?.overSectionId === section.id ? drag.overId : null
+                  }
+                  overPos={
+                    drag?.overSectionId === section.id ? drag.overPos : null
+                  }
+                  isDropSection={drag?.overSectionId === section.id}
+                  onBlockDragStart={startBlockDrag}
+                  onBlockDragOver={hoverBlockDrag}
+                  onBlockDragLeave={leaveBlockDrag}
+                  onBlockDrop={dropBlockDrag}
+                  onBlockDragEnd={endBlockDrag}
                 />
               ))}
             </Stack>
