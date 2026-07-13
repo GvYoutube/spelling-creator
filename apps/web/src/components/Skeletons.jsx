@@ -164,6 +164,21 @@ export function FeedListSkeleton({ count = 4 }) {
 }
 
 /**
+ * Placeholder for an on-device AI summary (LessonSummary.jsx), shown between the
+ * click and the model's first streamed chunk. Ragged lines, because a summary is
+ * a short block of prose or bullets and we don't know how long it will be.
+ */
+export function SummarySkeleton() {
+  return (
+    <Box>
+      <Skeleton variant="text" width="92%" />
+      <Skeleton variant="text" width="85%" />
+      <Skeleton variant="text" width="60%" />
+    </Box>
+  );
+}
+
+/**
  * A short stack of single-line placeholders, for the moderation panels' simple row
  * lists (bans, shadowbanned lessons, pending requests, moderators).
  */

@@ -71,6 +71,10 @@ export default defineConfig({
               link: "/web-app/ai-question-suggestions",
             },
             { text: "AI lesson ideas", link: "/web-app/ai-lesson-ideas" },
+            {
+              text: "Lesson summaries (on-device AI)",
+              link: "/web-app/lesson-summaries",
+            },
             { text: "Search images", link: "/web-app/search-images" },
             {
               text: "Save to Google Docs",

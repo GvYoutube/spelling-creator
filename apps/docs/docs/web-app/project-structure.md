@@ -26,6 +26,7 @@ src/
     FirstLessonWizard.jsx dismissable step-by-step welcome guide for newcomers
     CommentsSection.jsx   lesson comments list + post box, incl. the 1–5 star rating input
     LessonView.jsx        read-only renderer for the lesson page (blocks straight to React, lazy images)
+    LessonSummary.jsx     on-device AI summary card on the lesson page (hidden unless the browser supports it)
     SectionCard.jsx       a named section with its content blocks + add buttons
     ContentBlock.jsx      a single text, spelling, image, or question block
     AiTextDialog.jsx       Turnstile-verified "suggest text with AI" dialog
@@ -44,6 +45,7 @@ src/
     spelling.js           helpers for the explicit "spelling words" block
     ageRanges.js          the age ranges a lesson can be pitched at
     aiSuggest.js          calls the Worker for AI text / questions / lesson ideas
+    summarizer.js         browser Summarizer API wrapper (on-device lesson summaries; fails closed)
     pixabay.js            calls the Worker to search + fetch Pixabay images
     lessons.js            calls the Worker to list / fetch / publish hub lessons
     lessonSearch.js       fully client-side hub search (Fuse.js)

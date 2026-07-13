@@ -48,6 +48,7 @@ import BlockIcon from "@mui/icons-material/Block";
 import WifiOffIcon from "@mui/icons-material/WifiOff";
 import NavActions from "../components/NavActions.jsx";
 import CommentsSection from "../components/CommentsSection.jsx";
+import LessonSummary from "../components/LessonSummary.jsx";
 import { LessonContentSkeleton } from "../components/Skeletons.jsx";
 import LessonView, { lessonPlainText } from "../components/LessonView.jsx";
 import {
@@ -711,6 +712,11 @@ export default function LessonPage() {
                 </Stack>
               )}
             </Stack>
+
+            {/* On-device AI summary, above the lesson itself so a reader can
+                decide whether to read on. Renders nothing unless the browser
+                supports the Summarizer API. */}
+            <LessonSummary doc={lesson.doc} />
 
             <Paper variant="outlined" sx={{ overflow: "hidden" }}>
               <LessonView doc={lesson.doc} />

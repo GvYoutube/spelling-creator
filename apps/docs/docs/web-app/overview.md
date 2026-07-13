@@ -29,6 +29,10 @@ PDF printing.
   a section's title and existing text (see [AI question suggestions](./ai-question-suggestions.md)).
 - **AI lesson ideas** - get a batch of lesson topic suggestions for an age range
   to start from a blank document (see [AI lesson ideas](./ai-lesson-ideas.md)).
+- **Lesson summaries** - summarise a published lesson with the browser's built-in
+  AI, running entirely on the reader's own device (no server, no cost). Only
+  appears on browsers that can actually run it (see
+  [Lesson summaries](./lesson-summaries.md)).
 - **Reorder / delete** sections and blocks with inline controls.
 - **Export DOCX** - downloads a formatted `.docx`.
 - **Print PDF** - builds the docx, converts it to HTML with mammoth, then renders
