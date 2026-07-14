@@ -2,6 +2,7 @@
 // row→summary mapper and the full (author-agnostic) delete used by admins.
 
 import { supabaseHeaders } from './supabase.js';
+import { deleteLessonGit } from './lessonGit.js';
 
 /**
  * Map a Supabase `lessons` row to the camelCase summary the frontend expects.
@@ -24,6 +25,10 @@ export function rowToLesson(row, withDoc, includeMod) {
 		// Whether a moderator has hidden the lesson from the public hub. Defaults to
 		// false so rows predating the column read as visible.
 		shadowbanned: row.shadowbanned ?? false,
+		// The lesson this one was forked from, or null. A fork keeps this pointer home
+		// so the editor can offer to pull the original's later changes in, merging the
+		// two histories against the commit they diverged from (see web/src/lib/git/).
+		forkedFrom: row.forked_from ?? null,
 		createdAt: row.created_at,
 	};
 	if (withDoc) lesson.doc = row.doc;
@@ -60,5 +65,9 @@ export async function fullyDeleteLesson(env, base, lessonId) {
 	}
 	if (!res.ok) return false;
 	const rows = await res.json().catch(() => []);
-	return Array.isArray(rows) && rows.length > 0;
+	const deleted = Array.isArray(rows) && rows.length > 0;
+	// Drop the lesson's stored version history too, so its packfile doesn't outlive
+	// it in the bucket. Best-effort — the row is already gone either way.
+	if (deleted) await deleteLessonGit(env, lessonId);
+	return deleted;
 }

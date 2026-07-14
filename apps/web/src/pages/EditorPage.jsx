@@ -42,6 +42,8 @@ import CloudUploadIcon from "@mui/icons-material/CloudUpload";
 import CloudIcon from "@mui/icons-material/Cloud";
 import CloudQueueIcon from "@mui/icons-material/CloudQueue";
 import CallSplitIcon from "@mui/icons-material/CallSplit";
+import CallMergeIcon from "@mui/icons-material/CallMerge";
+import HistoryIcon from "@mui/icons-material/History";
 import SpellcheckIcon from "@mui/icons-material/Spellcheck";
 import GroupsIcon from "@mui/icons-material/Groups";
 import IosShareIcon from "@mui/icons-material/IosShare";
@@ -62,9 +64,18 @@ import CollabCursors from "../components/CollabCursors.jsx";
 import CollabChat from "../components/CollabChat.jsx";
 import FirstLessonWizard from "../components/FirstLessonWizard.jsx";
 import AiLessonIdeaDialog from "../components/AiLessonIdeaDialog.jsx";
+import HistoryDialog, { timeAgo } from "../components/HistoryDialog.jsx";
+import MergeDialog from "../components/MergeDialog.jsx";
 import { AGE_RANGES } from "../lib/ageRanges.js";
 import { newId } from "../lib/id.js";
 import { extractCapitalizedWords } from "../lib/spelling.js";
+import { useLessonGit } from "../lib/git/useLessonGit.js";
+// The git engine (isomorphic-git + LightningFS) is loaded on demand rather than
+// imported directly, so it stays out of the bundle every homepage and hub visitor
+// downloads. loadGitEngine() memoises the import; by the time any of these flows
+// runs, useLessonGit has already fetched the chunk.
+import { loadGitEngine } from "../lib/git/load.js";
+import { gitRemoteEnabled } from "../lib/git/remote.js";
 import {
   loadDocument,
   saveDocument,
@@ -72,6 +83,8 @@ import {
   saveEditingId,
   loadEditingPublished,
   saveEditingPublished,
+  loadForkedFrom,
+  saveForkedFrom,
   loadWizardSeen,
   saveWizardSeen,
   migrateLocalStorage,
@@ -200,6 +213,19 @@ export default function EditorPage() {
   const [pendingEdit, setPendingEdit] = useState(null); // { id, title, doc, published } | null
   const [editLoading, setEditLoading] = useState(false);
 
+  // Version control. The lesson is kept in a real git repository in the browser,
+  // one file per content block (see lib/git/), committed automatically whenever
+  // the user pauses. `forkedFrom` is the lesson this one was forked from, if any:
+  // it's what lets us later pull the original's changes in, merging the two
+  // histories against the commit they diverged from. Persisted with the draft.
+  const [forkedFrom, setForkedFrom] = useState(null);
+  const [forkedFromTitle, setForkedFromTitle] = useState("");
+  const [historyOpen, setHistoryOpen] = useState(false);
+  // A merge the user is being asked to settle: the result of prepareUpstreamMerge,
+  // held until they've chosen how to resolve any conflicts (see MergeDialog).
+  const [merge, setMerge] = useState(null);
+  const [merging, setMerging] = useState(false);
+
   const { enabled: authEnabled, accessToken, user } = useAuth();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
@@ -238,6 +264,12 @@ export default function EditorPage() {
   });
   const [collabOpen, setCollabOpen] = useState(false);
 
+  // Editor state hydrates from IndexedDB (below), and `hydrated` gates this so
+  // version control never commits the empty starter doc over a real draft's
+  // history before that draft has loaded.
+  const [hydrated, setHydrated] = useState(false);
+  const git = useLessonGit({ doc, editingId, identity, enabled: hydrated });
+
   // First-lesson wizard. Auto-shows once for newcomers (tracked by a
   // localStorage flag); dismissing it sets the flag so it won't reappear. The
   // help button reopens it on demand without touching the flag.
@@ -249,21 +281,22 @@ export default function EditorPage() {
   // before it loads, and defers the hub edit/fork request until we know whether
   // there's in-progress work to protect. migrateLocalStorage() first moves any
   // pre-IndexedDB draft across (a one-time, idempotent no-op afterwards).
-  const [hydrated, setHydrated] = useState(false);
   useEffect(() => {
     let cancelled = false;
     (async () => {
       await migrateLocalStorage();
-      const [savedDoc, savedEditingId, savedPublished, seen] =
+      const [savedDoc, savedEditingId, savedPublished, savedFork, seen] =
         await Promise.all([
           loadDocument(),
           loadEditingId(),
           loadEditingPublished(),
+          loadForkedFrom(),
           loadWizardSeen(),
         ]);
       if (cancelled) return;
       if (savedDoc) setDoc(savedDoc);
       if (savedEditingId) setEditingId(savedEditingId);
+      if (savedFork) setForkedFrom(savedFork);
       setEditingPublished(savedPublished);
       if (!seen) setWizardOpen(true);
       setHydrated(true);
@@ -272,6 +305,26 @@ export default function EditorPage() {
       cancelled = true;
     };
   }, []);
+
+  // The name of the lesson this one was forked from, for the "sync" button and
+  // the merge dialog. Fetched lazily; a failure just leaves the generic wording.
+  useEffect(() => {
+    if (!forkedFrom) {
+      setForkedFromTitle("");
+      return;
+    }
+    let cancelled = false;
+    fetchLesson(forkedFrom)
+      .then((lesson) => {
+        if (!cancelled) setForkedFromTitle(lesson.title || "");
+      })
+      .catch(() => {
+        /* the original may have been deleted — the sync will report it */
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [forkedFrom]);
 
   const closeWizard = () => {
     setWizardOpen(false);
@@ -345,18 +398,37 @@ export default function EditorPage() {
     if (hydrated) saveEditingPublished(editingId ? editingPublished : null);
   }, [editingId, editingPublished, hydrated]);
 
+  // Persist the lesson this one was forked from, so the link home survives a
+  // reload and the fork can still be synced with its original days later.
+  useEffect(() => {
+    if (hydrated) saveForkedFrom(forkedFrom);
+  }, [forkedFrom, hydrated]);
+
   // Adopt a fetched lesson into the editor: replace the working doc (this is the
   // step that overwrites the auto-saved draft). For an edit, enter edit mode so
   // "Publish" becomes "Update" on the original row. For a fork, load it as a
   // fresh, unattached draft (editingId stays null) titled "… (copy)", so
   // publishing creates a separate lesson and the original is left untouched.
-  const applyEdit = ({ id, doc: nextDoc, mode, source, published }) => {
+  const applyEdit = async ({
+    id,
+    doc: nextDoc,
+    mode,
+    source,
+    published,
+    forkedFrom: incomingFork,
+  }) => {
     if (mode === "import") {
       // An imported doc loads as a fresh, unattached lesson (like a fork, but
       // keeping the document's own title): saving it later creates a new cloud
       // lesson rather than overwriting anything.
+      //
+      // Its history starts here too. An imported lesson has no relationship to
+      // whatever was in the editor before, so the draft repo is thrown away
+      // rather than having the import committed on top of an unrelated timeline.
+      await git.discard();
       setDoc(nextDoc);
       setEditingId(null);
+      setForkedFrom(null);
       setEditingPublished(true);
       setPendingEdit(null);
       setToast({
@@ -369,22 +441,42 @@ export default function EditorPage() {
       return;
     }
     if (mode === "fork") {
+      // Forking *clones the lesson's repository*: the copy keeps the original's
+      // full history and, because git addresses commits by content, shares its
+      // ancestry — which is what lets the fork be merged with the original later,
+      // against the exact commit the two diverged from.
+      //
+      // A lesson published before this feature has no repo to clone. The fork
+      // still works and still gets history from here on; it just has no common
+      // ancestor with the original, so a later sync compares the two directly.
+      let cloned = false;
+      try {
+        const engine = await loadGitEngine();
+        cloned = Boolean(await engine.forkLessonRepo(id));
+      } catch {
+        /* no history to clone — fall through to a fresh one */
+      }
+
       setDoc({
         ...nextDoc,
         title: `${nextDoc.title || "Untitled Lesson"} (copy)`,
       });
       setEditingId(null);
+      setForkedFrom(id);
       setEditingPublished(true);
       setPendingEdit(null);
+      git.reload();
       setToast({
         severity: "info",
-        message:
-          "Forked into a new lesson — edit freely, then save it to the cloud as your own copy.",
+        message: cloned
+          ? "Forked into a new lesson — its full history came with it. Edit freely, then save it as your own copy."
+          : "Forked into a new lesson — edit freely, then save it to the cloud as your own copy.",
       });
       return;
     }
     setDoc(nextDoc);
     setEditingId(id);
+    setForkedFrom(incomingFork || null);
     setEditingPublished(published);
     setPendingEdit(null);
     setToast({
@@ -394,6 +486,15 @@ export default function EditorPage() {
         : "Loaded your draft — edit and save to the cloud, or publish it to the hub.",
     });
   };
+
+  // applyEdit closes over most of the editor's state, so its identity changes
+  // every render. Mirror it in a ref so the mount-only effect below can call the
+  // current one without listing it as a dependency (which would re-run the
+  // one-shot load on every keystroke).
+  const applyEditRef = useRef(applyEdit);
+  useEffect(() => {
+    applyEditRef.current = applyEdit;
+  });
 
   // The hub asks us to edit one of the user's lessons — and the lesson page asks
   // us to fork any lesson — by stashing its id in sessionStorage (see
@@ -437,6 +538,9 @@ export default function EditorPage() {
           // Drafts (published === false) load with their draft status preserved so
           // a re-save keeps them private until the author chooses to publish.
           published: lesson.published !== false,
+          // Re-opening a lesson that is itself a fork keeps its link home, so the
+          // "sync with the original" action stays available across sessions.
+          forkedFrom: lesson.forkedFrom || null,
         };
         // Edit can adopt straight away when re-opening the same lesson; either
         // mode adopts when there's no in-progress work to lose. Otherwise warn.
@@ -444,7 +548,7 @@ export default function EditorPage() {
           (mode === "edit" && editingIdRef.current === lesson.id) ||
           !docHasContent(docRef.current)
         ) {
-          applyEdit(incoming);
+          applyEditRef.current(incoming);
         } else {
           setPendingEdit(incoming);
         }
@@ -709,6 +813,8 @@ export default function EditorPage() {
       const converted = await convertDocImages(doc);
       if (converted !== doc) setDoc(converted);
       await ensureImagesUploaded(converted, accessToken);
+
+      let lessonId = editingId;
       if (editingId) {
         await updateLesson(editingId, converted, accessToken, {
           published: publish,
@@ -716,16 +822,49 @@ export default function EditorPage() {
       } else {
         const lesson = await publishLesson(converted, accessToken, {
           published: publish,
+          // Record what this lesson was forked from, so it can pull the
+          // original's later changes in (see handleSyncUpstream).
+          forkedFrom,
         });
-        if (lesson?.id) setEditingId(lesson.id);
+        if (lesson?.id) {
+          lessonId = lesson.id;
+          // Move the draft's repository under the new lesson's id *before*
+          // switching to it, so the history built up while the lesson was an
+          // unsaved draft comes with it rather than being stranded.
+          await git.adoptDraft(lesson.id);
+          setEditingId(lesson.id);
+        }
       }
       setEditingPublished(publish);
+
+      // Publish the lesson's history too, so anyone who forks it clones a real
+      // repository. Deliberately after the lesson itself is saved, and
+      // deliberately non-fatal: the lesson is safely stored either way, and the
+      // next save will carry the history up.
+      let historyWarning = null;
+      if (lessonId && gitRemoteEnabled) {
+        try {
+          await git.commitNow();
+          const engine = await loadGitEngine();
+          await engine.publishHistory(lessonId, accessToken);
+        } catch (err) {
+          console.error(err);
+          historyWarning =
+            err.message || "the version history couldn't be saved";
+        }
+      }
+
       setToast({
-        severity: "success",
-        message: publish
-          ? "Lesson published to the hub."
-          : "Draft saved to the cloud — only you can see it.",
-        route: publish ? { to: "/hub", label: "View hub" } : undefined,
+        severity: historyWarning ? "warning" : "success",
+        message: historyWarning
+          ? `Lesson saved, but ${historyWarning}. Your history is safe on this device and will upload next time you save.`
+          : publish
+            ? "Lesson published to the hub."
+            : "Draft saved to the cloud — only you can see it.",
+        route:
+          publish && !historyWarning
+            ? { to: "/hub", label: "View hub" }
+            : undefined,
       });
     } catch (err) {
       console.error(err);
@@ -742,14 +881,112 @@ export default function EditorPage() {
   // next "Publish" creates a new lesson instead of updating the original. This
   // is the explicit way to leave the editing-published status (the status
   // otherwise persists across reloads).
-  const handleFork = () => {
+  //
+  // Like forking from the hub, this clones the lesson's repository rather than
+  // just copying its text: the new lesson keeps the history and shares ancestry
+  // with the one it left, so it can be merged back with it later.
+  const handleFork = async () => {
+    const from = editingId;
+    if (from) {
+      await git.commitNow();
+      try {
+        const engine = await loadGitEngine();
+        await engine.forkLocalRepo(from);
+      } catch {
+        /* no local history to carry over — the fork starts a fresh one */
+      }
+    }
     setEditingId(null);
+    setForkedFrom(from || null);
     setEditingPublished(true);
+    git.reload();
     setToast({
       severity: "info",
       message:
         "Forked into a new lesson — saving to the cloud will create a separate copy.",
     });
+  };
+
+  // Pull the original lesson's changes into this fork.
+  //
+  // The merge is by block id, against the commit the two histories diverged from:
+  // a block only one side changed is taken from that side, and a block both sides
+  // changed in *different fields* is merged so both edits survive. Only a genuine
+  // clash — the same field of the same block, given two different values — is put
+  // to the user, in MergeDialog.
+  const handleSyncUpstream = async () => {
+    if (!forkedFrom) return;
+    setBusy("merge");
+    try {
+      // Commit what's outstanding first: the merge is computed against the doc on
+      // screen, and its result becomes a commit with two parents, so our side of
+      // it needs to actually be in the history.
+      await git.commitNow();
+
+      const engine = await loadGitEngine();
+      const prepared = await engine.prepareUpstreamMerge({
+        repoId: git.repoId,
+        upstreamLessonId: forkedFrom,
+        doc,
+      });
+
+      if (!prepared) {
+        setToast({
+          severity: "info",
+          message:
+            "The original lesson has no shared history to merge — it may have been published before version history, or deleted.",
+        });
+        return;
+      }
+      if (prepared.upToDate) {
+        setToast({
+          severity: "success",
+          message: "Already up to date with the original.",
+        });
+        return;
+      }
+
+      // Nothing contested and nothing to show? Apply it silently.
+      setMerge(prepared);
+    } catch (err) {
+      console.error(err);
+      setToast({
+        severity: "error",
+        message: `Could not merge: ${err.message || err}`,
+      });
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const confirmMerge = async (choices) => {
+    if (!merge) return;
+    setMerging(true);
+    try {
+      const engine = await loadGitEngine();
+      const merged = await engine.completeMerge({
+        repoId: git.repoId,
+        prepared: merge,
+        choices,
+        author: identity,
+        upstreamTitle: forkedFromTitle,
+        currentDoc: doc,
+      });
+      setDoc(merged);
+      setMerge(null);
+      setToast({
+        severity: "success",
+        message: `Merged the changes from ${forkedFromTitle || "the original"}.`,
+      });
+    } catch (err) {
+      console.error(err);
+      setToast({
+        severity: "error",
+        message: `Could not complete the merge: ${err.message || err}`,
+      });
+    } finally {
+      setMerging(false);
+    }
   };
 
   // Word import. We warn first (the conversion is lossy and can fail), then open
@@ -1335,7 +1572,7 @@ export default function EditorPage() {
             content block
             {blockCount === 1 ? "" : "s"}
           </Typography>
-          {editingId && (
+          {(editingId || git.ready) && (
             <Stack
               direction="row"
               spacing={1}
@@ -1344,37 +1581,88 @@ export default function EditorPage() {
               useFlexGap
               sx={{ mt: 1.5 }}
             >
-              <Tooltip
-                title={
-                  editingPublished
-                    ? "You're editing a lesson you published. Saving to the cloud overwrites it in the hub. This status is saved until you update it or fork into a new lesson."
-                    : "You're editing a draft backed up to the cloud. Only you can see it; saving updates the backup, or you can publish it to the hub. This status is saved until you change it or fork into a new lesson."
-                }
-              >
-                <Chip
-                  size="small"
-                  color={editingPublished ? "primary" : "default"}
-                  variant="outlined"
-                  icon={
-                    editingPublished ? <CloudUploadIcon /> : <CloudQueueIcon />
-                  }
-                  label={
+              {editingId && (
+                <Tooltip
+                  title={
                     editingPublished
-                      ? "Editing a published lesson"
-                      : "Editing a cloud draft"
+                      ? "You're editing a lesson you published. Saving to the cloud overwrites it in the hub. This status is saved until you update it or fork into a new lesson."
+                      : "You're editing a draft backed up to the cloud. Only you can see it; saving updates the backup, or you can publish it to the hub. This status is saved until you change it or fork into a new lesson."
                   }
-                />
-              </Tooltip>
-              <Tooltip title="Detach from this saved lesson and start a new one. Saving to the cloud will then create a separate copy instead of overwriting the original.">
-                <Button
-                  size="small"
-                  variant="text"
-                  startIcon={<CallSplitIcon />}
-                  onClick={handleFork}
                 >
-                  Fork into a new lesson
-                </Button>
-              </Tooltip>
+                  <Chip
+                    size="small"
+                    color={editingPublished ? "primary" : "default"}
+                    variant="outlined"
+                    icon={
+                      editingPublished ? (
+                        <CloudUploadIcon />
+                      ) : (
+                        <CloudQueueIcon />
+                      )
+                    }
+                    label={
+                      editingPublished
+                        ? "Editing a published lesson"
+                        : "Editing a cloud draft"
+                    }
+                  />
+                </Tooltip>
+              )}
+
+              {/* Version history. Every edit is committed to the lesson's own git
+                  repository when you pause; this is the way in to that timeline. */}
+              {git.ready && (
+                <Tooltip title="Every version of this lesson is saved automatically as you work. Click to browse them and go back to any one.">
+                  <Chip
+                    size="small"
+                    variant="outlined"
+                    color={git.pending > 0 ? "default" : "success"}
+                    icon={<HistoryIcon />}
+                    onClick={() => setHistoryOpen(true)}
+                    label={
+                      git.pending > 0
+                        ? `${git.pending} unsaved change${git.pending === 1 ? "" : "s"}`
+                        : git.lastCommit
+                          ? `Version saved ${timeAgo(git.lastCommit.at)}`
+                          : "Version history"
+                    }
+                  />
+                </Tooltip>
+              )}
+
+              {editingId && (
+                <Tooltip title="Detach from this saved lesson and start a new one. The new lesson keeps this one's history, so you can merge them later. Saving to the cloud will create a separate copy instead of overwriting the original.">
+                  <Button
+                    size="small"
+                    variant="text"
+                    startIcon={<CallSplitIcon />}
+                    onClick={handleFork}
+                  >
+                    Fork into a new lesson
+                  </Button>
+                </Tooltip>
+              )}
+
+              {/* This lesson is a fork. Offer to pull in whatever the original
+                  has changed since — merged block by block. */}
+              {forkedFrom && gitRemoteEnabled && (
+                <Tooltip
+                  title={`Bring in the changes made to ${forkedFromTitle || "the original lesson"} since you forked it. Edits to different blocks — or to different parts of the same block — merge automatically; anything genuinely clashing is put to you.`}
+                >
+                  <Button
+                    size="small"
+                    variant="text"
+                    color="secondary"
+                    startIcon={<CallMergeIcon />}
+                    onClick={handleSyncUpstream}
+                    disabled={busy !== null}
+                  >
+                    {busy === "merge"
+                      ? "Checking..."
+                      : `Sync with ${forkedFromTitle || "the original"}`}
+                  </Button>
+                </Tooltip>
+              )}
             </Stack>
           )}
         </Paper>
@@ -1689,6 +1977,29 @@ export default function EditorPage() {
         initialJoinCode={joinCode}
         trusted={doc.trustedCollaborators || []}
         onTrustedChange={setTrustedCollaborators}
+      />
+
+      {/* The lesson's own version history, read out of its git repository. */}
+      <HistoryDialog
+        open={historyOpen}
+        onClose={() => setHistoryOpen(false)}
+        git={git}
+        onRestore={setDoc}
+      />
+
+      {/* Settling a merge with the lesson this one was forked from. Only blocks
+          both sides changed in the same place reach the user; everything else has
+          already merged by the time this opens. */}
+      <MergeDialog
+        // Keyed on the merge's own commits, so each merge opens with a fresh set
+        // of choices rather than inheriting the last one's.
+        key={merge ? `${merge.ours}-${merge.theirs}` : "no-merge"}
+        open={Boolean(merge)}
+        onClose={() => setMerge(null)}
+        prepared={merge}
+        theirName={forkedFromTitle || "the original"}
+        onConfirm={confirmMerge}
+        busy={merging}
       />
 
       {/* Floating avatars showing where each collaborator is editing. */}

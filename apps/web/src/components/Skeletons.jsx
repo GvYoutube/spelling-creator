@@ -178,6 +178,34 @@ export function SummarySkeleton() {
   );
 }
 
+// A single commit placeholder for the version-history timeline: the dot on the
+// rail, then the summary line and a shorter meta line beside it.
+function CommitSkeleton() {
+  return (
+    <Stack direction="row" spacing={1.5} alignItems="flex-start" sx={{ py: 1 }}>
+      <Skeleton variant="circular" width={12} height={12} sx={{ mt: 0.75 }} />
+      <Box sx={{ flexGrow: 1 }}>
+        <Skeleton variant="text" width="70%" />
+        <Skeleton variant="text" width="40%" />
+      </Box>
+    </Stack>
+  );
+}
+
+/**
+ * A stack of placeholder commits, shown while a lesson's history is read out of
+ * its git repository (HistoryDialog). Mirrors the real timeline rows, dot and all.
+ */
+export function HistorySkeleton({ count = 5 }) {
+  return (
+    <Stack spacing={0.5}>
+      {Array.from({ length: count }, (_, i) => (
+        <CommitSkeleton key={i} />
+      ))}
+    </Stack>
+  );
+}
+
 /**
  * A short stack of single-line placeholders, for the moderation panels' simple row
  * lists (bans, shadowbanned lessons, pending requests, moderators).

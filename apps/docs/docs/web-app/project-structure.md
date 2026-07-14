@@ -33,9 +33,11 @@ src/
     AiQuestionDialog.jsx   Turnstile-verified "suggest a question with AI" dialog
     AiLessonIdeaDialog.jsx Turnstile-verified "suggest a whole lesson outline with AI" dialog
     ImageSearchDialog.jsx  Turnstile-verified "search Pixabay images" dialog
-    CollaborateDialog.jsx  live-collaboration control panel (host/join, roster, TURN settings)
+    CollaborateDialog.jsx  live-collaboration control panel (host/join, roster, trusted collaborators)
     CollabCursors.jsx      floating coloured carets showing collaborators' selections
     CollabChat.jsx         floating in-session chat panel
+    HistoryDialog.jsx      the lesson's version timeline: what each commit changed, per block, + restore
+    MergeDialog.jsx        settle a merge with the lesson this one was forked from (mine / theirs / keep both)
   lib/
     docxExport.js         build + download the .docx (text, images, questions)
     docxImport.js         best-effort import of a .docx back into the lesson model
@@ -54,14 +56,25 @@ src/
     users.js              calls the Worker for other users' public profiles
     notifications.js      calls the Worker for the notification feed
     moderation.js         calls the Worker for the moderation queue
-    collab.js             useCollaboration hook (PeerJS peer, doc sync, chat)
-    iceServers.js         STUN list + optional TURN credentials for WebRTC
+    collab.js             useCollaboration hook (one WebSocket to the CollabRoom Durable Object; doc sync, cursors, chat)
     presence.js           per-collaborator colour + selection presence helpers
     useSelectionBroadcast.js broadcasts the local editor selection to peers
     useDragAutoScroll.js  scrolls the page while a block drag hovers near a window edge (the browser only auto-scrolls a native drag while the pointer keeps moving)
     imageStore.js         IndexedDB storage for the working lesson + its images
     imageRef.js           binary image-ref model (a block references its bytes)
     imagesClient.js       uploads a lesson's images to the Worker (R2) on publish
+    git/                  version history — every lesson is a real git repo, one file per content block
+      doc.js              pure doc helpers: canonical JSON, manifest, block map (no git)
+      ops.js              diff two docs into block operations; render commit messages (no git)
+      merge.js            three-way merge by block id, field-level (no git)
+      layout.js           document <-> git tree (lesson.json manifest + blocks/<blockId>.json)
+      repo.js             commit, history, diff two commits, restore (bare repo, pure plumbing)
+      pack.js             pack for upload; clone/fetch from a pack; find the merge base
+      remote.js           calls the Worker's /git/:lessonId endpoints (pack in R2)
+      sync.js             fork (= clone the repo) and merge-with-original flows
+      fs.js               LightningFS — the IndexedDB filesystem the repos live on
+      engine.js, load.js  the git engine, behind one dynamic import (keeps ~185 KB off the main bundle)
+      useLessonGit.js     the editor's controller: setup, periodic commits, history, restore
     useImageSrc.js        resolves an image ref to a displayable src
     image.js              file reading, sizing, data-url helpers
     supabase.js           Supabase client (auth only) + supabaseEnabled flag

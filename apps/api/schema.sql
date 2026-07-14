@@ -20,12 +20,29 @@ create table if not exists public.lessons (
   -- sees it (GET /lessons/mine). Defaults to true so every pre-draft row — all of
   -- which were published — keeps showing in the hub.
   published     boolean not null default true,
+  -- The lesson this one was forked from, or null for an original.
+  --
+  -- Forking clones the source lesson's git repository (its history lives in R2 as
+  -- a packfile — see the Worker's src/routes/git.js), so a fork shares ancestry
+  -- with its original. This column is the pointer home: it tells the editor whose
+  -- history to fetch when the user asks to pull the original's later changes in,
+  -- which is then a true three-way merge against the commit they diverged from.
+  -- `on delete set null`: deleting the original orphans its forks, it doesn't
+  -- delete them.
+  forked_from   uuid references public.lessons (id) on delete set null,
   created_at    timestamptz not null default now()
 );
 
 -- Migration for databases created before the draft feature: add the column with a
 -- default of true so existing rows stay published. Safe to re-run.
 alter table public.lessons add column if not exists published boolean not null default true;
+
+-- Migration for databases created before lesson version history. Existing lessons
+-- were not forked (or were forked before we tracked it), so null is correct.
+alter table public.lessons add column if not exists forked_from uuid references public.lessons (id) on delete set null;
+
+-- Forks are looked up by their origin ("what was forked from this lesson?").
+create index if not exists lessons_forked_from_idx on public.lessons (forked_from);
 
 -- Listing is ordered newest-first; index the sort key.
 create index if not exists lessons_created_at_idx on public.lessons (created_at desc);

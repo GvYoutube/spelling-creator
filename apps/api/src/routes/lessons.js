@@ -7,6 +7,7 @@ import { authorFromUser, clientIp, displayNameOf, isModeratorRole, verifyUserAnd
 import { bannedResponse } from '../lib/bans.js';
 import { rowToLesson } from '../lib/lesson.js';
 import { fetchRatingStats } from '../lib/ratings.js';
+import { LESSON_ID_RE, deleteLessonGit } from '../lib/lessonGit.js';
 import { textResponse, jsonResponse } from '../lib/http.js';
 
 // A user may keep at most this many private drafts (published = false) at once.
@@ -73,7 +74,7 @@ export async function handleLessons(request, env, url, cors) {
 
 		const query = `author_id=eq.${encodeURIComponent(
 			user.id,
-		)}&select=id,author_id,title,author,section_count,published,created_at&order=created_at.desc`;
+		)}&select=id,author_id,title,author,section_count,published,forked_from,created_at&order=created_at.desc`;
 		let res;
 		try {
 			res = await fetch(`${base}/rest/v1/lessons?${query}`, { headers: supabaseHeaders(env) });
@@ -95,7 +96,7 @@ export async function handleLessons(request, env, url, cors) {
 	// they're hidden) and to moderators/admins (who manage them). So we only verify
 	// a JWT when the row turns out to be shadowbanned — public reads stay token-free.
 	if (request.method === 'GET' && id) {
-		const query = `id=eq.${encodeURIComponent(id)}&select=id,author_id,title,author,section_count,published,shadowbanned,author_ip,created_at,doc&limit=1`;
+		const query = `id=eq.${encodeURIComponent(id)}&select=id,author_id,title,author,section_count,published,shadowbanned,author_ip,forked_from,created_at,doc&limit=1`;
 		let res;
 		try {
 			res = await fetch(`${base}/rest/v1/lessons?${query}`, { headers: supabaseHeaders(env) });
@@ -130,7 +131,7 @@ export async function handleLessons(request, env, url, cors) {
 	// excluded; section_count gives the summary its count without shipping every block.
 	if (request.method === 'GET') {
 		const query =
-			'published=eq.true&shadowbanned=eq.false&select=id,author_id,title,author,section_count,published,created_at&order=created_at.desc';
+			'published=eq.true&shadowbanned=eq.false&select=id,author_id,title,author,section_count,published,forked_from,created_at&order=created_at.desc';
 		let res;
 		try {
 			res = await fetch(`${base}/rest/v1/lessons?${query}`, { headers: supabaseHeaders(env) });
@@ -187,19 +188,26 @@ export async function handleLessons(request, env, url, cors) {
 			}
 		}
 
+		// The lesson this one was forked from, if any. Recorded so the fork can later
+		// pull the original's changes in: it tells the editor whose history to fetch
+		// and merge against (see web/src/lib/git/sync.js). A bad id is dropped rather
+		// than rejected — losing the link is survivable, failing the save is not.
+		const forkedFrom = typeof body.forkedFrom === 'string' && LESSON_ID_RE.test(body.forkedFrom) ? body.forkedFrom : null;
+
 		const insert = {
 			author_id: user.id,
 			author: authorFromUser(user),
 			title,
 			doc,
 			published,
+			forked_from: forkedFrom,
 			// Recorded so an admin can later ban the address from a lesson of theirs.
 			author_ip: clientIp(request) || null,
 		};
 
 		let res;
 		try {
-			res = await fetch(`${base}/rest/v1/lessons?select=id,author_id,title,author,section_count,published,created_at`, {
+			res = await fetch(`${base}/rest/v1/lessons?select=id,author_id,title,author,section_count,published,forked_from,created_at`, {
 				method: 'POST',
 				headers: {
 					...supabaseHeaders(env),
@@ -268,7 +276,7 @@ export async function handleLessons(request, env, url, cors) {
 			res = await fetch(
 				`${base}/rest/v1/lessons?id=eq.${encodeURIComponent(id)}&author_id=eq.${encodeURIComponent(
 					user.id,
-				)}&select=id,author_id,title,author,section_count,published,created_at`,
+				)}&select=id,author_id,title,author,section_count,published,forked_from,created_at`,
 				{
 					method: 'PATCH',
 					headers: {
@@ -362,6 +370,11 @@ export async function handleLessons(request, env, url, cors) {
 		if (!Array.isArray(rows) || rows.length === 0) {
 			return textResponse('You can only delete lessons you published.', 403, cors);
 		}
+
+		// (4) Drop the lesson's stored version history so its packfile doesn't
+		// outlive it in the bucket. Best-effort — the lesson row is already gone.
+		await deleteLessonGit(env, id);
+
 		return jsonResponse({ ok: true }, 200, cors);
 	}
 

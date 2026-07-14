@@ -61,7 +61,16 @@ PDF printing.
 - **Moderation** - moderator/admin tools for comments, shadowbanning, and bans
   (see [Moderation](./moderation.md)).
 - **Live collaboration** - invite others to edit a lesson with you in real time
-  over a peer-to-peer (PeerJS/WebRTC) connection, with live cursors and an
-  in-session chat panel. People you invite only start collaborating once you add
-  them to the lesson (see [Live collaboration](./live-collaboration.md)).
-- **Auto-save** - your work is kept in `localStorage` between reloads.
+  over a server-side room (a Cloudflare Durable Object, one WebSocket per
+  participant), with live cursors and an in-session chat panel. People you invite
+  only start collaborating once you add them to the lesson (see
+  [Live collaboration](./live-collaboration.md)).
+- **Version history** - every lesson is a real git repository in the browser, one
+  file per content block. Edits are committed automatically as you pause, so you
+  can browse every version and restore any of them. Forking a lesson **clones**
+  its repository, and a fork can later pull the original's changes in — merged
+  block by block, with edits to different blocks (or different parts of the same
+  block) merging automatically (see
+  [Version history](/monorepo/version-history)).
+- **Auto-save** - your work is kept in IndexedDB between reloads (images as binary
+  blobs, so large drafts aren't capped by `localStorage`'s ~5 MB quota).

@@ -6,6 +6,7 @@ import { allowedHostnames, corsHeaders } from './lib/cors.js';
 
 import { handleAi } from './routes/ai.js';
 import { handleImageGet, handleImagePut } from './routes/images.js';
+import { handleGit } from './routes/git.js';
 import { handleLessons } from './routes/lessons.js';
 import { handleComments } from './routes/comments.js';
 import { handleTextFeedback } from './routes/feedback.js';
@@ -48,6 +49,12 @@ app.use('*', async (c, next) => {
 // frontend fall-through so the SPA catch-all never shadows it.
 app.on(['GET', 'HEAD'], '/images/:hash', (c) => handleImageGet(req(c), c.env, c.executionCtx, c.req.param('hash')));
 app.put('/images/:hash', (c) => handleImagePut(req(c), c.env, c.req.param('hash'), cors(c)));
+
+// A lesson's version history, stored in R2 as a git packfile. GET is public (so
+// anyone can fork a published lesson by cloning it); PUT is the author's only.
+// Its own top-level path, deliberately not under /lessons/*, so it can't be
+// shadowed by the broader lesson match below.
+app.all('/git/:id/:action', (c) => handleGit(req(c), c.env, c.req.param('id'), `/${c.req.param('action')}`, cors(c)));
 
 // Lesson-hub routes (Supabase-backed). /lessons/:id/comments is its own handler,
 // so it must be registered before the broader /lessons/* match.

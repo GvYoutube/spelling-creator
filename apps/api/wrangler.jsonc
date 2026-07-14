@@ -57,5 +57,16 @@
 			"binding": "IMAGES",
 			"bucket_name": "spelling-creator-images",
 		},
+		// R2 bucket holding each lesson's version history as a git packfile, under
+		// git/<lessonId>/pack (+ refs.json). The editor keeps every lesson in a real
+		// git repository in the browser; this is how that repository travels, so
+		// forking a lesson can *clone* it. GET is public (forking a published lesson
+		// is public), PUT is the author's only. See src/routes/git.js.
+		// Create it once with:
+		//   wrangler r2 bucket create spelling-creator-git
+		{
+			"binding": "LESSON_GIT",
+			"bucket_name": "spelling-creator-git",
+		},
 	],
 }

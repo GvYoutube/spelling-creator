@@ -28,6 +28,15 @@ the comment box). Ratings are one-per-user-per-lesson — re-rating updates your
 existing star count rather than adding a second vote — and the lesson page shows
 the **average** rating and how many ratings it has.
 
+**Forking.** Any lesson can be forked into a new lesson of your own — the
+original row is never touched, so this needs no special permission. A fork is a
+**clone of the lesson's git repository**: it carries the original's full version
+history and, because git addresses commits by content, shares its ancestry. The
+new lesson records what it was forked from (`lessons.forked_from`), which lets it
+later **pull the original's changes in**: the two histories are merged against the
+commit they diverged from, block by block. See
+[Version history](/monorepo/version-history).
+
 **Where the data lives.** Lessons are stored in **Supabase Postgres**, but — like
 the AI and Pixabay features — the browser never talks to the database directly.
 All lesson reads/writes go through the companion Worker (`apps/api` in this
@@ -134,6 +143,12 @@ create table public.lessons (
   -- false = a private draft, backed up but kept out of the public listing.
   -- Defaults true so pre-draft rows (all of which were published) stay visible.
   published     boolean not null default true,
+  -- The lesson this one was forked from, or null for an original. Forking clones
+  -- the source lesson's git repository, so a fork shares ancestry with it; this
+  -- is the pointer home that lets the fork later merge the original's changes in
+  -- (see /monorepo/version-history). Deleting the original orphans its forks
+  -- rather than deleting them.
+  forked_from   uuid references public.lessons (id) on delete set null,
   created_at    timestamptz not null default now()
 );
 

@@ -14,6 +14,8 @@ import {
   saveEditingId,
   loadEditingPublished,
   saveEditingPublished,
+  loadForkedFrom,
+  saveForkedFrom,
   loadWizardSeen,
   saveWizardSeen,
 } from "./imageStore.js";
@@ -27,6 +29,8 @@ export {
   saveEditingId,
   loadEditingPublished,
   saveEditingPublished,
+  loadForkedFrom,
+  saveForkedFrom,
   loadWizardSeen,
   saveWizardSeen,
 };

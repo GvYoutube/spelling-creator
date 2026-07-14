@@ -191,13 +191,16 @@ export async function fetchLesson(id) {
  * the default) or kept as a private draft backup (false).
  * @param {object} doc          The editor document ({ title, sections }).
  * @param {string} accessToken  Supabase session JWT.
- * @param {{ published?: boolean }} [opts]
- * @returns {Promise<{id, title, author, sectionCount, published, createdAt}>}
+ * @param {{ published?: boolean, forkedFrom?: string }} [opts]
+ *        `forkedFrom` is the id of the lesson this one was forked from, when it
+ *        was. The server records it so the fork can later pull the original's
+ *        changes in — see lib/git/sync.js.
+ * @returns {Promise<{id, title, author, sectionCount, published, forkedFrom, createdAt}>}
  */
 export async function publishLesson(
   doc,
   accessToken,
-  { published = true } = {},
+  { published = true, forkedFrom = null } = {},
 ) {
   if (!API_URL) throw new Error("The lesson hub is not configured.");
   if (!accessToken) throw new Error("Please sign in before saving.");
@@ -217,6 +220,7 @@ export async function publishLesson(
         title: doc.title || "Untitled Lesson",
         doc,
         published,
+        ...(forkedFrom ? { forkedFrom } : {}),
       }),
     });
   } catch {

@@ -53,6 +53,10 @@ export default defineConfig({
               text: "Lesson images (binary, R2 + IndexedDB)",
               link: "/monorepo/lesson-images",
             },
+            {
+              text: "Version history (git, by content block)",
+              link: "/monorepo/version-history",
+            },
           ],
         },
         {

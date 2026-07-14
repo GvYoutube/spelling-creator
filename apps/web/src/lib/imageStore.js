@@ -17,6 +17,10 @@ const DOC_KEY = "doc";
 const EDITING_ID_KEY = "editing-id";
 const EDITING_PUBLISHED_KEY = "editing-published";
 const WIZARD_SEEN_KEY = "wizard-seen";
+// The lesson the working doc was forked from, if any. Persisted alongside the
+// editing id so a fork still knows where it came from after a reload, and can
+// offer to pull the original's later changes in (see lib/git/sync.js).
+const FORKED_FROM_KEY = "forked-from";
 
 let dbPromise = null;
 
@@ -194,6 +198,23 @@ export async function saveEditingId(id) {
   try {
     if (id) await appSet(EDITING_ID_KEY, id);
     else await appDelete(EDITING_ID_KEY);
+  } catch {
+    /* ignore */
+  }
+}
+
+export async function loadForkedFrom() {
+  try {
+    return (await appGet(FORKED_FROM_KEY)) || null;
+  } catch {
+    return null;
+  }
+}
+
+export async function saveForkedFrom(id) {
+  try {
+    if (id) await appSet(FORKED_FROM_KEY, id);
+    else await appDelete(FORKED_FROM_KEY);
   } catch {
     /* ignore */
   }
