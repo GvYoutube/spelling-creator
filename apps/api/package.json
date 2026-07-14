@@ -21,6 +21,7 @@
 		"@jsquash/png": "^3.1.1",
 		"@jsquash/webp": "^1.5.0",
 		"glin-profanity": "^3.3.0",
-		"hono": "^4.12.25"
+		"hono": "^4.12.25",
+		"yjs": "^13.6.31"
 	}
 }

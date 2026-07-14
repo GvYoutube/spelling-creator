@@ -35,16 +35,27 @@ guest the moment they're added.
    [Version history](/monorepo/version-history#merging-a-fork-back-in-trusted-collaborators)
    for what that does and does not let them do.
 
-4. Once added, edits sync **both ways**: the whole document is the unit of sync
-   (last-write-wins), the room re-broadcasts each change to the other admitted
-   collaborators, and a presence roster shows everyone in the lesson.
+4. Once added, edits sync **both ways**: the room merges each change into the
+   session's document, re-broadcasts it to the other admitted collaborators, and a
+   presence roster shows everyone in the lesson.
+
+**Conflict handling (CRDT).** Edits are merged with a **CRDT** ([Yjs](https://yjs.dev)),
+not applied last-write-wins. Two people working on **different blocks, sections or
+fields** both keep their work — previously the document was synced whole, so
+whoever typed last silently overwrote the other. Every participant keeps a Yjs
+document mirroring the lesson, the room holds the authoritative copy, and only the
+**changes** travel over the wire rather than the whole lesson on every keystroke.
+
+The one deliberate limit: text is merged **per field**, not per character. If two
+people type into the **same** field at the same time, one of them still wins (both
+sides agree on which). Editing different blocks — the normal case — always merges.
 
 **Binary wire protocol.** Messages are sent as **binary WebSocket frames** for
-speed: a one-byte type tag followed by the payload (document, cursor and chat
-payloads are UTF-8 JSON, so the room can relay document bytes without parsing
-them). A participant is identified by a server-assigned numeric **slot** rather
-than by name in every packet; the client maps slot → identity from the presence
-roster to label cursors and chat.
+speed: a one-byte type tag followed by the payload. Cursor and chat payloads are
+UTF-8 JSON; document payloads are opaque Yjs update bytes, which the room relays
+without parsing. A participant is identified by a server-assigned numeric **slot**
+rather than by name in every packet; the client maps slot → identity from the
+presence roster to label cursors and chat.
 
 **Live cursors.** Each collaborator's text selection is relayed to the others, so
 you can see where everyone is working. `useSelectionBroadcast`
@@ -62,18 +73,31 @@ the panel is collapsed.
 **Rate limits.** Because the relay is server-side, it is rate-limited to keep it
 cheap and abuse-resistant: at most **5 session joins per minute** and **6
 concurrent hosted rooms** per user, **10 participants** per room, and per
-connection a budget of **8 document edits, 15 cursor moves and 2 chat messages
-per second** (document updates are capped at 512 KB). Over-budget traffic is
-dropped, and a connection that keeps flooding is closed.
+connection a budget of **30 document updates, 15 cursor moves and 2 chat messages
+per second** (a single update is capped at 512 KB — a ceiling that only the host's
+opening copy of the lesson ever approaches, since ordinary edits are a few bytes).
+Over-budget traffic is dropped, and a connection that keeps flooding is closed.
 
-**Implementation.** `src/lib/collab.js` is a `useCollaboration` hook that owns the
-WebSocket, the slot → identity roster, the admission state, the chat transcript,
-and the broadcast/echo-suppression logic. `src/components/CollaborateDialog.jsx`
-is the control panel (host/join landing, invite sharing, the waiting-to-join
-admission list, and the roster). `EditorPage` wires the hook's `onRemoteDoc` to
-its `setDoc`, passes the access token, and watches `doc` so local edits broadcast
-automatically. The server side lives in `apps/api/src/collab-room.js` (the
-`CollabRoom` Durable Object) and `handleCollab` in `apps/api/src/index.js` (the
-JWT gate, connection rate limits, and forwarding to the room). The lesson
-document is small (images are content-hash references, not inlined), so it is
-shipped whole on each change rather than as a CRDT diff.
+**Implementation.** `src/lib/ydoc.js` owns the CRDT: it maps the editor's plain
+lesson document (`{ title, sections: [...] }`) onto a Yjs document and back. The
+editor itself is untouched by any of this — it keeps working on plain objects, and
+`ydoc.js` keeps a Yjs document in step underneath, matching sections, blocks,
+spelling words and answers by the stable `id` they already carry. Its `reconcile`
+is **idempotent**, which is what stops a received edit from bouncing straight back
+to the sender.
+
+`src/lib/collab.js` is a `useCollaboration` hook that owns the WebSocket, the
+Yjs document, the slot → identity roster, the admission state and the chat
+transcript. `src/components/CollaborateDialog.jsx` is the control panel (host/join
+landing, invite sharing, the waiting-to-join admission list, and the roster).
+`EditorPage` wires the hook's `onRemoteDoc` to its `setDoc`, passes the access
+token, and watches `doc` so local edits broadcast automatically.
+
+The server side lives in `apps/api/src/collab-room.js` (the `CollabRoom` Durable
+Object, which holds the session's authoritative Yjs document, persists it to
+SQLite so it survives hibernation, and relays updates) and `handleCollab` in
+`apps/api/src/index.js` (the JWT gate, connection rate limits, and forwarding to
+the room).
+
+Yjs is used **only for the live session**. Lessons are still stored as plain JSON,
+so nothing about saving, exporting, forking or version history changes.

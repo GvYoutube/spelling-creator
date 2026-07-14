@@ -11,32 +11,45 @@
 // arrive and their identity (uid/name/email/avatar) is trusted server-side
 // rather than self-asserted (the old metadata model was spoofable).
 //
+// Sync model — a CRDT (Yjs), not last-write-wins. The room holds the session's
+// authoritative Y.Doc: it merges each incoming update into it, persists the
+// merged state, and relays the update to the other admitted peers. Two people
+// editing different blocks therefore both keep their work, where the old
+// whole-document last-write-wins model silently dropped one of them. See
+// apps/web/src/lib/ydoc.js for the document model and the plain-JSON bridge.
+//
 // Wire protocol — binary frames for speed. Every frame is an ArrayBuffer whose
-// first byte is the message type; the rest is the payload. Document, cursor and
-// chat payloads are UTF-8 JSON, which lets us relay the document bytes without
-// parsing them. A sender is identified by a server-assigned u16 "slot" (not by
-// name/email) — smaller packets and unspoofable. Frame shapes:
+// first byte is the message type; the rest is the payload. Cursor and chat
+// payloads are UTF-8 JSON; document payloads are opaque Yjs update bytes, which
+// the room can relay without parsing. A sender is identified by a server-assigned
+// u16 "slot" (not by name/email) — smaller packets and unspoofable. Frame shapes:
 //
 //   server -> client
 //     HELLO    [0][slot u16][role u8]            your slot + role (1=host)
-//     DOC      [1][utf8 doc]                      full document update
+//     UPDATE   [1][yjs update]                    someone edited the document
 //     CURSOR   [2][senderSlot u16][utf8 cursor]   where someone is editing
 //     CHAT     [3][senderSlot u16][utf8 chat]     a chat message for everyone
 //     PRESENCE [4][utf8 roster]                   who's here / who's waiting
-//     ADMITTED [5][utf8 doc]                      you were added; here's the doc
+//     ADMITTED [5][yjs state]                     you were added; here's the lesson
 //     REMOVED  [6][utf8 reason]                   declined / removed / host left
 //     ERROR    [7][utf8 message]                  fatal error before/while joining
 //   client -> server
-//     DOC      [1][utf8 doc]                       I edited the document
+//     UPDATE   [1][yjs update]                     I edited the document
 //     CURSOR   [2][utf8 cursor]                     my caret moved
 //     CHAT     [3][utf8 chat]                       send a chat message
 //     ADMIT    [8][targetSlot u16]                  host: add this pending guest
 //     REMOVE   [9][targetSlot u16]                  host: decline / remove
+//
+// There is deliberately no separate "full document" frame: a Yjs update encoding
+// an entire document is just a large update, and Y.applyUpdate treats it exactly
+// like an incremental one. So the host's initial seed, a late joiner's ADMITTED
+// payload and a single keystroke all travel the same path.
 import { DurableObject } from 'cloudflare:workers';
+import * as Y from 'yjs';
 
 const T = {
 	HELLO: 0,
-	DOC: 1,
+	UPDATE: 1,
 	CURSOR: 2,
 	CHAT: 3,
 	PRESENCE: 4,
@@ -51,11 +64,15 @@ const T = {
 // how often a user may open a connection and how many rooms they may host; these
 // are the per-room / per-connection caps enforced here.
 const MAX_PARTICIPANTS = 10; // people in a single room (incl. host)
-const MAX_DOC_BYTES = 512 * 1024; // a document update payload
+// A single update payload. Incremental edits are tiny; this ceiling exists for
+// the one genuinely large update — the host's opening seed of a whole lesson.
+const MAX_UPDATE_BYTES = 512 * 1024;
 const MAX_CURSOR_BYTES = 1024; // a cursor payload
 const MAX_CHAT_BYTES = 8192; // a chat payload (~2000 UTF-8 chars)
-// Per-connection message budgets, in messages per second (token-bucket).
-const RATE = { [T.DOC]: 8, [T.CURSOR]: 15, [T.CHAT]: 2 };
+// Per-connection message budgets, in messages per second (token-bucket). The
+// document budget is generous because CRDT updates are small and frequent — one
+// per edit — where the old whole-document messages were fat and slow.
+const RATE = { [T.UPDATE]: 30, [T.CURSOR]: 15, [T.CHAT]: 2 };
 // Close a connection that keeps exceeding its budget this many times — a sender
 // that ignores back-pressure is treated as abusive rather than throttled forever.
 const MAX_VIOLATIONS = 100;
@@ -107,8 +124,17 @@ export class CollabRoom extends DurableObject {
 		// The document is cached in SQLite (not a DO storage value) so it survives
 		// hibernation/eviction and can exceed the 128 KiB key-value limit; a late
 		// joiner is served the cached copy on admission.
+		//
+		// The room's authoritative Y.Doc is rebuilt from that cache here rather than
+		// merely held in memory: this object can be evicted while its WebSockets
+		// hibernate, and waking up with an empty CRDT would lose the lesson. We store
+		// the *merged state*, not a log of updates, so waking costs one applyUpdate
+		// and the stored blob stays compact however long the session runs.
 		ctx.blockConcurrencyWhile(async () => {
 			ctx.storage.sql.exec('CREATE TABLE IF NOT EXISTS room (k TEXT PRIMARY KEY, v BLOB)');
+			this.ydoc = new Y.Doc();
+			const saved = this.getDocBytes();
+			if (saved) Y.applyUpdate(this.ydoc, saved);
 		});
 		// Keep-alive. A backgrounded tab stops sending cursor/doc traffic, so its
 		// otherwise-idle WebSocket gets dropped as inactive — the bug where leaving
@@ -132,6 +158,12 @@ export class CollabRoom extends DurableObject {
 		// stores the BLOB).
 		const buf = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength);
 		this.ctx.storage.sql.exec("INSERT OR REPLACE INTO room (k, v) VALUES ('doc', ?)", buf);
+	}
+
+	// Write the room's merged CRDT state back to SQLite, so a late joiner (or this
+	// object waking from hibernation) sees every edit made so far.
+	persist() {
+		this.setDocBytes(Y.encodeStateAsUpdate(this.ydoc));
 	}
 
 	// ----- connection helpers -------------------------------------------------
@@ -304,7 +336,7 @@ export class CollabRoom extends DurableObject {
 		const payload = bytes.subarray(1);
 
 		// Per-connection flood control for the relayed message types.
-		if (type === T.DOC || type === T.CURSOR || type === T.CHAT) {
+		if (type === T.UPDATE || type === T.CURSOR || type === T.CHAT) {
 			if (!this.rateOk(s.slot, type)) {
 				if (this.abusive(s.slot)) {
 					try {
@@ -318,13 +350,20 @@ export class CollabRoom extends DurableObject {
 		}
 
 		switch (type) {
-			case T.DOC: {
+			case T.UPDATE: {
 				if (!s.admitted) return;
-				if (payload.length > MAX_DOC_BYTES) return;
-				// Cache the new document and relay it to every *other* admitted peer.
-				this.setDocBytes(payload);
-				const frame = frameBytes(T.DOC, payload);
-				this.relay(s.slot, frame, true);
+				if (payload.length > MAX_UPDATE_BYTES) return;
+				// Merge into the room's authoritative state, persist it, then relay the
+				// update itself to the other admitted peers. Relaying the raw bytes (not
+				// a re-encode of our state) keeps this cheap and keeps every peer's Yjs
+				// document converging on exactly the same history.
+				try {
+					Y.applyUpdate(this.ydoc, payload);
+				} catch {
+					return; // a malformed update must not be able to take the room down
+				}
+				this.persist();
+				this.relay(s.slot, frameBytes(T.UPDATE, payload), true);
 				break;
 			}
 			case T.CURSOR: {
@@ -364,8 +403,10 @@ export class CollabRoom extends DurableObject {
 		}
 	}
 
-	// Host admitted a pending guest: flip them to admitted, hand them the cached
-	// document, and refresh everyone's roster.
+	// Host admitted a pending guest: flip them to admitted, hand them the lesson as
+	// it stands, and refresh everyone's roster. The payload is the room's whole Y.Doc
+	// encoded as one update, which the guest simply applies — the same code path as
+	// any incremental edit.
 	admit(slot) {
 		const ws = this.socketBySlot(slot);
 		if (!ws) return;
@@ -373,8 +414,7 @@ export class CollabRoom extends DurableObject {
 		if (!s || s.admitted) return;
 		s.admitted = true;
 		ws.serializeAttachment(s);
-		const doc = this.getDocBytes() || new Uint8Array(0);
-		this.send(ws, frameBytes(T.ADMITTED, doc));
+		this.send(ws, frameBytes(T.ADMITTED, Y.encodeStateAsUpdate(this.ydoc)));
 		this.broadcastPresence();
 	}
 
@@ -420,7 +460,11 @@ export class CollabRoom extends DurableObject {
 					/* ignore */
 				}
 			}
+			// The room dies with its host, so drop the cached lesson and start from a
+			// clean CRDT — a later session reusing this object must not inherit the
+			// previous one's document.
 			this.ctx.storage.sql.exec("DELETE FROM room WHERE k = 'doc'");
+			this.ydoc = new Y.Doc();
 			await this.releaseRoom(s.uid);
 		} else {
 			this.broadcastPresence();

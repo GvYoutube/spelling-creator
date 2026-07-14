@@ -12,28 +12,40 @@
 // Trusted collaborators (an email list saved on the doc) bypass the waiting room:
 // the host auto-admits them the instant their request arrives.
 //
-// Sync model. The room is the authority and relay; it caches the whole document
-// (last-write-wins) and re-broadcasts a change to the other admitted peers. The
-// document is the unit of sync — it's small (images are content-hash refs, not
-// inlined) so sending it whole on each edit is simple and good enough; no CRDT
-// needed. Echoes are suppressed by remembering the JSON of the last doc we sent
-// or applied and not re-sending an identical one.
+// Sync model — a CRDT (Yjs). Each participant keeps a Y.Doc mirroring the editor's
+// plain document; the room merges and relays the updates. Two people editing
+// different blocks both keep their work, where the previous whole-document
+// last-write-wins model silently dropped one of them. lib/ydoc.js owns the
+// document model and the plain-JSON <-> Yjs bridge; this file owns the socket.
+//
+// The loop, and why it settles:
+//
+//   local edit  -> setDoc -> reconcile(ydoc, doc, LOCAL) -> Yjs emits an update
+//                                                        -> we send it
+//   remote frame -> Y.applyUpdate(..., REMOTE) -> onRemoteDoc(docFromY(ydoc))
+//                -> setDoc -> reconcile again -> no difference -> no update
+//
+// That last step is the whole trick: `reconcile` is idempotent, so applying a
+// remote edit doesn't bounce it straight back. It replaces the old approach of
+// stringifying the document and comparing it against the last one we sent.
 //
 // Wire protocol — binary frames for speed (see collab-room.js for the full spec).
 // Every frame is an ArrayBuffer whose first byte is the message type; the rest is
-// the payload. Document/cursor/chat payloads are UTF-8 JSON. A peer is identified
-// by a server-assigned numeric "slot"; we map slot -> identity from the presence
-// roster so cursors and chat can be labelled without shipping a name in every
-// packet.
+// the payload. Cursor/chat payloads are UTF-8 JSON; document payloads are opaque
+// Yjs update bytes. A peer is identified by a server-assigned numeric "slot"; we
+// map slot -> identity from the presence roster so cursors and chat can be
+// labelled without shipping a name in every packet.
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import * as Y from "yjs";
 import { newId } from "./id.js";
 import { colorForId } from "./presence.js";
+import { LOCAL, applyRemote, docFromY, reconcile } from "./ydoc.js";
 
 // Message type bytes — must match T in apps/api/src/collab-room.js.
 const T = {
   HELLO: 0,
-  DOC: 1,
+  UPDATE: 1,
   CURSOR: 2,
   CHAT: 3,
   PRESENCE: 4,
@@ -43,6 +55,11 @@ const T = {
   ADMIT: 8,
   REMOVE: 9,
 };
+
+// How long to sit on a burst of local edits before pushing them into the Y.Doc.
+// Short, because a CRDT update is bytes rather than a re-serialised lesson — the
+// old code had to wait 250ms to keep JSON.stringify off the keystroke path.
+const SYNC_DEBOUNCE_MS = 50;
 
 // Cap on a single chat message so a peer can't flood the channel with a huge
 // string. Chat is ephemeral (kept only in memory for the session).
@@ -110,6 +127,10 @@ export function useCollaboration({ doc, onRemoteDoc, identity, accessToken }) {
   const [selections, setSelections] = useState({});
   // Chat transcript for this session, oldest first. Ephemeral.
   const [messages, setMessages] = useState([]);
+  // Whether our Y.Doc is part of the session's document yet, and so whether local
+  // edits should be pushed into it. False for a guest until the host admits them —
+  // see the note on `startSyncing`.
+  const [synced, setSynced] = useState(false);
 
   // Live objects kept in refs (not state) so re-renders don't churn the socket.
   const wsRef = useRef(null);
@@ -117,8 +138,9 @@ export function useCollaboration({ doc, onRemoteDoc, identity, accessToken }) {
   // slot -> { name, email, avatarUrl, host } so we can label cursors/chat from
   // the presence roster rather than trusting per-message identity.
   const rosterRef = useRef(new Map());
-  // JSON of the last doc we sent or applied, to break broadcast echo loops.
-  const lastSyncedRef = useRef(null);
+  // This session's CRDT document, and whether we're syncing into it yet.
+  const ydocRef = useRef(null);
+  const syncedRef = useRef(false);
   // True while we're intentionally tearing down, so the close handler doesn't
   // surface a spurious "disconnected" error.
   const closingRef = useRef(false);
@@ -154,11 +176,37 @@ export function useCollaboration({ doc, onRemoteDoc, identity, accessToken }) {
     }
   };
 
-  // Apply a doc received from the room without re-broadcasting it (the parent's
-  // resulting state change will match lastSynced and be skipped by the effect).
-  const applyRemote = useCallback((nextDoc) => {
-    lastSyncedRef.current = JSON.stringify(nextDoc);
-    onRemoteDocRef.current?.(nextDoc);
+  // Open this session's Y.Doc. Every change it accepts emits an update, and the
+  // ones that originated locally are exactly the ones we broadcast — an edit we
+  // merged from the room carries the REMOTE origin, so it is never echoed back.
+  const openYDoc = useCallback(() => {
+    const ydoc = new Y.Doc();
+    ydoc.on("update", (update, origin) => {
+      if (origin === LOCAL) sendFrame(frame(T.UPDATE, update));
+    });
+    ydocRef.current = ydoc;
+  }, []);
+
+  // Merge an update from the room, then hand the resulting document to the editor.
+  const mergeRemote = useCallback((bytes) => {
+    const ydoc = ydocRef.current;
+    if (!ydoc || bytes.length === 0) return;
+    applyRemote(ydoc, bytes);
+    onRemoteDocRef.current?.(docFromY(ydoc));
+  }, []);
+
+  // Start pushing local edits into the Y.Doc.
+  //
+  // A guest is deliberately NOT syncing the moment they connect. They're sitting
+  // in their own editor with their own lesson open, and a CRDT *unions* documents
+  // rather than replacing them — so reconciling that lesson into the Y.Doc before
+  // the host admitted them would merge their content into the host's lesson. A
+  // guest therefore starts with an empty Y.Doc and only begins syncing once
+  // ADMITTED has delivered the real one. The host, whose document *is* the lesson,
+  // starts syncing immediately.
+  const startSyncing = useCallback(() => {
+    syncedRef.current = true;
+    setSynced(true);
   }, []);
 
   // Record (or, when a peer leaves their field, clear) a collaborator's editing
@@ -224,31 +272,25 @@ export function useCollaboration({ doc, onRemoteDoc, identity, accessToken }) {
           setRole(host ? "host" : "guest");
           if (host) {
             setStatus("hosting");
-            // Seed the room with our current document so late joiners get it.
-            lastSyncedRef.current = JSON.stringify(docRef.current);
-            sendFrame(jsonFrame(T.DOC, docRef.current));
+            // Seed the room with our lesson: reconciling it into our fresh Y.Doc
+            // emits one update carrying the whole document, which the Y.Doc's
+            // update handler sends for us.
+            reconcile(ydocRef.current, docRef.current, LOCAL);
+            startSyncing();
           } else {
             setStatus("joined");
           }
           break;
         }
         case T.ADMITTED: {
-          // We were added to the lesson; the payload is the current document.
-          if (view.length > 1) {
-            try {
-              applyRemote(JSON.parse(decoder.decode(view.subarray(1))));
-            } catch {
-              /* ignore a malformed doc */
-            }
-          }
+          // We're in. The payload is the room's whole document as a single Yjs
+          // update; adopt it, and only now start syncing our own edits.
+          mergeRemote(view.subarray(1));
+          startSyncing();
           break;
         }
-        case T.DOC: {
-          try {
-            applyRemote(JSON.parse(decoder.decode(view.subarray(1))));
-          } catch {
-            /* ignore */
-          }
+        case T.UPDATE: {
+          mergeRemote(view.subarray(1));
           break;
         }
         case T.CURSOR: {
@@ -380,7 +422,7 @@ export function useCollaboration({ doc, onRemoteDoc, identity, accessToken }) {
           break;
       }
     },
-    [applyRemote, applyCursor, addMessage, admit, isTrustedEmail],
+    [mergeRemote, startSyncing, applyCursor, addMessage, admit, isTrustedEmail],
   );
 
   // Open a WebSocket to the room and wire its lifecycle. Shared by host and guest.
@@ -404,8 +446,10 @@ export function useCollaboration({ doc, onRemoteDoc, identity, accessToken }) {
       roleRef.current = create ? "host" : "guest";
       closingRef.current = false;
       mySlotRef.current = null;
-      lastSyncedRef.current = null;
       rosterRef.current = new Map();
+      syncedRef.current = false;
+      setSynced(false);
+      openYDoc();
 
       const params = new URLSearchParams({ token: accessToken });
       if (create) params.set("create", "1");
@@ -468,7 +512,7 @@ export function useCollaboration({ doc, onRemoteDoc, identity, accessToken }) {
     // `error` is intentionally omitted: it's only read to avoid clobbering an
     // existing message, and including it would re-create the socket callbacks.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [accessToken, handleFrame],
+    [accessToken, handleFrame, openYDoc],
   );
 
   // ----- public host/guest entry points -------------------------------------
@@ -506,8 +550,13 @@ export function useCollaboration({ doc, onRemoteDoc, identity, accessToken }) {
     }
     wsRef.current = null;
     mySlotRef.current = null;
-    lastSyncedRef.current = null;
     rosterRef.current = new Map();
+    // The Y.Doc belongs to the session, not to the editor: a new session starts
+    // from a fresh one, so the previous lesson can't bleed into it.
+    ydocRef.current?.destroy();
+    ydocRef.current = null;
+    syncedRef.current = false;
+    setSynced(false);
     setSelections({});
     setMessages([]);
   }
@@ -564,21 +613,21 @@ export function useCollaboration({ doc, onRemoteDoc, identity, accessToken }) {
   // Tear down the socket when the component using this hook unmounts.
   useEffect(() => () => cleanup(), []);
 
-  // Broadcast local edits. Debounced (~250ms): serialising the whole doc with
-  // JSON.stringify on every keystroke janks low-end machines editing large
-  // lessons, so we coalesce bursts of edits and send once they briefly pause.
-  // Sends only when the doc actually differs from the last one we synced (which
-  // both prevents echoing a just-received doc and de-dupes no-op renders).
+  // Push local edits into the Y.Doc, which emits an update that we broadcast.
+  // Lightly debounced so a burst of keystrokes becomes one update rather than one
+  // per character.
+  //
+  // This runs on *every* document change, including one we just adopted from the
+  // room — and that's fine, because `reconcile` is idempotent: re-reconciling a
+  // document the Y.Doc already holds performs no operations, emits no update, and
+  // the round-trip ends there. No echo suppression needed.
   useEffect(() => {
-    if (status !== "hosting" && status !== "joined") return;
+    if (!synced || !ydocRef.current) return;
     const id = setTimeout(() => {
-      const json = JSON.stringify(doc);
-      if (json === lastSyncedRef.current) return;
-      lastSyncedRef.current = json;
-      sendFrame(jsonFrame(T.DOC, doc));
-    }, 250);
+      if (ydocRef.current) reconcile(ydocRef.current, doc, LOCAL);
+    }, SYNC_DEBOUNCE_MS);
     return () => clearTimeout(id);
-  }, [doc, status]);
+  }, [doc, synced]);
 
   const active =
     status === "hosting" || status === "joined" || status === "connecting";
