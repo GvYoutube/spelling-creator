@@ -46,7 +46,9 @@ export function timeAgo(ts) {
     value /= units[i + 1][1];
     unit = units[i + 1][0];
   }
-  const rounded = Math.floor(value);
+  // Floor, but never to zero: 45–59s is past "just now" yet floors to 0 minutes,
+  // which would read as the nonsensical "0 minutes ago".
+  const rounded = Math.max(1, Math.floor(value));
   if (unit === "day" && rounded > 6) {
     return new Date(ts).toLocaleDateString(undefined, {
       day: "numeric",

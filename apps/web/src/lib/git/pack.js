@@ -19,7 +19,7 @@
 // a pack is pure JSON and stays small.
 
 import * as git from "isomorphic-git";
-import { BRANCH_REF, UPSTREAM_REF, headOid, ensureRepo } from "./repo.js";
+import { BRANCH_REF, UPSTREAM_REF, ensureRepo, headOid } from "./repo.js";
 
 /**
  * Every object reachable from a commit: the commit itself, its ancestors, and
@@ -132,30 +132,38 @@ export async function cloneFromPack({ fs, gitdir, packfile, filename, head }) {
 }
 
 /**
- * Fetch the lesson a fork came from into the fork's own repo, recording its tip
- * at refs/remotes/upstream/main.
+ * Fetch a remote lesson's history into this repo, recording its tip at `ref`.
  *
  * The objects land in the same store as ours, so the commits the two histories
- * share are literally the same objects — findMergeBase can then walk both back
- * to their common ancestor. That ancestor is the `base` merge.js needs.
+ * share are literally the same objects — findMergeBase can then walk both back to
+ * their common ancestor. That ancestor is the `base` merge.js needs.
+ *
+ * `ref` says *which* remote this is: UPSTREAM_REF for the lesson we forked from,
+ * ORIGIN_REF for this lesson's own published history (which a trusted
+ * collaborator may have moved on without us).
  */
-export async function fetchUpstreamPack({
+export async function fetchRemotePack({
   fs,
   gitdir,
   packfile,
   filename,
   head,
+  ref = UPSTREAM_REF,
 }) {
   await ensureRepo({ fs, gitdir });
   await absorbPack({ fs, gitdir, packfile, filename });
-  await git.writeRef({
-    fs,
-    gitdir,
-    ref: UPSTREAM_REF,
-    value: head,
-    force: true,
-  });
+  await git.writeRef({ fs, gitdir, ref, value: head, force: true });
   return head;
+}
+
+/** Whether `oid` has `ancestor` somewhere in its history (so it contains it). */
+export async function contains({ fs, gitdir, oid, ancestor }) {
+  if (oid === ancestor) return true;
+  try {
+    return await git.isDescendent({ fs, gitdir, oid, ancestor });
+  } catch {
+    return false; // unrelated histories, or an object we don't hold
+  }
 }
 
 /**

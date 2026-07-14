@@ -37,6 +37,15 @@ later **pull the original's changes in**: the two histories are merged against t
 commit they diverged from, block by block. See
 [Version history](/monorepo/version-history).
 
+**Merging a fork back in.** A **trusted collaborator** — someone the author added
+to the lesson's collaboration list — can also merge their fork _back into_ the
+original lesson. That makes them the one kind of non-author who may write a
+lesson: its title, document and history, but never its published/draft state, the
+trusted list itself, or its existence (no delete). Pushes are compare-and-swapped
+on the history's head, so neither the author nor a collaborator can overwrite work
+they haven't seen — whoever is stale is told to merge and try again. The author is
+notified when a collaborator merges into their lesson.
+
 **Where the data lives.** Lessons are stored in **Supabase Postgres**, but — like
 the AI and Pixabay features — the browser never talks to the database directly.
 All lesson reads/writes go through the companion Worker (`apps/api` in this

@@ -5,9 +5,10 @@
 import { supabaseHeaders, verifySupabaseUser } from '../lib/supabase.js';
 import { authorFromUser, clientIp, displayNameOf, isModeratorRole, verifyUserAndRole } from '../lib/auth.js';
 import { bannedResponse } from '../lib/bans.js';
-import { rowToLesson } from '../lib/lesson.js';
+import { fetchLessonRow, isTrustedCollaborator, rowToLesson } from '../lib/lesson.js';
 import { fetchRatingStats } from '../lib/ratings.js';
 import { LESSON_ID_RE, deleteLessonGit } from '../lib/lessonGit.js';
+import { createNotification } from './notifications.js';
 import { textResponse, jsonResponse } from '../lib/http.js';
 
 // A user may keep at most this many private drafts (published = false) at once.
@@ -227,14 +228,19 @@ export async function handleLessons(request, env, url, cors) {
 		return jsonResponse({ lesson: rowToLesson(rows[0], false) }, 201, cors);
 	}
 
-	// PUT /lessons/:id — update a lesson the signed-in user already saved to the
-	// cloud. Requires a valid Supabase session JWT, and the verified user must be the
-	// lesson's author: the PATCH is filtered on both id AND author_id, so a
-	// request from anyone other than the author matches no rows and is rejected
-	// with 403. The title, doc and published flag are mutable (so a draft can be
-	// published, or a published lesson pulled back to a draft); author and created_at
-	// stay put. `published` is only changed when the body includes a boolean for it,
-	// so an older client that omits it leaves the lesson's current state alone.
+	// PUT /lessons/:id — update a lesson already saved to the cloud. Requires a
+	// valid Supabase session JWT. Two kinds of caller may write:
+	//
+	//   the author            — full control: title, doc, and the published flag
+	//   a trusted collaborator — title and doc only (this is how a fork is merged
+	//                            back into the lesson; see /monorepo/version-history)
+	//
+	// A trusted collaborator is someone the author added to the lesson's own
+	// trusted list (`doc.trustedCollaborators`; the same list that auto-admits them
+	// to a live session). Their write is deliberately narrowed below: they cannot
+	// publish or unpublish the lesson, and they cannot change the trusted list —
+	// otherwise a collaborator could widen their own privileges or grant them to
+	// someone else. Anyone else is rejected with 403.
 	if (request.method === 'PUT' && id) {
 		const auth = request.headers.get('Authorization') || '';
 		const token = auth.startsWith('Bearer ') ? auth.slice('Bearer '.length).trim() : '';
@@ -255,9 +261,30 @@ export async function handleLessons(request, env, url, cors) {
 		if (!doc || typeof doc !== 'object' || !Array.isArray(doc.sections) || doc.sections.length === 0) {
 			return textResponse('Add at least one section before saving.', 400, cors);
 		}
+
+		// Who is writing? We need the existing row's doc to answer that, since the
+		// trusted list lives inside it.
+		const existing = await fetchLessonRow(env, base, id, { withDoc: true });
+		if (!existing) return textResponse('Lesson not found.', 404, cors);
+
+		const isAuthor = existing.author_id === user.id;
+		const isTrusted = !isAuthor && isTrustedCollaborator(existing, user);
+		if (!isAuthor && !isTrusted) {
+			return textResponse('You can only edit lessons you published, or lessons you are a trusted collaborator on.', 403, cors);
+		}
+
 		const title = (body.title || doc.title || 'Untitled Lesson').toString().slice(0, 300);
 		const patch = { title, doc };
-		if (typeof body.published === 'boolean') patch.published = body.published;
+
+		if (isAuthor) {
+			if (typeof body.published === 'boolean') patch.published = body.published;
+		} else {
+			// A trusted collaborator's merge must not be able to change who else is
+			// trusted, so the list is taken from the row as it stands, never from the
+			// document they sent. (Their local copy of it may also simply be stale.)
+			patch.doc = { ...doc, trustedCollaborators: existing.doc?.trustedCollaborators ?? [] };
+			if (patch.doc.trustedCollaborators.length === 0) delete patch.doc.trustedCollaborators;
+		}
 
 		// Cap private drafts: block an update that would leave this lesson a draft once
 		// the author is already at MAX_DRAFTS *other* drafts. Excluding this lesson lets
@@ -271,11 +298,13 @@ export async function handleLessons(request, env, url, cors) {
 			}
 		}
 
+		// The ownership check above already gated this, so the PATCH is filtered on
+		// the id alone (a trusted collaborator is, by definition, not the author).
 		let res;
 		try {
 			res = await fetch(
-				`${base}/rest/v1/lessons?id=eq.${encodeURIComponent(id)}&author_id=eq.${encodeURIComponent(
-					user.id,
+				`${base}/rest/v1/lessons?id=eq.${encodeURIComponent(
+					id,
 				)}&select=id,author_id,title,author,section_count,published,forked_from,created_at`,
 				{
 					method: 'PATCH',
@@ -292,11 +321,22 @@ export async function handleLessons(request, env, url, cors) {
 		}
 		if (!res.ok) return textResponse('Could not save the lesson.', 502, cors);
 		const rows = await res.json().catch(() => []);
-		// No row matched id+author_id: the lesson doesn't exist, or it isn't the
-		// signed-in user's to edit. Either way, don't reveal which.
 		if (!Array.isArray(rows) || rows.length === 0) {
-			return textResponse('You can only edit lessons you published.', 403, cors);
+			return textResponse('Could not save the lesson.', 502, cors);
 		}
+
+		// Tell the author someone merged into their lesson — it changed under them,
+		// and they didn't do it. Best-effort: never fail the merge over a notification.
+		if (isTrusted) {
+			await createNotification(env, base, {
+				userId: existing.author_id,
+				type: 'merge',
+				title: `${displayNameOf(user) || 'A collaborator'} merged changes into “${title}”`,
+				body: 'They are a trusted collaborator on this lesson. Open it to see the merged version.',
+				link: `/hub/${id}`,
+			}).catch(() => {});
+		}
+
 		return jsonResponse({ lesson: rowToLesson(rows[0], false) }, 200, cors);
 	}
 

@@ -21,7 +21,15 @@ import { describeOps, diffDocs } from "./ops.js";
 
 export const BRANCH = "main";
 export const BRANCH_REF = `refs/heads/${BRANCH}`;
-/** Where a fork's origin lives once its pack has been fetched (see pack.js). */
+
+// The two remotes a lesson can have, in git's own vocabulary.
+//
+//   origin    this lesson's own published history — what the hub holds for it.
+//             It can be *ahead of us* now that a trusted collaborator may merge
+//             their fork into it, so we check it before pushing.
+//   upstream  the lesson this one was forked FROM, for pulling its later changes
+//             in (and, if we're trusted, for merging ours back into it).
+export const ORIGIN_REF = "refs/remotes/origin/main";
 export const UPSTREAM_REF = "refs/remotes/upstream/main";
 
 const DEFAULT_AUTHOR = { name: "Spelling Creator", email: "lessons@local" };

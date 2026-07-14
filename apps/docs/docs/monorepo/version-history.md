@@ -122,7 +122,7 @@ so a pack is pure JSON and stays small — a few KB for a typical lesson.
 ```
 GET /git/:lessonId/refs   public  -> { head, size, updatedAt }   (404 = no history)
 GET /git/:lessonId/pack   public  -> the packfile (X-Git-Head names its tip)
-PUT /git/:lessonId/pack   Bearer  -> store it (the lesson's author only)
+PUT /git/:lessonId/pack   Bearer  -> store it (the author, or a trusted collaborator)
 ```
 
 Stored as two R2 objects per lesson, in the `LESSON_GIT` bucket:
@@ -138,9 +138,8 @@ _same object_, and can never pair a fresh ref with a stale pack.
 
 `GET` is public because forking a published lesson is public; a shadowbanned
 lesson's history 404s to everyone but its author and moderators, mirroring
-`GET /lessons/:id`. `PUT` verifies the caller is the lesson's author, caps the
-pack at 10 MB, and rejects anything that doesn't begin with the `PACK` magic
-bytes.
+`GET /lessons/:id`. `PUT` verifies the caller may write (below), caps the pack at
+10 MB, and rejects anything that doesn't begin with the `PACK` magic bytes.
 
 ### Setup
 
@@ -182,6 +181,68 @@ one to adjudicate, so a reorder on both sides resolves to ours.
 The result is committed with **two parents**, which genuinely joins the two
 histories — so the next merge can find _this_ commit as its base.
 
+## Merging a fork back in (trusted collaborators)
+
+Anyone can fork a lesson and pull the original's later changes in. A **trusted
+collaborator** can also go the other way: merge their fork _back into the original
+lesson_, for everyone.
+
+"Trusted" is not a new concept — it's the list the author already manages in the
+collaboration dialog (`doc.trustedCollaborators`, the same list that auto-admits
+someone to a live session). Being on it now also means: you may merge your fork
+back in.
+
+The editor shows a **"Merge back into &lt;lesson&gt;"** button on a fork when the
+original's trusted list contains your email. The flow is deliberately ordered:
+
+1. Commit whatever is outstanding.
+2. **Pull the original in first** — merge its current tip into your fork, block by
+   block, settling any conflicts in the usual dialog.
+3. **Push** your history to the original.
+4. **Then** write the original's document row, and notify its author.
+
+Step 2 is what makes step 3 safe: after it, your head _contains_ the original's
+tip, so pushing it can only move the lesson forward. And step 4 is last on
+purpose — if the push is rejected, the original's document must be left exactly as
+it was.
+
+### Nobody can overwrite anybody
+
+The moment a lesson has two possible writers, "last write wins" would silently
+destroy work: whoever saved second would replace the other's commits with a
+history that never contained them. So **a push is a compare-and-swap**.
+
+The client sends `X-Git-Parent`: the head it believes the lesson is on. If that
+isn't the head the Worker holds, the push is rejected with **409**, and the client
+must fetch, merge, and retry. Combined with step 2 above, an accepted push always
+contains what it replaced.
+
+This guards **both** writers, symmetrically:
+
+- A collaborator who forked, edited, and pushes without pulling first → 409. Their
+  push would have erased the author's newer commits.
+- The **author**, saving from a stale editor after a collaborator merged in → also 409. Their save would have erased the contribution.
+
+In both cases the editor responds the same way: it merges the other side in and
+asks the user to save again. Nothing is overwritten, and the merge is by block id
+as usual — so two people who touched different blocks (or different fields of the
+same block) never even see a dialog.
+
+### What a trusted collaborator may _not_ do
+
+Their write is deliberately narrow. The Worker allows them the lesson's **title,
+document and history**, and nothing else:
+
+- they cannot **publish or unpublish** it (visibility stays the author's call), and
+- they cannot change the **trusted list itself** — the Worker takes that from the
+  row as it stands and ignores whatever the incoming document says.
+
+That last one matters: otherwise a trusted collaborator could add themselves to
+another lesson, or hand the privilege to someone else. A collaborator merging a
+fork back in cannot widen their own access.
+
+They also can't delete the lesson — `DELETE /lessons/:id` is still author-only.
+
 ## What is deliberately not versioned
 
 `doc.trustedCollaborators` holds collaborator **email addresses** (see
@@ -195,21 +256,26 @@ live document instead (`preserveLocalFields` in `lib/git/doc.js`).
 
 Browser (`apps/web/src/lib/git/`):
 
-| File                    | Purpose                                                        |
-| ----------------------- | -------------------------------------------------------------- |
-| `doc.js`                | Pure doc helpers: canonical JSON, manifest, block map. No git. |
-| `ops.js`                | Diff two docs into operations; render commit messages. No git. |
-| `merge.js`              | Three-way merge by block id, field-level. No git.              |
-| `layout.js`             | Document ⇄ git tree (one file per block).                      |
-| `repo.js`               | Commit, history, diff two commits, restore.                    |
-| `pack.js`               | Pack for upload; clone/fetch from a pack; find the merge base. |
-| `remote.js`             | The `/git/:lessonId` Worker calls.                             |
-| `sync.js`               | Fork (clone) and merge (upstream) flows.                       |
-| `fs.js`                 | LightningFS — the IndexedDB filesystem the repos live on.      |
-| `engine.js` + `load.js` | The git engine, behind one dynamic import.                     |
-| `useLessonGit.js`       | The editor's controller: setup, periodic commits, history.     |
+| File                    | Purpose                                                            |
+| ----------------------- | ------------------------------------------------------------------ |
+| `doc.js`                | Pure doc helpers: canonical JSON, manifest, block map. No git.     |
+| `ops.js`                | Diff two docs into operations; render commit messages. No git.     |
+| `merge.js`              | Three-way merge by block id, field-level. No git.                  |
+| `layout.js`             | Document ⇄ git tree (one file per block).                          |
+| `repo.js`               | Commit, history, diff two commits, restore.                        |
+| `pack.js`               | Pack for upload; clone/fetch from a pack; merge base; ancestry.    |
+| `remote.js`             | The `/git/:lessonId` Worker calls (incl. the 409 on a stale push). |
+| `sync.js`               | Fork (clone), merge, and push — incl. the merge-back-in flow.      |
+| `fs.js`                 | LightningFS — the IndexedDB filesystem the repos live on.          |
+| `engine.js` + `load.js` | The git engine, behind one dynamic import.                         |
+| `useLessonGit.js`       | The editor's controller: setup, periodic commits, history.         |
 
-Worker: `apps/api/src/routes/git.js`.
+A repo tracks two remotes, in git's own vocabulary: `origin` (this lesson's own
+published history, which a trusted collaborator may have moved on without us) and
+`upstream` (the lesson it was forked from).
+
+Worker: `apps/api/src/routes/git.js`, with the trusted-collaborator check in
+`apps/api/src/lib/lesson.js` (`isTrustedCollaborator`).
 
 Repositories are **bare** — no working tree, no index. The editor's document
 lives in React state and IndexedDB, so checked-out files would be dead weight;

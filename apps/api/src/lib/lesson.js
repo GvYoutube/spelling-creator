@@ -1,8 +1,68 @@
 // Lesson helpers shared by the lessons, moderation and profile routes: the
-// row→summary mapper and the full (author-agnostic) delete used by admins.
+// row→summary mapper, the trusted-collaborator check, and the full
+// (author-agnostic) delete used by admins.
 
 import { supabaseHeaders } from './supabase.js';
 import { deleteLessonGit } from './lessonGit.js';
+
+/**
+ * The emails on a lesson's trusted-collaborator list, lowercased.
+ *
+ * The list lives on the lesson's own document (`doc.trustedCollaborators`, each
+ * entry `{ email, name? }`) and is managed by the author in the collaboration
+ * dialog. Trusted collaborators are auto-admitted to a live session — and, per
+ * below, may merge a fork back into the lesson.
+ */
+export function trustedEmails(doc) {
+	const list = doc && Array.isArray(doc.trustedCollaborators) ? doc.trustedCollaborators : [];
+	return new Set(list.map((t) => (t && typeof t.email === 'string' ? t.email.trim().toLowerCase() : '')).filter(Boolean));
+}
+
+/**
+ * Whether a verified user is a trusted collaborator on a lesson — i.e. someone
+ * the author invited, who may therefore merge their fork back into it.
+ *
+ * This is the *only* way a non-author gets write access to a lesson, and it is
+ * deliberately narrow: it lets them update the lesson's title, document and
+ * history. It does not let them publish/unpublish it, delete it, or change the
+ * trusted list itself (the routes strip those — see routes/lessons.js), because
+ * a trusted collaborator must not be able to widen their own privileges or hand
+ * them to someone else.
+ *
+ * `row` must have been selected with its `doc`, since the list lives inside it.
+ */
+export function isTrustedCollaborator(row, user) {
+	const email = (user && typeof user.email === 'string' ? user.email : '').trim().toLowerCase();
+	if (!email) return false;
+	return trustedEmails(row && row.doc).has(email);
+}
+
+/**
+ * Fetch the row behind a lesson id, for the paths that must decide who the caller
+ * is before letting them through.
+ *
+ * `withDoc` pulls the lesson's document too, which is needed to answer
+ * isTrustedCollaborator (the trusted list lives inside it). It's off by default
+ * because the doc is the whole lesson — the public read paths only need
+ * `shadowbanned` and shouldn't be dragging a lesson's entire content out of the
+ * database to get it.
+ *
+ * Returns null when the lesson doesn't exist or the store can't be reached —
+ * callers treat both as "no".
+ */
+export async function fetchLessonRow(env, base, lessonId, { withDoc = false } = {}) {
+	const columns = withDoc ? 'id,author_id,shadowbanned,doc' : 'id,author_id,shadowbanned';
+	const query = `id=eq.${encodeURIComponent(lessonId)}&select=${columns}&limit=1`;
+	let res;
+	try {
+		res = await fetch(`${base}/rest/v1/lessons?${query}`, { headers: supabaseHeaders(env) });
+	} catch (e) {
+		return null;
+	}
+	if (!res.ok) return null;
+	const rows = await res.json().catch(() => []);
+	return Array.isArray(rows) && rows.length > 0 ? rows[0] : null;
+}
 
 /**
  * Map a Supabase `lessons` row to the camelCase summary the frontend expects.

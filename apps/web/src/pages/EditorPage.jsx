@@ -43,6 +43,7 @@ import CloudIcon from "@mui/icons-material/Cloud";
 import CloudQueueIcon from "@mui/icons-material/CloudQueue";
 import CallSplitIcon from "@mui/icons-material/CallSplit";
 import CallMergeIcon from "@mui/icons-material/CallMerge";
+import MergeTypeIcon from "@mui/icons-material/MergeType";
 import HistoryIcon from "@mui/icons-material/History";
 import SpellcheckIcon from "@mui/icons-material/Spellcheck";
 import GroupsIcon from "@mui/icons-material/Groups";
@@ -220,11 +221,20 @@ export default function EditorPage() {
   // histories against the commit they diverged from. Persisted with the draft.
   const [forkedFrom, setForkedFrom] = useState(null);
   const [forkedFromTitle, setForkedFromTitle] = useState("");
+  // Whether the original's author trusts us — i.e. our email is on ITS
+  // trusted-collaborator list. Only then may we merge this fork back into it.
+  // The Worker enforces the same check; this only decides whether to offer it.
+  const [canContribute, setCanContribute] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
-  // A merge the user is being asked to settle: the result of prepareUpstreamMerge,
-  // held until they've chosen how to resolve any conflicts (see MergeDialog).
+  // A merge the user is being asked to settle: the result of prepareMerge, held
+  // until they've chosen how to resolve any conflicts (see MergeDialog).
   const [merge, setMerge] = useState(null);
   const [merging, setMerging] = useState(false);
+  // What to do once the merge is settled:
+  //   "pull"       just take the original's changes into this fork
+  //   "contribute" ...then push the result back into the original (trusted only)
+  //   "publish"    a save found the hub ahead of us; merge, then save again
+  const [mergeIntent, setMergeIntent] = useState("pull");
 
   const { enabled: authEnabled, accessToken, user } = useAuth();
   const navigate = useNavigate();
@@ -306,17 +316,38 @@ export default function EditorPage() {
     };
   }, []);
 
-  // The name of the lesson this one was forked from, for the "sync" button and
-  // the merge dialog. Fetched lazily; a failure just leaves the generic wording.
+  // The lesson this one was forked from: its name (for the sync/merge-back buttons
+  // and the merge dialog), and whether its author trusts us enough to let us merge
+  // back into it. Fetched lazily; a failure just leaves the generic wording and no
+  // merge-back offer.
   useEffect(() => {
     if (!forkedFrom) {
       setForkedFromTitle("");
+      setCanContribute(false);
       return;
     }
     let cancelled = false;
     fetchLesson(forkedFrom)
       .then((lesson) => {
-        if (!cancelled) setForkedFromTitle(lesson.title || "");
+        if (cancelled) return;
+        setForkedFromTitle(lesson.title || "");
+
+        // The trusted list lives on the original's own document — the same list
+        // its author manages in the collaboration dialog. Being on it is what
+        // makes this fork mergeable back into the original. The Worker re-checks
+        // it on every write, so this is only about whether to show the button.
+        const trusted = lesson.doc?.trustedCollaborators;
+        const mine = (user?.email || "").trim().toLowerCase();
+        setCanContribute(
+          Boolean(mine) &&
+            Array.isArray(trusted) &&
+            trusted.some(
+              (t) => (t?.email || "").trim().toLowerCase() === mine,
+            ) &&
+            // The author doesn't need to "contribute" to their own lesson —
+            // they'd just save it.
+            lesson.authorId !== user?.id,
+        );
       })
       .catch(() => {
         /* the original may have been deleted — the sync will report it */
@@ -324,7 +355,7 @@ export default function EditorPage() {
     return () => {
       cancelled = true;
     };
-  }, [forkedFrom]);
+  }, [forkedFrom, user]);
 
   const closeWizard = () => {
     setWizardOpen(false);
@@ -814,6 +845,36 @@ export default function EditorPage() {
       if (converted !== doc) setDoc(converted);
       await ensureImagesUploaded(converted, accessToken);
 
+      // Updating a lesson that already exists: push the history FIRST.
+      //
+      // A lesson can now have two writers — its author, and a trusted
+      // collaborator merging a fork back in — so the hub's copy may hold commits
+      // we've never seen. Pushing tells us: if the lesson has moved on, the push
+      // is refused and we stop here, *before* overwriting the doc row with a
+      // document that doesn't contain their work. The user merges (below) and
+      // saves again.
+      if (editingId && gitRemoteEnabled) {
+        await git.commitNow();
+        const engine = await loadGitEngine();
+        const result = await engine.pushHistory({
+          repoId: editingId,
+          lessonId: editingId,
+          doc: converted,
+          accessToken,
+        });
+
+        if (result.needsMerge && result.prepared) {
+          setMergeIntent("publish");
+          setMerge(result.prepared);
+          setToast({
+            severity: "info",
+            message:
+              "Someone else has changed this lesson since you last synced. Merge their changes, then save again — nothing has been overwritten.",
+          });
+          return;
+        }
+      }
+
       let lessonId = editingId;
       if (editingId) {
         await updateLesson(editingId, converted, accessToken, {
@@ -830,23 +891,27 @@ export default function EditorPage() {
           lessonId = lesson.id;
           // Move the draft's repository under the new lesson's id *before*
           // switching to it, so the history built up while the lesson was an
-          // unsaved draft comes with it rather than being stranded.
+          // unsaved draft comes with it rather than being stranded. adoptDraft
+          // commits any outstanding edits into the draft before copying it.
           await git.adoptDraft(lesson.id);
           setEditingId(lesson.id);
         }
       }
       setEditingPublished(publish);
 
-      // Publish the lesson's history too, so anyone who forks it clones a real
-      // repository. Deliberately after the lesson itself is saved, and
-      // deliberately non-fatal: the lesson is safely stored either way, and the
-      // next save will carry the history up.
+      // A brand-new lesson has no history on the hub yet, so this is its first
+      // push. Deliberately non-fatal: the lesson itself is safely stored either
+      // way, and the next save will carry the history up.
       let historyWarning = null;
-      if (lessonId && gitRemoteEnabled) {
+      if (!editingId && lessonId && gitRemoteEnabled) {
         try {
-          await git.commitNow();
           const engine = await loadGitEngine();
-          await engine.publishHistory(lessonId, accessToken);
+          await engine.pushHistory({
+            repoId: lessonId,
+            lessonId,
+            doc: converted,
+            accessToken,
+          });
         } catch (err) {
           console.error(err);
           historyWarning =
@@ -924,10 +989,11 @@ export default function EditorPage() {
       await git.commitNow();
 
       const engine = await loadGitEngine();
-      const prepared = await engine.prepareUpstreamMerge({
+      const prepared = await engine.prepareMerge({
         repoId: git.repoId,
-        upstreamLessonId: forkedFrom,
+        lessonId: forkedFrom,
         doc,
+        ref: engine.UPSTREAM_REF,
       });
 
       if (!prepared) {
@@ -946,7 +1012,7 @@ export default function EditorPage() {
         return;
       }
 
-      // Nothing contested and nothing to show? Apply it silently.
+      setMergeIntent("pull");
       setMerge(prepared);
     } catch (err) {
       console.error(err);
@@ -959,6 +1025,91 @@ export default function EditorPage() {
     }
   };
 
+  // Merge this fork BACK into the lesson it was forked from — the trusted
+  // collaborator's contribution.
+  //
+  // Only offered when the original's author put us on its trusted-collaborator
+  // list (the same list that auto-admits us to a live session). The Worker checks
+  // that independently; this is just the UI gate.
+  //
+  // The order matters. We first pull the original in, so our history *contains*
+  // its current tip — a push can then only move it forward, never erase the
+  // author's commits. If that pull raises conflicts, they're settled in the merge
+  // dialog first, and the contribution is finished by confirmMerge below.
+  const handleContribute = async () => {
+    if (!forkedFrom || !canContribute) return;
+    setBusy("contribute");
+    try {
+      await git.commitNow();
+
+      const engine = await loadGitEngine();
+      const prepared = await engine.prepareMerge({
+        repoId: git.repoId,
+        lessonId: forkedFrom,
+        doc,
+        ref: engine.UPSTREAM_REF,
+      });
+
+      if (!prepared) {
+        setToast({
+          severity: "info",
+          message:
+            "The original lesson has no shared history, so there's nothing to merge back into.",
+        });
+        return;
+      }
+      if (prepared.identical) {
+        setToast({
+          severity: "info",
+          message: `Your copy is identical to ${forkedFromTitle || "the original"} — there's nothing to merge back.`,
+        });
+        return;
+      }
+
+      // Already sitting on top of the original: nothing to pull, so push straight
+      // away. Otherwise settle the merge first (confirmMerge finishes the push).
+      if (prepared.ahead) {
+        await contributeUpstream(prepared, doc);
+        return;
+      }
+
+      setMergeIntent("contribute");
+      setMerge(prepared);
+    } catch (err) {
+      console.error(err);
+      setToast({
+        severity: "error",
+        message: `Could not merge back: ${err.message || err}`,
+      });
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  // Push our (already-merged) history and document into the original lesson.
+  // `prepared.theirs` is the original's tip we merged, and doubles as the
+  // compare-and-swap: if the original moved on in the meantime, the Worker
+  // rejects the push rather than dropping whatever landed there.
+  const contributeUpstream = async (prepared, mergedDoc) => {
+    const engine = await loadGitEngine();
+
+    // History first, document second. If the push is rejected, the original's doc
+    // row must be left exactly as it was.
+    await engine.pushToUpstream({
+      repoId: git.repoId,
+      upstreamLessonId: forkedFrom,
+      expectedHead: prepared.theirs,
+      accessToken,
+    });
+    await updateLesson(forkedFrom, mergedDoc, accessToken);
+
+    setToast({
+      severity: "success",
+      message: `Merged your changes into ${forkedFromTitle || "the original lesson"}. Its author has been notified.`,
+      route: { to: `/hub/${forkedFrom}`, label: "View lesson" },
+    });
+  };
+
   const confirmMerge = async (choices) => {
     if (!merge) return;
     setMerging(true);
@@ -969,11 +1120,27 @@ export default function EditorPage() {
         prepared: merge,
         choices,
         author: identity,
-        upstreamTitle: forkedFromTitle,
+        theirName: mergeIntent === "publish" ? doc.title : forkedFromTitle,
         currentDoc: doc,
       });
       setDoc(merged);
+      const intent = mergeIntent;
       setMerge(null);
+
+      if (intent === "contribute") {
+        await contributeUpstream(merge, merged);
+        return;
+      }
+      if (intent === "publish") {
+        // The merge is committed locally; the save that triggered it was aborted
+        // before it could overwrite anything, so the user re-runs it.
+        setToast({
+          severity: "success",
+          message:
+            "Merged the changes from the hub. Save to the cloud again to publish the merged lesson.",
+        });
+        return;
+      }
       setToast({
         severity: "success",
         message: `Merged the changes from ${forkedFromTitle || "the original"}.`,
@@ -1663,6 +1830,28 @@ export default function EditorPage() {
                   </Button>
                 </Tooltip>
               )}
+
+              {/* We're a trusted collaborator on the lesson this was forked from,
+                  so we can merge our work back INTO it — the contribution flow.
+                  Anyone else can fork and sync, but only push their own copy. */}
+              {forkedFrom && canContribute && gitRemoteEnabled && (
+                <Tooltip
+                  title={`You're a trusted collaborator on ${forkedFromTitle || "the original lesson"}, so you can merge your changes back into it. Its latest changes are pulled in first, block by block, and only genuine clashes are put to you. Its author is notified.`}
+                >
+                  <Button
+                    size="small"
+                    variant="contained"
+                    color="secondary"
+                    startIcon={<MergeTypeIcon />}
+                    onClick={handleContribute}
+                    disabled={busy !== null}
+                  >
+                    {busy === "contribute"
+                      ? "Merging..."
+                      : `Merge back into ${forkedFromTitle || "the original"}`}
+                  </Button>
+                </Tooltip>
+              )}
             </Stack>
           )}
         </Paper>
@@ -1997,7 +2186,12 @@ export default function EditorPage() {
         open={Boolean(merge)}
         onClose={() => setMerge(null)}
         prepared={merge}
-        theirName={forkedFromTitle || "the original"}
+        intent={mergeIntent}
+        theirName={
+          mergeIntent === "publish"
+            ? "the saved lesson"
+            : forkedFromTitle || "the original"
+        }
         onConfirm={confirmMerge}
         busy={merging}
       />

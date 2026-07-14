@@ -3,11 +3,15 @@
 //
 //   GET {API}/git/:lessonId/refs   public  -> { head, refs } (404 when never pushed)
 //   GET {API}/git/:lessonId/pack   public  -> the packfile bytes
-//   PUT {API}/git/:lessonId/pack   Bearer  -> store them (author only)
+//   PUT {API}/git/:lessonId/pack   Bearer  -> store them (the author, or a trusted
+//                                             collaborator merging a fork back in)
 //
 // This is deliberately not git's smart-HTTP protocol: we control both ends, so a
 // whole-history packfile plus a refs pointer is all that's needed to clone, and
 // it reuses the same R2-through-the-Worker path the lesson images already take.
+//
+// Because a lesson has more than one possible writer, PUT is a compare-and-swap:
+// see pushPack below.
 
 const API_URL = import.meta.env.VITE_API_URL;
 
@@ -73,31 +77,58 @@ export async function fetchPack(lessonId) {
 }
 
 /**
- * Upload the lesson's history. The Worker verifies the caller is the lesson's
- * author before storing it.
- *
- * Failure here is deliberately non-fatal to the caller: the lesson itself is
- * saved through /lessons, and the history is an enhancement on top. A push that
- * fails leaves the local history intact and the next push will carry it.
+ * Thrown when a push is rejected because the lesson's history moved on since we
+ * last synced — someone else (the author, or another trusted collaborator) pushed
+ * in the meantime. The caller must merge their changes and try again; see
+ * pushHistory() in sync.js, which does exactly that.
  */
-export async function pushPack(lessonId, { packfile, head }, accessToken) {
+export class HistoryMovedError extends Error {
+  constructor(message) {
+    super(message);
+    this.name = "HistoryMovedError";
+  }
+}
+
+/**
+ * Upload the lesson's history. The Worker verifies the caller is the lesson's
+ * author, or a trusted collaborator merging a fork back in.
+ *
+ * `parent` is the head we believe the lesson currently points at — the
+ * compare-and-swap. The Worker rejects the push (409) if that isn't the head it
+ * holds, which is what stops two writers from overwriting each other's commits.
+ * Pass null only when the lesson has no history at all yet.
+ */
+export async function pushPack(
+  lessonId,
+  { packfile, head, parent },
+  accessToken,
+) {
   if (!API_URL) throw new Error("The lesson hub is not configured.");
   if (!lessonId) throw new Error("Missing lesson id.");
   if (!accessToken) throw new Error("Please sign in before saving.");
+
+  const headers = {
+    "Content-Type": "application/x-git-packfile",
+    "X-Git-Head": head,
+    Authorization: `Bearer ${accessToken}`,
+  };
+  if (parent) headers["X-Git-Parent"] = parent;
 
   let res;
   try {
     res = await fetch(endpoint(lessonId, "/pack"), {
       method: "PUT",
-      headers: {
-        "Content-Type": "application/x-git-packfile",
-        "X-Git-Head": head,
-        Authorization: `Bearer ${accessToken}`,
-      },
+      headers,
       body: packfile,
     });
   } catch {
     throw new Error("Could not reach the lesson hub.");
+  }
+  if (res.status === 409) {
+    throw new HistoryMovedError(
+      (await res.text().catch(() => "")) ||
+        "This lesson's history has moved on since you last synced.",
+    );
   }
   if (!res.ok) {
     const detail = await res.text().catch(() => "");

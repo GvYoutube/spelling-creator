@@ -8,7 +8,7 @@
 //
 //   GET /git/:lessonId/refs   public  -> { head, size, updatedAt } | 404
 //   GET /git/:lessonId/pack   public  -> the packfile (X-Git-Head names its tip)
-//   PUT /git/:lessonId/pack   Bearer  -> store it (the lesson's author only)
+//   PUT /git/:lessonId/pack   Bearer  -> store it (the author, or a trusted collaborator)
 //
 // A forker downloads the pack, indexes it into their own object store, and holds
 // a genuine clone: same commits, same oids, shared ancestry — which is what lets
@@ -21,11 +21,27 @@
 // The pack carries its own tip in customMetadata (and in the X-Git-Head response
 // header). A clone therefore reads the head from the *same object* as the bytes,
 // so it can never pair a new refs.json with a stale pack.
+//
+// ---- Who may push, and why it can't lose work -------------------------------
+//
+// Two people can write a lesson's history: its author, and anyone the author put
+// on the lesson's trusted-collaborator list (that's how a trusted collaborator
+// merges a fork back in — see /monorepo/version-history). The moment more than
+// one writer exists, a plain "last write wins" would silently destroy history:
+// whoever saved second would replace the other's commits with a pack that never
+// contained them.
+//
+// So a push is a **compare-and-swap**. The client sends `X-Git-Parent`: the head
+// it believes is current. If that isn't the head we hold, the push is rejected
+// with 409 and the client must fetch, merge, and retry. Since the client only
+// pushes a history that already *contains* the head it merged, an accepted push
+// can only ever move the lesson forward.
 
 import { bearerToken, isModeratorRole, verifyUserAndRole } from '../lib/auth.js';
 import { bannedResponse } from '../lib/bans.js';
+import { fetchLessonRow, isTrustedCollaborator } from '../lib/lesson.js';
 import { LESSON_ID_RE, packKey, refsKey } from '../lib/lessonGit.js';
-import { supabaseBase, supabaseConfigured, supabaseHeaders, verifySupabaseUser } from '../lib/supabase.js';
+import { supabaseBase, supabaseConfigured, verifySupabaseUser } from '../lib/supabase.js';
 import { textResponse, jsonResponse } from '../lib/http.js';
 
 // A commit oid is a 40-char lowercase hex SHA-1.
@@ -39,21 +55,12 @@ const MAX_PACK_BYTES = 10 * 1024 * 1024;
 // Every packfile starts with the four bytes "PACK".
 const PACK_MAGIC = [0x50, 0x41, 0x43, 0x4b];
 
-/**
- * Look up the lesson a history belongs to. Returns the row (id, author_id,
- * shadowbanned) or null when it doesn't exist.
- */
-async function fetchLessonRow(env, base, lessonId) {
-	const query = `id=eq.${encodeURIComponent(lessonId)}&select=id,author_id,shadowbanned&limit=1`;
-	let res;
-	try {
-		res = await fetch(`${base}/rest/v1/lessons?${query}`, { headers: supabaseHeaders(env) });
-	} catch (e) {
-		return null;
-	}
-	if (!res.ok) return null;
-	const rows = await res.json().catch(() => []);
-	return Array.isArray(rows) && rows.length > 0 ? rows[0] : null;
+/** The head we currently hold for a lesson, or null if it has no history yet. */
+async function storedHead(env, lessonId) {
+	const object = await env.LESSON_GIT.get(refsKey(lessonId));
+	if (!object) return null;
+	const refs = await object.json().catch(() => null);
+	return refs && refs.head ? refs.head : null;
 }
 
 /**
@@ -127,8 +134,9 @@ export async function handleGit(request, env, lessonId, rest, cors) {
 		return new Response(object.body, { status: 200, headers });
 	}
 
-	// PUT /git/:lessonId/pack — store the author's packed history. The body is the
-	// packfile; X-Git-Head names the commit its branch points at.
+	// PUT /git/:lessonId/pack — store a packed history. The body is the packfile;
+	// X-Git-Head names the commit its branch points at, and X-Git-Parent the head
+	// the client believes is current (the compare-and-swap; see the note up top).
 	if (request.method === 'PUT' && rest === '/pack') {
 		const user = await verifySupabaseUser(env, bearerToken(request));
 		if (!user) return textResponse('Please sign in before saving.', 401, cors);
@@ -136,17 +144,40 @@ export async function handleGit(request, env, lessonId, rest, cors) {
 		const banned = await bannedResponse(env, base, request, user, cors);
 		if (banned) return banned;
 
-		const row = await fetchLessonRow(env, base, lessonId);
+		// withDoc: the trusted-collaborator list lives on the lesson's document.
+		const row = await fetchLessonRow(env, base, lessonId, { withDoc: true });
 		if (!row) return textResponse('Lesson not found.', 404, cors);
-		// Only the lesson's author may write its history. Don't reveal which of
-		// "missing" or "not yours" it was.
-		if (row.author_id !== user.id) {
-			return textResponse('You can only save history for lessons you published.', 403, cors);
+
+		// The author, or someone the author trusts (who is merging a fork back in).
+		// Don't reveal which of "missing" or "not yours" it was.
+		const isAuthor = row.author_id === user.id;
+		if (!isAuthor && !isTrustedCollaborator(row, user)) {
+			return textResponse('You can only save history for lessons you published, or lessons you are a trusted collaborator on.', 403, cors);
 		}
 
 		const head = (request.headers.get('X-Git-Head') || '').trim();
 		if (!OID_RE.test(head)) {
 			return textResponse('Missing or invalid X-Git-Head.', 400, cors);
+		}
+
+		// Compare-and-swap. `parent` is the head the client merged before building
+		// this pack; if the lesson has moved on since (someone else pushed), we
+		// refuse — accepting would drop their commits. 409 tells the client to
+		// fetch, merge and try again.
+		const parent = (request.headers.get('X-Git-Parent') || '').trim();
+		const current = await storedHead(env, lessonId);
+		if (current && parent !== current) {
+			return textResponse(
+				'This lesson’s history has moved on since you last synced. Merge the latest changes, then save again.',
+				409,
+				cors,
+			);
+		}
+		// Already there — the client is re-pushing a history we hold. Nothing to do.
+		if (current && current === head) {
+			const object = await env.LESSON_GIT.get(refsKey(lessonId));
+			const refs = object ? await object.json().catch(() => null) : null;
+			if (refs) return jsonResponse(refs, 200, cors);
 		}
 
 		const declared = Number(request.headers.get('Content-Length') || 0);

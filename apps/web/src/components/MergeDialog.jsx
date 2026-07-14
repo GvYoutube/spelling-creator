@@ -180,8 +180,9 @@ function ConflictCard({ conflict, choice, onChoose, theirName }) {
 }
 
 /**
- * @param {object}   props.prepared  The result of prepareUpstreamMerge (doc, conflicts, auto).
- * @param {string}   props.theirName What to call the other side (the original lesson's title).
+ * @param {object}   props.prepared  The result of prepareMerge (doc, conflicts, auto).
+ * @param {string}   props.theirName What to call the other side (usually the original's title).
+ * @param {"pull"|"contribute"|"publish"} props.intent  What happens once it's settled.
  * @param {Function} props.onConfirm Called with the { blockId: choice } map.
  */
 export default function MergeDialog({
@@ -189,6 +190,7 @@ export default function MergeDialog({
   onClose,
   prepared,
   theirName = "the original",
+  intent = "pull",
   onConfirm,
   busy,
 }) {
@@ -198,6 +200,17 @@ export default function MergeDialog({
 
   if (!prepared) return null;
   const { conflicts, auto } = prepared;
+
+  // A contribution writes to *someone else's* lesson, so say so plainly rather
+  // than letting "Merge" imply it only touches your own copy.
+  const contributing = intent === "contribute";
+  const confirmLabel = busy
+    ? contributing
+      ? "Merging back..."
+      : "Merging..."
+    : contributing
+      ? `Merge back into ${theirName}`
+      : "Merge";
 
   const choiceFor = (blockId) => choices[blockId] || "ours";
   const choose = (blockId, value) =>
@@ -219,11 +232,23 @@ export default function MergeDialog({
       <DialogTitle>
         <Stack direction="row" alignItems="center" spacing={1}>
           <CallMergeIcon fontSize="small" />
-          <span>Merge changes from {theirName}</span>
+          <span>
+            {contributing
+              ? `Merge your changes back into ${theirName}`
+              : `Merge changes from ${theirName}`}
+          </span>
         </Stack>
       </DialogTitle>
 
       <DialogContent dividers>
+        {contributing && (
+          <Alert severity="warning" sx={{ mb: 2 }}>
+            This updates <strong>{theirName}</strong> itself, for everyone — you
+            are a trusted collaborator on it. Its latest changes are merged in
+            first, so nothing its author has done since you forked is lost, and
+            they&apos;ll be notified.
+          </Alert>
+        )}
         {autoCount > 0 && (
           <Alert severity="success" sx={{ mb: 2 }}>
             <Typography variant="body2" component="div">
@@ -287,11 +312,12 @@ export default function MergeDialog({
         </Button>
         <Button
           variant="contained"
+          color={contributing ? "secondary" : "primary"}
           startIcon={<CallMergeIcon />}
           onClick={() => onConfirm(choices)}
           disabled={busy}
         >
-          {busy ? "Merging..." : "Merge"}
+          {confirmLabel}
         </Button>
       </DialogActions>
     </Dialog>

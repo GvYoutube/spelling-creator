@@ -46,6 +46,7 @@ export {
 export {
   BRANCH,
   BRANCH_REF,
+  ORIGIN_REF,
   UPSTREAM_REF,
   authorFrom,
   changedBlockIds,
@@ -64,7 +65,8 @@ export {
 
 export {
   cloneFromPack,
-  fetchUpstreamPack,
+  contains,
+  fetchRemotePack,
   mergeBase,
   packRepo,
   reachableOids,
@@ -74,6 +76,8 @@ export {
   completeMerge,
   forkLessonRepo,
   forkLocalRepo,
-  prepareUpstreamMerge,
-  publishHistory,
+  prepareMerge,
+  pushHistory,
+  pushToUpstream,
+  remoteStatus,
 } from "./sync.js";

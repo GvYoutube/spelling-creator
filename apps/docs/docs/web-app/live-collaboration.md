@@ -28,6 +28,13 @@ guest the moment they're added.
    The host can decline a request or remove a collaborator at any time. **Trusted
    collaborators** (an email list saved on the lesson) skip the waiting room and
    are admitted automatically.
+
+   That trusted list carries one further privilege, outside the live session: a
+   trusted collaborator may **merge a fork back into the lesson** — the only way a
+   non-author can write to one. See
+   [Version history](/monorepo/version-history#merging-a-fork-back-in-trusted-collaborators)
+   for what that does and does not let them do.
+
 4. Once added, edits sync **both ways**: the whole document is the unit of sync
    (last-write-wins), the room re-broadcasts each change to the other admitted
    collaborators, and a presence roster shows everyone in the lesson.
