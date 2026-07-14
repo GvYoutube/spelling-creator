@@ -26,11 +26,28 @@ for fast listing, changing your name also backfills it onto your existing rows.
 
 ## Bios
 
-A bio is a short free-text "about me" shown on your profile page. It's edited in
-`BioDialog.jsx` and saved with `POST /profile/bio`, which caps the length, runs a
-profanity check (rejecting with `422` if it fails), and — like the display name —
-stores it in `user_metadata.bio` via the Admin API. An empty bio clears it. Bio
-is profile-only (never denormalised onto rows).
+A bio is a short "about me" shown on your profile page. It's edited in
+`BioDialog.jsx` and saved with `POST /profile/bio`, which sanitizes it, caps the
+length, runs a profanity check (rejecting with `422` if it fails), and — like the
+display name — stores it in `user_metadata.bio` via the Admin API. An empty bio
+clears it. Bio is profile-only (never denormalised onto rows).
+
+**Bios are rich text**, written with the same [mui-tiptap](https://github.com/sjdemartini/mui-tiptap)
+editor as a comment (`RichTextInput.jsx`) and stored as sanitized HTML: formatting,
+lists and links, but **no embedded media** — see [Rich text](./rich-text.md). Two
+consequences worth knowing:
+
+- The 500-character cap counts the **text** you wrote, not the markup around it, so
+  formatting a bio never eats into the budget. The editor's counter measures it the
+  same way the Worker does, so the number you see is the number that's enforced.
+- Wherever a bio appears somewhere markup can't go, it is flattened to plain text
+  first (`richTextToLine` in `lib/richText.js`): the profile's meta/OG description,
+  and the one-line subtitle in the followers/following list. A bio rendered as HTML
+  into a `<meta content>` would otherwise show up as literal tags in Google snippets
+  and link previews.
+
+A bio that is nothing but media (say, a pasted image) sanitizes down to nothing, and
+is therefore stored as an empty bio rather than as stray empty markup.
 
 ## Profile pages
 

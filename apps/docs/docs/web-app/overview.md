@@ -49,11 +49,13 @@ PDF printing.
   and publish your own once signed in (see [Lesson hub & accounts](./lesson-hub-and-accounts.md)).
 - **Comments & ratings** - discuss a published lesson in a threaded comment box,
   and leave a 1–5 star rating with your comment; the lesson page shows the average
-  (see [Lesson hub & accounts](./lesson-hub-and-accounts.md)).
+  (see [Lesson hub & accounts](./lesson-hub-and-accounts.md)). Comments (and bios)
+  are **rich text** — formatting and links, but no embedded media — and you can edit
+  your own after posting (see [Rich text](./rich-text.md)).
 - **Accounts** - passwordless magic-link sign-in (Supabase Auth) on a dedicated
   login page; required only to publish to the hub (see [Lesson hub & accounts](./lesson-hub-and-accounts.md)).
 - **Profiles & display names** - every user picks a public display name and an
-  optional bio, with a public profile page listing their lessons. Signed-in users
+  optional rich-text bio, with a public profile page listing their lessons. Signed-in users
   can **follow** each other, and a home-page feed shows the activity of people you
   follow (see [Profiles & display names](./profiles-and-display-names.md#following)).
 - **Notifications** - an in-app bell for replies, comments on your lessons, new

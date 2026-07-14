@@ -61,9 +61,11 @@ export default defineConfig([
       globals: {
         ...globals.worker,
         ...globals.node,
-        // Cloudflare-specific runtime globals (Durable Object WebSockets).
+        // Cloudflare-specific runtime globals: Durable Object WebSockets, and the
+        // streaming HTML parser the rich-text sanitizer is built on (lib/richtext.js).
         WebSocketPair: "readonly",
         WebSocketRequestResponsePair: "readonly",
+        HTMLRewriter: "readonly",
       },
     },
   },

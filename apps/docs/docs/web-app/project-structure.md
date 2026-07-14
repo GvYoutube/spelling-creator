@@ -22,9 +22,11 @@ src/
     NotificationBell.jsx  AppBar bell that polls for and shows the user's notifications
     DisplayNameGate.jsx   makes a signed-in user pick a display name before using the app
     DisplayNameDialog.jsx pick / change your public display name
-    BioDialog.jsx         edit your public profile bio
+    BioDialog.jsx         edit your public profile bio (rich text)
     FirstLessonWizard.jsx dismissable step-by-step welcome guide for newcomers
-    CommentsSection.jsx   lesson comments list + post box, incl. the 1–5 star rating input
+    CommentsSection.jsx   lesson comments list + post/reply/edit boxes, incl. the 1–5 star rating input
+    RichTextInput.jsx     the mui-tiptap editor used for comments + bios (formatting and links; no media)
+    RichText.jsx          renders a stored comment/bio: sanitized HTML, or plain text for pre-rich-text values
     LessonView.jsx        read-only renderer for the lesson page (blocks straight to React, lazy images)
     LessonSummary.jsx     on-device AI summary card on the lesson page (hidden unless the browser supports it)
     SectionCard.jsx       a named section with its content blocks + add buttons; measures the pointer against its own rows during a block drag, but the drag itself is owned by EditorPage (blocks can move between sections)
@@ -51,7 +53,8 @@ src/
     pixabay.js            calls the Worker to search + fetch Pixabay images
     lessons.js            calls the Worker to list / fetch / publish hub lessons
     lessonSearch.js       fully client-side hub search (Fuse.js)
-    comments.js           calls the Worker to list / post lesson comments
+    comments.js           calls the Worker to list / post / edit lesson comments
+    richText.js           render-time sanitizing (DOMPurify) + HTML→text for comments and bios
     profile.js            calls the Worker for your own profile
     users.js              calls the Worker for other users' public profiles
     notifications.js      calls the Worker for the notification feed

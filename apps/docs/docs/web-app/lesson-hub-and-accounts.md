@@ -23,6 +23,21 @@ entirely by the Worker — it is never stored, and the user is shown why. Postin
 reply sends a [notification](./notifications.md) to the parent commenter and the
 lesson author.
 
+**Comments are rich text.** They're written with
+[mui-tiptap](https://github.com/sjdemartini/mui-tiptap) (`RichTextInput.jsx`) and
+stored as sanitized HTML: bold, italic, underline, strikethrough, inline code,
+lists, blockquotes and links. **Media cannot be embedded** — no images, video,
+audio or frames — and that rule is enforced by the Worker's sanitizer rather than
+by the toolbar, so it holds even against a hand-crafted request. See
+[Rich text](./rich-text.md) for how that works and what survives sanitizing.
+
+**Editing a comment.** An author can edit their own comment after posting; the
+comment then shows an **"edited"** marker next to its timestamp, so it never
+changes silently under someone who already read (or replied to) it. Editing runs
+the same sanitizing, length and profanity checks as posting, so it can't be used
+to launder content past the rules. Moderators can _delete_ a comment but not
+rewrite one — see [Moderation](./moderation.md).
+
 A commenter can also leave a **1–5 star rating** for the lesson (a MUI Rating in
 the comment box). Ratings are one-per-user-per-lesson — re-rating updates your
 existing star count rather than adding a second vote — and the lesson page shows
@@ -68,7 +83,8 @@ verifies it (and derives the author) before inserting the row.
  Browser ──POST /lessons  (Bearer JWT)──────────▶ Worker ──verify JWT──▶ Postgres (publish or save draft)
  Browser ──PUT  /lessons/:id (Bearer JWT)────────▶ Worker ──verify JWT + author──▶ Postgres (edit own; may flip draft↔hub)
  Browser ──GET /lessons/:id/comments────────────▶ Worker ──▶ Supabase Postgres   (public reads)
- Browser ──POST /lessons/:id/comments (Bearer)──▶ Worker ──verify JWT, profanity check──▶ Postgres
+ Browser ──POST /lessons/:id/comments (Bearer)──▶ Worker ──verify JWT, sanitize, profanity check──▶ Postgres
+ Browser ──PATCH /lessons/:id/comments/:cid ────▶ Worker ──verify JWT + author, same checks──▶ Postgres (edit own)
 ```
 
 ## Worker endpoints (contract)
@@ -78,16 +94,17 @@ These live in the Worker (`apps/api`). The frontend
 also exposes the profile, notification, and moderation endpoints documented on
 their own pages.)
 
-| Method & path                | Auth                    | Response                                                                                                              |
-| ---------------------------- | ----------------------- | --------------------------------------------------------------------------------------------------------------------- |
-| `GET /lessons`               | none (public)           | `{ "lessons": [{ id, authorId, title, author, sectionCount, published, createdAt }] }` (published only, newest first) |
-| `GET /lessons/mine`          | `Bearer <Supabase JWT>` | `{ "lessons": [{ id, authorId, title, author, sectionCount, published, createdAt }] }` (caller's own, incl. drafts)   |
-| `GET /lessons/:id`           | none (public)           | `{ "lesson": { id, authorId, title, author, sectionCount, published, createdAt, doc, avgRating, ratingCount } }`      |
-| `POST /lessons`              | `Bearer <Supabase JWT>` | `{ "lesson": { id, authorId, title, author, sectionCount, published, createdAt } }`                                   |
-| `PUT /lessons/:id`           | `Bearer <Supabase JWT>` | `{ "lesson": { id, authorId, title, author, sectionCount, published, createdAt } }` (author only; else `403`)         |
-| `GET /lessons/:id/comments`  | none (public)           | `{ "comments": [{ id, author, body, createdAt }] }` (oldest first)                                                    |
-| `POST /lessons/:id/comments` | `Bearer <Supabase JWT>` | `{ "comment": { id, author, body, createdAt }, "rating": { average, count } \| null }`                                |
-| `POST /ai-text/dislike`      | `Bearer <Supabase JWT>` | `{ "ok": true }` — evicts the cached text for `{ subject, documentName }`                                             |
+| Method & path                            | Auth                    | Response                                                                                                              |
+| ---------------------------------------- | ----------------------- | --------------------------------------------------------------------------------------------------------------------- |
+| `GET /lessons`                           | none (public)           | `{ "lessons": [{ id, authorId, title, author, sectionCount, published, createdAt }] }` (published only, newest first) |
+| `GET /lessons/mine`                      | `Bearer <Supabase JWT>` | `{ "lessons": [{ id, authorId, title, author, sectionCount, published, createdAt }] }` (caller's own, incl. drafts)   |
+| `GET /lessons/:id`                       | none (public)           | `{ "lesson": { id, authorId, title, author, sectionCount, published, createdAt, doc, avgRating, ratingCount } }`      |
+| `POST /lessons`                          | `Bearer <Supabase JWT>` | `{ "lesson": { id, authorId, title, author, sectionCount, published, createdAt } }`                                   |
+| `PUT /lessons/:id`                       | `Bearer <Supabase JWT>` | `{ "lesson": { id, authorId, title, author, sectionCount, published, createdAt } }` (author only; else `403`)         |
+| `GET /lessons/:id/comments`              | none (public)           | `{ "comments": [{ id, parentId, authorId, author, body, createdAt, editedAt }] }` (oldest first)                      |
+| `POST /lessons/:id/comments`             | `Bearer <Supabase JWT>` | `{ "comment": { id, ..., body, createdAt, editedAt }, "rating": { average, count } \| null }`                         |
+| `PATCH /lessons/:id/comments/:commentId` | `Bearer <Supabase JWT>` | `{ "comment": { ... } }` — edit your own comment (author only; else `403`)                                            |
+| `POST /ai-text/dislike`                  | `Bearer <Supabase JWT>` | `{ "ok": true }` — evicts the cached text for `{ subject, documentName }`                                             |
 
 - `doc` is the editor document shape used throughout the app:
   `{ title, sections: [{ id, name, blocks: [...] }] }`. Store it as `jsonb`.
@@ -110,16 +127,27 @@ their own pages.)
   draft; omitting it leaves the current state alone. `author` and `created_at` are
   left unchanged. This backs the editor's **Save to cloud** actions when editing a
   lesson loaded from the hub.
-- `POST /lessons/:id/comments` body is `{ body, parentId?, rating? }`. The Worker
-  verifies the JWT the same way, derives the author from the verified user, then
-  runs the text through [`glin-profanity`](https://www.npmjs.com/package/glin-profanity);
+- `POST /lessons/:id/comments` body is `{ body, parentId?, rating? }`, where `body`
+  is rich-text HTML. The Worker verifies the JWT the same way, derives the author
+  from the verified user, then **sanitizes the HTML** against an allow-list
+  ([Rich text](./rich-text.md)) — dropping media and anything else not permitted —
+  and runs the _resulting text_ through
+  [`glin-profanity`](https://www.npmjs.com/package/glin-profanity);
   if any profanity is found it **rejects the whole comment with `422`** (nothing is
-  stored). Otherwise it inserts the row with the service-role key. The check runs
-  on the Worker so it can't be bypassed by a crafted client request. An optional
-  `rating` (integer 1–5) rates the lesson alongside the comment: the Worker upserts
-  it into the `ratings` table keyed by `(lesson_id, author_id)` — one rating per
-  user, re-rating updates it — and returns the lesson's new `{ average, count }` as
-  `rating` (or `null` when no rating was sent). A `rating` outside 1–5 is `400`.
+  stored). Otherwise it inserts the **sanitized** HTML with the service-role key.
+  Both checks run on the Worker so neither can be bypassed by a crafted client
+  request. The 2000-character limit counts the comment's _text_, not the markup. An
+  optional `rating` (integer 1–5) rates the lesson alongside the comment: the Worker
+  upserts it into the `ratings` table keyed by `(lesson_id, author_id)` — one rating
+  per user, re-rating updates it — and returns the lesson's new `{ average, count }`
+  as `rating` (or `null` when no rating was sent). A `rating` outside 1–5 is `400`.
+- `PATCH /lessons/:id/comments/:commentId` body is `{ body }`. Edits one comment,
+  and **only its author may do so**: ownership is decided by comparing the stored
+  `author_id` against the verified JWT (a non-author gets `403`, a missing comment
+  `404`). The new body runs through the same sanitize/length/profanity pipeline as a
+  fresh post, so an edit can't launder content past the rules that applied when it
+  was written. A successful edit stamps `edited_at`, which the UI shows as an
+  "edited" marker. Moderators cannot edit — only delete.
 - `POST /ai-text/dislike` body is `{ subject, documentName }`. The Worker
   verifies the JWT the same way (sign-in required), then rebuilds the cache key
   for that text suggestion and deletes it, so the next request for the same
@@ -174,6 +202,11 @@ create policy "lessons are public to read"
 -- after it verifies the JWT and the profanity check passes. parent_id threads a
 -- reply under another comment (null for a top-level comment); posting a reply
 -- notifies the parent comment's author and the lesson author.
+--
+-- body holds sanitized rich-text HTML (comments written before rich text are plain
+-- strings, and still render as such). edited_at is when the author last edited the
+-- comment, or null if they never have — the thread shows an "edited" marker when it
+-- is set. Only the author can edit; a moderator's power is to delete.
 create table public.comments (
   id          uuid primary key default gen_random_uuid(),
   lesson_id   uuid not null references public.lessons (id) on delete cascade,
@@ -181,7 +214,8 @@ create table public.comments (
   author_id   uuid not null references auth.users (id) on delete cascade,
   author      text,
   body        text not null,
-  created_at  timestamptz not null default now()
+  created_at  timestamptz not null default now(),
+  edited_at   timestamptz
 );
 create index comments_lesson_id_idx on public.comments (lesson_id, created_at);
 alter table public.comments enable row level security;

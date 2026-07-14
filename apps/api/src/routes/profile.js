@@ -8,14 +8,23 @@ import { bearerToken } from '../lib/auth.js';
 import { isNameBanned } from '../lib/bans.js';
 import { profanityFilter } from '../lib/profanity.js';
 import { textResponse, jsonResponse } from '../lib/http.js';
+import { richTextToPlain, sanitizeRichText } from '../lib/richtext.js';
 
 // Display names are the only identity shown to other users (we never expose an
 // email). Bounded so a name stays readable in a comment header or hub card.
 const DISPLAY_NAME_MIN = 2;
 const DISPLAY_NAME_MAX = 40;
-// A user's free-text "about me", stored in user_metadata.bio (no DB column).
+
+// A user's "about me", stored in user_metadata.bio (no DB column). It is rich text
+// — HTML written in the browser with mui-tiptap — and, exactly as with comments, the
+// stored value is only ever what sanitizeRichText allows through (see lib/richtext.js).
 // Empty is allowed and clears the bio.
+//
+// The cap counts the text the user wrote, not the markup around it, so formatting a
+// bio doesn't eat into their word budget. MAX_BIO_HTML is the crude ceiling on the
+// raw submission, checked before parsing so a markup bomb never gets that far.
 const BIO_MAX = 500;
+const MAX_BIO_HTML = 8000;
 
 /**
  * Profile endpoint — lets a signed-in user set the display name that the rest of
@@ -110,16 +119,27 @@ export async function handleProfile(request, env, url, cors) {
 		} catch (e) {
 			return textResponse('Invalid JSON body', 400, cors);
 		}
-		const bio = (body && typeof body.bio === 'string' ? body.bio : '').trim();
-		if (bio.length > BIO_MAX) {
+		const raw = (body && typeof body.bio === 'string' ? body.bio : '').trim();
+		if (raw.length > MAX_BIO_HTML) {
 			return textResponse(`Bios are limited to ${BIO_MAX} characters.`, 400, cors);
 		}
-		if (bio && profanityFilter.checkProfanity(bio).containsProfanity) {
+
+		// Sanitize first, then judge the result: length and profanity are checked
+		// against the words the user wrote, not the markup they wrote them in (which
+		// would otherwise let tag names pad the length and confuse the filter).
+		const bio = await sanitizeRichText(raw);
+		const text = richTextToPlain(bio);
+		if (text.length > BIO_MAX) {
+			return textResponse(`Bios are limited to ${BIO_MAX} characters.`, 400, cors);
+		}
+		if (text && profanityFilter.checkProfanity(text).containsProfanity) {
 			return textResponse('That bio isn’t allowed. Please remove any inappropriate language.', 422, cors);
 		}
 
-		// Write the bio into user_metadata, preserving any other metadata keys.
-		const merged = { ...(user.user_metadata || {}), bio };
+		// Write the bio into user_metadata, preserving any other metadata keys. A bio
+		// with no words left after sanitizing (say, nothing but an image) stores as ''
+		// — i.e. it clears the bio, rather than leaving stray empty markup behind.
+		const merged = { ...(user.user_metadata || {}), bio: text ? bio : '' };
 		let res;
 		try {
 			res = await fetch(`${base}/auth/v1/admin/users/${encodeURIComponent(user.id)}`, {
@@ -132,7 +152,9 @@ export async function handleProfile(request, env, url, cors) {
 		}
 		if (!res.ok) return textResponse('Could not save your bio.', 502, cors);
 
-		return jsonResponse({ bio }, 200, cors);
+		// Hand back exactly what was stored — the sanitized HTML, which may differ from
+		// what was sent — so the profile page renders the truth without a refetch.
+		return jsonResponse({ bio: merged.bio }, 200, cors);
 	}
 
 	return textResponse('Not found.', 404, cors);

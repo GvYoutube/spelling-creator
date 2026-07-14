@@ -25,6 +25,11 @@ user is a plain author who can only touch their own content. Above that:
 - **Admin** — everything a moderator can do, plus: add moderators, approve a
   moderator's lesson-deletion request, fully delete a lesson, and ban users by IP.
 
+Note what is _not_ on either list: **editing** someone else's comment. A comment can
+only be edited by the person who wrote it (see [Rich text](./rich-text.md)) — a
+moderator's power over a bad comment is to delete it, not to rewrite it under its
+author's name.
+
 There is deliberately **no in-app way to create an admin** — admins are seeded by
 hand in the Supabase SQL editor (see the snippet at the bottom of `schema.sql`).
 Admins can add moderators (`POST /moderation/moderators`); `granted_by` records

@@ -15,7 +15,10 @@ queries the table directly — everything goes through the Worker's
 
 - **`comment`** — someone replied to your comment, or commented on a lesson you
   published. The Worker creates these inside its comment handler when a comment is
-  posted (notifying the parent comment's author and the lesson's author).
+  posted (notifying the parent comment's author and the lesson's author). Comments
+  are [rich text](./rich-text.md), but the notification's `body` carries the comment
+  **flattened to plain text** — the bell renders it as text, so markup would show up
+  there as literal tags.
 - **`link`** — another signed-in user sent you a link via **send link to user**
   (an optional short message can ride along, and is profanity-checked server-side).
   Because the recipient may not have an account id yet, a `link` notification is

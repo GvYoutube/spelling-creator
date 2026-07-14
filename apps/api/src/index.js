@@ -8,7 +8,7 @@ import { handleAi } from './routes/ai.js';
 import { handleImageGet, handleImagePut } from './routes/images.js';
 import { handleGit } from './routes/git.js';
 import { handleLessons } from './routes/lessons.js';
-import { handleComments } from './routes/comments.js';
+import { handleComments, handleCommentEdit } from './routes/comments.js';
 import { handleTextFeedback } from './routes/feedback.js';
 import { handleNotifications } from './routes/notifications.js';
 import { handleProfile } from './routes/profile.js';
@@ -57,7 +57,9 @@ app.put('/images/:hash', (c) => handleImagePut(req(c), c.env, c.req.param('hash'
 app.all('/git/:id/:action', (c) => handleGit(req(c), c.env, c.req.param('id'), `/${c.req.param('action')}`, cors(c)));
 
 // Lesson-hub routes (Supabase-backed). /lessons/:id/comments is its own handler,
-// so it must be registered before the broader /lessons/* match.
+// so it must be registered before the broader /lessons/* match. Editing one comment
+// (author-only) is a deeper path under it, registered first for the same reason.
+app.all('/lessons/:id/comments/:commentId', (c) => handleCommentEdit(req(c), c.env, c.req.param('id'), c.req.param('commentId'), cors(c)));
 app.all('/lessons/:id/comments', (c) => handleComments(req(c), c.env, c.req.param('id'), cors(c)));
 app.all('/lessons', (c) => handleLessons(req(c), c.env, urlOf(c), cors(c)));
 app.all('/lessons/*', (c) => handleLessons(req(c), c.env, urlOf(c), cors(c)));

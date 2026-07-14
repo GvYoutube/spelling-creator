@@ -2,6 +2,10 @@
 // profile page. Mirrors DisplayNameDialog: saving goes through the Worker
 // (lib/profile.setBio), which validates length and profanity before storing it in
 // user_metadata; on success we refresh the session so `user` reflects the change.
+//
+// The bio is rich text, written with the same editor as a comment (RichTextInput):
+// formatting and links, but no images or other media. The Worker sanitizes whatever
+// arrives, so what it stores is only ever what the allow-list permits.
 
 import { useEffect, useState } from "react";
 import Dialog from "@mui/material/Dialog";
@@ -11,11 +15,12 @@ import DialogContentText from "@mui/material/DialogContentText";
 import DialogActions from "@mui/material/DialogActions";
 import Button from "@mui/material/Button";
 import Stack from "@mui/material/Stack";
-import TextField from "@mui/material/TextField";
 import Alert from "@mui/material/Alert";
 import CircularProgress from "@mui/material/CircularProgress";
+import RichTextInput from "./RichTextInput.jsx";
 import { useAuth } from "../lib/auth.jsx";
 import { setBio, BIO_MAX } from "../lib/profile.js";
+import { richTextLength } from "../lib/richText.js";
 
 /**
  * @param {object}     props
@@ -27,20 +32,24 @@ import { setBio, BIO_MAX } from "../lib/profile.js";
  */
 export default function BioDialog({ open, initial = "", onClose, onSaved }) {
   const { accessToken, refreshSession } = useAuth();
-  const [text, setText] = useState("");
+  // The bio as rich-text HTML. `editorKey` remounts the editor when the dialog
+  // reopens — tiptap owns its content after mount, so re-seeding it needs a remount.
+  const [html, setHtml] = useState("");
+  const [editorKey, setEditorKey] = useState(0);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
 
-  // Seed the field with the current bio each time it opens.
+  // Seed the editor with the current bio each time it opens.
   useEffect(() => {
     if (open) {
-      setText(initial || "");
+      setHtml(initial || "");
+      setEditorKey((k) => k + 1);
       setError("");
     }
   }, [open, initial]);
 
-  const trimmed = text.trim();
-  const tooLong = trimmed.length > BIO_MAX;
+  // Measured over the words, not the markup — the same way the Worker measures it.
+  const tooLong = richTextLength(html) > BIO_MAX;
 
   const save = async (e) => {
     e.preventDefault();
@@ -48,7 +57,7 @@ export default function BioDialog({ open, initial = "", onClose, onSaved }) {
     if (tooLong) return;
     setSaving(true);
     try {
-      const saved = await setBio(trimmed, accessToken);
+      const saved = await setBio(html, accessToken);
       // Pull the new metadata into the session so the UI reflects it elsewhere.
       await refreshSession();
       if (onSaved) onSaved(saved);
@@ -74,18 +83,15 @@ export default function BioDialog({ open, initial = "", onClose, onSaved }) {
               {error}
             </Alert>
           )}
-          <TextField
-            autoFocus
-            fullWidth
-            multiline
-            minRows={3}
+          <RichTextInput
+            key={editorKey}
+            value={html}
+            onChange={setHtml}
+            maxLength={BIO_MAX}
             label="Bio"
-            value={text}
-            onChange={(e) => setText(e.target.value)}
+            placeholder="Tell people a little about yourself…"
             disabled={saving}
-            inputProps={{ maxLength: BIO_MAX }}
-            error={tooLong}
-            helperText={`${trimmed.length}/${BIO_MAX} characters.`}
+            autoFocus
           />
         </DialogContent>
         <DialogActions>

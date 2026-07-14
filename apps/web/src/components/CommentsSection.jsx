@@ -8,13 +8,21 @@
 // top-level comment); we nest replies under their parent here. Posting a reply
 // also notifies the parent comment's author and the lesson author — handled
 // entirely server-side.
+//
+// Comments are rich text: written with RichTextInput (mui-tiptap) and stored as
+// sanitized HTML, rendered back through RichText. Formatting and links only — no
+// images or other media, which the Worker's sanitizer is what actually enforces
+// (apps/api/src/lib/richtext.js).
+//
+// An author may edit their own comment after posting; the thread then shows an
+// "edited" marker, so a comment never changes silently under someone reading it.
+// Moderators can delete a comment but not rewrite it — see handleCommentEdit.
 
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import Box from "@mui/material/Box";
 import Stack from "@mui/material/Stack";
 import Typography from "@mui/material/Typography";
-import TextField from "@mui/material/TextField";
 import Button from "@mui/material/Button";
 import Rating from "@mui/material/Rating";
 import Divider from "@mui/material/Divider";
@@ -32,13 +40,18 @@ import MoreVertIcon from "@mui/icons-material/MoreVert";
 import DeleteOutlineIcon from "@mui/icons-material/DeleteOutline";
 import BlockIcon from "@mui/icons-material/Block";
 import { CommentsSkeleton } from "./Skeletons.jsx";
+import RichText from "./RichText.jsx";
+import RichTextInput from "./RichTextInput.jsx";
 import { useAuth } from "../lib/auth.jsx";
 import {
   fetchComments,
   postComment,
+  updateComment,
   deleteComment,
   COMMENT_BLOCKED_STATUS,
+  COMMENT_MAX,
 } from "../lib/comments.js";
+import { isRichTextEmpty, richTextLength } from "../lib/richText.js";
 import { banName } from "../lib/moderation.js";
 
 // How deep replies are allowed to indent before they stop nesting further. Deeper
@@ -64,6 +77,11 @@ function initial(name) {
   return s ? s[0].toUpperCase() : "?";
 }
 
+// Whether a rich-text draft can be submitted: it must say something, and must fit.
+function isSubmittable(html) {
+  return !isRichTextEmpty(html) && richTextLength(html) <= COMMENT_MAX;
+}
+
 export default function CommentsSection({ lessonId, onRated }) {
   const navigate = useNavigate();
   const { enabled: authEnabled, user, accessToken, isModerator } = useAuth();
@@ -72,7 +90,11 @@ export default function CommentsSection({ lessonId, onRated }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
+  // Drafts are rich-text HTML, not plain strings. `draftKey` remounts the editor:
+  // tiptap owns its content once mounted, so bumping the key is how we clear the box
+  // after a successful post.
   const [draft, setDraft] = useState("");
+  const [draftKey, setDraftKey] = useState(0);
   // Optional 1–5 star rating posted with a top-level comment. null = not rating.
   const [ratingValue, setRatingValue] = useState(null);
   const [posting, setPosting] = useState(false);
@@ -87,6 +109,14 @@ export default function CommentsSection({ lessonId, onRated }) {
   const [replyDraft, setReplyDraft] = useState("");
   const [replyPosting, setReplyPosting] = useState(false);
   const [replyNotice, setReplyNotice] = useState(null);
+
+  // Edit state, mirroring the reply state: one open editor at a time, keyed by the
+  // id of the comment being edited. You may only edit your own comment — the Worker
+  // enforces that from the verified session, this just declines to offer the button.
+  const [editing, setEditing] = useState(null);
+  const [editDraft, setEditDraft] = useState("");
+  const [editSaving, setEditSaving] = useState(false);
+  const [editNotice, setEditNotice] = useState(null);
 
   // Moderator-only per-comment action menu (delete / ban author), keyed by the
   // comment it was opened on, plus a feedback toast for those actions.
@@ -126,32 +156,37 @@ export default function CommentsSection({ lessonId, onRated }) {
     if (lessonId) load();
     // Reset the in-progress draft state when switching lessons.
     setDraft("");
+    setDraftKey((k) => k + 1);
     setRatingValue(null);
     setPostNotice(null);
     setReplyTo(null);
     setReplyDraft("");
     setReplyNotice(null);
+    setEditing(null);
+    setEditDraft("");
+    setEditNotice(null);
     // Intentionally re-run only when the lesson changes, not when `load` changes.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [lessonId]);
 
   const submit = async (e) => {
     e.preventDefault();
-    const text = draft.trim();
-    if (!text || posting) return;
+    if (!isSubmittable(draft) || posting) return;
     setPosting(true);
     setPostNotice(null);
     try {
       const { comment, rating } = await postComment(
         lessonId,
-        text,
+        draft,
         accessToken,
         undefined,
         ratingValue,
       );
-      // Append the new comment to the (oldest-first) list and clear the box.
+      // Append the new comment to the (oldest-first) list and clear the box (the key
+      // bump remounts the editor, which is what actually empties it).
       setComments((prev) => [...prev, comment]);
       setDraft("");
+      setDraftKey((k) => k + 1);
       // If a rating rode along, hand the lesson page its new average and reset
       // the stars so a follow-up comment doesn't re-submit the same rating.
       if (rating) {
@@ -185,14 +220,13 @@ export default function CommentsSection({ lessonId, onRated }) {
 
   const submitReply = async (e) => {
     e.preventDefault();
-    const text = replyDraft.trim();
-    if (!text || replyPosting || !replyTo) return;
+    if (!isSubmittable(replyDraft) || replyPosting || !replyTo) return;
     setReplyPosting(true);
     setReplyNotice(null);
     try {
       const { comment: reply } = await postComment(
         lessonId,
-        text,
+        replyDraft,
         accessToken,
         replyTo,
       );
@@ -208,6 +242,49 @@ export default function CommentsSection({ lessonId, onRated }) {
       });
     } finally {
       setReplyPosting(false);
+    }
+  };
+
+  // Editing your own comment. Seeded with the comment's current body, so the editor
+  // opens showing exactly what's on screen — formatting and all.
+  const openEdit = (c) => {
+    setEditing(c.id);
+    setEditDraft(c.body || "");
+    setEditNotice(null);
+  };
+
+  const cancelEdit = () => {
+    setEditing(null);
+    setEditDraft("");
+    setEditNotice(null);
+  };
+
+  const submitEdit = async (e, c) => {
+    e.preventDefault();
+    if (!isSubmittable(editDraft) || editSaving) return;
+    setEditSaving(true);
+    setEditNotice(null);
+    try {
+      const saved = await updateComment(lessonId, c.id, editDraft, accessToken);
+      // Swap the updated comment into place. The Worker returns the stored (sanitized)
+      // body and the fresh `editedAt`, so the thread shows what was really saved
+      // rather than what we hoped was.
+      setComments((prev) =>
+        prev.map((item) =>
+          item.id === saved.id ? { ...item, ...saved } : item,
+        ),
+      );
+      cancelEdit();
+    } catch (err) {
+      // Same shape as posting: a profanity block is a fixable warning (keep the
+      // draft), anything else is an error.
+      const blocked = err.status === COMMENT_BLOCKED_STATUS;
+      setEditNotice({
+        severity: blocked ? "warning" : "error",
+        message: err.message || "Could not save your edit.",
+      });
+    } finally {
+      setEditSaving(false);
     }
   };
 
@@ -285,6 +362,9 @@ export default function CommentsSection({ lessonId, onRated }) {
               </Typography>
               <Typography variant="caption" color="text.secondary">
                 {formatDateTime(c.createdAt)}
+                {/* An edit is never silent: say so, so a reader can tell the comment
+                    they're looking at isn't necessarily the one that was replied to. */}
+                {c.editedAt ? " · edited" : ""}
               </Typography>
               {/* Moderator-only actions on this comment. */}
               {isModerator && (
@@ -300,36 +380,101 @@ export default function CommentsSection({ lessonId, onRated }) {
                 </IconButton>
               )}
             </Stack>
-            <Typography
-              variant="body2"
-              sx={{ whiteSpace: "pre-wrap", wordBreak: "break-word" }}
-            >
-              {c.body}
-            </Typography>
-
-            {/* Replying needs a signed-in session, like posting a comment. */}
-            {authEnabled && user && replyTo !== c.id && (
-              <Button
-                size="small"
-                sx={{ mt: 0.5, px: 0.5, minWidth: 0 }}
-                onClick={() => openReply(c.id)}
+            {/* Editing swaps the body for an editor seeded with it; otherwise the
+                stored rich text renders (or plain text, for older comments). */}
+            {editing === c.id ? (
+              <Box
+                component="form"
+                onSubmit={(e) => submitEdit(e, c)}
+                sx={{ mt: 1 }}
               >
-                Reply
-              </Button>
+                <RichTextInput
+                  value={editDraft}
+                  onChange={setEditDraft}
+                  maxLength={COMMENT_MAX}
+                  label="Edit your comment"
+                  disabled={editSaving}
+                  autoFocus
+                />
+                {editNotice && (
+                  <Alert
+                    severity={editNotice.severity}
+                    sx={{ mt: 1 }}
+                    onClose={() => setEditNotice(null)}
+                  >
+                    {editNotice.severity === "warning" && (
+                      <AlertTitle>Edit blocked</AlertTitle>
+                    )}
+                    {editNotice.message}
+                  </Alert>
+                )}
+                <Stack
+                  direction="row"
+                  spacing={1}
+                  justifyContent="flex-end"
+                  sx={{ mt: 1 }}
+                >
+                  <Button
+                    size="small"
+                    onClick={cancelEdit}
+                    disabled={editSaving}
+                  >
+                    Cancel
+                  </Button>
+                  <Button
+                    type="submit"
+                    size="small"
+                    variant="contained"
+                    disabled={editSaving || !isSubmittable(editDraft)}
+                    startIcon={
+                      editSaving ? (
+                        <CircularProgress size={16} color="inherit" />
+                      ) : null
+                    }
+                  >
+                    {editSaving ? "Saving…" : "Save changes"}
+                  </Button>
+                </Stack>
+              </Box>
+            ) : (
+              <RichText value={c.body} />
+            )}
+
+            {/* Replying and editing both need a signed-in session; editing further
+                needs the comment to be yours (the Worker checks this for real). */}
+            {editing !== c.id && authEnabled && user && (
+              <Stack direction="row" spacing={0.5} sx={{ mt: 0.5 }}>
+                {replyTo !== c.id && (
+                  <Button
+                    size="small"
+                    sx={{ px: 0.5, minWidth: 0 }}
+                    onClick={() => openReply(c.id)}
+                  >
+                    Reply
+                  </Button>
+                )}
+                {c.authorId === user.id && (
+                  <Button
+                    size="small"
+                    sx={{ px: 0.5, minWidth: 0 }}
+                    onClick={() => openEdit(c)}
+                  >
+                    Edit
+                  </Button>
+                )}
+              </Stack>
             )}
 
             {replyTo === c.id && (
               <Box component="form" onSubmit={submitReply} sx={{ mt: 1 }}>
-                <TextField
-                  label={`Reply to ${c.author || "Anonymous"}`}
+                <RichTextInput
                   value={replyDraft}
-                  onChange={(e) => setReplyDraft(e.target.value)}
-                  multiline
-                  minRows={2}
-                  fullWidth
-                  autoFocus
+                  onChange={setReplyDraft}
+                  maxLength={COMMENT_MAX}
+                  label={`Reply to ${c.author || "Anonymous"}`}
+                  placeholder={`Reply to ${c.author || "Anonymous"}…`}
                   disabled={replyPosting}
-                  inputProps={{ maxLength: 2000 }}
+                  autoFocus
                 />
                 {replyNotice && (
                   <Alert
@@ -360,7 +505,7 @@ export default function CommentsSection({ lessonId, onRated }) {
                     type="submit"
                     size="small"
                     variant="contained"
-                    disabled={replyPosting || !replyDraft.trim()}
+                    disabled={replyPosting || !isSubmittable(replyDraft)}
                     startIcon={
                       replyPosting ? (
                         <CircularProgress size={16} color="inherit" />
@@ -439,15 +584,14 @@ export default function CommentsSection({ lessonId, onRated }) {
             </Typography>
           ) : user ? (
             <Box component="form" onSubmit={submit}>
-              <TextField
-                label="Add a comment"
+              <RichTextInput
+                key={draftKey}
                 value={draft}
-                onChange={(e) => setDraft(e.target.value)}
-                multiline
-                minRows={2}
-                fullWidth
+                onChange={setDraft}
+                maxLength={COMMENT_MAX}
+                label="Add a comment"
+                placeholder="Add a comment…"
                 disabled={posting}
-                inputProps={{ maxLength: 2000 }}
               />
               {postNotice && (
                 <Alert
@@ -485,7 +629,7 @@ export default function CommentsSection({ lessonId, onRated }) {
                 <Button
                   type="submit"
                   variant="contained"
-                  disabled={posting || !draft.trim()}
+                  disabled={posting || !isSubmittable(draft)}
                   startIcon={
                     posting ? (
                       <CircularProgress size={16} color="inherit" />

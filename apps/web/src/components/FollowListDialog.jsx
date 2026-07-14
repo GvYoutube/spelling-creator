@@ -23,6 +23,7 @@ import Typography from "@mui/material/Typography";
 import Alert from "@mui/material/Alert";
 import Skeleton from "@mui/material/Skeleton";
 import { fetchFollowList } from "../lib/users.js";
+import { richTextToLine } from "../lib/richText.js";
 
 function initial(name) {
   const s = (name || "").trim();
@@ -156,9 +157,11 @@ export default function FollowListDialog({
                 <ListItemAvatar>
                   <Avatar>{initial(u.displayName)}</Avatar>
                 </ListItemAvatar>
+                {/* Bios are rich-text HTML; this is a one-line subtitle, so show the
+                    words and drop the markup. */}
                 <ListItemText
                   primary={u.displayName || "Anonymous"}
-                  secondary={u.bio || undefined}
+                  secondary={richTextToLine(u.bio, 80) || undefined}
                   primaryTypographyProps={{ noWrap: true }}
                   secondaryTypographyProps={{ noWrap: true }}
                 />

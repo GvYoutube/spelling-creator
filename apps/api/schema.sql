@@ -219,6 +219,13 @@ alter table public.lessons add column if not exists shadowbanned boolean not nul
 alter table public.lessons  add column if not exists author_ip text;
 alter table public.comments add column if not exists author_ip text;
 
+-- When the author last edited their comment, or null if they never have. Comments
+-- are rich text (HTML, authored with mui-tiptap) and their author may edit them
+-- after posting, so the thread shows an "edited" marker rather than letting a
+-- comment change under a reader silently. Only the author edits; a moderator's power
+-- over a comment is to delete it, not to rewrite it. See routes/comments.js.
+alter table public.comments add column if not exists edited_at timestamptz;
+
 -- Name bans (created by moderators): block any account whose display name matches
 -- from posting comments or publishing/editing lessons. Stored normalised
 -- (lower-cased, trimmed) as the primary key so the lookup is exact and case-

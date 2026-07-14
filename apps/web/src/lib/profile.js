@@ -14,7 +14,9 @@ const API_URL = import.meta.env.VITE_API_URL;
 export const DISPLAY_NAME_MIN = 2;
 export const DISPLAY_NAME_MAX = 40;
 
-// Mirrors the Worker's BIO_MAX. An empty bio is allowed and clears it.
+// Mirrors the Worker's BIO_MAX. Counted over the text the user wrote, not the
+// rich-text markup around it, so formatting a bio never eats into the budget — the
+// Worker measures it the same way. An empty bio is allowed and clears it.
 export const BIO_MAX = 500;
 
 /**
@@ -49,12 +51,19 @@ export async function setDisplayName(displayName, accessToken) {
 }
 
 /**
- * Save (or clear) the signed-in user's public bio. Pass an empty string to clear
- * it. Resolves to the stored bio on success; throws an Error carrying the Worker's
- * plain-text reason on failure (e.g. profanity or over the length limit).
- * @param {string} bio          The bio text (≤ BIO_MAX chars; "" clears it).
+ * Save (or clear) the signed-in user's public bio. Pass an empty string to clear it.
+ *
+ * The bio is rich-text HTML (see components/RichTextInput.jsx). The Worker sanitizes
+ * it before storing — stripping anything outside the allow-list, media above all —
+ * so what this resolves to is the stored value, which may differ from what was sent.
+ * Render it back with components/RichText.jsx, never as raw HTML.
+ *
+ * Throws an Error carrying the Worker's plain-text reason on failure (e.g. profanity,
+ * or over the length limit — which counts the words, not the markup).
+ *
+ * @param {string} bio          The bio as rich-text HTML ("" clears it).
  * @param {string} accessToken  Supabase session JWT.
- * @returns {Promise<string>}
+ * @returns {Promise<string>}   The sanitized HTML actually stored.
  */
 export async function setBio(bio, accessToken) {
   if (!API_URL) throw new Error("Accounts are not configured.");

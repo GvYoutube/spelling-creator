@@ -37,7 +37,9 @@ import HowToRegIcon from "@mui/icons-material/HowToReg";
 import NavActions from "../components/NavActions.jsx";
 import BioDialog from "../components/BioDialog.jsx";
 import FollowListDialog from "../components/FollowListDialog.jsx";
+import RichText from "../components/RichText.jsx";
 import { LessonGridSkeleton } from "../components/Skeletons.jsx";
+import { richTextToLine } from "../lib/richText.js";
 import {
   fetchUserProfile,
   fetchUserActivity,
@@ -156,8 +158,11 @@ export default function ProfilePage() {
 
   useDocumentMeta({
     title: profile ? `${displayName}` : "Profile",
+    // The bio is rich-text HTML, but a meta/OG description is plain text — raw markup
+    // would show up verbatim in search snippets and link previews. Flatten it to one
+    // truncated line.
     description: profile
-      ? bio || `Spelling lessons published by ${displayName}.`
+      ? richTextToLine(bio) || `Spelling lessons published by ${displayName}.`
       : undefined,
   });
 
@@ -324,12 +329,7 @@ export default function ProfilePage() {
             <Box sx={{ mb: 4 }}>
               {bio ? (
                 <Stack direction="row" spacing={1} alignItems="flex-start">
-                  <Typography
-                    variant="body1"
-                    sx={{ whiteSpace: "pre-wrap", wordBreak: "break-word" }}
-                  >
-                    {bio}
-                  </Typography>
+                  <RichText value={bio} variant="body1" />
                   {isOwner && (
                     <Tooltip title="Edit bio">
                       <IconButton

@@ -7,6 +7,7 @@ import { bearerToken } from '../lib/auth.js';
 import { countFollows, isFollowing } from './follows.js';
 import { rowToLesson } from '../lib/lesson.js';
 import { xmlEscape } from '../lib/xml.js';
+import { richTextToPlain } from '../lib/richtext.js';
 import { textResponse, jsonResponse } from '../lib/http.js';
 
 /**
@@ -125,7 +126,10 @@ async function userFeed(env, base, url, id, cors) {
 					id: `urn:s2c:comment:${row.id}`,
 					title: `Comment by ${user.displayName}`,
 					link: row.lesson_id ? `${origin}/hub/${encodeURIComponent(row.lesson_id)}` : profileUrl,
-					summary: row.body || '',
+					// Comment bodies are rich-text HTML. An Atom <summary> without a
+					// type="html" attribute is plain text, so the markup would reach feed
+					// readers as literal, escaped tags — flatten it to the words instead.
+					summary: richTextToPlain(row.body || ''),
 					createdAt: row.created_at,
 				});
 			}
