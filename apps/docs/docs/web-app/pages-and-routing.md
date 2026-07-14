@@ -37,6 +37,10 @@ The home page (`src/pages/HomePage.jsx`) has two faces, chosen from the auth sta
   The words come from the Worker's `GET /spelling-words.json` — an aggregate of
   every spelling word taught across the published hub lessons, rebuilt at most
   once every two days and cached in KV (`apps/api/src/routes/spelling-words.js`).
+  A spelling row can hold a phrase rather than a single word ("ice cream"), and
+  those animate badly — the shape scales text by character count, so a phrase
+  renders tiny and stretched — so `src/lib/spellingWords.js` drops any entry
+  containing whitespace and only single words reach the animation.
   If that fetch fails, a small built-in word list is used instead. Feature
   illustrations live under `apps/web/public/home/` (a missing file degrades to a
   labelled placeholder — see that folder's `README.md`).

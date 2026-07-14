@@ -26,9 +26,25 @@ const FALLBACK_WORDS = [
 ];
 
 /**
+ * A spelling row can hold anything a teacher typed, including phrases ("ice
+ * cream"). The animation renders each entry as one drifting particle, and a
+ * multi-word phrase makes for an ugly one — it is scaled by character count, so
+ * it comes out tiny and stretched, and can break across the hero's edges. Only
+ * single words are usable, so anything containing whitespace is dropped.
+ * @param {unknown} word
+ * @returns {boolean}
+ */
+function isSingleWord(word) {
+  return (
+    typeof word === "string" && word.trim() !== "" && !/\s/.test(word.trim())
+  );
+}
+
+/**
  * Fetch the aggregated spelling words. Always resolves to a non-empty array of
- * strings: the server list when available, otherwise a small built-in fallback,
- * so the caller (the animation) never has to handle an empty state.
+ * single-word strings: the server list when available, otherwise a small
+ * built-in fallback, so the caller (the animation) never has to handle an empty
+ * state.
  * @returns {Promise<string[]>}
  */
 export async function fetchSpellingWords() {
@@ -46,6 +62,6 @@ export async function fetchSpellingWords() {
 
   const data = await res.json().catch(() => null);
   const words = data && Array.isArray(data.words) ? data.words : [];
-  const clean = words.filter((w) => typeof w === "string" && w.trim());
+  const clean = words.filter(isSingleWord).map((w) => w.trim());
   return clean.length ? clean : FALLBACK_WORDS;
 }
