@@ -1,0 +1,86 @@
+name: Build & Release MCPB
+
+# Builds the Spelling Creator Hub .mcpb bundle and publishes it as a GitHub
+# Release asset.
+#
+# Two ways to trigger:
+#   • Push a tag matching `mcp-v*` (e.g. `mcp-v0.1.4`) — the release is created
+#     for that tag.
+#   • Run manually (workflow_dispatch) — the tag/release name is derived from
+#     the version in apps/mcp/manifest.json (e.g. `mcp-v0.1.4`).
+on:
+  push:
+    tags:
+      - "mcp-v*"
+  workflow_dispatch:
+
+# Don't run two release builds at once.
+concurrency:
+  group: "mcpb-release"
+  cancel-in-progress: false
+
+permissions:
+  contents: write # needed to create the release and upload the asset
+
+jobs:
+  build-and-release:
+    runs-on: ubuntu-latest
+
+    env:
+      CI: true
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 11.1.3
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 26
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install
+
+      - name: Validate manifest
+        run: pnpm --filter @spelling-creator/mcp validate
+
+      - name: Build .mcpb bundle
+        run: pnpm --filter @spelling-creator/mcp pack
+
+      # Resolve the release tag/name. On a tag push, use the pushed tag as-is.
+      # On a manual run, derive `mcp-v<version>` from the manifest so the asset
+      # and release are versioned consistently.
+      - name: Resolve version
+        id: version
+        run: |
+          version=$(node -p "require('./apps/mcp/manifest.json').version")
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          if [ "${{ github.ref_type }}" = "tag" ]; then
+            echo "tag=${{ github.ref_name }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "tag=mcp-v$version" >> "$GITHUB_OUTPUT"
+          fi
+
+      # Give the asset a versioned name so downloads are self-describing.
+      - name: Name the asset
+        run: |
+          cp apps/mcp/dist/spelling-creator-hub.mcpb \
+             "apps/mcp/dist/spelling-creator-hub-${{ steps.version.outputs.version }}.mcpb"
+
+      - name: Publish release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.version.outputs.tag }}
+          name: Spelling Creator Hub MCPB ${{ steps.version.outputs.version }}
+          body: |
+            Spelling Creator Hub MCP bundle `v${{ steps.version.outputs.version }}`.
+
+            Install by opening the attached `.mcpb` file with Claude Desktop.
+          files: apps/mcp/dist/spelling-creator-hub-${{ steps.version.outputs.version }}.mcpb
+          fail_on_unmatched_files: true
