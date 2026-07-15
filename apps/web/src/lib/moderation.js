@@ -5,28 +5,32 @@
 // Worker's plain-text reason on failure. The browser's view of "am I a mod/admin"
 // (fetchMyRole) is only ever used to decide what UI to show — never to authorise.
 //
-// Worker endpoints (see handleModeration in apps/api/src/index.js):
-//   GET    /moderation/whoami                         -> { role }            (any signed-in)
-//   DELETE /moderation/comments/:id                                          (mod+)
-//   POST   /moderation/lessons/:id/shadowban          { shadowbanned }       (mod+)
-//   POST   /moderation/lessons/:id/delete-request     { reason }             (mod+)
-//   GET    /moderation/lessons/shadowbanned           -> { lessons }         (mod+)
-//   DELETE /moderation/lessons/:id                                           (admin)
-//   GET    /moderation/delete-requests                -> { requests }        (admin)
-//   POST   /moderation/delete-requests/:id/approve|deny                      (admin)
-//   GET    /moderation/bans                           -> { names, ips }      (mod+ / admin)
-//   POST   /moderation/bans/name                      { name }               (mod+)
-//   DELETE /moderation/bans/name/:nameLower                                  (mod+)
-//   POST   /moderation/bans/ip                        { ip, reason? }        (admin)
-//   DELETE /moderation/bans/ip/:ip                                           (admin)
-//   GET    /moderation/moderators                     -> { moderators }      (admin)
-//   POST   /moderation/moderators                     { email }              (admin)
-//   DELETE /moderation/moderators/:userId                                    (admin)
+// Worker endpoints (see handleModeration in apps/api/src/routes/moderation.js).
+// Named "/mod", not "/moderation" — the SPA already owns the "/moderation"
+// page route, and the Worker sees every request before its static assets do
+// (run_worker_first), so an API route at the same path as a page would
+// swallow that page's direct loads/reloads instead of ever serving it.
+//   GET    /mod/whoami                         -> { role }            (any signed-in)
+//   DELETE /mod/comments/:id                                          (mod+)
+//   POST   /mod/lessons/:id/shadowban          { shadowbanned }       (mod+)
+//   POST   /mod/lessons/:id/delete-request     { reason }             (mod+)
+//   GET    /mod/lessons/shadowbanned           -> { lessons }         (mod+)
+//   DELETE /mod/lessons/:id                                           (admin)
+//   GET    /mod/delete-requests                -> { requests }        (admin)
+//   POST   /mod/delete-requests/:id/approve|deny                      (admin)
+//   GET    /mod/bans                           -> { names, ips }      (mod+ / admin)
+//   POST   /mod/bans/name                      { name }               (mod+)
+//   DELETE /mod/bans/name/:nameLower                                  (mod+)
+//   POST   /mod/bans/ip                        { ip, reason? }        (admin)
+//   DELETE /mod/bans/ip/:ip                                           (admin)
+//   GET    /mod/moderators                     -> { moderators }      (admin)
+//   POST   /mod/moderators                     { email }              (admin)
+//   DELETE /mod/moderators/:userId                                    (admin)
 
 const API_URL = import.meta.env.VITE_API_URL;
 
 function endpoint(path = "") {
-  return `${API_URL.replace(/\/$/, "")}/moderation${path}`;
+  return `${API_URL.replace(/\/$/, "")}/mod${path}`;
 }
 
 async function readError(res) {

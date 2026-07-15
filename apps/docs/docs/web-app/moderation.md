@@ -11,9 +11,12 @@ dedicated moderation queue at `/moderation` (`ModerationPage.jsx`). The page is
 gated to privileged users and is disallowed for robots.
 
 The browser holds no authority of its own: it asks the Worker
-`GET /moderation/whoami` what the caller is allowed to do and renders accordingly,
+`GET /mod/whoami` what the caller is allowed to do and renders accordingly,
 and the Worker **re-derives the caller's role from the database on every
 privileged request**, so a tampered client can never grant itself power.
+(The Worker's moderation API lives at `/mod`, not `/moderation` — it's named
+differently on purpose so it can't collide with this page's own `/moderation`
+route; see the registration comment in `apps/api/src/index.js`.)
 
 ## Roles
 
@@ -32,7 +35,7 @@ author's name.
 
 There is deliberately **no in-app way to create an admin** — admins are seeded by
 hand in the Supabase SQL editor (see the snippet at the bottom of `schema.sql`).
-Admins can add moderators (`POST /moderation/moderators`); `granted_by` records
+Admins can add moderators (`POST /mod/moderators`); `granted_by` records
 which admin added each one.
 
 ## Shadowbanning vs. deletion
@@ -63,16 +66,16 @@ That column is **only ever surfaced to mods/admins**, never in public responses.
 All require a `Bearer <Supabase JWT>` and the appropriate role; the frontend
 wrapper is `src/lib/moderation.js`.
 
-| Method & path                                     | Role  | What it does                                 |
-| ------------------------------------------------- | ----- | -------------------------------------------- |
-| `GET /moderation/whoami`                          | any   | The caller's capabilities (mod/admin flags). |
-| `DELETE /moderation/comments/:id`                 | mod   | Delete any comment.                          |
-| `POST /moderation/lessons/:id/shadowban`          | mod   | Hide/unhide a lesson from the public hub.    |
-| `GET /moderation/lessons/shadowbanned`            | mod   | List shadowbanned lessons.                   |
-| `POST /moderation/lessons/:id/delete-request`     | mod   | File a request to fully delete a lesson.     |
-| `GET /moderation/delete-requests`                 | admin | List pending deletion requests.              |
-| `POST /moderation/delete-requests/:id/approve`    | admin | Approve (and delete) a request.              |
-| `DELETE /moderation/lessons/:id`                  | admin | Fully delete a lesson.                       |
-| `GET` / `POST` / `DELETE /moderation/bans/name…`  | mod   | List / add / remove name bans.               |
-| `GET` / `POST` / `DELETE /moderation/bans/ip…`    | admin | List / add / remove IP bans.                 |
-| `GET` / `POST` / `DELETE /moderation/moderators…` | admin | List / add / remove moderators.              |
+| Method & path                              | Role  | What it does                                 |
+| ------------------------------------------ | ----- | -------------------------------------------- |
+| `GET /mod/whoami`                          | any   | The caller's capabilities (mod/admin flags). |
+| `DELETE /mod/comments/:id`                 | mod   | Delete any comment.                          |
+| `POST /mod/lessons/:id/shadowban`          | mod   | Hide/unhide a lesson from the public hub.    |
+| `GET /mod/lessons/shadowbanned`            | mod   | List shadowbanned lessons.                   |
+| `POST /mod/lessons/:id/delete-request`     | mod   | File a request to fully delete a lesson.     |
+| `GET /mod/delete-requests`                 | admin | List pending deletion requests.              |
+| `POST /mod/delete-requests/:id/approve`    | admin | Approve (and delete) a request.              |
+| `DELETE /mod/lessons/:id`                  | admin | Fully delete a lesson.                       |
+| `GET` / `POST` / `DELETE /mod/bans/name…`  | mod   | List / add / remove name bans.               |
+| `GET` / `POST` / `DELETE /mod/bans/ip…`    | admin | List / add / remove IP bans.                 |
+| `GET` / `POST` / `DELETE /mod/moderators…` | admin | List / add / remove moderators.              |

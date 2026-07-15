@@ -13,23 +13,26 @@ import { textResponse, jsonResponse } from '../lib/http.js';
  * client's claim of being a mod/admin is never trusted), then gates on it:
  * "mod+" routes need moderator or admin; "admin" routes need admin.
  *
- *   GET    /moderation/whoami                            any signed-in -> { role }
- *   DELETE /moderation/comments/:id                      mod+   delete a comment (replies cascade)
- *   POST   /moderation/lessons/:id/shadowban             mod+   { shadowbanned } hide/show a lesson
- *   POST   /moderation/lessons/:id/delete-request        mod+   { reason } ask an admin to delete
- *   GET    /moderation/lessons/shadowbanned              mod+   list shadowbanned lessons
- *   DELETE /moderation/lessons/:id                       admin  fully delete a lesson
- *   GET    /moderation/delete-requests                   admin  pending deletion requests
- *   POST   /moderation/delete-requests/:id/approve       admin  delete the lesson + resolve
- *   POST   /moderation/delete-requests/:id/deny          admin  resolve without deleting
- *   GET    /moderation/bans                              mod+   name bans (+ ip bans for admin)
- *   POST   /moderation/bans/name                         mod+   { name } ban a display name
- *   DELETE /moderation/bans/name/:nameLower              mod+   lift a name ban
- *   POST   /moderation/bans/ip                           admin  { ip, reason? } ban an address
- *   DELETE /moderation/bans/ip/:ip                       admin  lift an ip ban
- *   GET    /moderation/moderators                        admin  list moderators
- *   POST   /moderation/moderators                        admin  { email } add a moderator
- *   DELETE /moderation/moderators/:userId                admin  remove a moderator
+ *   GET    /mod/whoami                            any signed-in -> { role }
+ *   DELETE /mod/comments/:id                      mod+   delete a comment (replies cascade)
+ *   POST   /mod/lessons/:id/shadowban             mod+   { shadowbanned } hide/show a lesson
+ *   POST   /mod/lessons/:id/delete-request        mod+   { reason } ask an admin to delete
+ *   GET    /mod/lessons/shadowbanned              mod+   list shadowbanned lessons
+ *   DELETE /mod/lessons/:id                       admin  fully delete a lesson
+ *   GET    /mod/delete-requests                   admin  pending deletion requests
+ *   POST   /mod/delete-requests/:id/approve       admin  delete the lesson + resolve
+ *   POST   /mod/delete-requests/:id/deny          admin  resolve without deleting
+ *   GET    /mod/bans                              mod+   name bans (+ ip bans for admin)
+ *   POST   /mod/bans/name                         mod+   { name } ban a display name
+ *   DELETE /mod/bans/name/:nameLower              mod+   lift a name ban
+ *   POST   /mod/bans/ip                           admin  { ip, reason? } ban an address
+ *   DELETE /mod/bans/ip/:ip                       admin  lift an ip ban
+ *   GET    /mod/moderators                        admin  list moderators
+ *   POST   /mod/moderators                        admin  { email } add a moderator
+ *   DELETE /mod/moderators/:userId                admin  remove a moderator
+ *
+ * Named "/mod", not "/moderation", so it can't collide with the SPA's own
+ * "/moderation" page route — see the registration comment in index.js.
  *
  * Errors are short plain-text reasons, matching the rest of the API.
  */
@@ -40,8 +43,8 @@ export async function handleModeration(request, env, url, cors) {
 	const base = env.SUPABASE_URL.replace(/\/$/, '');
 	const method = request.method;
 
-	// Path under "/moderation", split into decoded segments.
-	const rest = url.pathname.replace(/\/$/, '').slice('/moderation'.length);
+	// Path under "/mod", split into decoded segments.
+	const rest = url.pathname.replace(/\/$/, '').slice('/mod'.length);
 	const seg = rest
 		.split('/')
 		.filter(Boolean)
@@ -63,12 +66,12 @@ export async function handleModeration(request, env, url, cors) {
 	};
 	const nowIso = () => new Date().toISOString();
 
-	// GET /moderation/whoami — any signed-in user learns their own tier.
+	// GET /mod/whoami — any signed-in user learns their own tier.
 	if (method === 'GET' && seg.length === 1 && seg[0] === 'whoami') {
 		return jsonResponse({ role: role || null }, 200, cors);
 	}
 
-	// DELETE /moderation/comments/:id — mod+ removes any comment; its replies go
+	// DELETE /mod/comments/:id — mod+ removes any comment; its replies go
 	// with it via the comments.parent_id ON DELETE CASCADE.
 	if (method === 'DELETE' && seg.length === 2 && seg[0] === 'comments') {
 		const denied = denyMod();
@@ -88,7 +91,7 @@ export async function handleModeration(request, env, url, cors) {
 		return jsonResponse({ ok: true }, 200, cors);
 	}
 
-	// GET /moderation/lessons/shadowbanned — mod+ lists currently hidden lessons.
+	// GET /mod/lessons/shadowbanned — mod+ lists currently hidden lessons.
 	if (method === 'GET' && seg.length === 2 && seg[0] === 'lessons' && seg[1] === 'shadowbanned') {
 		const denied = denyMod();
 		if (denied) return denied;
@@ -107,7 +110,7 @@ export async function handleModeration(request, env, url, cors) {
 		return jsonResponse({ lessons }, 200, cors);
 	}
 
-	// POST /moderation/lessons/:id/shadowban — mod+ toggles a lesson's visibility.
+	// POST /mod/lessons/:id/shadowban — mod+ toggles a lesson's visibility.
 	if (method === 'POST' && seg.length === 3 && seg[0] === 'lessons' && seg[2] === 'shadowban') {
 		const denied = denyMod();
 		if (denied) return denied;
@@ -134,7 +137,7 @@ export async function handleModeration(request, env, url, cors) {
 		return jsonResponse({ lesson: rowToLesson(rows[0], false, true) }, 200, cors);
 	}
 
-	// POST /moderation/lessons/:id/delete-request — a moderator asks an admin to
+	// POST /mod/lessons/:id/delete-request — a moderator asks an admin to
 	// fully delete a lesson (mods can't delete lessons themselves).
 	if (method === 'POST' && seg.length === 3 && seg[0] === 'lessons' && seg[2] === 'delete-request') {
 		const denied = denyMod();
@@ -159,7 +162,7 @@ export async function handleModeration(request, env, url, cors) {
 		return jsonResponse({ request: Array.isArray(rows) ? rows[0] : null }, 201, cors);
 	}
 
-	// DELETE /moderation/lessons/:id — admin fully deletes any lesson.
+	// DELETE /mod/lessons/:id — admin fully deletes any lesson.
 	if (method === 'DELETE' && seg.length === 2 && seg[0] === 'lessons') {
 		const denied = denyAdmin();
 		if (denied) return denied;
@@ -168,7 +171,7 @@ export async function handleModeration(request, env, url, cors) {
 		return jsonResponse({ ok: true }, 200, cors);
 	}
 
-	// GET /moderation/delete-requests — admin reviews pending deletion requests,
+	// GET /mod/delete-requests — admin reviews pending deletion requests,
 	// each embedded with its lesson's title/author for context.
 	if (method === 'GET' && seg.length === 1 && seg[0] === 'delete-requests') {
 		const denied = denyAdmin();
@@ -196,7 +199,7 @@ export async function handleModeration(request, env, url, cors) {
 		return jsonResponse({ requests }, 200, cors);
 	}
 
-	// POST /moderation/delete-requests/:id/approve | /deny — admin resolves a
+	// POST /mod/delete-requests/:id/approve | /deny — admin resolves a
 	// request. Approving deletes the lesson; either way the request is marked
 	// resolved with the admin's id and timestamp.
 	if (method === 'POST' && seg.length === 3 && seg[0] === 'delete-requests' && (seg[2] === 'approve' || seg[2] === 'deny')) {
@@ -233,7 +236,7 @@ export async function handleModeration(request, env, url, cors) {
 		return jsonResponse({ ok: true }, 200, cors);
 	}
 
-	// GET /moderation/bans — name bans for any mod; admins also see ip bans.
+	// GET /mod/bans — name bans for any mod; admins also see ip bans.
 	if (method === 'GET' && seg.length === 1 && seg[0] === 'bans') {
 		const denied = denyMod();
 		if (denied) return denied;
@@ -260,7 +263,7 @@ export async function handleModeration(request, env, url, cors) {
 		return jsonResponse({ names, ips }, 200, cors);
 	}
 
-	// POST /moderation/bans/name — mod+ bans a display name (stored normalised).
+	// POST /mod/bans/name — mod+ bans a display name (stored normalised).
 	if (method === 'POST' && seg.length === 2 && seg[0] === 'bans' && seg[1] === 'name') {
 		const denied = denyMod();
 		if (denied) return denied;
@@ -281,7 +284,7 @@ export async function handleModeration(request, env, url, cors) {
 		return jsonResponse({ ok: true }, 200, cors);
 	}
 
-	// DELETE /moderation/bans/name/:nameLower — mod+ lifts a name ban.
+	// DELETE /mod/bans/name/:nameLower — mod+ lifts a name ban.
 	if (method === 'DELETE' && seg.length === 3 && seg[0] === 'bans' && seg[1] === 'name') {
 		const denied = denyMod();
 		if (denied) return denied;
@@ -296,7 +299,7 @@ export async function handleModeration(request, env, url, cors) {
 		return jsonResponse({ ok: true }, 200, cors);
 	}
 
-	// POST /moderation/bans/ip — admin bans an IP address.
+	// POST /mod/bans/ip — admin bans an IP address.
 	if (method === 'POST' && seg.length === 2 && seg[0] === 'bans' && seg[1] === 'ip') {
 		const denied = denyAdmin();
 		if (denied) return denied;
@@ -317,7 +320,7 @@ export async function handleModeration(request, env, url, cors) {
 		return jsonResponse({ ok: true }, 200, cors);
 	}
 
-	// DELETE /moderation/bans/ip/:ip — admin lifts an IP ban.
+	// DELETE /mod/bans/ip/:ip — admin lifts an IP ban.
 	if (method === 'DELETE' && seg.length === 3 && seg[0] === 'bans' && seg[1] === 'ip') {
 		const denied = denyAdmin();
 		if (denied) return denied;
@@ -332,7 +335,7 @@ export async function handleModeration(request, env, url, cors) {
 		return jsonResponse({ ok: true }, 200, cors);
 	}
 
-	// GET /moderation/moderators — admin lists moderators with their emails.
+	// GET /mod/moderators — admin lists moderators with their emails.
 	if (method === 'GET' && seg.length === 1 && seg[0] === 'moderators') {
 		const denied = denyAdmin();
 		if (denied) return denied;
@@ -354,7 +357,7 @@ export async function handleModeration(request, env, url, cors) {
 		return jsonResponse({ moderators }, 200, cors);
 	}
 
-	// POST /moderation/moderators — admin grants moderator to a user by email.
+	// POST /mod/moderators — admin grants moderator to a user by email.
 	if (method === 'POST' && seg.length === 1 && seg[0] === 'moderators') {
 		const denied = denyAdmin();
 		if (denied) return denied;
@@ -379,7 +382,7 @@ export async function handleModeration(request, env, url, cors) {
 		return jsonResponse({ moderator: { userId: target.id, email: target.email } }, 201, cors);
 	}
 
-	// DELETE /moderation/moderators/:userId — admin revokes moderator. Filtered to
+	// DELETE /mod/moderators/:userId — admin revokes moderator. Filtered to
 	// role='moderator' so it can never remove an admin.
 	if (method === 'DELETE' && seg.length === 2 && seg[0] === 'moderators') {
 		const denied = denyAdmin();

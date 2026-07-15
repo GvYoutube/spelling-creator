@@ -93,9 +93,16 @@ app.get('/following/activity', (c) => handleFollowingFeed(req(c), c.env, urlOf(c
 app.all('/profiles', (c) => handleUsers(req(c), c.env, urlOf(c), cors(c)));
 app.all('/profiles/*', (c) => handleUsers(req(c), c.env, urlOf(c), cors(c)));
 
-// Moderation routes: the admin/moderator privilege layer.
-app.all('/moderation', (c) => handleModeration(req(c), c.env, urlOf(c), cors(c)));
-app.all('/moderation/*', (c) => handleModeration(req(c), c.env, urlOf(c), cors(c)));
+// Moderation routes: the admin/moderator privilege layer. Named "/mod", not
+// "/moderation", so it can't collide with the SPA's own "/moderation" page
+// route — same reason /profiles (not /users) above and /authorize (not
+// /oauth/authorize) below are named the way they are. run_worker_first means
+// this Hono app sees every request before the static assets do, so a route
+// here with the same path as a client-side one would swallow that page's
+// direct loads/reloads (a real GET, with no Authorization header) and this
+// handler would always answer them with 401, never actually serving the SPA.
+app.all('/mod', (c) => handleModeration(req(c), c.env, urlOf(c), cors(c)));
+app.all('/mod/*', (c) => handleModeration(req(c), c.env, urlOf(c), cors(c)));
 
 // One-time admin backfills, secret-gated (X-Admin-Token), POST-only.
 app.post('/admin/migrate-images', (c) => handleAdminMigrateImages(req(c), c.env, cors(c)));
