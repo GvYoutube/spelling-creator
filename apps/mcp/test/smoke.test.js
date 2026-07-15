@@ -555,17 +555,126 @@ test("add_image resolves a Commons ref, uploads it, and inserts an image block",
     // Bytes were uploaded.
     assert.equal(uploaded.length, 4);
     assert.equal(uploaded.mime, "image/jpeg");
-    // The lesson got an image block appended to section 0, with the attribution.
+    // The lesson got an image block in section 0, with the attribution — inserted
+    // before the trailing question block rather than appended after it.
     const blocks = putDoc.sections[0].blocks;
-    const img = blocks[blocks.length - 1];
+    assert.equal(blocks.length, 3);
+    const img = blocks[1];
     assert.equal(img.type, "image");
     assert.equal(img.image.hash, "deadbeef");
     assert.equal(img.width, 1600);
     assert.match(img.caption, /NASA/);
     assert.match(img.caption, /Wikimedia Commons/);
+    assert.equal(blocks[2].type, "question");
     // The result echoes the attribution caption.
     const payload = JSON.parse(res.content[0].text);
     assert.match(payload.caption, /NASA/);
+
+    await client.close();
+    await server.close();
+  } finally {
+    globalThis.fetch = realFetch;
+  }
+});
+
+test("add_image places the block right after afterBlockId", async () => {
+  const server = new McpServer(SERVER_INFO);
+  const stored = buildDoc({
+    title: "Space",
+    sections: [
+      {
+        name: "Saturn",
+        blocks: [
+          { type: "text", text: "SATURN has rings." },
+          { type: "text", text: "It is a GIANT planet." },
+          {
+            type: "question",
+            questionType: "single",
+            prompt: "Which planet?",
+            answer: "Saturn",
+          },
+        ],
+      },
+    ],
+  });
+  const firstBlockId = stored.sections[0].blocks[0].id;
+
+  let putDoc = null;
+  const api = {
+    async getLesson() {
+      return { id: "L1", title: "Space", doc: stored };
+    },
+    async uploadImage(bytes, mime) {
+      return { hash: "deadbeef", mime, ext: "jpg" };
+    },
+    async updateLesson(id, { doc }) {
+      putDoc = doc;
+      return { id, title: doc.title, sectionCount: doc.sections.length };
+    },
+  };
+  registerTools(server, { api, config: { apiUrl: "https://example.test" } });
+
+  const realFetch = globalThis.fetch;
+  globalThis.fetch = async (url) => {
+    const u = String(url);
+    if (u.includes("commons.wikimedia.org")) {
+      return new Response(
+        JSON.stringify({
+          query: {
+            pages: {
+              42: {
+                title: "File:Saturn.jpg",
+                imageinfo: [
+                  {
+                    thumburl: "https://upload.wikimedia.org/saturn-1600.jpg",
+                    url: "https://upload.wikimedia.org/saturn.jpg",
+                    thumbwidth: 1600,
+                    thumbheight: 1200,
+                    width: 4000,
+                    height: 3000,
+                    mime: "image/jpeg",
+                    descriptionurl:
+                      "https://commons.wikimedia.org/wiki/File:Saturn.jpg",
+                    extmetadata: {
+                      Artist: { value: "<a href='#'>NASA</a>" },
+                      LicenseShortName: { value: "CC BY 2.0" },
+                    },
+                  },
+                ],
+              },
+            },
+          },
+        }),
+        { status: 200, headers: { "Content-Type": "application/json" } },
+      );
+    }
+    return new Response(new Uint8Array([1, 2, 3, 4]), {
+      status: 200,
+      headers: { "Content-Type": "image/jpeg" },
+    });
+  };
+
+  try {
+    const client = new Client({ name: "test", version: "0" });
+    const [clientT, serverT] = InMemoryTransport.createLinkedPair();
+    await Promise.all([server.connect(serverT), client.connect(clientT)]);
+
+    const res = await client.callTool({
+      name: "add_image",
+      arguments: {
+        lessonId: "L1",
+        ref: "File:Saturn.jpg",
+        afterBlockId: firstBlockId,
+      },
+    });
+
+    assert.equal(res.isError, undefined);
+    const blocks = putDoc.sections[0].blocks;
+    assert.equal(blocks.length, 4);
+    assert.equal(blocks[0].id, firstBlockId);
+    assert.equal(blocks[1].type, "image");
+    assert.equal(blocks[2].type, "text");
+    assert.equal(blocks[3].type, "question");
 
     await client.close();
     await server.close();

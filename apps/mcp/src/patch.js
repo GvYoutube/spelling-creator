@@ -34,7 +34,7 @@ function findSectionIndex(doc, sectionId, where) {
   return idx;
 }
 
-function findBlock(doc, blockId, where) {
+export function findBlock(doc, blockId, where) {
   for (let s = 0; s < doc.sections.length; s++) {
     const b = doc.sections[s].blocks.findIndex((blk) => blk.id === blockId);
     if (b !== -1) return { sectionIndex: s, blockIndex: b };

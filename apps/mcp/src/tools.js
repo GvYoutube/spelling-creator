@@ -17,7 +17,7 @@ import {
   lessonWarnings,
   QUESTION_TYPES,
 } from "./doc.js";
-import { applyPatch } from "./patch.js";
+import { applyPatch, findBlock } from "./patch.js";
 import { searchWikimediaImages, resolveWikimediaImage } from "./wikimedia.js";
 
 // One content block, described richly so the model fills the right fields per
@@ -537,10 +537,14 @@ export function registerTools(server, ctx) {
       description:
         "Download a Wikimedia Commons image (from a search_images `ref`), store its bytes, and insert it as an image " +
         "block in a lesson you authored. The picture's attribution is set as the caption automatically.\n\n" +
-        "Choose the target section by either `sectionId` (from get_lesson) or `sectionIndex` (0-based); if you give " +
-        "neither, the image is appended to the LAST section. `index` sets the block's position within the section " +
-        "(omit to append). Run search_images first to get a `ref`. To change an image later, remove_block it and " +
-        "add_image again, or have the user replace it in the editor (which keeps its place).",
+        "To place the image right next to a specific block you already know (e.g. the paragraph it illustrates), " +
+        "pass `afterBlockId` (a block id from get_lesson) — this picks both the section and position for you and is " +
+        "the most reliable way to choose placement. Otherwise choose the target section with `sectionId` (from " +
+        "get_lesson) or `sectionIndex` (0-based), and optionally `index` for the exact position within it. If you " +
+        "give none of these, the image is inserted at the end of the LAST section's prose, before any trailing " +
+        "question block(s) — never buried after the quiz. Run search_images first to get a `ref`. To change an " +
+        "image later, remove_block it and add_image again, or have the user replace it in the editor (which keeps " +
+        "its place).",
       inputSchema: {
         lessonId: z
           .string()
@@ -550,25 +554,35 @@ export function registerTools(server, ctx) {
           .describe(
             "The image's File: title, taken from a search_images result's `ref`.",
           ),
+        afterBlockId: z
+          .string()
+          .optional()
+          .describe(
+            "Insert the image directly after this block id (from get_lesson) — determines both the section and " +
+              "position, and takes precedence over sectionId/sectionIndex/index. The most reliable way to place an " +
+              "image next to the content it illustrates.",
+          ),
         sectionId: z
           .string()
           .optional()
           .describe(
-            "Target section id (from get_lesson). Takes precedence over sectionIndex.",
+            "Target section id (from get_lesson), used when afterBlockId is omitted. Takes precedence over " +
+              "sectionIndex.",
           ),
         sectionIndex: z
           .number()
           .int()
           .optional()
           .describe(
-            "0-based target section. Used when sectionId is omitted; defaults to the last section.",
+            "0-based target section. Used when afterBlockId/sectionId are omitted; defaults to the last section.",
           ),
         index: z
           .number()
           .int()
           .optional()
           .describe(
-            "0-based position for the image within the section; omit to append.",
+            "0-based position for the image within the section; omit to insert before the section's trailing " +
+              "question block(s), if any (otherwise appended). Ignored when afterBlockId is given.",
           ),
         caption: z
           .string()
@@ -592,6 +606,7 @@ export function registerTools(server, ctx) {
       async ({
         lessonId,
         ref,
+        afterBlockId,
         sectionId,
         sectionIndex,
         index,
@@ -607,24 +622,51 @@ export function registerTools(server, ctx) {
             ? caption
             : resolved.caption;
 
-        // Resolve the target section: explicit id wins, else an index, else last.
         const current = await api.getLesson(lessonId);
         const sections = current.doc?.sections || [];
         if (!sections.length) {
           throw new Error("That lesson has no sections to add an image to.");
         }
-        let targetSectionId = sectionId;
-        if (!targetSectionId) {
-          const i = Number.isInteger(sectionIndex)
-            ? sectionIndex
-            : sections.length - 1;
-          const section = sections[i];
-          if (!section) {
-            throw new Error(
-              `sectionIndex ${sectionIndex} is out of range — the lesson has ${sections.length} section(s) (0–${sections.length - 1}).`,
-            );
+
+        // Resolve the target section + position. `afterBlockId` wins (it pins
+        // both); otherwise resolve the section (explicit id, else index, else
+        // last) and either use the given `index` or default to just before any
+        // trailing question block(s), so a plain add_image never buries the
+        // picture after the quiz.
+        let targetSectionId;
+        let insertIndex;
+        if (afterBlockId) {
+          const { sectionIndex: si, blockIndex } = findBlock(
+            current.doc,
+            afterBlockId,
+            "add_image",
+          );
+          targetSectionId = sections[si].id;
+          insertIndex = blockIndex + 1;
+        } else {
+          targetSectionId = sectionId;
+          if (!targetSectionId) {
+            const i = Number.isInteger(sectionIndex)
+              ? sectionIndex
+              : sections.length - 1;
+            const section = sections[i];
+            if (!section) {
+              throw new Error(
+                `sectionIndex ${sectionIndex} is out of range — the lesson has ${sections.length} section(s) (0–${sections.length - 1}).`,
+              );
+            }
+            targetSectionId = section.id;
           }
-          targetSectionId = section.id;
+
+          if (Number.isInteger(index)) {
+            insertIndex = index;
+          } else {
+            const blocks =
+              sections.find((s) => s.id === targetSectionId)?.blocks || [];
+            let i = blocks.length;
+            while (i > 0 && blocks[i - 1].type === "question") i--;
+            insertIndex = i;
+          }
         }
 
         // Insert via the same patch path as everything else, then save.
@@ -639,7 +681,12 @@ export function registerTools(server, ctx) {
         if (size) block.size = size;
 
         const doc = applyPatch(current.doc, [
-          { op: "add_block", sectionId: targetSectionId, block, index },
+          {
+            op: "add_block",
+            sectionId: targetSectionId,
+            block,
+            index: insertIndex,
+          },
         ]);
         const lesson = await api.updateLesson(lessonId, {
           title: doc.title || current.title,

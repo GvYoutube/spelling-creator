@@ -16,6 +16,8 @@ sidebar_position: 2
 | `list_hub_lessons`     | Browse published lessons for inspiration / de-duplication.                    |
 | `set_lesson_published` | Toggle a lesson between public and private draft.                             |
 | `delete_lesson`        | Permanently delete one of your lessons.                                       |
+| `search_images`        | Search Wikimedia Commons for freely-licensed images to illustrate a lesson.   |
+| `add_image`            | Download a searched image and insert it as an image block in a lesson.        |
 
 ## Editing a lesson: patch vs. replace
 
@@ -66,4 +68,20 @@ A lesson is **sections** of **blocks**. Block types:
   - `open` → free response (no answer field; just the `prompt`)
   - `background` → `background` + `answer` (needs prior knowledge)
 
-Image blocks aren't supported over MCP yet (they need a separate binary upload).
+- **`image`** — a picture. Don't write these by hand; use `search_images` to find a
+  freely-licensed Wikimedia Commons image, then `add_image` with its `ref` to download
+  the bytes, store them, and insert the block. The licence attribution is set as the
+  caption automatically.
+
+## Placing an image
+
+`add_image` needs somewhere to put the block. In order of precedence:
+
+1. **`afterBlockId`** — insert directly after a specific block id (from `get_lesson`).
+   This is the most reliable way to place an image next to the content it illustrates,
+   since it pins both the section and the position without any index arithmetic.
+2. **`sectionId`** / **`sectionIndex`** + optional **`index`** — target a section
+   explicitly and, optionally, a 0-based position within it.
+3. If none of the above are given, the image is inserted at the end of the **last**
+   section's prose, just before any trailing question block(s) — never buried after
+   the quiz.
