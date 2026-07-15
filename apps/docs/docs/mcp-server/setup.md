@@ -5,6 +5,14 @@ sidebar_position: 4
 
 # Setup (manual / for development)
 
+> If your client supports remote MCP servers (claude.ai, Claude Desktop's
+> remote connectors, Cursor), connecting to
+> `https://spellingcreator.org/mcp` is simpler: click "Connect", approve in
+> your browser, done — no token to manage. See
+> **[Remote (hosted) mode](./remote-mode.md)**. The steps below are for
+> running the server yourself (stdio), e.g. for local development or a client
+> that only supports local servers.
+
 ## 1. Install
 
 From the monorepo root:

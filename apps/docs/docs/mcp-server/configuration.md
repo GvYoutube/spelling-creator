@@ -5,6 +5,10 @@ sidebar_position: 5
 
 # Configuration
 
+These variables configure the **local stdio server** only — see
+[Setup](./setup.md). [Remote mode](./remote-mode.md) needs no client-side
+configuration at all; the OAuth "Connect" flow replaces all of it.
+
 All optional except a token. See `.env.example`. Set these in the environment or
 the MCP client's `env` block (a local `.env` in this folder also works for
 `pnpm start`).

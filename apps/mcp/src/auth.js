@@ -19,11 +19,11 @@ import { dirname } from "node:path";
 
 // Refresh a little before the token actually expires, to avoid a request racing
 // the boundary.
-const EXPIRY_SKEW_SECONDS = 60;
+export const EXPIRY_SKEW_SECONDS = 60;
 
 // Decode a JWT's `exp` (seconds since epoch) without verifying the signature —
 // we only need it to decide when to refresh, not to trust it.
-function jwtExpiry(token) {
+export function jwtExpiry(token) {
   try {
     const payload = token.split(".")[1];
     const json = Buffer.from(payload, "base64url").toString("utf8");
@@ -34,8 +34,52 @@ function jwtExpiry(token) {
   }
 }
 
-function nowSeconds() {
+export function nowSeconds() {
   return Math.floor(Date.now() / 1000);
+}
+
+/**
+ * Trade a Supabase refresh token for a fresh session. Pure network call, no
+ * mutable state — shared by the stdio auth provider (below), the remote
+ * per-connection auth provider (worker.js), and the Worker's OAuth token
+ * endpoint (apps/api), which all need the exact same GoTrue call.
+ * @param {{ supabaseUrl: string, supabaseAnonKey: string }} config
+ * @param {string} refreshToken
+ */
+export async function refreshSupabaseSession(config, refreshToken) {
+  if (!refreshToken) {
+    throw new Error("No Supabase refresh token to refresh with.");
+  }
+  const res = await fetch(
+    `${config.supabaseUrl}/auth/v1/token?grant_type=refresh_token`,
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        apikey: config.supabaseAnonKey,
+      },
+      body: JSON.stringify({ refresh_token: refreshToken }),
+    },
+  );
+  if (!res.ok) {
+    const detail = await res.text().catch(() => "");
+    throw new Error(
+      `Could not refresh the Supabase session (${res.status}). ` +
+        "The refresh token may have been revoked — sign in again. " +
+        (detail ? `Details: ${detail}` : ""),
+    );
+  }
+  const data = await res.json();
+  if (!data.access_token) {
+    throw new Error("Supabase did not return an access token.");
+  }
+  return {
+    accessToken: data.access_token,
+    // Supabase rotates the refresh token on every use; fall back to the one we
+    // sent if the response omits it (shouldn't happen, but stay usable).
+    refreshToken: data.refresh_token || refreshToken,
+    expiresAt: data.expires_at || null,
+  };
 }
 
 async function readSessionFile(path) {
@@ -115,36 +159,26 @@ export function createAuth(config) {
           "Run `pnpm --filter @spelling-creator/mcp login` (or set SUPABASE_REFRESH_TOKEN) to sign in again.",
       );
     }
-    const res = await fetch(
-      `${config.supabaseUrl}/auth/v1/token?grant_type=refresh_token`,
-      {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          apikey: config.supabaseAnonKey,
-        },
-        body: JSON.stringify({ refresh_token: refreshToken }),
-      },
-    );
-    if (!res.ok) {
-      const detail = await res.text().catch(() => "");
+    let session;
+    try {
+      session = await refreshSupabaseSession(config, refreshToken);
+    } catch (err) {
       throw new Error(
-        `Could not refresh the Supabase session (${res.status}). ` +
-          "The refresh token may have been revoked — sign in again with the `login` helper. " +
-          (detail ? `Details: ${detail}` : ""),
+        `${err.message} Sign in again with the \`login\` helper.`,
+        {
+          cause: err,
+        },
       );
     }
-    const data = await res.json();
-    accessToken = data.access_token || "";
-    // Supabase rotates the refresh token on every use; keep the newest.
-    refreshToken = data.refresh_token || refreshToken;
+    accessToken = session.accessToken;
+    refreshToken = session.refreshToken;
     await writeSessionFile(config.sessionFile, {
       // Tie this rotation chain to its bootstrap seed (see `seed` above) so the
       // next start knows the file supersedes the now-stale env token.
       seed: seed || null,
       access_token: accessToken,
       refresh_token: refreshToken,
-      expires_at: data.expires_at || null,
+      expires_at: session.expiresAt,
       updated_at: new Date().toISOString(),
     });
     return accessToken;

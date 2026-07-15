@@ -20,10 +20,12 @@ import { handleSitemap, handleRobots, handleLessonsFeed } from './routes/seo.js'
 import { handleSpellingWords } from './routes/spelling-words.js';
 import { ogImage, handleFrontend } from './routes/render.js';
 import { handleCollab } from './routes/collab.js';
+import { HubMcp, registerOAuthConsentRoutes, buildOAuthProvider } from './routes/mcp.js';
 
-// Re-export the Durable Object class so Wrangler can bind it (the migration in
-// wrangler.jsonc registers COLLAB_ROOM -> CollabRoom). See routes/collab.js.
-export { CollabRoom };
+// Re-export the Durable Object classes so Wrangler can bind them (the
+// migrations in wrangler.jsonc register COLLAB_ROOM -> CollabRoom and
+// MCP_OBJECT -> HubMcp). See routes/collab.js and routes/mcp.js.
+export { CollabRoom, HubMcp };
 
 // Per-request handles the route handlers expect, derived from the Hono context.
 const req = (c) => c.req.raw;
@@ -119,6 +121,11 @@ app.get('/og-image', (c) => ogImage(req(c), c.env, c.executionCtx, urlOf(c)));
 app.get('/collab', (c) => handleCollab(req(c), c.env, urlOf(c), cors(c)));
 app.get('/collab/*', (c) => handleCollab(req(c), c.env, urlOf(c), cors(c)));
 
+// Consent screen backing the remote MCP OAuth flow. `/authorize`, `/token`, and
+// `/register` are also reserved paths (the OAuthProvider wrap below implements
+// `/token` + `/register` itself) — see routes/mcp.js and routes/oauth.js.
+registerOAuthConsentRoutes(app);
+
 // Turnstile-gated AI / image flow. The client posts to the API root (`POST /`).
 app.post('/', (c) => handleAi(req(c), c.env, cors(c), c.get('allowed')));
 
@@ -127,4 +134,13 @@ app.post('/', (c) => handleAi(req(c), c.env, cors(c), c.get('allowed')));
 // it only runs when no route above matched.
 app.on(['GET', 'HEAD'], '*', (c) => handleFrontend(req(c), c.env, c.executionCtx, urlOf(c)));
 
-export default app;
+// The OAuthProvider wraps the whole app: it serves the MCP OAuth authorization
+// server itself (/token, /register, discovery metadata) and the /mcp Streamable
+// HTTP endpoint, and passes every other request through to `app` unchanged —
+// see routes/mcp.js. Built fresh per request so its token-refresh callback can
+// close over this request's env bindings.
+export default {
+	fetch(request, env, ctx) {
+		return buildOAuthProvider(app, env).fetch(request, env, ctx);
+	},
+};

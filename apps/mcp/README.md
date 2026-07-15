@@ -26,6 +26,11 @@ Full documentation lives on the docs site under **MCP Server**:
 
 The docs source is in `apps/docs/docs/mcp-server`.
 
+If your client supports remote MCP servers, connecting to
+`https://spellingcreator.org/mcp` is simpler — no token to manage, just a
+browser "Connect" flow. See [Remote mode](https://spellingcreator.org/docs/mcp-server/remote-mode).
+The quick start below is for the local stdio server.
+
 ## Quick start
 
 ```bash

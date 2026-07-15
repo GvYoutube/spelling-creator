@@ -13,6 +13,12 @@
 	"vars": {
 		"ALLOWED_HOSTNAMES": "spellingcreator.org",
 		"SUPABASE_URL": "https://hfkgrqihawgosalltjpy.supabase.co",
+		// Publishable anon key (same one apps/web and apps/mcp ship) — used only for
+		// the MCP OAuth route's Supabase session refresh (routes/mcp.js). Safe to
+		// commit: it grants no more than the browser client already can.
+		"SUPABASE_ANON_KEY": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imhma2dycWloYXdnb3NhbGx0anB5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODAwNzQ4NDMsImV4cCI6MjA5NTY1MDg0M30.G-Ait5_9WqUfBQLfinHiOPl3w_LwwK5jA_G_aGw97CU",
+		// Self-referential base URL the MCP tool layer calls back into (routes/mcp.js).
+		"SPELLING_CREATOR_API_URL": "https://spellingcreator.org",
 	},
 
 	// Serve the built web SPA as static assets. The Worker runs first on every
@@ -37,16 +43,34 @@
 			"binding": "RATE_LIMIT_KV",
 			"id": "e3d5364c3c8f4637937bb07a17ffbb38",
 		},
+		// Grant/token/client storage for the MCP OAuth provider (routes/mcp.js), plus
+		// this Worker's own short-lived pending-authorization state (routes/oauth.js).
+		// Create once with:
+		//   wrangler kv namespace create OAUTH_KV
+		{
+			"binding": "OAUTH_KV",
+			"id": "f9496452d8434755adc716c84ceb5415",
+		},
 	],
 
 	// Live-collaboration coordinator. One CollabRoom Durable Object per session
 	// (addressed by the host's share code) relays edits/cursors/chat over a single
 	// WebSocket and enforces per-room/per-connection limits. See src/collab-room.js
 	// and handleCollab in src/index.js. SQLite-backed (the room caches the doc).
+	//
+	// HubMcp is one remote MCP connection's tool server (routes/mcp.js), addressed
+	// per-session by the Agents SDK; MCP_OBJECT is the binding name the SDK looks
+	// for by default (McpAgent.serve()'s `binding` option).
 	"durable_objects": {
-		"bindings": [{ "name": "COLLAB_ROOM", "class_name": "CollabRoom" }],
+		"bindings": [
+			{ "name": "COLLAB_ROOM", "class_name": "CollabRoom" },
+			{ "name": "MCP_OBJECT", "class_name": "HubMcp" },
+		],
 	},
-	"migrations": [{ "tag": "v1", "new_sqlite_classes": ["CollabRoom"] }],
+	"migrations": [
+		{ "tag": "v1", "new_sqlite_classes": ["CollabRoom"] },
+		{ "tag": "v2", "new_sqlite_classes": ["HubMcp"] },
+	],
 
 	// R2 bucket holding lesson images as binary objects, keyed by their SHA-256
 	// content hash. Served publicly by GET /images/:hash and written by the

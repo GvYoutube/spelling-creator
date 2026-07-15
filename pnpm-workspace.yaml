@@ -13,3 +13,7 @@ allowBuilds:
   # tsParticles' install script only warns about conflicting legacy particle
   # packages (we have none), so there's nothing for it to do here.
   "@tsparticles/engine": false
+  core-js-pure: true
+
+patchedDependencies:
+  "@cfworker/json-schema@4.1.1": patches/@cfworker__json-schema@4.1.1.patch

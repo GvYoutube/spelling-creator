@@ -94,15 +94,18 @@ export function AuthProvider({ children }) {
       isModerator: role === "moderator" || role === "admin",
       isAdmin: role === "admin",
 
-      // Send a passwordless magic link. `redirectTo` brings the user back to the
-      // app root, where the Supabase client exchanges the `?code=` for a session.
-      async signInWithMagicLink(email) {
+      // Send a passwordless magic link. `redirectTo` brings the user back to
+      // the given page (the app root by default), where the Supabase client
+      // exchanges the `?code=` for a session. Callers that need the user back
+      // on a specific page — e.g. the MCP OAuth consent screen, which carries
+      // its own `?state=` — can pass an explicit redirectTo.
+      async signInWithMagicLink(email, redirectTo = window.location.origin) {
         if (!supabaseEnabled) {
           throw new Error("Sign-in is not configured.");
         }
         const { error } = await supabase.auth.signInWithOtp({
           email,
-          options: { emailRedirectTo: window.location.origin },
+          options: { emailRedirectTo: redirectTo },
         });
         if (error) throw new Error(error.message);
       },
