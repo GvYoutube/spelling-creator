@@ -144,7 +144,7 @@ export default function CommentsSection({ lessonId, onRated }) {
     setLoading(true);
     setError("");
     try {
-      setComments(await fetchComments(lessonId));
+      setComments(await fetchComments(lessonId, accessToken));
     } catch (err) {
       setError(err.message || "Could not load comments.");
     } finally {

@@ -160,11 +160,14 @@ export async function fetchMyLessons(accessToken) {
 
 /**
  * Fetch a single lesson, including its full editor `doc`. Public for published
- * lessons; an author can also load their own draft by id (e.g. to edit it).
+ * lessons; a private draft (published === false) requires the caller to be
+ * signed in as its author, a trusted collaborator, or a moderator — `accessToken`
+ * is sent along whenever one is available so those cases keep working.
  * @param {string} id
+ * @param {string} [accessToken] Supabase session JWT, if signed in.
  * @returns {Promise<{id, title, author, sectionCount, published, createdAt, doc, avgRating, ratingCount}>}
  */
-export async function fetchLesson(id) {
+export async function fetchLesson(id, accessToken) {
   if (!API_URL) throw new Error("The lesson hub is not configured.");
   if (!id) throw new Error("Missing lesson id.");
 
@@ -172,6 +175,9 @@ export async function fetchLesson(id) {
   try {
     res = await fetch(endpoint(`/${encodeURIComponent(id)}`), {
       method: "GET",
+      ...(accessToken
+        ? { headers: { Authorization: `Bearer ${accessToken}` } }
+        : {}),
     });
   } catch {
     throw new Error("Could not reach the lesson hub.");

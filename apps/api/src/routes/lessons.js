@@ -44,7 +44,7 @@ async function countUserDrafts(env, base, userId, excludeId) {
  *
  *   GET  /lessons        public  -> { lessons: LessonSummary[] }   (published only, newest first)
  *   GET  /lessons/mine   Bearer  -> { lessons: LessonSummary[] }   (caller's own, incl. drafts)
- *   GET  /lessons/:id    public  -> { lesson: Lesson }             (includes doc; drafts too)
+ *   GET  /lessons/:id    public* -> { lesson: Lesson }             (includes doc; *drafts need auth as owner/trusted/mod)
  *   POST /lessons        Bearer  -> { lesson: LessonSummary }      (verified JWT; body.published picks draft/hub)
  *   PUT  /lessons/:id    Bearer  -> { lesson: LessonSummary }      (author only; body.published may flip draft<->hub)
  *
@@ -88,14 +88,15 @@ export async function handleLessons(request, env, url, cors) {
 		return jsonResponse({ lessons }, 200, cors);
 	}
 
-	// GET /lessons/:id — one lesson, including its full editor doc. Returns drafts
-	// too (so an author can load one for editing, and an unlisted-style link works);
-	// drafts are kept out of the public *listing* below, not addressable-by-id reads.
-	//
-	// Shadowbanned lessons are the exception: they 404 to the public, exactly as if
-	// they didn't exist, but stay readable to their author (who must not realise
-	// they're hidden) and to moderators/admins (who manage them). So we only verify
-	// a JWT when the row turns out to be shadowbanned — public reads stay token-free.
+	// GET /lessons/:id — one lesson, including its full editor doc. Published
+	// lessons are readable by anyone; a draft (published = false) is private and
+	// only readable by its author, a trusted collaborator, or a moderator/admin —
+	// having the URL is not enough. Shadowbanned lessons get the same treatment:
+	// they 404 to everyone else, exactly as if they didn't exist, but stay
+	// readable to their author (who must not realise they're hidden) and to
+	// moderators/admins (who manage them). We only verify a JWT when the row
+	// turns out to need it — a normal published, non-shadowbanned read stays
+	// token-free.
 	if (request.method === 'GET' && id) {
 		const query = `id=eq.${encodeURIComponent(id)}&select=id,author_id,title,author,section_count,published,shadowbanned,author_ip,forked_from,created_at,doc&limit=1`;
 		let res;
@@ -113,10 +114,14 @@ export async function handleLessons(request, env, url, cors) {
 		// The lesson's average star rating + how many ratings it has, shown on the
 		// lesson page. A store hiccup degrades to "no ratings" inside the helper.
 		const { average: avgRating, count: ratingCount } = await fetchRatingStats(env, base, id);
-		if (row.shadowbanned) {
+		if (!row.published || row.shadowbanned) {
 			const { user, role } = await verifyUserAndRole(env, base, request);
 			const isOwner = user && user.id === row.author_id;
-			if (!isOwner && !isModeratorRole(role)) {
+			// A trusted collaborator (the doc is already in hand from the select above)
+			// may also read a private draft — they're allowed to write it, so they must
+			// be able to load it too.
+			const isTrusted = !isOwner && user && isTrustedCollaborator(row, user);
+			if (!isOwner && !isTrusted && !isModeratorRole(role)) {
 				return textResponse('Lesson not found.', 404, cors);
 			}
 			// Moderators/admins get the author IP (for the "ban by IP" action); the

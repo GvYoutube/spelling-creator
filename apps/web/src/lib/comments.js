@@ -50,17 +50,26 @@ export const COMMENT_BLOCKED_STATUS = 422;
 export const COMMENT_MAX = 2000;
 
 /**
- * List the comments on a published lesson, oldest first. Public — no auth.
+ * List the comments on a lesson, oldest first. Public for a published lesson;
+ * a private draft's comments need the caller to be signed in as its author, a
+ * trusted collaborator, or a moderator — `accessToken` is sent along whenever
+ * one is available so those cases keep working.
  * @param {string} lessonId
+ * @param {string} [accessToken] Supabase session JWT, if signed in.
  * @returns {Promise<Array<{id, author, body, createdAt}>>}
  */
-export async function fetchComments(lessonId) {
+export async function fetchComments(lessonId, accessToken) {
   if (!API_URL) throw new Error("The lesson hub is not configured.");
   if (!lessonId) throw new Error("Missing lesson id.");
 
   let res;
   try {
-    res = await fetch(endpoint(lessonId), { method: "GET" });
+    res = await fetch(endpoint(lessonId), {
+      method: "GET",
+      ...(accessToken
+        ? { headers: { Authorization: `Bearer ${accessToken}` } }
+        : {}),
+    });
   } catch {
     throw new Error("Could not reach the lesson hub.");
   }

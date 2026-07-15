@@ -51,7 +51,7 @@ export function isTrustedCollaborator(row, user) {
  * callers treat both as "no".
  */
 export async function fetchLessonRow(env, base, lessonId, { withDoc = false } = {}) {
-	const columns = withDoc ? 'id,author_id,shadowbanned,doc' : 'id,author_id,shadowbanned';
+	const columns = withDoc ? 'id,author_id,published,shadowbanned,doc' : 'id,author_id,published,shadowbanned';
 	const query = `id=eq.${encodeURIComponent(lessonId)}&select=${columns}&limit=1`;
 	let res;
 	try {

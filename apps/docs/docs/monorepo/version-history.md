@@ -120,9 +120,9 @@ so a pack is pure JSON and stays small — a few KB for a typical lesson.
 ### Worker endpoints
 
 ```
-GET /git/:lessonId/refs   public  -> { head, size, updatedAt }   (404 = no history)
-GET /git/:lessonId/pack   public  -> the packfile (X-Git-Head names its tip)
-PUT /git/:lessonId/pack   Bearer  -> store it (the author, or a trusted collaborator)
+GET /git/:lessonId/refs   public*  -> { head, size, updatedAt }   (404 = no history)
+GET /git/:lessonId/pack   public*  -> the packfile (X-Git-Head names its tip)
+PUT /git/:lessonId/pack   Bearer   -> store it (the author, or a trusted collaborator)
 ```
 
 Stored as two R2 objects per lesson, in the `LESSON_GIT` bucket:
@@ -136,8 +136,9 @@ The pack carries its own tip in R2 `customMetadata`, echoed in the `X-Git-Head`
 response header — so a clone reads the bytes and the ref they belong to from the
 _same object_, and can never pair a fresh ref with a stale pack.
 
-`GET` is public because forking a published lesson is public; a shadowbanned
-lesson's history 404s to everyone but its author and moderators, mirroring
+`GET` is public because forking a published lesson is public; a private draft's
+history (like the draft itself) 404s to everyone but its author, a trusted
+collaborator, and moderators — same as a shadowbanned lesson, and mirroring
 `GET /lessons/:id`. `PUT` verifies the caller may write (below), caps the pack at
 10 MB, and rejects anything that doesn't begin with the `PACK` magic bytes.
 

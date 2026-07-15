@@ -236,7 +236,12 @@ export default function EditorPage() {
   //   "publish"    a save found the hub ahead of us; merge, then save again
   const [mergeIntent, setMergeIntent] = useState("pull");
 
-  const { enabled: authEnabled, accessToken, user } = useAuth();
+  const {
+    enabled: authEnabled,
+    accessToken,
+    loading: authLoading,
+    user,
+  } = useAuth();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const theme = useTheme();
@@ -327,7 +332,7 @@ export default function EditorPage() {
       return;
     }
     let cancelled = false;
-    fetchLesson(forkedFrom)
+    fetchLesson(forkedFrom, accessToken)
       .then((lesson) => {
         if (cancelled) return;
         setForkedFromTitle(lesson.title || "");
@@ -355,7 +360,7 @@ export default function EditorPage() {
     return () => {
       cancelled = true;
     };
-  }, [forkedFrom, user]);
+  }, [forkedFrom, user, accessToken]);
 
   const closeWizard = () => {
     setWizardOpen(false);
@@ -536,8 +541,11 @@ export default function EditorPage() {
   // double-mount; clearing the key also stops a reload from reloading it.
   useEffect(() => {
     // Wait until the saved draft has hydrated, so the "is there work to lose?"
-    // check below sees the real document rather than the empty starter.
-    if (!hydrated || editRequestedRef.current) return;
+    // check below sees the real document rather than the empty starter. Also
+    // wait for the session to resolve: a private draft needs the access token
+    // to load, and firing off the request token-less first would 404 on the
+    // author's own draft before this effect's one-shot guard could retry.
+    if (!hydrated || authLoading || editRequestedRef.current) return;
     let lessonId = null;
     let mode = "edit";
     try {
@@ -559,7 +567,7 @@ export default function EditorPage() {
     }
 
     setEditLoading(true);
-    fetchLesson(lessonId)
+    fetchLesson(lessonId, accessToken)
       .then((lesson) => {
         const incoming = {
           id: lesson.id,
@@ -593,7 +601,7 @@ export default function EditorPage() {
         });
       })
       .finally(() => setEditLoading(false));
-  }, [hydrated]);
+  }, [hydrated, authLoading, accessToken]);
 
   const setTitle = (title) => setDoc((d) => ({ ...d, title }));
 

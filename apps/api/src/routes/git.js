@@ -6,9 +6,13 @@
 // it here the way git itself moves history: as a packfile holding every object
 // reachable from the lesson's branch, plus the commit its branch points at.
 //
-//   GET /git/:lessonId/refs   public  -> { head, size, updatedAt } | 404
-//   GET /git/:lessonId/pack   public  -> the packfile (X-Git-Head names its tip)
-//   PUT /git/:lessonId/pack   Bearer  -> store it (the author, or a trusted collaborator)
+//   GET /git/:lessonId/refs   public* -> { head, size, updatedAt } | 404
+//   GET /git/:lessonId/pack   public* -> the packfile (X-Git-Head names its tip)
+//   PUT /git/:lessonId/pack   Bearer   -> store it (the author, or a trusted collaborator)
+//
+// *A private draft's (published = false) history is not public — only its
+//  author, a trusted collaborator, or a moderator/admin may read it, same as
+//  GET /lessons/:id.
 //
 // A forker downloads the pack, indexes it into their own object store, and holds
 // a genuine clone: same commits, same oids, shared ancestry — which is what lets
@@ -65,14 +69,21 @@ async function storedHead(env, lessonId) {
 
 /**
  * Whether a reader may see this lesson's history. Mirrors GET /lessons/:id: a
- * shadowbanned lesson is invisible to the public but stays readable to its author
- * (who must not realise it's hidden) and to moderators.
+ * private draft (published = false) or a shadowbanned lesson is invisible to
+ * the public but stays readable to its author (who must not realise a
+ * shadowban is in effect), a trusted collaborator, and moderators.
  */
 async function readable(request, env, base, row, cors) {
-	if (!row.shadowbanned) return null;
+	if (row.published && !row.shadowbanned) return null;
 	const { user, role } = await verifyUserAndRole(env, base, request);
 	const isOwner = user && user.id === row.author_id;
 	if (isOwner || isModeratorRole(role)) return null;
+	// The trusted list lives on the lesson's doc, which `row` doesn't carry (the
+	// callers below fetch without it) — pull it only for this less-common path.
+	if (user) {
+		const full = await fetchLessonRow(env, base, row.id, { withDoc: true });
+		if (full && isTrustedCollaborator(full, user)) return null;
+	}
 	return textResponse('Lesson not found.', 404, cors);
 }
 

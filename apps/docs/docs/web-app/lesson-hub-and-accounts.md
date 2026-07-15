@@ -78,11 +78,11 @@ verifies it (and derives the author) before inserting the row.
 
 ```
  Browser ──magic link / session (Supabase JS)──▶ Supabase Auth
- Browser ──GET /lessons, GET /lessons/:id───────▶ Worker ──▶ Supabase Postgres   (public reads; published only in listing)
+ Browser ──GET /lessons, GET /lessons/:id───────▶ Worker ──▶ Supabase Postgres   (public reads; published only in listing; a draft's GET /lessons/:id needs Bearer JWT as owner/trusted collaborator/mod)
  Browser ──GET /lessons/mine (Bearer JWT)────────▶ Worker ──verify JWT──▶ Postgres (own lessons + drafts)
  Browser ──POST /lessons  (Bearer JWT)──────────▶ Worker ──verify JWT──▶ Postgres (publish or save draft)
  Browser ──PUT  /lessons/:id (Bearer JWT)────────▶ Worker ──verify JWT + author──▶ Postgres (edit own; may flip draft↔hub)
- Browser ──GET /lessons/:id/comments────────────▶ Worker ──▶ Supabase Postgres   (public reads)
+ Browser ──GET /lessons/:id/comments────────────▶ Worker ──▶ Supabase Postgres   (public reads; a draft's comments need the same auth as the lesson)
  Browser ──POST /lessons/:id/comments (Bearer)──▶ Worker ──verify JWT, sanitize, profanity check──▶ Postgres
  Browser ──PATCH /lessons/:id/comments/:cid ────▶ Worker ──verify JWT + author, same checks──▶ Postgres (edit own)
 ```
@@ -98,13 +98,22 @@ their own pages.)
 | ---------------------------------------- | ----------------------- | --------------------------------------------------------------------------------------------------------------------- |
 | `GET /lessons`                           | none (public)           | `{ "lessons": [{ id, authorId, title, author, sectionCount, published, createdAt }] }` (published only, newest first) |
 | `GET /lessons/mine`                      | `Bearer <Supabase JWT>` | `{ "lessons": [{ id, authorId, title, author, sectionCount, published, createdAt }] }` (caller's own, incl. drafts)   |
-| `GET /lessons/:id`                       | none (public)           | `{ "lesson": { id, authorId, title, author, sectionCount, published, createdAt, doc, avgRating, ratingCount } }`      |
+| `GET /lessons/:id`                       | none, unless a draft\*  | `{ "lesson": { id, authorId, title, author, sectionCount, published, createdAt, doc, avgRating, ratingCount } }`      |
 | `POST /lessons`                          | `Bearer <Supabase JWT>` | `{ "lesson": { id, authorId, title, author, sectionCount, published, createdAt } }`                                   |
 | `PUT /lessons/:id`                       | `Bearer <Supabase JWT>` | `{ "lesson": { id, authorId, title, author, sectionCount, published, createdAt } }` (author only; else `403`)         |
-| `GET /lessons/:id/comments`              | none (public)           | `{ "comments": [{ id, parentId, authorId, author, body, createdAt, editedAt }] }` (oldest first)                      |
+| `GET /lessons/:id/comments`              | none, unless a draft\*  | `{ "comments": [{ id, parentId, authorId, author, body, createdAt, editedAt }] }` (oldest first)                      |
 | `POST /lessons/:id/comments`             | `Bearer <Supabase JWT>` | `{ "comment": { id, ..., body, createdAt, editedAt }, "rating": { average, count } \| null }`                         |
 | `PATCH /lessons/:id/comments/:commentId` | `Bearer <Supabase JWT>` | `{ "comment": { ... } }` — edit your own comment (author only; else `403`)                                            |
 | `POST /ai-text/dislike`                  | `Bearer <Supabase JWT>` | `{ "ok": true }` — evicts the cached text for `{ subject, documentName }`                                             |
+
+\* A published lesson's `GET /lessons/:id` and `GET /lessons/:id/comments` need
+no auth. A **draft** (`published: false`) is private — having the id/URL is not
+enough — so those two reads 404 unless the request carries a `Bearer <Supabase
+JWT>` for the lesson's author, a trusted collaborator (`doc.trustedCollaborators`),
+or a moderator/admin. The frontend (`src/lib/lessons.js`'s `fetchLesson`,
+`src/lib/comments.js`'s `fetchComments`) always sends the signed-in user's token
+when one is available, so this is transparent to an author viewing or editing
+their own draft.
 
 - `doc` is the editor document shape used throughout the app:
   `{ title, sections: [{ id, name, blocks: [...] }] }`. Store it as `jsonb`.

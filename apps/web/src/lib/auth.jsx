@@ -4,7 +4,11 @@
 // Worker needs to authorise a publish.
 
 import { createContext, useContext, useEffect, useMemo, useState } from "react";
-import { supabase, supabaseEnabled } from "./supabase.js";
+import {
+  supabase,
+  supabaseEnabled,
+  readPersistedRefreshToken,
+} from "./supabase.js";
 import { fetchMyRole } from "./moderation.js";
 
 const AuthContext = createContext(null);
@@ -28,9 +32,30 @@ export function AuthProvider({ children }) {
     if (!supabaseEnabled) return;
 
     let active = true;
-    supabase.auth.getSession().then(({ data }) => {
+    supabase.auth.getSession().then(async ({ data }) => {
       if (!active) return;
-      setSession(data.session ?? null);
+      if (data.session) {
+        setSession(data.session);
+        setLoading(false);
+        return;
+      }
+      // No session in memory — normally that just means signed out, but it's
+      // also what a known SDK gap looks like: a valid session can be stuck
+      // unloaded after a failed startup refresh (see readPersistedRefreshToken
+      // for the full story). If a persisted refresh token is sitting in
+      // storage, force one more real refresh attempt with it before
+      // concluding the user is actually signed out.
+      const refreshToken = readPersistedRefreshToken();
+      if (!refreshToken) {
+        setSession(null);
+        setLoading(false);
+        return;
+      }
+      const { data: refreshed } = await supabase.auth
+        .refreshSession({ refresh_token: refreshToken })
+        .catch(() => ({ data: null }));
+      if (!active) return;
+      setSession(refreshed?.session ?? null);
       setLoading(false);
     });
 

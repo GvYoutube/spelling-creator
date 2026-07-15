@@ -11,12 +11,13 @@
 // from the flattened plain text, not the markup.
 
 import { supabaseHeaders, verifySupabaseUser } from '../lib/supabase.js';
-import { authorFromUser, bearerToken, clientIp, displayNameOf } from '../lib/auth.js';
+import { authorFromUser, bearerToken, clientIp, displayNameOf, isModeratorRole, verifyUserAndRole } from '../lib/auth.js';
 import { bannedResponse } from '../lib/bans.js';
 import { profanityFilter } from '../lib/profanity.js';
 import { textResponse, jsonResponse } from '../lib/http.js';
 import { fetchRatingStats, upsertRating } from '../lib/ratings.js';
 import { richTextToPlain, sanitizeRichText } from '../lib/richtext.js';
+import { isTrustedCollaborator } from '../lib/lesson.js';
 import { createNotification } from './notifications.js';
 
 // The longest comment we accept, measured in the text the user actually wrote —
@@ -97,7 +98,7 @@ async function readCommentBody(body, cors) {
 /**
  * Comment endpoints for a single published lesson, backed by Supabase Postgres.
  *
- *   GET  /lessons/:id/comments   public  -> { comments: Comment[] }   (oldest first)
+ *   GET  /lessons/:id/comments   public* -> { comments: Comment[] }   (oldest first; *drafts need auth as owner/trusted/mod)
  *   POST /lessons/:id/comments   Bearer  -> { comment: Comment }      (verified JWT)
  *
  * POST is moderated: the comment text is run through glin-profanity, and if it
@@ -126,9 +127,35 @@ export async function handleComments(request, env, lessonId, cors) {
 
 	const base = env.SUPABASE_URL.replace(/\/$/, '');
 
-	// GET — public listing of a lesson's comments, oldest first so the thread
-	// reads top to bottom.
+	// GET — listing of a lesson's comments, oldest first so the thread reads top
+	// to bottom. Public for a published lesson; a private draft's comments are as
+	// private as the draft itself, so they're gated the same way GET /lessons/:id
+	// gates the lesson — owner, trusted collaborator, or moderator/admin only.
 	if (request.method === 'GET') {
+		let lessonRes;
+		try {
+			lessonRes = await fetch(
+				`${base}/rest/v1/lessons?id=eq.${encodeURIComponent(lessonId)}&select=id,author_id,published,shadowbanned,doc&limit=1`,
+				{ headers: supabaseHeaders(env) },
+			);
+		} catch (e) {
+			return textResponse('Could not reach the lesson store.', 502, cors);
+		}
+		if (!lessonRes.ok) return textResponse('Could not load comments.', 502, cors);
+		const lessonRows = await lessonRes.json().catch(() => []);
+		if (!Array.isArray(lessonRows) || lessonRows.length === 0) {
+			return textResponse('Lesson not found.', 404, cors);
+		}
+		const lesson = lessonRows[0];
+		if (!lesson.published || lesson.shadowbanned) {
+			const { user, role } = await verifyUserAndRole(env, base, request);
+			const isOwner = user && user.id === lesson.author_id;
+			const isTrusted = !isOwner && user && isTrustedCollaborator(lesson, user);
+			if (!isOwner && !isTrusted && !isModeratorRole(role)) {
+				return textResponse('Lesson not found.', 404, cors);
+			}
+		}
+
 		const query = `lesson_id=eq.${encodeURIComponent(lessonId)}&select=${COMMENT_COLUMNS}&order=created_at.asc`;
 		let res;
 		try {

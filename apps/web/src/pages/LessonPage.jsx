@@ -88,7 +88,13 @@ function formatDate(value) {
 
 export default function LessonPage() {
   const { id } = useParams();
-  const { user, accessToken, isModerator, isAdmin } = useAuth();
+  const {
+    user,
+    accessToken,
+    loading: authLoading,
+    isModerator,
+    isAdmin,
+  } = useAuth();
   const navigate = useNavigate();
   const theme = useTheme();
   // Below "md" the toolbar's action buttons collapse into an overflow menu.
@@ -133,13 +139,17 @@ export default function LessonPage() {
       setLoading(false);
       return;
     }
+    // Wait for the session to resolve before fetching: a private draft needs
+    // the access token to load for its owner, and firing off token-less first
+    // would flash a spurious "not found" for them until this effect re-runs.
+    if (authLoading) return;
     let cancelled = false;
     setLoading(true);
     setError("");
     setLesson(null);
     (async () => {
       try {
-        const full = await fetchLesson(id);
+        const full = await fetchLesson(id, accessToken);
         if (cancelled) return;
         // Render happens directly from the doc via <LessonView>; images
         // lazy-load in the browser, so there's no up-front render step to wait
@@ -154,7 +164,7 @@ export default function LessonPage() {
     return () => {
       cancelled = true;
     };
-  }, [id]);
+  }, [id, accessToken, authLoading]);
 
   // Send the user to the editor to edit their own lesson. The editor fetches the
   // full lesson and warns before replacing any in-progress work, so we only hand
