@@ -9,6 +9,7 @@ on:
     paths:
       - "apps/web/**"
       - "apps/api/**"
+      - "apps/mcp/**"
       - "apps/docs/**"
       - "pnpm-lock.yaml"
       - "pnpm-workspace.yaml"
