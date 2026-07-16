@@ -101,11 +101,14 @@ export function createApi(config, auth) {
       return Array.isArray(data.lessons) ? data.lessons : [];
     },
 
-    /** One lesson including its full `doc`. */
+    /**
+     * One lesson including its full `doc`. Sends the caller's token even though
+     * published reads don't need it — the Worker only recognises an owner (or
+     * trusted collaborator/moderator) on a draft or shadowbanned lesson via that
+     * same Bearer token, so omitting it made those reads 404 as "not found".
+     */
     async getLesson(id) {
-      const data = await call(lessonsUrl(`/${encodeURIComponent(id)}`), {
-        needsAuth: false,
-      });
+      const data = await call(lessonsUrl(`/${encodeURIComponent(id)}`));
       if (!data.lesson) throw new Error("Lesson not found.");
       return data.lesson;
     },
