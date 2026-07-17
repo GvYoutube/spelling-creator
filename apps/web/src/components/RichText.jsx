@@ -14,54 +14,28 @@
 // video, audio, iframe or svg in it.
 
 import { useMemo } from "react";
-import Typography from "@mui/material/Typography";
+import { cn } from "../lib/utils.js";
 import { isRichTextHtml, sanitizeRichText } from "../lib/richText.js";
 
-// Typography for the formatting the editor can produce. The editor wraps everything
-// in block tags, so the first and last child have their margins collapsed — otherwise
-// every comment would carry a blank line above and below it.
-const RICH_TEXT_SX = {
-  wordBreak: "break-word",
-  "& > :first-of-type": { mt: 0 },
-  "& > :last-child": { mb: 0 },
-  "& p": { my: 1 },
-  "& ul, & ol": { my: 1, pl: 3 },
-  "& li > p": { my: 0 },
-  "& blockquote": {
-    my: 1,
-    ml: 0,
-    pl: 1.5,
-    borderLeft: 3,
-    borderColor: "divider",
-    color: "text.secondary",
-  },
-  "& code": {
-    fontFamily: "monospace",
-    fontSize: "0.875em",
-    bgcolor: "action.hover",
-    px: 0.5,
-    py: 0.25,
-    borderRadius: 0.5,
-  },
-  "& pre": {
-    my: 1,
-    p: 1,
-    bgcolor: "action.hover",
-    borderRadius: 1,
-    overflowX: "auto",
-  },
-  "& pre code": { bgcolor: "transparent", p: 0 },
-  "& a": { color: "primary.main" },
+// Text size for the two places this renders: a comment body (the default,
+// smaller) and a profile bio (the one caller that asks for the larger size).
+// Formatting spacing itself (paragraph/list/blockquote/code margins) lives in
+// the shared .prose-content rules in styles/globals.css — the same rules
+// RichTextInput's live editor uses, so a comment looks the same while being
+// written and after it's posted.
+const VARIANT_CLASSES = {
+  body1: "text-base",
+  body2: "text-sm",
 };
 
 /**
  * @param {object} props
  * @param {string} props.value              The stored body/bio: rich-text HTML, or a
  *                                          plain string from before rich text.
- * @param {string} [props.variant]          MUI Typography variant.
- * @param {object} [props.sx]               Extra styles, merged last.
+ * @param {string} [props.variant]          "body1" (larger) or "body2" (default).
+ * @param {string} [props.className]        Extra classes, merged last.
  */
-export default function RichText({ value, variant = "body2", sx }) {
+export default function RichText({ value, variant = "body2", className }) {
   const html = useMemo(
     () => (isRichTextHtml(value) ? sanitizeRichText(value) : ""),
     [value],
@@ -69,15 +43,16 @@ export default function RichText({ value, variant = "body2", sx }) {
 
   if (!value) return null;
 
+  const sizeClass = VARIANT_CLASSES[variant] ?? VARIANT_CLASSES.body2;
+
   // Legacy plain text: render as text, never as markup.
   if (!isRichTextHtml(value)) {
     return (
-      <Typography
-        variant={variant}
-        sx={{ whiteSpace: "pre-wrap", wordBreak: "break-word", ...sx }}
+      <p
+        className={cn(sizeClass, "whitespace-pre-wrap break-words", className)}
       >
         {value}
-      </Typography>
+      </p>
     );
   }
 
@@ -86,10 +61,8 @@ export default function RichText({ value, variant = "body2", sx }) {
   if (!html) return null;
 
   return (
-    <Typography
-      variant={variant}
-      component="div"
-      sx={{ ...RICH_TEXT_SX, ...sx }}
+    <div
+      className={cn(sizeClass, "prose-content", className)}
       dangerouslySetInnerHTML={{ __html: html }}
     />
   );
