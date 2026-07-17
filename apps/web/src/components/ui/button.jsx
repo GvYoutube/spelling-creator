@@ -12,13 +12,23 @@ const buttonVariants = cva(
         default: "bg-primary text-primary-foreground hover:bg-primary/90",
         destructive:
           "bg-destructive text-white hover:bg-destructive/90 focus-visible:ring-destructive/20 dark:bg-destructive/60 dark:focus-visible:ring-destructive/40",
+        // text-foreground is explicit on outline/ghost (every other variant
+        // sets its own text-*) — without it, native <button> elements don't
+        // inherit color from ancestors at all while Tailwind preflight is
+        // off (browsers default form-element text to the UA "buttontext"
+        // system color — black — regardless of our dark-mode tokens). Found
+        // as a black (invisible) dialog close icon and ghost button label in
+        // dark mode. See the memory on this.
         outline:
-          "border bg-background shadow-xs hover:bg-accent hover:text-accent-foreground dark:border-input dark:bg-input/30 dark:hover:bg-input/50",
+          "border bg-background text-foreground shadow-xs hover:bg-accent hover:text-accent-foreground dark:border-input dark:bg-input/30 dark:hover:bg-input/50",
         secondary:
           "bg-secondary text-secondary-foreground hover:bg-secondary/80",
+        // bg-transparent is explicit too (every other variant sets its own
+        // bg-*) — without it these show the browser's default gray button
+        // chrome while preflight is off.
         ghost:
-          "hover:bg-accent hover:text-accent-foreground dark:hover:bg-accent/50",
-        link: "text-primary underline-offset-4 hover:underline",
+          "bg-transparent text-foreground hover:bg-accent hover:text-accent-foreground dark:hover:bg-accent/50",
+        link: "bg-transparent text-primary underline-offset-4 hover:underline",
       },
       size: {
         default: "h-9 px-4 py-2 has-[>svg]:px-3",

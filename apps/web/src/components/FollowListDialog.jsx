@@ -7,21 +7,16 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import Dialog from "@mui/material/Dialog";
-import DialogTitle from "@mui/material/DialogTitle";
-import DialogContent from "@mui/material/DialogContent";
-import Tabs from "@mui/material/Tabs";
-import Tab from "@mui/material/Tab";
-import List from "@mui/material/List";
-import ListItemButton from "@mui/material/ListItemButton";
-import ListItemAvatar from "@mui/material/ListItemAvatar";
-import ListItemText from "@mui/material/ListItemText";
-import Avatar from "@mui/material/Avatar";
-import Box from "@mui/material/Box";
-import Stack from "@mui/material/Stack";
-import Typography from "@mui/material/Typography";
-import Alert from "@mui/material/Alert";
-import Skeleton from "@mui/material/Skeleton";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "./ui/dialog.jsx";
+import { Tabs, TabsList, TabsTrigger } from "./ui/tabs.jsx";
+import { Avatar, AvatarFallback } from "./ui/avatar.jsx";
+import { Alert, AlertDescription } from "./ui/alert.jsx";
+import { Skeleton } from "./ui/skeleton.jsx";
 import { fetchFollowList } from "../lib/users.js";
 import { richTextToLine } from "../lib/richText.js";
 
@@ -33,20 +28,14 @@ function initial(name) {
 // A few placeholder rows (avatar + name line) while a tab's list loads.
 function RowsSkeleton({ count = 5 }) {
   return (
-    <List disablePadding>
+    <div className="flex flex-col gap-1">
       {Array.from({ length: count }, (_, i) => (
-        <Stack
-          key={i}
-          direction="row"
-          spacing={2}
-          alignItems="center"
-          sx={{ px: 2, py: 1 }}
-        >
-          <Skeleton variant="circular" width={40} height={40} />
-          <Skeleton variant="text" width={`${60 - i * 6}%`} />
-        </Stack>
+        <div key={i} className="flex items-center gap-3 px-4 py-2">
+          <Skeleton className="size-10 rounded-full" />
+          <Skeleton className="h-4" style={{ width: `${60 - i * 6}%` }} />
+        </div>
       ))}
-    </List>
+    </div>
   );
 }
 
@@ -113,7 +102,7 @@ export default function FollowListDialog({
   }, [open, userId, tab]);
 
   const openProfile = (id) => {
-    if (onClose) onClose();
+    onClose?.();
     navigate(`/users/${id}`);
   };
 
@@ -124,51 +113,59 @@ export default function FollowListDialog({
       : `${displayName} isn’t following anyone yet.`;
 
   return (
-    <Dialog open={open} onClose={onClose} fullWidth maxWidth="xs">
-      <DialogTitle sx={{ pb: 0 }}>Connections</DialogTitle>
-      <Tabs
-        value={tab}
-        onChange={(_e, v) => setTab(v)}
-        variant="fullWidth"
-        sx={{ px: 2, borderBottom: 1, borderColor: "divider" }}
-      >
-        <Tab value="followers" label="Followers" />
-        <Tab value="following" label="Following" />
-      </Tabs>
-      <DialogContent sx={{ p: 0, minHeight: 240 }}>
-        {!current || current.loading ? (
-          <RowsSkeleton />
-        ) : current.error ? (
-          <Box sx={{ p: 2 }}>
-            <Alert severity="error">{current.error}</Alert>
-          </Box>
-        ) : current.users.length === 0 ? (
-          <Typography
-            variant="body2"
-            color="text.secondary"
-            sx={{ px: 2, py: 3 }}
-          >
-            {emptyText}
-          </Typography>
-        ) : (
-          <List disablePadding>
-            {current.users.map((u) => (
-              <ListItemButton key={u.id} onClick={() => openProfile(u.id)}>
-                <ListItemAvatar>
-                  <Avatar>{initial(u.displayName)}</Avatar>
-                </ListItemAvatar>
-                {/* Bios are rich-text HTML; this is a one-line subtitle, so show the
-                    words and drop the markup. */}
-                <ListItemText
-                  primary={u.displayName || "Anonymous"}
-                  secondary={richTextToLine(u.bio, 80) || undefined}
-                  primaryTypographyProps={{ noWrap: true }}
-                  secondaryTypographyProps={{ noWrap: true }}
-                />
-              </ListItemButton>
-            ))}
-          </List>
-        )}
+    <Dialog open={open} onOpenChange={(next) => !next && onClose?.()}>
+      <DialogContent className="sm:max-w-sm p-0 gap-0">
+        <DialogHeader className="p-4 pb-0">
+          <DialogTitle>Connections</DialogTitle>
+        </DialogHeader>
+        <Tabs value={tab} onValueChange={setTab} className="gap-0">
+          <TabsList className="mx-4 mt-3 grid w-auto grid-cols-2">
+            <TabsTrigger value="followers">Followers</TabsTrigger>
+            <TabsTrigger value="following">Following</TabsTrigger>
+          </TabsList>
+        </Tabs>
+        <div className="min-h-[240px] border-t border-border py-2">
+          {!current || current.loading ? (
+            <RowsSkeleton />
+          ) : current.error ? (
+            <div className="p-4">
+              <Alert variant="destructive">
+                <AlertDescription>{current.error}</AlertDescription>
+              </Alert>
+            </div>
+          ) : current.users.length === 0 ? (
+            <p className="px-4 py-6 text-sm text-muted-foreground">
+              {emptyText}
+            </p>
+          ) : (
+            <div className="flex flex-col">
+              {current.users.map((u) => (
+                <button
+                  key={u.id}
+                  type="button"
+                  onClick={() => openProfile(u.id)}
+                  className="flex cursor-pointer items-center gap-3 border-0 bg-transparent px-4 py-2 text-left transition-colors hover:bg-accent"
+                >
+                  <Avatar>
+                    <AvatarFallback>{initial(u.displayName)}</AvatarFallback>
+                  </Avatar>
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-sm font-medium">
+                      {u.displayName || "Anonymous"}
+                    </p>
+                    {/* Bios are rich-text HTML; this is a one-line subtitle, so
+                        show the words and drop the markup. */}
+                    {richTextToLine(u.bio, 80) && (
+                      <p className="truncate text-sm text-muted-foreground">
+                        {richTextToLine(u.bio, 80)}
+                      </p>
+                    )}
+                  </div>
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
       </DialogContent>
     </Dialog>
   );
