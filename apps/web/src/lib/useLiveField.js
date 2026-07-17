@@ -1,10 +1,14 @@
 import { useEffect, useRef, useState } from "react";
 
-// Shared debounce/commit logic behind LiveTextField (MUI) and the shadcn
-// LiveInput/LiveTextarea — see the note in LiveTextField.jsx for why this
-// buffering exists at all. Returns the value the input should display plus
-// change/focus/blur handlers; callers wire those onto whatever input element
-// they're using.
+// Shared debounce/commit logic behind LiveInput/LiveTextarea (LiveField.jsx).
+// Typing updates local state immediately (so the field never feels laggy)
+// and commits upstream ~200ms after the user pauses, rather than on every
+// keystroke — collaborative editing broadcasts the committed value to other
+// participants, and committing per-keystroke would flood that channel. While
+// focused, incoming `value` updates (e.g. a remote edit arriving mid-type)
+// are held off so they can't clobber what's being typed; they apply once the
+// field blurs. Returns the value the input should display plus change/focus/
+// blur handlers; callers wire those onto whatever input element they're using.
 export function useLiveField(value, onCommit, commitDelay = 200) {
   const [local, setLocal] = useState(value ?? "");
   const focusedRef = useRef(false);

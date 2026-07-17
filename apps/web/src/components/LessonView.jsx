@@ -11,8 +11,7 @@
 // published view is visually identical to the Word/PDF export. The export/PDF
 // buttons still use the docx pipeline (docxExport.js / pdfExport.js) unchanged.
 
-import Box from "@mui/material/Box";
-import Skeleton from "@mui/material/Skeleton";
+import { Skeleton } from "./ui/skeleton.jsx";
 import { PREVIEW_STYLES } from "../lib/htmlPreview.js";
 import { fitWithin, imageSizeScale } from "../lib/image.js";
 import { DOCX_MAX_IMAGE_WIDTH } from "../lib/docxExport.js";
@@ -71,8 +70,8 @@ function ImageBlock({ block }) {
         // Local blobs resolve asynchronously; show a sized skeleton (not a
         // spinner) so there's no layout shift when the URL arrives.
         <Skeleton
-          variant="rectangular"
-          sx={{ width: "100%", aspectRatio: `${width} / ${height}` }}
+          className="w-full rounded-none"
+          style={{ aspectRatio: `${width} / ${height}` }}
         />
       )}
       {block.caption ? (
@@ -174,10 +173,7 @@ function Block({ block }) {
 export default function LessonView({ doc }) {
   const sections = doc?.sections || [];
   return (
-    <Box
-      className="s2c-preview-root"
-      sx={{ bgcolor: "#fff", color: "#1a1a1a", p: { xs: 2, sm: 3 } }}
-    >
+    <div className="s2c-preview-root bg-white p-4 text-[#1a1a1a] sm:p-6">
       <style>{PREVIEW_STYLES}</style>
       <h1>{doc?.title || "Untitled Lesson"}</h1>
       {sections.map((section, si) => (
@@ -188,7 +184,7 @@ export default function LessonView({ doc }) {
           ))}
         </section>
       ))}
-    </Box>
+    </div>
   );
 }
 

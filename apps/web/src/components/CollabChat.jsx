@@ -82,12 +82,13 @@ export default function CollabChat({ collab }) {
     setDraft("");
   };
 
-  // Collapsed: a small launcher FAB with an unread badge. z-[1202] matches
-  // FirstLessonWizard's fixed corner panel — comfortably above the still-MUI
-  // pages' sticky AppBar (z-1100).
+  // Collapsed: a small launcher FAB with an unread badge. z-40 matches
+  // AppHeader's sticky bar and FirstLessonWizard's fixed corner panel — this
+  // floats alongside page content rather than as a modal overlay, so it only
+  // needs to clear the header, not Dialog/Popover/DropdownMenu's z-50.
   if (!open) {
     return (
-      <div className="fixed bottom-4 left-4 z-[1202]">
+      <div className="fixed bottom-4 left-4 z-40">
         <Tooltip>
           <TooltipTrigger asChild>
             <Button
@@ -112,7 +113,7 @@ export default function CollabChat({ collab }) {
   }
 
   return (
-    <div className="fixed bottom-4 left-4 z-[1202] flex h-[420px] max-h-[calc(100vh-32px)] w-[calc(100vw-32px)] max-w-[360px] flex-col overflow-hidden rounded-panel border border-border bg-card text-card-foreground shadow-[var(--shadow-panel),0_0_0_1px_var(--glass-border-outer)] backdrop-blur-(--glass-blur) backdrop-saturate-[1.4] sm:w-80">
+    <div className="fixed bottom-4 left-4 z-40 flex h-[420px] max-h-[calc(100vh-32px)] w-[calc(100vw-32px)] max-w-[360px] flex-col overflow-hidden rounded-panel border border-border bg-card text-card-foreground shadow-[var(--shadow-panel),0_0_0_1px_var(--glass-border-outer)] backdrop-blur-(--glass-blur) backdrop-saturate-[1.4] sm:w-80">
       {/* Header */}
       <div className="flex items-center gap-2 bg-primary px-3 py-2 text-primary-foreground">
         <MessageCircleIcon className="size-4" />

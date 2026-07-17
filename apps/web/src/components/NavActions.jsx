@@ -3,16 +3,14 @@
 // state (sign in / sign out). Signed-in users also get a notification bell.
 //
 // The trigger elements below (the hub link, the icon buttons) sit directly on
-// AppHeader's colored --primary surface (or, on pages not yet migrated off
-// MUI, that AppBar's near-identical hardcoded blue), not on the page's own
-// light/dark background — so they're styled from --primary-foreground rather
-// than the usual --foreground/--muted-foreground tokens. --primary-foreground
-// already flips correctly with the theme (near-white on the light-mode blue,
-// near-black on the lighter dark-mode violet), so this works in both themes
-// once AppHeader itself is dark-mode aware, not just on the currently
-// light-locked MUI bar. The dropdown menu itself isn't constrained the same
-// way — it floats above everything as its own surface — so it uses the usual
-// design tokens throughout.
+// AppHeader's colored --primary surface, not on the page's own light/dark
+// background — so they're styled from --primary-foreground rather than the
+// usual --foreground/--muted-foreground tokens. --primary-foreground flips
+// correctly with the theme (near-white text on both the light-mode indigo and
+// the dark-mode's own deeper indigo), so this works in both themes. The
+// dropdown menu itself isn't constrained the same way — it floats above
+// everything as its own surface — so it uses the usual design tokens
+// throughout.
 
 import { useState } from "react";
 import { Link as RouterLink, useNavigate } from "react-router-dom";

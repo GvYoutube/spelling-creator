@@ -1,6 +1,6 @@
 // Rich text on the browser side — the counterpart to apps/api/src/lib/richtext.js.
 //
-// Comments and bios are rich text: HTML written with mui-tiptap (RichTextInput.jsx)
+// Comments and bios are rich text: HTML written with tiptap (RichTextInput.jsx)
 // and rendered back as HTML (RichText.jsx). Two jobs live here:
 //
 //   1. `sanitizeRichText` — a second, independent sanitizing pass at render time.

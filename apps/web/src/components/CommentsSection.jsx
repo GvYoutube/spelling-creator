@@ -9,7 +9,7 @@
 // also notifies the parent comment's author and the lesson author — handled
 // entirely server-side.
 //
-// Comments are rich text: written with RichTextInput (mui-tiptap) and stored as
+// Comments are rich text: written with RichTextInput (tiptap) and stored as
 // sanitized HTML, rendered back through RichText. Formatting and links only — no
 // images or other media, which the Worker's sanitizer is what actually enforces
 // (apps/api/src/lib/richtext.js).
@@ -20,10 +20,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-// Snackbar stays MUI for now — see the note in ModerationPage.jsx; this file
-// is one of the other still-MUI-Snackbar callers that will justify a real
-// shadcn Toast once one of them migrates.
-import Snackbar from "@mui/material/Snackbar";
+import { toast } from "sonner";
 import { EllipsisVerticalIcon, Trash2Icon, BanIcon, XIcon } from "lucide-react";
 import { Button } from "./ui/button.jsx";
 import { Alert, AlertTitle, AlertDescription } from "./ui/alert.jsx";
@@ -147,8 +144,6 @@ export default function CommentsSection({ lessonId, onRated }) {
   const [editDraft, setEditDraft] = useState("");
   const [editSaving, setEditSaving] = useState(false);
   const [editNotice, setEditNotice] = useState(null);
-
-  const [modNotice, setModNotice] = useState("");
 
   // Group the flat list into parent -> [replies] (preserving the oldest-first
   // order the Worker returns) so we can render the thread recursively.
@@ -328,9 +323,9 @@ export default function CommentsSection({ lessonId, onRated }) {
         }
         return prev.filter((item) => !removed.has(item.id));
       });
-      setModNotice("Comment deleted.");
+      toast("Comment deleted.");
     } catch (err) {
-      setModNotice(err.message || "Could not delete the comment.");
+      toast(err.message || "Could not delete the comment.");
     }
   };
 
@@ -339,14 +334,14 @@ export default function CommentsSection({ lessonId, onRated }) {
   const handleBanAuthor = async (c) => {
     const name = c.author || "";
     if (!name) {
-      setModNotice("This comment has no author name to ban.");
+      toast("This comment has no author name to ban.");
       return;
     }
     try {
       await banName(name, accessToken);
-      setModNotice(`Banned "${name}" from posting.`);
+      toast(`Banned "${name}" from posting.`);
     } catch (err) {
-      setModNotice(err.message || "Could not ban the author.");
+      toast(err.message || "Could not ban the author.");
     }
   };
 
@@ -622,14 +617,6 @@ export default function CommentsSection({ lessonId, onRated }) {
           )}
         </div>
       )}
-
-      <Snackbar
-        open={Boolean(modNotice)}
-        autoHideDuration={4000}
-        onClose={() => setModNotice("")}
-        message={modNotice}
-        anchorOrigin={{ vertical: "bottom", horizontal: "center" }}
-      />
     </div>
   );
 }

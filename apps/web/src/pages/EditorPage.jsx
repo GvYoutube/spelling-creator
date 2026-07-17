@@ -1,10 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { useDocumentMeta } from "../lib/seo.js";
-// Snackbar stays MUI for now — see the note in ModerationPage.jsx.
-import Snackbar from "@mui/material/Snackbar";
-import MuiAlert from "@mui/material/Alert";
-import MuiButton from "@mui/material/Button";
+import { toast } from "sonner";
 import {
   BracesIcon,
   ChevronDownIcon,
@@ -183,7 +180,6 @@ export default function EditorPage() {
   const [ideaDialogOpen, setIdeaDialogOpen] = useState(false);
   const [newSectionName, setNewSectionName] = useState("");
   const [busy, setBusy] = useState(null); // 'docx' | 'pdf' | 'gdocs' | 'preview' | 'publish' | 'import' | null
-  const [toast, setToast] = useState(null); // { severity, message }
   const [previewContent, setPreviewContent] = useState(null); // HTML string | null
   // Word-import flow. `importWarnOpen` shows the "import is best-effort" warning
   // before the file picker; `importError` holds the reason a chosen file was
@@ -246,6 +242,29 @@ export default function EditorPage() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const showPublish = lessonHubEnabled && authEnabled;
+
+  // A thin shim over sonner's toast() that keeps every call site below
+  // exactly as it was under the old { severity, message, link?, route? }
+  // shape (originally an object handed to setState, rendered by a single
+  // MUI Snackbar/Alert at the bottom of this component) — link opens an
+  // external URL, route navigates within the app; a toast has at most one.
+  const notify = useCallback(
+    ({ severity = "info", message, link, route }) => {
+      const show = toast[severity] || toast.info;
+      show(message, {
+        action: link
+          ? {
+              label: link.label,
+              onClick: () =>
+                window.open(link.href, "_blank", "noopener,noreferrer"),
+            }
+          : route
+            ? { label: route.label, onClick: () => navigate(route.to) }
+            : undefined,
+      });
+    },
+    [navigate],
+  );
 
   // Real-time collaboration over a Cloudflare Durable Object. The hook watches
   // `doc` to broadcast local edits and calls setDoc with documents received from
@@ -462,7 +481,7 @@ export default function EditorPage() {
       setForkedFrom(null);
       setEditingPublished(true);
       setPendingEdit(null);
-      setToast({
+      notify({
         severity: "info",
         message:
           source === "json"
@@ -497,7 +516,7 @@ export default function EditorPage() {
       setEditingPublished(true);
       setPendingEdit(null);
       git.reload();
-      setToast({
+      notify({
         severity: "info",
         message: cloned
           ? "Forked into a new lesson — its full history came with it. Edit freely, then save it as your own copy."
@@ -510,7 +529,7 @@ export default function EditorPage() {
     setForkedFrom(incomingFork || null);
     setEditingPublished(published);
     setPendingEdit(null);
-    setToast({
+    notify({
       severity: "info",
       message: published
         ? "Loaded your published lesson — edit and save to the cloud to update it."
@@ -588,7 +607,7 @@ export default function EditorPage() {
         }
       })
       .catch((err) => {
-        setToast({
+        notify({
           severity: "error",
           message:
             err.message ||
@@ -596,7 +615,7 @@ export default function EditorPage() {
         });
       })
       .finally(() => setEditLoading(false));
-  }, [hydrated, authLoading, accessToken]);
+  }, [hydrated, authLoading, accessToken, notify]);
 
   const setTitle = (title) => setDoc((d) => ({ ...d, title }));
 
@@ -649,8 +668,8 @@ export default function EditorPage() {
   );
 
   const handleSectionError = useCallback(
-    (message) => setToast({ severity: "error", message }),
-    [],
+    (message) => notify({ severity: "error", message }),
+    [notify],
   );
 
   // Block drag-and-drop. The in-flight drag lives here, above the sections,
@@ -729,7 +748,7 @@ export default function EditorPage() {
 
   const handleExport = async (kind) => {
     if (doc.sections.length === 0) {
-      setToast({
+      notify({
         severity: "warning",
         message: "Add at least one section before exporting.",
       });
@@ -739,20 +758,20 @@ export default function EditorPage() {
     try {
       if (kind === "docx") {
         await exportDocx(doc);
-        setToast({ severity: "success", message: "Word document downloaded." });
+        notify({ severity: "success", message: "Word document downloaded." });
       } else if (kind === "json") {
         exportJson(doc);
-        setToast({ severity: "success", message: "Lesson JSON downloaded." });
+        notify({ severity: "success", message: "Lesson JSON downloaded." });
       } else {
         await exportPdf(doc);
-        setToast({
+        notify({
           severity: "success",
           message: "PDF generated for printing.",
         });
       }
     } catch (err) {
       console.error(err);
-      setToast({
+      notify({
         severity: "error",
         message: `Export failed: ${err.message || err}`,
       });
@@ -763,7 +782,7 @@ export default function EditorPage() {
 
   const handleSaveToGoogle = async () => {
     if (doc.sections.length === 0) {
-      setToast({
+      notify({
         severity: "warning",
         message: "Add at least one section before saving.",
       });
@@ -772,7 +791,7 @@ export default function EditorPage() {
     setBusy("gdocs");
     try {
       const file = await saveToGoogleDrive(doc);
-      setToast({
+      notify({
         severity: "success",
         message: "Saved to Google Drive as a Google Doc.",
         link: file.webViewLink
@@ -781,7 +800,7 @@ export default function EditorPage() {
       });
     } catch (err) {
       console.error(err);
-      setToast({
+      notify({
         severity: "error",
         message: `Could not save to Google: ${err.message || err}`,
       });
@@ -792,7 +811,7 @@ export default function EditorPage() {
 
   const handlePreview = async () => {
     if (doc.sections.length === 0) {
-      setToast({
+      notify({
         severity: "warning",
         message: "Add at least one section before previewing.",
       });
@@ -804,7 +823,7 @@ export default function EditorPage() {
       setPreviewContent(html);
     } catch (err) {
       console.error(err);
-      setToast({
+      notify({
         severity: "error",
         message: `Preview failed: ${err.message || err}`,
       });
@@ -821,7 +840,7 @@ export default function EditorPage() {
   // menu stay accurate.
   const handleSaveToCloud = async (publish) => {
     if (doc.sections.length === 0) {
-      setToast({
+      notify({
         severity: "warning",
         message: "Add at least one section before saving.",
       });
@@ -830,7 +849,7 @@ export default function EditorPage() {
     // Saving requires a signed-in account — send the user to the login page (and
     // back) if they aren't authenticated yet.
     if (!accessToken) {
-      setToast({
+      notify({
         severity: "info",
         message: "Please sign in to save your lesson to the cloud.",
       });
@@ -868,7 +887,7 @@ export default function EditorPage() {
         if (result.needsMerge && result.prepared) {
           setMergeIntent("publish");
           setMerge(result.prepared);
-          setToast({
+          notify({
             severity: "info",
             message:
               "Someone else has changed this lesson since you last synced. Merge their changes, then save again — nothing has been overwritten.",
@@ -921,7 +940,7 @@ export default function EditorPage() {
         }
       }
 
-      setToast({
+      notify({
         severity: historyWarning ? "warning" : "success",
         message: historyWarning
           ? `Lesson saved, but ${historyWarning}. Your history is safe on this device and will upload next time you save.`
@@ -935,7 +954,7 @@ export default function EditorPage() {
       });
     } catch (err) {
       console.error(err);
-      setToast({
+      notify({
         severity: "error",
         message: `Could not save: ${err.message || err}`,
       });
@@ -967,7 +986,7 @@ export default function EditorPage() {
     setForkedFrom(from || null);
     setEditingPublished(true);
     git.reload();
-    setToast({
+    notify({
       severity: "info",
       message:
         "Forked into a new lesson — saving to the cloud will create a separate copy.",
@@ -999,7 +1018,7 @@ export default function EditorPage() {
       });
 
       if (!prepared) {
-        setToast({
+        notify({
           severity: "info",
           message:
             "The original lesson has no shared history to merge — it may have been published before version history, or deleted.",
@@ -1007,7 +1026,7 @@ export default function EditorPage() {
         return;
       }
       if (prepared.upToDate) {
-        setToast({
+        notify({
           severity: "success",
           message: "Already up to date with the original.",
         });
@@ -1018,7 +1037,7 @@ export default function EditorPage() {
       setMerge(prepared);
     } catch (err) {
       console.error(err);
-      setToast({
+      notify({
         severity: "error",
         message: `Could not merge: ${err.message || err}`,
       });
@@ -1053,7 +1072,7 @@ export default function EditorPage() {
       });
 
       if (!prepared) {
-        setToast({
+        notify({
           severity: "info",
           message:
             "The original lesson has no shared history, so there's nothing to merge back into.",
@@ -1061,7 +1080,7 @@ export default function EditorPage() {
         return;
       }
       if (prepared.identical) {
-        setToast({
+        notify({
           severity: "info",
           message: `Your copy is identical to ${forkedFromTitle || "the original"} — there's nothing to merge back.`,
         });
@@ -1079,7 +1098,7 @@ export default function EditorPage() {
       setMerge(prepared);
     } catch (err) {
       console.error(err);
-      setToast({
+      notify({
         severity: "error",
         message: `Could not merge back: ${err.message || err}`,
       });
@@ -1105,7 +1124,7 @@ export default function EditorPage() {
     });
     await updateLesson(forkedFrom, mergedDoc, accessToken);
 
-    setToast({
+    notify({
       severity: "success",
       message: `Merged your changes into ${forkedFromTitle || "the original lesson"}. Its author has been notified.`,
       route: { to: `/hub/${forkedFrom}`, label: "View lesson" },
@@ -1136,20 +1155,20 @@ export default function EditorPage() {
       if (intent === "publish") {
         // The merge is committed locally; the save that triggered it was aborted
         // before it could overwrite anything, so the user re-runs it.
-        setToast({
+        notify({
           severity: "success",
           message:
             "Merged the changes from the hub. Save to the cloud again to publish the merged lesson.",
         });
         return;
       }
-      setToast({
+      notify({
         severity: "success",
         message: `Merged the changes from ${forkedFromTitle || "the original"}.`,
       });
     } catch (err) {
       console.error(err);
-      setToast({
+      notify({
         severity: "error",
         message: `Could not complete the merge: ${err.message || err}`,
       });
@@ -2108,51 +2127,10 @@ export default function EditorPage() {
       <CollabChat collab={collab} />
 
       {editLoading && (
-        <div className="fixed inset-0 z-(--z-overlay) flex items-center justify-center bg-black/50">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
           <Spinner className="size-10 text-white" />
         </div>
       )}
-
-      <Snackbar
-        open={Boolean(toast)}
-        autoHideDuration={4000}
-        onClose={() => setToast(null)}
-        anchorOrigin={{ vertical: "bottom", horizontal: "center" }}
-      >
-        {toast ? (
-          <MuiAlert
-            severity={toast.severity}
-            onClose={() => setToast(null)}
-            variant="filled"
-            action={
-              toast.link ? (
-                <MuiButton
-                  color="inherit"
-                  size="small"
-                  href={toast.link.href}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                >
-                  {toast.link.label}
-                </MuiButton>
-              ) : toast.route ? (
-                <MuiButton
-                  color="inherit"
-                  size="small"
-                  onClick={() => {
-                    setToast(null);
-                    navigate(toast.route.to);
-                  }}
-                >
-                  {toast.route.label}
-                </MuiButton>
-              ) : undefined
-            }
-          >
-            {toast.message}
-          </MuiAlert>
-        ) : undefined}
-      </Snackbar>
     </div>
   );
 }

@@ -1,26 +1,27 @@
 import React from "react";
 import ReactDOM from "react-dom/client";
 import { BrowserRouter } from "react-router-dom";
-// Tailwind + shadcn/ui tokens (theme + utilities layers only, no preflight —
-// see the comment at the top of globals.css for why). Imported once here so
-// every migrated component can use the utility classes and CSS variables.
+// Tailwind + shadcn/ui tokens (full preflight now that MUI's CssBaseline is
+// gone — see the comment at the top of globals.css). Imported once here so
+// every component can use the utility classes and CSS variables.
 import "./styles/globals.css";
-// Self-hosted Roboto via Fontsource (loads faster than the Google Fonts CDN).
-// Weights match the theme's typography (300/400/500/700).
-import "@fontsource/roboto/300.css";
-import "@fontsource/roboto/400.css";
-import "@fontsource/roboto/500.css";
-import "@fontsource/roboto/700.css";
+// Self-hosted via Fontsource (loads faster than a Google Fonts CDN link —
+// see the memory on this). Fraunces 600 is headings only; Public Sans
+// 400/500/600 is UI/body text — see globals.css for where each is applied.
+import "@fontsource/fraunces/600.css";
+import "@fontsource/public-sans/400.css";
+import "@fontsource/public-sans/500.css";
+import "@fontsource/public-sans/600.css";
 // Preload the weights so the fonts are fetched in parallel with the bundle and
 // are ready before first paint — avoids the flash of fallback (unstyled) text.
-// Vite fingerprints these URLs at build time, so we resolve them via ?url
+// Rsbuild fingerprints these URLs at build time, so we resolve them via ?url
 // rather than hardcoding hashed paths in index.html.
-import roboto300 from "@fontsource/roboto/files/roboto-latin-300-normal.woff2?url";
-import roboto400 from "@fontsource/roboto/files/roboto-latin-400-normal.woff2?url";
-import roboto500 from "@fontsource/roboto/files/roboto-latin-500-normal.woff2?url";
-import roboto700 from "@fontsource/roboto/files/roboto-latin-700-normal.woff2?url";
+import fraunces600 from "@fontsource/fraunces/files/fraunces-latin-600-normal.woff2?url";
+import publicSans400 from "@fontsource/public-sans/files/public-sans-latin-400-normal.woff2?url";
+import publicSans500 from "@fontsource/public-sans/files/public-sans-latin-500-normal.woff2?url";
+import publicSans600 from "@fontsource/public-sans/files/public-sans-latin-600-normal.woff2?url";
 
-for (const href of [roboto300, roboto400, roboto500, roboto700]) {
+for (const href of [fraunces600, publicSans400, publicSans500, publicSans600]) {
   const link = document.createElement("link");
   link.rel = "preload";
   link.as = "font";
@@ -29,13 +30,11 @@ for (const href of [roboto300, roboto400, roboto500, roboto700]) {
   link.crossOrigin = "anonymous";
   document.head.appendChild(link);
 }
-import CssBaseline from "@mui/material/CssBaseline";
-import { ThemeProvider } from "@mui/material/styles";
 import App from "./App.jsx";
-import theme from "./theme.js";
 import { AuthProvider } from "./lib/auth.jsx";
 import { ColorSchemeProvider } from "./lib/colorScheme.jsx";
 import { TooltipProvider } from "./components/ui/tooltip.jsx";
+import { Toaster } from "./components/ui/sonner.jsx";
 import DisplayNameGate from "./components/DisplayNameGate.jsx";
 
 // BrowserRouter gives every page a real path (e.g. /hub/:id) so the Worker can
@@ -44,23 +43,20 @@ import DisplayNameGate from "./components/DisplayNameGate.jsx";
 // fallback), so client-side deep links resolve. AuthProvider exposes the
 // Supabase session to every page. ColorSchemeProvider is outermost (and reads
 // a value already applied pre-paint by index.html's inline script) so
-// light/dark is available everywhere, including to still-MUI pages once they
-// start adopting the new tokens.
+// light/dark is available everywhere.
 ReactDOM.createRoot(document.getElementById("root")).render(
   <React.StrictMode>
     <ColorSchemeProvider>
-      <ThemeProvider theme={theme}>
-        <CssBaseline />
-        <TooltipProvider>
-          <BrowserRouter>
-            <AuthProvider>
-              <DisplayNameGate>
-                <App />
-              </DisplayNameGate>
-            </AuthProvider>
-          </BrowserRouter>
-        </TooltipProvider>
-      </ThemeProvider>
+      <TooltipProvider>
+        <BrowserRouter>
+          <AuthProvider>
+            <DisplayNameGate>
+              <App />
+            </DisplayNameGate>
+          </AuthProvider>
+        </BrowserRouter>
+        <Toaster />
+      </TooltipProvider>
     </ColorSchemeProvider>
   </React.StrictMode>,
 );

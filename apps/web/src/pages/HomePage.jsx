@@ -148,7 +148,9 @@ function FeatureRow({ feature, flip }) {
           <div className="flex size-12 items-center justify-center rounded-lg bg-primary text-primary-foreground">
             <Icon className="size-5" />
           </div>
-          <h3 className="text-xl font-semibold md:text-2xl">{feature.title}</h3>
+          <h3 className="font-serif text-xl font-semibold md:text-2xl">
+            {feature.title}
+          </h3>
           <p className="text-base text-muted-foreground">{feature.body}</p>
         </div>
       </div>
@@ -185,7 +187,7 @@ function LandingView() {
         />
         <div className="relative mx-auto max-w-3xl px-4 py-16 text-center">
           <h1
-            className="mb-4 text-4xl font-extrabold md:text-6xl"
+            className="mb-4 font-serif text-4xl font-semibold md:text-6xl"
             style={{ textShadow: "0 2px 18px rgba(0,0,0,0.4)" }}
           >
             Spelling lessons that stick
@@ -226,7 +228,7 @@ function LandingView() {
           <p className="text-sm font-semibold tracking-wide text-primary uppercase">
             Everything you need
           </p>
-          <h2 className="text-3xl font-bold md:text-4xl">
+          <h2 className="font-serif text-3xl font-semibold md:text-4xl">
             From blank page to printed lesson
           </h2>
         </div>
@@ -241,7 +243,7 @@ function LandingView() {
         </div>
 
         <div className="mt-16 rounded-panel border border-border bg-card p-8 text-center text-card-foreground shadow-(--shadow-panel) md:mt-24 md:p-12">
-          <h2 className="mb-1.5 text-2xl font-bold md:text-3xl">
+          <h2 className="mb-1.5 font-serif text-2xl font-semibold md:text-3xl">
             Ready to make your first lesson?
           </h2>
           <p className="mb-6 text-muted-foreground">

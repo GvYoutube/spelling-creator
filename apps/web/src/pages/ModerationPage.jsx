@@ -11,12 +11,7 @@
 
 import { useEffect, useState } from "react";
 import { Link as RouterLink } from "react-router-dom";
-// Snackbar stays MUI for now — no shadcn toast primitive exists yet, and it's
-// not worth building one for a single caller. HubPage/LessonPage/EditorPage/
-// CommentsSection all still use MUI's Snackbar too; a real Toast component is
-// worth building once one of those migrates and this stops being the only
-// other user.
-import Snackbar from "@mui/material/Snackbar";
+import { toast } from "sonner";
 import {
   ArrowLeftIcon,
   Trash2Icon,
@@ -513,7 +508,6 @@ function ModeratorsSection({ accessToken, onToast }) {
 export default function ModerationPage() {
   const { loading, user, accessToken, roleLoading, isModerator, isAdmin } =
     useAuth();
-  const [toast, setToast] = useState("");
 
   // Auth resolves in two async stages on a reload: first the Supabase session is
   // restored from storage (`loading`), then the user's role is looked up from the
@@ -577,36 +571,22 @@ export default function ModerationPage() {
               {isAdmin && (
                 <DeleteRequestsSection
                   accessToken={accessToken}
-                  onToast={setToast}
+                  onToast={toast}
                 />
               )}
-              <ShadowbannedSection
-                accessToken={accessToken}
-                onToast={setToast}
-              />
+              <ShadowbannedSection accessToken={accessToken} onToast={toast} />
               <BansSection
                 accessToken={accessToken}
                 isAdmin={isAdmin}
-                onToast={setToast}
+                onToast={toast}
               />
               {isAdmin && (
-                <ModeratorsSection
-                  accessToken={accessToken}
-                  onToast={setToast}
-                />
+                <ModeratorsSection accessToken={accessToken} onToast={toast} />
               )}
             </div>
           )
         )}
       </div>
-
-      <Snackbar
-        open={Boolean(toast)}
-        autoHideDuration={4000}
-        onClose={() => setToast("")}
-        message={toast}
-        anchorOrigin={{ vertical: "bottom", horizontal: "center" }}
-      />
     </div>
   );
 }

@@ -1,27 +1,8 @@
-/* Tailwind v4, theme + utilities only — preflight (the reset) is deliberately
-   left out while MUI's <CssBaseline /> is still mounted, so the two resets
-   don't fight. Swapped for the full `@import "tailwindcss";` in the cleanup
-   phase once CssBaseline is removed. See CLAUDE.md migration plan.
-
-   One preflight rule is cherry-picked below despite that: the default
-   border-color (registered here, in the `base` layer, so it sits between
-   `theme` and `utilities` in the cascade — see the block further down).
-   Tailwind v4 dropped the old gray-200-ish default border color in favor of
-   `currentColor`, so every bare `border` utility in this app (dialog/
-   popover/dropdown/select panels, MergeDialog's diff boxes, etc.) was
-   silently rendering a solid text-colored ring instead of the intended soft
-   `--border` glass edge. Full preflight would fix this on its own, but
-   pulling in the rest of it this early would fight with CssBaseline.
-
-   A second preflight rule is cherry-picked alongside it: form controls don't
-   inherit typography or color from their ancestors without preflight —
-   `<textarea>` fell back to the browser's UA monospace font and every native
-   control fell back to UA black text, regardless of our `text-foreground`
-   classes elsewhere. Found via ContentBlock.jsx's LiveTextarea rendering in
-   a monospace font with near-invisible text. */
-@layer theme, base, utilities;
-@import "tailwindcss/theme.css" layer(theme);
-@import "tailwindcss/utilities.css" layer(utilities);
+/* Tailwind v4, full preflight — MUI is gone, so nothing for the reset to
+   fight anymore. Was theme+utilities-only (with two rules cherry-picked from
+   preflight) for the length of the MUI→shadcn migration; see git history on
+   this file for that era's reasoning if it's ever relevant again. */
+@import "tailwindcss";
 @import "tw-animate-css";
 
 /* Dark mode is driven by data-theme="dark"|"light" on <html> (set by
@@ -65,9 +46,22 @@
   --radius-panel: var(--radius-panel);
   --radius-tile: var(--radius-tile);
   --radius-pill: var(--radius-pill);
+
+  /* Public Sans (400/500/600) for body/UI text — the default everywhere, via
+     the `body` rule below. Fraunces (600) is a deliberately separate
+     `font-serif` opt-in for display/marketing headings (HomePage's hero and
+     section headlines) — not applied blanket to every <h1>-<h6>, since most
+     headings in the app are ordinary UI chrome (dialog titles, card titles)
+     that should read as part of the same UI as the buttons/labels around
+     them, not as editorial copy. */
+  --font-sans: "Public Sans", ui-sans-serif, system-ui, sans-serif;
+  --font-serif: "Fraunces", ui-serif, Georgia, serif;
 }
 
-/* See the note above the imports at the top of this file. */
+/* This app's only addition to Tailwind's preflight: the default border-color
+   (Tailwind v4's bare `border` utility resolves to `currentColor`, not a
+   theme color, unless told otherwise) and the page's base background/text/
+   font — standard shadcn boilerplate. */
 @layer base {
   *,
   ::before,
@@ -75,16 +69,10 @@
     border-color: var(--border);
   }
 
-  button,
-  input,
-  optgroup,
-  select,
-  textarea {
-    font-family: inherit;
-    font-size: 100%;
-    font-weight: inherit;
-    line-height: inherit;
-    color: inherit;
+  body {
+    background: var(--background);
+    color: var(--foreground);
+    font-family: var(--font-sans);
   }
 }
 
@@ -99,17 +87,6 @@
   --radius-panel: 1.25rem; /* 20px */
   --radius-tile: 0.5rem; /* 8px */
   --radius-pill: 999px;
-
-  /* Radix-portaled surfaces (Dialog/Popover/DropdownMenu/Select/Tooltip) need
-     to sit above MUI's own z-index scale (AppBar 1100, Drawer 1200, Modal
-     1300, Snackbar 1400, Tooltip 1500) while pages still mix MUI chrome with
-     shadcn overlays — plain z-50 was rendering a sticky AppBar on top of an
-     open dropdown. --z-overlay-top out-ranks our own --z-overlay so a
-     tooltip triggered from inside a menu/popover still shows above it. Both
-     revert to the ordinary z-50 utility in the Phase 6 cleanup, once MUI's
-     AppBar is gone for good. */
-  --z-overlay: 1500;
-  --z-overlay-top: 1600;
 
   --background: #dee3f3;
   --foreground: #1e2138;
@@ -259,13 +236,6 @@
   --shadow-tile:
     inset 0 1px 0 rgba(255, 255, 255, 0.7), 0 1px 2px rgba(30, 34, 70, 0.14);
 }
-
-/* A global body background/text-color reset and the body font-family are
-   intentionally NOT set yet — MUI's <CssBaseline /> still owns those
-   globally. Wiring them here would repaint every not-yet-migrated MUI page.
-   Both move here in the Phase 6 cleanup, once CssBaseline is removed.
-   Migrated components set their own background and text utility classes in
-   the meantime. */
 
 /* Shared spacing for rendered rich text — both the live tiptap editor
    (RichTextInput.jsx, class="prose-editor") and stored-HTML display

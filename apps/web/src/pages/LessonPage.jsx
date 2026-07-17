@@ -6,8 +6,7 @@
 
 import { useEffect, useState } from "react";
 import { Link as RouterLink, useNavigate, useParams } from "react-router-dom";
-// Snackbar stays MUI for now — see the note in ModerationPage.jsx.
-import Snackbar from "@mui/material/Snackbar";
+import { toast } from "sonner";
 import {
   ArrowLeftIcon,
   BanIcon,
@@ -104,9 +103,8 @@ export default function LessonPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
-  // Which export is in flight ('docx' | 'pdf' | null), plus a feedback toast.
+  // Which export is in flight ('docx' | 'pdf' | null).
   const [busy, setBusy] = useState(null);
-  const [toast, setToast] = useState("");
 
   // Delete-confirmation dialog. The user must retype the lesson's title to
   // confirm, guarding against an accidental, irreversible delete. `deleteMode`
@@ -206,13 +204,13 @@ export default function LessonPage() {
     try {
       if (kind === "docx") {
         await exportDocx(lesson.doc);
-        setToast("Word document downloaded.");
+        toast("Word document downloaded.");
       } else {
         await exportPdf(lesson.doc);
-        setToast("PDF generated for printing.");
+        toast("PDF generated for printing.");
       }
     } catch (err) {
-      setToast(`Export failed: ${err.message || err}`);
+      toast(`Export failed: ${err.message || err}`);
     } finally {
       setBusy(null);
     }
@@ -267,9 +265,9 @@ export default function LessonPage() {
       const next = !lesson.shadowbanned;
       await setShadowban(id, next, accessToken);
       setLesson((prev) => (prev ? { ...prev, shadowbanned: next } : prev));
-      setToast(next ? "Lesson shadowbanned." : "Lesson restored.");
+      toast(next ? "Lesson shadowbanned." : "Lesson restored.");
     } catch (err) {
-      setToast(err.message || "Could not update the lesson.");
+      toast(err.message || "Could not update the lesson.");
     } finally {
       setShadowBusy(false);
     }
@@ -279,14 +277,14 @@ export default function LessonPage() {
   const banAuthorName = async () => {
     const name = lesson?.author || "";
     if (!name) {
-      setToast("This lesson has no author name to ban.");
+      toast("This lesson has no author name to ban.");
       return;
     }
     try {
       await banName(name, accessToken);
-      setToast(`Banned “${name}” from posting.`);
+      toast(`Banned “${name}” from posting.`);
     } catch (err) {
-      setToast(err.message || "Could not ban the author.");
+      toast(err.message || "Could not ban the author.");
     }
   };
 
@@ -298,7 +296,7 @@ export default function LessonPage() {
       await requestLessonDeletion(id, reqReason.trim(), accessToken);
       setReqOpen(false);
       setReqReason("");
-      setToast("Deletion request sent to admins.");
+      toast("Deletion request sent to admins.");
     } catch (err) {
       setReqError(err.message || "Could not send the request.");
     } finally {
@@ -313,7 +311,7 @@ export default function LessonPage() {
     try {
       await banIp(lesson.authorIp, "", accessToken);
       setIpBanOpen(false);
-      setToast(`Banned IP ${lesson.authorIp}.`);
+      toast(`Banned IP ${lesson.authorIp}.`);
     } catch (err) {
       setIpBanError(err.message || "Could not ban the IP.");
     } finally {
@@ -809,14 +807,6 @@ export default function LessonPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-
-      <Snackbar
-        open={Boolean(toast)}
-        autoHideDuration={4000}
-        onClose={() => setToast("")}
-        message={toast}
-        anchorOrigin={{ vertical: "bottom", horizontal: "center" }}
-      />
     </div>
   );
 }

@@ -5,8 +5,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link as RouterLink, useNavigate, useLocation } from "react-router-dom";
-// Snackbar stays MUI for now — see the note in ModerationPage.jsx.
-import Snackbar from "@mui/material/Snackbar";
+import { toast } from "sonner";
 import {
   CloudIcon,
   PencilIcon,
@@ -204,7 +203,6 @@ export default function HubPage() {
   const [deleteText, setDeleteText] = useState("");
   const [deleteBusy, setDeleteBusy] = useState(false);
   const [deleteError, setDeleteError] = useState("");
-  const [toast, setToast] = useState("");
 
   const load = async () => {
     setLoading(true);
@@ -247,7 +245,7 @@ export default function HubPage() {
   useEffect(() => {
     const deletedTitle = location.state?.deletedTitle;
     if (deletedTitle) {
-      setToast(`Deleted “${deletedTitle}”.`);
+      toast(`Deleted “${deletedTitle}”.`);
       navigate(location.pathname, { replace: true, state: null });
     }
   }, [location, navigate]);
@@ -297,7 +295,7 @@ export default function HubPage() {
       // disappears immediately.
       setLessons((prev) => prev.filter((l) => l.id !== deleting.id));
       setDrafts((prev) => prev.filter((l) => l.id !== deleting.id));
-      setToast(`Deleted “${deleteTarget}”.`);
+      toast(`Deleted “${deleteTarget}”.`);
       setDeleting(null);
     } catch (err) {
       setDeleteError(err.message || "Could not delete this lesson.");
@@ -544,14 +542,6 @@ export default function HubPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-
-      <Snackbar
-        open={Boolean(toast)}
-        autoHideDuration={4000}
-        onClose={() => setToast("")}
-        message={toast}
-        anchorOrigin={{ vertical: "bottom", horizontal: "center" }}
-      />
     </div>
   );
 }
