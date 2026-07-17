@@ -580,7 +580,9 @@ export default function LessonPage() {
             <AlertDescription className="flex items-center justify-between gap-2">
               {error}
               <Button variant="ghost" size="sm" asChild>
-                <RouterLink to="/hub">Back to hub</RouterLink>
+                <RouterLink to="/hub" className="no-underline">
+                  Back to hub
+                </RouterLink>
               </Button>
             </AlertDescription>
           </Alert>

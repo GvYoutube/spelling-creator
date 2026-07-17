@@ -8,36 +8,34 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { Link as RouterLink, useParams } from "react-router-dom";
-import AppBar from "@mui/material/AppBar";
-import Toolbar from "@mui/material/Toolbar";
-import Typography from "@mui/material/Typography";
-import Button from "@mui/material/Button";
-import Box from "@mui/material/Box";
-import Container from "@mui/material/Container";
-import Stack from "@mui/material/Stack";
-import Grid from "@mui/material/Grid2";
-import Card from "@mui/material/Card";
-import CardActionArea from "@mui/material/CardActionArea";
-import CardContent from "@mui/material/CardContent";
-import Avatar from "@mui/material/Avatar";
-import Link from "@mui/material/Link";
-import Alert from "@mui/material/Alert";
-import Skeleton from "@mui/material/Skeleton";
-import Tooltip from "@mui/material/Tooltip";
-import IconButton from "@mui/material/IconButton";
-import Menu from "@mui/material/Menu";
-import MenuItem from "@mui/material/MenuItem";
-import ListItemText from "@mui/material/ListItemText";
-import CircularProgress from "@mui/material/CircularProgress";
-import EditIcon from "@mui/icons-material/Edit";
-import RssFeedIcon from "@mui/icons-material/RssFeed";
-import HistoryIcon from "@mui/icons-material/History";
-import PersonAddIcon from "@mui/icons-material/PersonAdd";
-import HowToRegIcon from "@mui/icons-material/HowToReg";
+import {
+  HistoryIcon,
+  PencilIcon,
+  RssIcon,
+  UserCheckIcon,
+  UserPlusIcon,
+  XIcon,
+} from "lucide-react";
+import AppHeader from "../components/AppHeader.jsx";
 import NavActions from "../components/NavActions.jsx";
 import BioDialog from "../components/BioDialog.jsx";
 import FollowListDialog from "../components/FollowListDialog.jsx";
 import RichText from "../components/RichText.jsx";
+import { Button } from "../components/ui/button.jsx";
+import { Avatar, AvatarFallback } from "../components/ui/avatar.jsx";
+import { Alert, AlertDescription } from "../components/ui/alert.jsx";
+import { Skeleton } from "../components/ui/skeleton.jsx";
+import { Spinner } from "../components/ui/spinner.jsx";
+import {
+  Tooltip,
+  TooltipTrigger,
+  TooltipContent,
+} from "../components/ui/tooltip.jsx";
+import {
+  Popover,
+  PopoverTrigger,
+  PopoverContent,
+} from "../components/ui/popover.jsx";
 import { LessonGridSkeleton } from "../components/Skeletons.jsx";
 import { richTextToLine } from "../lib/richText.js";
 import {
@@ -86,15 +84,15 @@ export default function ProfilePage() {
   // when it's closed.
   const [followListTab, setFollowListTab] = useState(null);
 
-  // Activity menu: lazily parsed from the user's Atom feed on first open.
-  const [activityAnchor, setActivityAnchor] = useState(null);
+  // Activity popover: lazily parsed from the user's Atom feed on first open.
+  const [activityOpen, setActivityOpen] = useState(false);
   const [activity, setActivity] = useState([]);
   const [activityLoaded, setActivityLoaded] = useState(false);
   const [activityLoading, setActivityLoading] = useState(false);
   const [activityError, setActivityError] = useState("");
 
-  const openActivity = (e) => {
-    setActivityAnchor(e.currentTarget);
+  const openActivity = () => {
+    setActivityOpen(true);
     if (activityLoaded) return;
     setActivityLoaded(true);
     setActivityLoading(true);
@@ -169,296 +167,258 @@ export default function ProfilePage() {
   const feedUrl = userFeedUrl(id);
 
   return (
-    <Box sx={{ minHeight: "100vh", pb: 8 }}>
-      <AppBar position="sticky" elevation={1}>
-        <Toolbar>
-          <Button
-            color="inherit"
-            component={RouterLink}
+    <div className="min-h-screen bg-background pb-16 text-foreground">
+      <AppHeader
+        title="Profile"
+        left={
+          <RouterLink
             to="/hub"
-            sx={{ mr: 1 }}
+            className="mr-1 inline-flex shrink-0 items-center gap-2 rounded-md border-0 bg-transparent px-4 py-2 text-sm font-medium text-primary-foreground no-underline transition-colors hover:bg-primary-foreground/10"
           >
             Lesson hub
-          </Button>
-          <Typography
-            variant="h6"
-            noWrap
-            sx={{ flexGrow: 1, minWidth: 0, mr: 1 }}
-          >
-            Profile
-          </Typography>
-          <Stack direction="row" spacing={1} alignItems="center">
-            <NavActions current="profile" />
-          </Stack>
-        </Toolbar>
-      </AppBar>
+          </RouterLink>
+        }
+      >
+        <NavActions current="profile" />
+      </AppHeader>
 
-      <Container maxWidth="lg" sx={{ pt: 3 }}>
+      <div className="mx-auto max-w-5xl px-4 pt-6">
         {loading ? (
           <>
             {/* Header placeholder: avatar + name/bio lines, then the lessons grid. */}
-            <Stack direction="row" spacing={2} sx={{ mb: 4 }}>
-              <Skeleton variant="circular" width={56} height={56} />
-              <Box sx={{ flexGrow: 1 }}>
-                <Skeleton
-                  variant="text"
-                  sx={{ fontSize: "1.5rem" }}
-                  width="40%"
-                />
-                <Skeleton variant="text" width="60%" />
-              </Box>
-            </Stack>
+            <div className="mb-8 flex items-center gap-4">
+              <Skeleton className="size-14 shrink-0 rounded-full" />
+              <div className="flex-1">
+                <Skeleton className="h-6 w-[40%]" />
+                <Skeleton className="mt-2 h-4 w-[60%]" />
+              </div>
+            </div>
             <LessonGridSkeleton count={3} />
           </>
         ) : error ? (
-          <Alert severity="error" sx={{ mt: 2 }}>
-            {error}
+          <Alert variant="destructive">
+            <AlertDescription>{error}</AlertDescription>
           </Alert>
         ) : (
           <>
             {/* Profile header: avatar, display name, follower/following counts,
                 the Follow button, and the Activity/RSS buttons. */}
-            <Stack
-              direction={{ xs: "column", sm: "row" }}
-              spacing={2}
-              alignItems={{ xs: "flex-start", sm: "center" }}
-              sx={{ mb: 1 }}
-            >
-              <Avatar sx={{ width: 56, height: 56, fontSize: 24 }}>
-                {initial(displayName)}
+            <div className="mb-2 flex flex-col items-start gap-4 sm:flex-row sm:items-center">
+              <Avatar className="size-14 shrink-0">
+                <AvatarFallback className="text-xl">
+                  {initial(displayName)}
+                </AvatarFallback>
               </Avatar>
-              <Box sx={{ flexGrow: 1, minWidth: 0 }}>
-                <Typography variant="h5" noWrap>
+              <div className="min-w-0 flex-1">
+                <h1 className="truncate text-2xl font-semibold">
                   {displayName}
-                </Typography>
-                <Stack
-                  direction="row"
-                  spacing={1.5}
-                  alignItems="baseline"
-                  sx={{ flexWrap: "wrap" }}
-                >
-                  <Typography variant="body2" color="text.secondary">
+                </h1>
+                <div className="mt-0.5 flex flex-wrap items-baseline gap-x-3 gap-y-1">
+                  <p className="text-sm text-muted-foreground">
                     {lessons.length} published lesson
                     {lessons.length === 1 ? "" : "s"}
-                  </Typography>
+                  </p>
                   {/* Counts open the connections dialog on the matching tab. */}
-                  <Link
-                    component="button"
+                  <button
                     type="button"
-                    variant="body2"
-                    color="text.secondary"
-                    underline="hover"
                     onClick={() => setFollowListTab("followers")}
+                    className="cursor-pointer border-0 bg-transparent p-0 text-sm text-muted-foreground underline-offset-2 hover:underline"
                   >
                     {followerCount} follower{followerCount === 1 ? "" : "s"}
-                  </Link>
-                  <Link
-                    component="button"
+                  </button>
+                  <button
                     type="button"
-                    variant="body2"
-                    color="text.secondary"
-                    underline="hover"
                     onClick={() => setFollowListTab("following")}
+                    className="cursor-pointer border-0 bg-transparent p-0 text-sm text-muted-foreground underline-offset-2 hover:underline"
                   >
                     {followingCount} following
-                  </Link>
-                </Stack>
-              </Box>
-              <Stack direction="row" spacing={1} alignItems="center">
+                  </button>
+                </div>
+              </div>
+              <div className="flex shrink-0 items-center gap-2">
                 {canFollow && (
                   <Button
-                    variant={profile?.isFollowing ? "outlined" : "contained"}
-                    size="small"
+                    variant={profile?.isFollowing ? "outline" : "default"}
+                    size="sm"
                     onClick={toggleFollow}
                     disabled={followBusy}
-                    startIcon={
-                      followBusy ? (
-                        <CircularProgress size={16} color="inherit" />
-                      ) : profile?.isFollowing ? (
-                        <HowToRegIcon />
-                      ) : (
-                        <PersonAddIcon />
-                      )
-                    }
                   >
+                    {followBusy ? (
+                      <Spinner data-icon="inline-start" />
+                    ) : profile?.isFollowing ? (
+                      <UserCheckIcon data-icon="inline-start" />
+                    ) : (
+                      <UserPlusIcon data-icon="inline-start" />
+                    )}
                     {profile?.isFollowing ? "Following" : "Follow"}
                   </Button>
                 )}
                 {feedUrl && (
                   <>
-                    <Tooltip title="Recent activity (lessons & comments)">
-                      <Button
-                        variant="outlined"
-                        size="small"
-                        startIcon={<HistoryIcon />}
-                        onClick={openActivity}
-                        aria-haspopup="true"
-                        aria-expanded={Boolean(activityAnchor)}
+                    <Popover open={activityOpen} onOpenChange={setActivityOpen}>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <PopoverTrigger asChild>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={openActivity}
+                            >
+                              <HistoryIcon data-icon="inline-start" />
+                              Activity
+                            </Button>
+                          </PopoverTrigger>
+                        </TooltipTrigger>
+                        <TooltipContent>
+                          Recent activity (lessons &amp; comments)
+                        </TooltipContent>
+                      </Tooltip>
+                      <PopoverContent
+                        align="end"
+                        className="max-h-[360px] w-[340px] max-w-[90vw] overflow-y-auto p-2"
                       >
-                        Activity
-                      </Button>
-                    </Tooltip>
-                    <Tooltip title="Subscribe to this user's activity (RSS)">
-                      <Button
-                        variant="outlined"
-                        size="small"
-                        component="a"
-                        href={feedUrl}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        startIcon={<RssFeedIcon />}
-                      >
-                        RSS
-                      </Button>
+                        {activityLoading ? (
+                          <div className="flex flex-col gap-3 px-2 py-1">
+                            {Array.from({ length: 4 }, (_, i) => (
+                              <div key={i}>
+                                <Skeleton className="h-4 w-[70%]" />
+                                <Skeleton className="mt-2 h-4 w-[40%]" />
+                              </div>
+                            ))}
+                          </div>
+                        ) : activityError ? (
+                          <p className="px-2 py-1.5 text-sm text-destructive">
+                            {activityError}
+                          </p>
+                        ) : activity.length === 0 ? (
+                          <p className="px-2 py-1.5 text-sm text-muted-foreground">
+                            No recent activity.
+                          </p>
+                        ) : (
+                          <div className="flex flex-col">
+                            {activity.map((item) => (
+                              <a
+                                key={item.id}
+                                href={item.link}
+                                onClick={() => setActivityOpen(false)}
+                                className="rounded-sm border-0 bg-transparent px-2 py-1.5 text-left no-underline transition-colors hover:bg-accent"
+                              >
+                                <p className="truncate text-sm font-medium text-foreground">
+                                  {item.title}
+                                </p>
+                                {(item.summary || item.updated) && (
+                                  <p className="line-clamp-2 text-xs text-muted-foreground">
+                                    {[item.summary, formatDate(item.updated)]
+                                      .filter(Boolean)
+                                      .join(" · ")}
+                                  </p>
+                                )}
+                              </a>
+                            ))}
+                          </div>
+                        )}
+                      </PopoverContent>
+                    </Popover>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Button variant="outline" size="sm" asChild>
+                          <a
+                            href={feedUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="no-underline"
+                          >
+                            <RssIcon data-icon="inline-start" />
+                            RSS
+                          </a>
+                        </Button>
+                      </TooltipTrigger>
+                      <TooltipContent>
+                        Subscribe to this user&rsquo;s activity (RSS)
+                      </TooltipContent>
                     </Tooltip>
                   </>
                 )}
-              </Stack>
-            </Stack>
+              </div>
+            </div>
             {followError && (
-              <Alert
-                severity="error"
-                sx={{ mb: 1 }}
-                onClose={() => setFollowError("")}
-              >
-                {followError}
+              <Alert variant="destructive" className="relative mb-2 pr-9">
+                <AlertDescription>{followError}</AlertDescription>
+                <button
+                  type="button"
+                  onClick={() => setFollowError("")}
+                  aria-label="Dismiss"
+                  className="absolute top-3 right-3 cursor-pointer rounded-sm border-0 bg-transparent p-0.5 text-current opacity-70 transition-opacity hover:opacity-100"
+                >
+                  <XIcon className="size-3.5" />
+                </button>
               </Alert>
             )}
 
             {/* Bio. The owner can edit it (or add one when empty). */}
-            <Box sx={{ mb: 4 }}>
+            <div className="mb-8">
               {bio ? (
-                <Stack direction="row" spacing={1} alignItems="flex-start">
-                  <RichText value={bio} variant="body1" />
+                <div className="flex items-start gap-1">
+                  <RichText value={bio} variant="body1" className="flex-1" />
                   {isOwner && (
-                    <Tooltip title="Edit bio">
-                      <IconButton
-                        size="small"
-                        aria-label="edit bio"
-                        onClick={() => setBioOpen(true)}
-                      >
-                        <EditIcon fontSize="small" />
-                      </IconButton>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Button
+                          variant="ghost"
+                          size="icon-sm"
+                          aria-label="edit bio"
+                          onClick={() => setBioOpen(true)}
+                        >
+                          <PencilIcon />
+                        </Button>
+                      </TooltipTrigger>
+                      <TooltipContent>Edit bio</TooltipContent>
                     </Tooltip>
                   )}
-                </Stack>
+                </div>
               ) : isOwner ? (
                 <Button
-                  size="small"
-                  startIcon={<EditIcon />}
+                  variant="ghost"
+                  size="sm"
                   onClick={() => setBioOpen(true)}
                 >
+                  <PencilIcon data-icon="inline-start" />
                   Add a bio
                 </Button>
               ) : null}
-            </Box>
+            </div>
 
-            <Typography variant="h6" gutterBottom>
-              Published lessons
-            </Typography>
+            <h2 className="mb-3 text-lg font-semibold">Published lessons</h2>
             {lessons.length === 0 ? (
-              <Typography variant="body2" color="text.secondary">
-                {displayName} hasn’t published any lessons yet.
-              </Typography>
+              <p className="text-sm text-muted-foreground">
+                {displayName} hasn&rsquo;t published any lessons yet.
+              </p>
             ) : (
-              <Grid container spacing={2}>
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 md:grid-cols-3">
                 {lessons.map((lesson) => (
-                  <Grid key={lesson.id} size={{ xs: 12, sm: 6, md: 4 }}>
-                    <Card variant="outlined" sx={{ position: "relative" }}>
-                      <CardActionArea
-                        component={RouterLink}
-                        to={`/hub/${lesson.id}`}
-                        sx={{ height: "100%", alignItems: "stretch" }}
-                      >
-                        <CardContent>
-                          <Typography variant="h6" gutterBottom noWrap>
-                            {lesson.title || "Untitled Lesson"}
-                          </Typography>
-                          <Typography
-                            variant="caption"
-                            color="text.secondary"
-                            sx={{ display: "block" }}
-                          >
-                            {typeof lesson.sectionCount === "number"
-                              ? `${lesson.sectionCount} section${lesson.sectionCount === 1 ? "" : "s"}`
-                              : ""}
-                            {lesson.createdAt
-                              ? ` · ${formatDate(lesson.createdAt)}`
-                              : ""}
-                          </Typography>
-                        </CardContent>
-                      </CardActionArea>
-                    </Card>
-                  </Grid>
+                  <RouterLink
+                    key={lesson.id}
+                    to={`/hub/${lesson.id}`}
+                    className="rounded-md border border-border p-4 no-underline transition-colors hover:bg-accent"
+                  >
+                    <h3 className="truncate text-base font-semibold text-foreground">
+                      {lesson.title || "Untitled Lesson"}
+                    </h3>
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      {typeof lesson.sectionCount === "number"
+                        ? `${lesson.sectionCount} section${lesson.sectionCount === 1 ? "" : "s"}`
+                        : ""}
+                      {lesson.createdAt
+                        ? ` · ${formatDate(lesson.createdAt)}`
+                        : ""}
+                    </p>
+                  </RouterLink>
                 ))}
-              </Grid>
+              </div>
             )}
           </>
         )}
-      </Container>
-
-      {/* Scrollable activity menu — parsed from the same Atom feed as the RSS button. */}
-      <Menu
-        anchorEl={activityAnchor}
-        open={Boolean(activityAnchor)}
-        onClose={() => setActivityAnchor(null)}
-        anchorOrigin={{ vertical: "bottom", horizontal: "right" }}
-        transformOrigin={{ vertical: "top", horizontal: "right" }}
-        slotProps={{
-          paper: { sx: { width: 340, maxWidth: "90vw", maxHeight: 360 } },
-        }}
-      >
-        {activityLoading ? (
-          <Box sx={{ px: 2, py: 1 }}>
-            {Array.from({ length: 4 }, (_, i) => (
-              <Box key={i} sx={{ py: 0.75 }}>
-                <Skeleton variant="text" width="70%" />
-                <Skeleton variant="text" width="40%" />
-              </Box>
-            ))}
-          </Box>
-        ) : activityError ? (
-          <Box sx={{ px: 2, py: 1.5 }}>
-            <Typography variant="body2" color="error">
-              {activityError}
-            </Typography>
-          </Box>
-        ) : activity.length === 0 ? (
-          <Box sx={{ px: 2, py: 1.5 }}>
-            <Typography variant="body2" color="text.secondary">
-              No recent activity.
-            </Typography>
-          </Box>
-        ) : (
-          activity.map((item) => (
-            <MenuItem
-              key={item.id}
-              component="a"
-              href={item.link}
-              onClick={() => setActivityAnchor(null)}
-              sx={{ whiteSpace: "normal", alignItems: "flex-start" }}
-            >
-              <ListItemText
-                primary={item.title}
-                secondary={
-                  [item.summary, formatDate(item.updated)]
-                    .filter(Boolean)
-                    .join(" · ") || undefined
-                }
-                primaryTypographyProps={{ noWrap: true }}
-                secondaryTypographyProps={{
-                  sx: {
-                    display: "-webkit-box",
-                    WebkitLineClamp: 2,
-                    WebkitBoxOrient: "vertical",
-                    overflow: "hidden",
-                  },
-                }}
-              />
-            </MenuItem>
-          ))
-        )}
-      </Menu>
+      </div>
 
       {isOwner && (
         <BioDialog
@@ -476,6 +436,6 @@ export default function ProfilePage() {
         initialTab={followListTab || "followers"}
         onClose={() => setFollowListTab(null)}
       />
-    </Box>
+    </div>
   );
 }

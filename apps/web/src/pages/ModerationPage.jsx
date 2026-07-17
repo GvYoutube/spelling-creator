@@ -553,7 +553,9 @@ export default function ModerationPage() {
             <AlertDescription className="flex items-center justify-between gap-2">
               Please sign in to access moderation tools.
               <Button variant="ghost" size="sm" asChild>
-                <RouterLink to="/login">Sign in</RouterLink>
+                <RouterLink to="/login" className="no-underline">
+                  Sign in
+                </RouterLink>
               </Button>
             </AlertDescription>
           </Alert>
@@ -563,7 +565,7 @@ export default function ModerationPage() {
             <AlertDescription className="flex items-center justify-between gap-2 text-focus">
               You don&rsquo;t have moderation access.
               <Button variant="ghost" size="sm" asChild>
-                <RouterLink to="/hub" className="text-focus">
+                <RouterLink to="/hub" className="text-focus no-underline">
                   Back to hub
                 </RouterLink>
               </Button>
