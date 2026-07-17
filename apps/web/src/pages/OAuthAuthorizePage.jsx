@@ -111,7 +111,7 @@ export default function OAuthAuthorizePage() {
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-background p-4">
-      <div className="w-full max-w-sm rounded-[var(--radius-panel)] border border-border bg-card p-8 text-card-foreground shadow-[var(--shadow-panel)]">
+      <div className="w-full max-w-sm rounded-panel border border-border bg-card p-8 text-card-foreground shadow-(--shadow-panel)">
         {!enabled ? (
           <Alert>
             <AlertDescription>

@@ -155,7 +155,10 @@ export default function FirstLessonWizard({ open, onClose }) {
       role="complementary"
       aria-label="How to create a lesson"
       className={cn(
-        "fixed right-4 bottom-4 left-4 z-[1202] w-auto rounded-lg border border-border bg-card p-4 text-card-foreground shadow-[var(--shadow-panel)]",
+        // Glass surface, same recipe as dialog.jsx — see the note there. This
+        // one genuinely has something to blur: unlike an isolated one-off
+        // page, it floats over the real editor content behind it.
+        "fixed right-4 bottom-4 left-4 z-[1202] w-auto rounded-panel border border-border bg-card p-4 text-card-foreground shadow-[var(--shadow-panel),0_0_0_1px_var(--glass-border-outer)] backdrop-blur-(--glass-blur) backdrop-saturate-[1.4]",
         "sm:right-6 sm:bottom-6 sm:left-auto sm:w-[380px]",
         "max-w-[calc(100vw-32px)]",
         "animate-in slide-in-from-bottom-4 fade-in duration-300",
