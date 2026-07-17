@@ -6,35 +6,35 @@
 // signed-in account.
 
 import { useEffect, useRef, useState } from "react";
-import Dialog from "@mui/material/Dialog";
-import DialogTitle from "@mui/material/DialogTitle";
-import DialogContent from "@mui/material/DialogContent";
-import DialogContentText from "@mui/material/DialogContentText";
-import DialogActions from "@mui/material/DialogActions";
-import Button from "@mui/material/Button";
-import Box from "@mui/material/Box";
-import Stack from "@mui/material/Stack";
-import TextField from "@mui/material/TextField";
-import Typography from "@mui/material/Typography";
-import Divider from "@mui/material/Divider";
-import List from "@mui/material/List";
-import ListItem from "@mui/material/ListItem";
-import ListItemText from "@mui/material/ListItemText";
-import ListItemAvatar from "@mui/material/ListItemAvatar";
-import Avatar from "@mui/material/Avatar";
-import Chip from "@mui/material/Chip";
-import Alert from "@mui/material/Alert";
-import CircularProgress from "@mui/material/CircularProgress";
-import IconButton from "@mui/material/IconButton";
-import Tooltip from "@mui/material/Tooltip";
-import PersonAddIcon from "@mui/icons-material/PersonAdd";
-import CloseIcon from "@mui/icons-material/Close";
-import ContentCopyIcon from "@mui/icons-material/ContentCopy";
-import GroupAddIcon from "@mui/icons-material/GroupAdd";
-import LoginIcon from "@mui/icons-material/Login";
-import SendIcon from "@mui/icons-material/Send";
-import DeleteIcon from "@mui/icons-material/Delete";
-import StarIcon from "@mui/icons-material/Star";
+import {
+  UserPlusIcon,
+  XIcon,
+  CopyIcon,
+  UsersRoundIcon,
+  LogInIcon,
+  SendIcon,
+  Trash2Icon,
+  StarIcon,
+} from "lucide-react";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+} from "./ui/dialog.jsx";
+import { Button } from "./ui/button.jsx";
+import { Badge } from "./ui/badge.jsx";
+import { Input } from "./ui/input.jsx";
+import { Textarea } from "./ui/textarea.jsx";
+import { Field, FieldLabel } from "./ui/field.jsx";
+import { Alert, AlertDescription } from "./ui/alert.jsx";
+import { Avatar, AvatarImage, AvatarFallback } from "./ui/avatar.jsx";
+import { Spinner } from "./ui/spinner.jsx";
+import { Tooltip, TooltipTrigger, TooltipContent } from "./ui/tooltip.jsx";
+import IconActionButton from "./IconActionButton.jsx";
+import { cn } from "../lib/utils.js";
 import { colorForId } from "../lib/presence.js";
 import { useAuth } from "../lib/auth.jsx";
 import { sendLink } from "../lib/notifications.js";
@@ -55,6 +55,83 @@ function initials(entry) {
 // Loose client-side email check — just enough to keep obvious typos out of the
 // trusted list. The Worker re-validates on send, so this is only for UX.
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+// severity -> tone, mapped onto this app's tokens the same way HistoryDialog's
+// chip colors are: --success/--destructive already existed; "info" borrows
+// --primary, "warning" borrows --focus.
+const ALERT_TONES = {
+  success: {
+    alert: "border-success/40 bg-success/10 text-success",
+    text: "text-success",
+  },
+  info: {
+    alert: "border-primary/40 bg-primary/10 text-primary",
+    text: "text-primary",
+  },
+  warning: {
+    alert: "border-focus/40 bg-focus/10 text-focus",
+    text: "text-focus",
+  },
+};
+
+function ToneAlert({ severity, icon, children, className }) {
+  if (severity === "error") {
+    return (
+      <Alert variant="destructive" className={className}>
+        <AlertDescription>{children}</AlertDescription>
+      </Alert>
+    );
+  }
+  const tone = ALERT_TONES[severity];
+  return (
+    <Alert className={cn(tone.alert, className)}>
+      {icon}
+      <AlertDescription className={tone.text}>{children}</AlertDescription>
+    </Alert>
+  );
+}
+
+// A single row shared by the pending-requests, roster, and trusted-collaborator
+// lists: an avatar, a primary/secondary text pair, and optional trailing content
+// (action buttons, a badge).
+function PersonRow({
+  avatarSrc,
+  avatarColor,
+  label,
+  primary,
+  secondary,
+  children,
+}) {
+  return (
+    <div className="flex items-center gap-2 py-1.5">
+      <Avatar className="shrink-0" style={{ backgroundColor: avatarColor }}>
+        {avatarSrc && <AvatarImage src={avatarSrc} alt={primary} />}
+        <AvatarFallback
+          className="text-white"
+          style={{ backgroundColor: avatarColor }}
+        >
+          {label}
+        </AvatarFallback>
+      </Avatar>
+      <div className="min-w-0 flex-1">
+        <p className="truncate text-sm font-medium">{primary}</p>
+        {secondary && (
+          <p className="truncate text-xs text-muted-foreground">{secondary}</p>
+        )}
+      </div>
+      {children}
+    </div>
+  );
+}
+
+function OrDivider() {
+  return (
+    <div className="relative py-1 text-center text-sm text-muted-foreground">
+      <hr className="absolute inset-x-0 top-1/2 border-border" />
+      <span className="relative bg-card px-2">or</span>
+    </div>
+  );
+}
 
 export default function CollaborateDialog({
   open,
@@ -202,178 +279,160 @@ export default function CollaborateDialog({
   // signed-in account (the WebSocket is authenticated server-side), so when the
   // user isn't signed in we explain that and disable the host/join controls.
   const renderLanding = () => (
-    <Stack spacing={3} sx={{ pt: 1 }}>
+    <div className="flex flex-col gap-4 pt-1">
       {!accessToken && (
-        <Alert severity="info" variant="outlined">
+        <ToneAlert severity="info">
           Sign in to start or join a live collaboration session.
-        </Alert>
+        </ToneAlert>
       )}
-      <Box>
-        <Typography variant="subtitle2" gutterBottom>
-          Invite people to this lesson
-        </Typography>
-        <Typography variant="body2" color="text.secondary" sx={{ mb: 1.5 }}>
+      <div>
+        <p className="mb-1 text-sm font-medium">Invite people to this lesson</p>
+        <p className="mb-2 text-sm text-muted-foreground">
           Start a live session, then share the code. People who join wait until
           you add them to the lesson — after that, your edits sync both ways in
           real time.
-        </Typography>
-        <Button
-          variant="contained"
-          startIcon={<GroupAddIcon />}
-          onClick={startHosting}
-          disabled={!accessToken}
-        >
+        </p>
+        <Button onClick={startHosting} disabled={!accessToken}>
+          <UsersRoundIcon data-icon="inline-start" />
           Start a collaboration session
         </Button>
-      </Box>
+      </div>
 
-      <Divider>or</Divider>
+      <OrDivider />
 
-      <Box>
-        <Typography variant="subtitle2" gutterBottom>
-          Join someone&apos;s lesson
-        </Typography>
-        <Stack direction="row" spacing={1} alignItems="flex-start">
-          <TextField
-            size="small"
-            fullWidth
-            label="Session code"
-            placeholder="Paste the code you were given"
-            value={joinCode}
-            disabled={!accessToken}
-            onChange={(e) => setJoinCode(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") joinSession(joinCode);
-            }}
-          />
+      <div>
+        <p className="mb-1 text-sm font-medium">Join someone&apos;s lesson</p>
+        <div className="flex items-start gap-2">
+          <Field className="flex-1">
+            <FieldLabel htmlFor="join-code" className="sr-only">
+              Session code
+            </FieldLabel>
+            <Input
+              id="join-code"
+              placeholder="Paste the code you were given"
+              value={joinCode}
+              disabled={!accessToken}
+              onChange={(e) => setJoinCode(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") joinSession(joinCode);
+              }}
+            />
+          </Field>
           <Button
-            variant="outlined"
-            startIcon={<LoginIcon />}
+            variant="outline"
             onClick={() => joinSession(joinCode)}
             disabled={!accessToken}
-            sx={{ flexShrink: 0, mt: 0.25 }}
+            className="shrink-0"
           >
+            <LogInIcon data-icon="inline-start" />
             Join
           </Button>
-        </Stack>
-        <Typography variant="caption" color="text.secondary">
+        </div>
+        <p className="mt-1 text-xs text-muted-foreground">
           Joining replaces your current draft with the host&apos;s lesson.
-        </Typography>
-      </Box>
+        </p>
+      </div>
 
-      <Divider />
+      <hr className="border-border" />
 
       {renderTrusted()}
-    </Stack>
+    </div>
   );
 
   const renderConnecting = () => (
-    <Stack alignItems="center" spacing={2} sx={{ py: 4 }}>
-      <CircularProgress />
-      <Typography variant="body2" color="text.secondary">
+    <div className="flex flex-col items-center gap-3 py-8">
+      <Spinner className="size-8" />
+      <p className="text-sm text-muted-foreground">
         {role === "host" ? "Starting session…" : "Connecting to the host…"}
-      </Typography>
-    </Stack>
+      </p>
+    </div>
   );
 
   const renderHost = () => (
-    <Stack spacing={2.5} sx={{ pt: 1 }}>
-      <Alert severity="success" variant="outlined">
+    <div className="flex flex-col gap-4 pt-1">
+      <ToneAlert severity="success">
         Your session is live. Share the code or link below to invite people.
-      </Alert>
+      </ToneAlert>
 
       {renderAutoSend()}
 
-      <Box>
-        <Typography variant="caption" color="text.secondary">
-          Session code
-        </Typography>
-        <Stack direction="row" spacing={1} alignItems="center">
-          <TextField
-            size="small"
-            fullWidth
-            value={myCode || ""}
-            slotProps={{ input: { readOnly: true } }}
-          />
-          <Tooltip title={copied === "code" ? "Copied!" : "Copy code"}>
-            <IconButton onClick={() => copy(myCode, "code")}>
-              <ContentCopyIcon fontSize="small" />
-            </IconButton>
+      <div>
+        <p className="mb-1 text-xs text-muted-foreground">Session code</p>
+        <div className="flex items-center gap-2">
+          <Input readOnly value={myCode || ""} />
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => copy(myCode, "code")}
+              >
+                <CopyIcon className="size-4" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>
+              {copied === "code" ? "Copied!" : "Copy code"}
+            </TooltipContent>
           </Tooltip>
-        </Stack>
-        <Stack direction="row" spacing={1} flexWrap="wrap" sx={{ mt: 0.5 }}>
+        </div>
+        <div className="mt-1.5 flex flex-wrap gap-2">
           <Button
-            size="small"
-            startIcon={<ContentCopyIcon fontSize="small" />}
+            variant="ghost"
+            size="sm"
             onClick={() => copy(inviteLink(myCode), "link")}
           >
+            <CopyIcon data-icon="inline-start" />
             {copied === "link" ? "Invite link copied!" : "Copy invite link"}
           </Button>
-          <Button
-            size="small"
-            startIcon={<SendIcon fontSize="small" />}
-            onClick={() => setSendOpen(true)}
-          >
+          <Button variant="ghost" size="sm" onClick={() => setSendOpen(true)}>
+            <SendIcon data-icon="inline-start" />
             Send link
           </Button>
-        </Stack>
-      </Box>
+        </div>
+      </div>
 
       {requests.length > 0 && (
-        <Box>
-          <Typography variant="subtitle2" gutterBottom>
+        <div>
+          <p className="mb-1 text-sm font-medium">
             Waiting to join ({requests.length})
-          </Typography>
-          <List dense disablePadding>
+          </p>
+          <div className="flex flex-col">
             {requests.map((r) => (
-              <ListItem
+              <PersonRow
                 key={r.id}
-                secondaryAction={
-                  <Stack direction="row" spacing={0.5}>
-                    <Tooltip title="Add to lesson">
-                      <IconButton
-                        edge="end"
-                        color="primary"
-                        onClick={() => admit(r.id)}
-                      >
-                        <PersonAddIcon />
-                      </IconButton>
-                    </Tooltip>
-                    <Tooltip title="Decline">
-                      <IconButton
-                        edge="end"
-                        onClick={() => removeParticipant(r.id)}
-                      >
-                        <CloseIcon />
-                      </IconButton>
-                    </Tooltip>
-                  </Stack>
-                }
+                avatarSrc={r.avatarUrl}
+                avatarColor="var(--focus)"
+                label={initials(r)}
+                primary={r.name || "Someone"}
+                secondary={r.email || "wants to collaborate"}
               >
-                <ListItemAvatar>
-                  <Avatar
-                    src={r.avatarUrl || undefined}
-                    sx={{ bgcolor: "warning.light" }}
+                <div className="flex shrink-0 gap-0.5">
+                  <IconActionButton
+                    tooltip="Add to lesson"
+                    onClick={() => admit(r.id)}
+                    className="text-primary"
                   >
-                    {initials(r)}
-                  </Avatar>
-                </ListItemAvatar>
-                <ListItemText
-                  primary={r.name || "Someone"}
-                  secondary={r.email || "wants to collaborate"}
-                />
-              </ListItem>
+                    <UserPlusIcon />
+                  </IconActionButton>
+                  <IconActionButton
+                    tooltip="Decline"
+                    onClick={() => removeParticipant(r.id)}
+                  >
+                    <XIcon />
+                  </IconActionButton>
+                </div>
+              </PersonRow>
             ))}
-          </List>
-        </Box>
+          </div>
+        </div>
       )}
 
       {renderRoster()}
 
-      <Divider />
+      <hr className="border-border" />
 
       {renderTrusted({ compact: true })}
-    </Stack>
+    </div>
   );
 
   const renderGuest = () => {
@@ -381,157 +440,143 @@ export default function CollaborateDialog({
     // non-empty list is our signal that we've been added to the lesson.
     const admitted = participants.length > 0;
     return (
-      <Stack spacing={2.5} sx={{ pt: 1 }}>
+      <div className="flex flex-col gap-4 pt-1">
         {admitted ? (
-          <Alert severity="success" variant="outlined">
+          <ToneAlert severity="success">
             You&apos;re collaborating live. Your changes sync with everyone
             here.
-          </Alert>
+          </ToneAlert>
         ) : (
-          <Alert
-            severity="info"
-            variant="outlined"
-            icon={<CircularProgress size={18} />}
-          >
+          <ToneAlert severity="info" icon={<Spinner className="size-[18px]" />}>
             Connected — waiting for the host to add you to the lesson.
-          </Alert>
+          </ToneAlert>
         )}
         {admitted && renderRoster()}
-      </Stack>
+      </div>
     );
   };
 
   const renderRoster = () =>
     participants.length > 0 && (
-      <Box>
-        <Typography variant="subtitle2" gutterBottom>
+      <div>
+        <p className="mb-1 text-sm font-medium">
           In this lesson ({participants.length})
-        </Typography>
-        <List dense disablePadding>
+        </p>
+        <div className="flex flex-col">
           {participants.map((p) => (
-            <ListItem
+            <PersonRow
               key={p.id}
-              secondaryAction={
-                role === "host" && !p.host ? (
-                  <Tooltip title="Remove from lesson">
-                    <IconButton
-                      edge="end"
-                      onClick={() => removeParticipant(p.id)}
-                    >
-                      <CloseIcon fontSize="small" />
-                    </IconButton>
-                  </Tooltip>
-                ) : null
-              }
+              avatarSrc={p.avatarUrl}
+              avatarColor={p.host ? "var(--primary)" : colorForId(p.id)}
+              label={initials(p)}
+              primary={p.name || "Collaborator"}
+              secondary={p.email}
             >
-              <ListItemAvatar>
-                <Avatar
-                  src={p.avatarUrl || undefined}
-                  sx={{ bgcolor: p.host ? "primary.main" : colorForId(p.id) }}
+              {p.host ? (
+                <Badge
+                  variant="outline"
+                  className="shrink-0 border-primary/40 text-primary"
                 >
-                  {initials(p)}
-                </Avatar>
-              </ListItemAvatar>
-              <ListItemText
-                primary={p.name || "Collaborator"}
-                secondary={p.email || undefined}
-              />
-              {p.host && (
-                <Chip
-                  size="small"
-                  label="Host"
-                  color="primary"
-                  variant="outlined"
-                />
-              )}
-            </ListItem>
+                  Host
+                </Badge>
+              ) : role === "host" ? (
+                <IconActionButton
+                  tooltip="Remove from lesson"
+                  onClick={() => removeParticipant(p.id)}
+                >
+                  <XIcon />
+                </IconActionButton>
+              ) : null}
+            </PersonRow>
           ))}
-        </List>
-      </Box>
+        </div>
+      </div>
     );
 
   // Manage the per-document trusted-collaborator list and explain the
   // auto-invite behaviour. `compact` drops the explanatory copy for the
   // in-session (host) view where space is tighter.
   const renderTrusted = ({ compact = false } = {}) => (
-    <Box>
-      <Stack direction="row" spacing={0.5} alignItems="center" sx={{ mb: 0.5 }}>
-        <StarIcon fontSize="small" color="warning" />
-        <Typography variant="subtitle2">Trusted collaborators</Typography>
-      </Stack>
+    <div>
+      <div className="mb-1 flex items-center gap-1.5">
+        <StarIcon className="size-4 text-focus" />
+        <p className="text-sm font-medium">Trusted collaborators</p>
+      </div>
       {!compact && (
-        <Typography variant="body2" color="text.secondary" sx={{ mb: 1.5 }}>
+        <p className="mb-2 text-sm text-muted-foreground">
           People on this list are emailed this lesson&apos;s invite link
           automatically whenever you start a session, and they join straight
           away without waiting for your approval. This list is saved with the
           lesson.
-        </Typography>
+        </p>
       )}
 
-      <Stack direction="row" spacing={1} alignItems="flex-start">
-        <TextField
-          size="small"
-          fullWidth
-          type="email"
-          label="Add by email"
-          placeholder="name@example.com"
-          value={trustedEmail}
-          error={Boolean(trustedError)}
-          helperText={trustedError || undefined}
-          onChange={(e) => {
-            setTrustedEmail(e.target.value);
-            if (trustedError) setTrustedError("");
-          }}
-          onKeyDown={(e) => {
-            if (e.key === "Enter") {
-              e.preventDefault();
-              addTrusted();
-            }
-          }}
-        />
+      <div className="flex items-start gap-2">
+        <Field className="flex-1">
+          <FieldLabel htmlFor="trusted-email" className="sr-only">
+            Add by email
+          </FieldLabel>
+          <Input
+            id="trusted-email"
+            type="email"
+            placeholder="name@example.com"
+            value={trustedEmail}
+            aria-invalid={Boolean(trustedError)}
+            onChange={(e) => {
+              setTrustedEmail(e.target.value);
+              if (trustedError) setTrustedError("");
+            }}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                e.preventDefault();
+                addTrusted();
+              }
+            }}
+          />
+          {trustedError && (
+            <p className="text-xs text-destructive">{trustedError}</p>
+          )}
+        </Field>
         <Button
-          variant="outlined"
-          startIcon={<PersonAddIcon />}
+          variant="outline"
           onClick={addTrusted}
           disabled={!trustedEmail.trim()}
-          sx={{ flexShrink: 0, mt: 0.25 }}
+          className="shrink-0"
         >
+          <UserPlusIcon data-icon="inline-start" />
           Add
         </Button>
-      </Stack>
+      </div>
 
       {trusted.length > 0 && (
-        <List dense disablePadding sx={{ mt: 1 }}>
+        <div className="mt-2 flex flex-col">
           {trusted.map((t) => (
-            <ListItem
+            <PersonRow
               key={t.email}
-              secondaryAction={
-                <Tooltip title="Remove">
-                  <IconButton edge="end" onClick={() => removeTrusted(t.email)}>
-                    <DeleteIcon fontSize="small" />
-                  </IconButton>
-                </Tooltip>
-              }
+              avatarColor="var(--focus)"
+              label={initials(t)}
+              primary={t.name || t.email}
+              secondary={t.name ? t.email : undefined}
             >
-              <ListItemAvatar>
-                <Avatar sx={{ bgcolor: "warning.light" }}>{initials(t)}</Avatar>
-              </ListItemAvatar>
-              <ListItemText
-                primary={t.name || t.email}
-                secondary={t.name ? t.email : undefined}
-              />
-            </ListItem>
+              <IconActionButton
+                tooltip="Remove"
+                onClick={() => removeTrusted(t.email)}
+                destructive
+              >
+                <Trash2Icon />
+              </IconActionButton>
+            </PersonRow>
           ))}
-        </List>
+        </div>
       )}
 
       {!accessToken && trusted.length > 0 && (
-        <Alert severity="info" variant="outlined" sx={{ mt: 1 }}>
+        <ToneAlert severity="info" className="mt-2">
           Sign in to automatically email the invite link to trusted
           collaborators.
-        </Alert>
+        </ToneAlert>
       )}
-    </Box>
+    </div>
   );
 
   // A short banner summarising the automatic invite send to trusted people.
@@ -540,10 +585,15 @@ export default function CollaborateDialog({
     (autoSend.sending ||
       autoSend.sent.length > 0 ||
       autoSend.failed.length > 0) && (
-      <Alert
+      <ToneAlert
         severity={autoSend.failed.length > 0 ? "warning" : "success"}
-        variant="outlined"
-        icon={autoSend.sending ? <CircularProgress size={18} /> : <SendIcon />}
+        icon={
+          autoSend.sending ? (
+            <Spinner className="size-[18px]" />
+          ) : (
+            <SendIcon className="size-4" />
+          )
+        }
       >
         {autoSend.sending
           ? "Sending the invite link to your trusted collaborators…"
@@ -552,35 +602,55 @@ export default function CollaborateDialog({
             : `Invite link sent to ${autoSend.sent.length} trusted collaborator${
                 autoSend.sent.length === 1 ? "" : "s"
               }.`}
-      </Alert>
+      </ToneAlert>
     );
 
   return (
     <>
-      <Dialog open={open} onClose={onClose} fullWidth maxWidth="xs">
-        <DialogTitle>Collaborate on this lesson</DialogTitle>
-        <DialogContent dividers>
-          {error && (
-            <Alert severity="error" sx={{ mb: 2 }} onClose={clearError}>
-              {error}
-            </Alert>
-          )}
-          {connecting
-            ? renderConnecting()
-            : status === "hosting"
-              ? renderHost()
-              : status === "joined"
-                ? renderGuest()
-                : renderLanding()}
-        </DialogContent>
-        <DialogActions>
-          {inSession || connecting ? (
-            <Button color="error" onClick={leave}>
-              {role === "host" ? "End session" : "Leave"}
+      <Dialog open={open} onOpenChange={(next) => !next && onClose()}>
+        <DialogContent className="flex max-h-[85vh] flex-col sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Collaborate on this lesson</DialogTitle>
+          </DialogHeader>
+
+          <div className="overflow-y-auto border-t border-border pt-3">
+            {error && (
+              <Alert variant="destructive" className="relative mb-3 pr-9">
+                <AlertDescription>{error}</AlertDescription>
+                <button
+                  type="button"
+                  onClick={clearError}
+                  aria-label="Dismiss"
+                  className="absolute top-3 right-3 cursor-pointer rounded-sm border-0 bg-transparent p-0.5 text-current opacity-70 transition-opacity hover:opacity-100"
+                >
+                  <XIcon className="size-3.5" />
+                </button>
+              </Alert>
+            )}
+            {connecting
+              ? renderConnecting()
+              : status === "hosting"
+                ? renderHost()
+                : status === "joined"
+                  ? renderGuest()
+                  : renderLanding()}
+          </div>
+
+          <DialogFooter>
+            {inSession || connecting ? (
+              <Button
+                variant="destructive"
+                onClick={leave}
+                className="sm:mr-auto"
+              >
+                {role === "host" ? "End session" : "Leave"}
+              </Button>
+            ) : null}
+            <Button variant="outline" onClick={onClose}>
+              Close
             </Button>
-          ) : null}
-          <Button onClick={onClose}>Close</Button>
-        </DialogActions>
+          </DialogFooter>
+        </DialogContent>
       </Dialog>
       <SendLinkDialog
         open={sendOpen}
@@ -632,80 +702,82 @@ function SendLinkDialog({ open, onClose, accessToken, link }) {
   };
 
   return (
-    <Dialog open={open} onClose={onClose} fullWidth maxWidth="xs">
-      <DialogTitle>Send the invite link</DialogTitle>
-      {sent ? (
-        <>
-          <DialogContent>
-            <Alert severity="success">
-              The invite link was sent. It will pop up in that user&apos;s
-              notifications.
+    <Dialog open={open} onOpenChange={(next) => !next && onClose()}>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle>Send the invite link</DialogTitle>
+        </DialogHeader>
+        {sent ? (
+          <>
+            <Alert className="border-success/40 bg-success/10 text-success">
+              <AlertDescription className="text-success">
+                The invite link was sent. It will pop up in that user&apos;s
+                notifications.
+              </AlertDescription>
             </Alert>
-          </DialogContent>
-          <DialogActions>
-            <Button variant="contained" onClick={onClose}>
-              Done
-            </Button>
-          </DialogActions>
-        </>
-      ) : (
-        <Box component="form" onSubmit={submit}>
-          <DialogContent>
-            <DialogContentText sx={{ mb: 2 }}>
+            <DialogFooter>
+              <Button onClick={onClose}>Done</Button>
+            </DialogFooter>
+          </>
+        ) : (
+          <form onSubmit={submit} className="flex flex-col gap-4">
+            <DialogDescription>
               Enter the email of the person you want to invite. They&apos;ll see
               this session&apos;s invite link in their notifications the next
               time they&apos;re signed in.
-            </DialogContentText>
+            </DialogDescription>
             {error && (
-              <Alert severity="error" sx={{ mb: 2 }}>
-                {error}
+              <Alert variant="destructive">
+                <AlertDescription>{error}</AlertDescription>
               </Alert>
             )}
-            <Stack spacing={2}>
-              <TextField
+            <Field>
+              <FieldLabel htmlFor="send-link-email">Recipient email</FieldLabel>
+              <Input
+                id="send-link-email"
                 autoFocus
-                fullWidth
                 required
                 type="email"
-                label="Recipient email"
                 placeholder="name@example.com"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 disabled={sending}
               />
-              <TextField
-                fullWidth
-                multiline
-                minRows={2}
-                label="Message (optional)"
+            </Field>
+            <Field>
+              <FieldLabel htmlFor="send-link-message">
+                Message (optional)
+              </FieldLabel>
+              <Textarea
+                id="send-link-message"
                 value={message}
                 onChange={(e) => setMessage(e.target.value)}
                 disabled={sending}
-                inputProps={{ maxLength: 1000 }}
+                maxLength={1000}
+                className="min-h-16"
               />
-            </Stack>
-          </DialogContent>
-          <DialogActions>
-            <Button onClick={onClose} disabled={sending}>
-              Cancel
-            </Button>
-            <Button
-              type="submit"
-              variant="contained"
-              disabled={sending || !email.trim() || !link}
-              startIcon={
-                sending ? (
-                  <CircularProgress size={16} color="inherit" />
-                ) : (
-                  <SendIcon />
-                )
-              }
-            >
-              {sending ? "Sending…" : "Send link"}
-            </Button>
-          </DialogActions>
-        </Box>
-      )}
+            </Field>
+            <DialogFooter>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={onClose}
+                disabled={sending}
+              >
+                Cancel
+              </Button>
+              <Button
+                type="submit"
+                disabled={sending || !email.trim() || !link}
+              >
+                {sending && <Spinner data-icon="inline-start" />}
+                {!sending && <SendIcon data-icon="inline-start" />}
+                {sending ? "Sending…" : "Send link"}
+              </Button>
+            </DialogFooter>
+          </form>
+        )}
+      </DialogContent>
     </Dialog>
   );
 }
