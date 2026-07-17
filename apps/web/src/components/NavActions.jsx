@@ -1,16 +1,18 @@
-// Right-hand AppBar cluster shared by every page: a link to the lesson hub, a
+// Right-hand header cluster shared by every page: a link to the lesson hub, a
 // light/dark toggle, and an account control that reflects the Supabase auth
 // state (sign in / sign out). Signed-in users also get a notification bell.
 //
-// This still renders inside every page's MUI <AppBar color="primary">, which
-// hasn't migrated yet (that happens per-page, later in the migration) — so
-// the *trigger* elements below (the hub link, the icon buttons) intentionally
-// use plain white-on-transparent classes to stay legible on that still-MUI
-// colored bar, rather than the new semantic tokens (bg-card etc.), which
-// assume a light/dark page background this isn't sitting on yet. The dropdown
-// menu itself isn't constrained the same way — it floats above everything as
-// its own surface — so it uses the real design tokens throughout. Revisit the
-// trigger styling once each page's header is rebuilt on the new design.
+// The trigger elements below (the hub link, the icon buttons) sit directly on
+// AppHeader's colored --primary surface (or, on pages not yet migrated off
+// MUI, that AppBar's near-identical hardcoded blue), not on the page's own
+// light/dark background — so they're styled from --primary-foreground rather
+// than the usual --foreground/--muted-foreground tokens. --primary-foreground
+// already flips correctly with the theme (near-white on the light-mode blue,
+// near-black on the lighter dark-mode violet), so this works in both themes
+// once AppHeader itself is dark-mode aware, not just on the currently
+// light-locked MUI bar. The dropdown menu itself isn't constrained the same
+// way — it floats above everything as its own surface — so it uses the usual
+// design tokens throughout.
 
 import { useState } from "react";
 import { Link as RouterLink, useNavigate } from "react-router-dom";
@@ -38,14 +40,15 @@ import {
 import NotificationBell from "./NotificationBell.jsx";
 import DisplayNameDialog from "./DisplayNameDialog.jsx";
 
-// Interim AppBar-inherit styling — see the file header. bg-transparent and
-// border-0/cursor-pointer are explicit here (not just hover:bg-white/10)
-// because Tailwind's preflight reset is off for now (see globals.css), so a
-// plain <button> still gets the browser's default gray button chrome.
+// See the file header for why these use --primary-foreground rather than
+// the usual tokens. bg-transparent and border-0/cursor-pointer are explicit
+// (not just hover:bg-primary-foreground/10) because Tailwind's preflight
+// reset is off for now (see globals.css), so a plain <button> still gets the
+// browser's default gray button chrome.
 const iconTrigger =
-  "inline-flex size-10 cursor-pointer items-center justify-center rounded-full border-0 bg-transparent text-white transition-colors hover:bg-white/10";
+  "inline-flex size-10 cursor-pointer items-center justify-center rounded-full border-0 bg-transparent text-primary-foreground no-underline transition-colors hover:bg-primary-foreground/10";
 const outlineTrigger =
-  "inline-flex items-center gap-2 rounded-md border border-white/60 bg-transparent px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-white/10";
+  "inline-flex items-center gap-2 rounded-md border border-primary-foreground/60 bg-transparent px-4 py-2 text-sm font-medium text-primary-foreground no-underline transition-colors hover:bg-primary-foreground/10";
 
 export default function NavActions({ current }) {
   const { enabled, user, displayName, signOut, isModerator } = useAuth();

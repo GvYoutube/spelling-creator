@@ -8,24 +8,19 @@
 
 import { useState } from "react";
 import { Link as RouterLink, useNavigate } from "react-router-dom";
-import AppBar from "@mui/material/AppBar";
-import Toolbar from "@mui/material/Toolbar";
-import Typography from "@mui/material/Typography";
-import Button from "@mui/material/Button";
-import Box from "@mui/material/Box";
-import Container from "@mui/material/Container";
-import Stack from "@mui/material/Stack";
-import Paper from "@mui/material/Paper";
-import TextField from "@mui/material/TextField";
-import Alert from "@mui/material/Alert";
-import CircularProgress from "@mui/material/CircularProgress";
-import IconButton from "@mui/material/IconButton";
-import Tooltip from "@mui/material/Tooltip";
-import useMediaQuery from "@mui/material/useMediaQuery";
-import { useTheme } from "@mui/material/styles";
-import EditIcon from "@mui/icons-material/Edit";
-import MarkEmailReadIcon from "@mui/icons-material/MarkEmailRead";
+import { PencilIcon, MailCheckIcon } from "lucide-react";
+import AppHeader from "../components/AppHeader.jsx";
 import NavActions from "../components/NavActions.jsx";
+import { Button } from "../components/ui/button.jsx";
+import { Input } from "../components/ui/input.jsx";
+import { Field, FieldLabel } from "../components/ui/field.jsx";
+import { Alert, AlertDescription } from "../components/ui/alert.jsx";
+import { Spinner } from "../components/ui/spinner.jsx";
+import {
+  Tooltip,
+  TooltipTrigger,
+  TooltipContent,
+} from "../components/ui/tooltip.jsx";
 import { useAuth } from "../lib/auth.jsx";
 import { useDocumentMeta } from "../lib/seo.js";
 
@@ -36,8 +31,6 @@ export default function LoginPage() {
   const { enabled, user, displayName, loading, signInWithMagicLink, signOut } =
     useAuth();
   const navigate = useNavigate();
-  const theme = useTheme();
-  const isMobile = useMediaQuery(theme.breakpoints.down("md"));
 
   const [email, setEmail] = useState("");
   const [sending, setSending] = useState(false);
@@ -63,84 +56,76 @@ export default function LoginPage() {
   };
 
   return (
-    <Box sx={{ minHeight: "100vh" }}>
-      <AppBar position="sticky" elevation={1}>
-        <Toolbar>
-          {isMobile ? (
-            <Tooltip title="Editor">
-              <IconButton
-                color="inherit"
-                component={RouterLink}
-                to="/editor"
-                aria-label="editor"
-                sx={{ mr: 0.5 }}
-              >
-                <EditIcon />
-              </IconButton>
+    <div className="min-h-screen bg-background">
+      <AppHeader
+        title="Sign in"
+        left={
+          <>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <RouterLink
+                  to="/editor"
+                  aria-label="editor"
+                  className="mr-0.5 inline-flex size-10 shrink-0 cursor-pointer items-center justify-center rounded-full border-0 bg-transparent text-primary-foreground no-underline transition-colors hover:bg-primary-foreground/10 md:hidden"
+                >
+                  <PencilIcon />
+                </RouterLink>
+              </TooltipTrigger>
+              <TooltipContent>Editor</TooltipContent>
             </Tooltip>
-          ) : (
-            <Button
-              color="inherit"
-              component={RouterLink}
+            <RouterLink
               to="/editor"
-              startIcon={<EditIcon />}
-              sx={{ mr: 1 }}
+              className="mr-1 hidden shrink-0 items-center gap-2 rounded-md border-0 bg-transparent px-4 py-2 text-sm font-medium text-primary-foreground no-underline transition-colors hover:bg-primary-foreground/10 md:inline-flex"
             >
+              <PencilIcon data-icon="inline-start" />
               Editor
-            </Button>
-          )}
-          <Typography
-            variant="h6"
-            noWrap
-            sx={{ flexGrow: 1, minWidth: 0, mr: 1 }}
-          >
-            Sign in
-          </Typography>
-          <Stack direction="row" spacing={1} alignItems="center">
-            <NavActions current="login" />
-          </Stack>
-        </Toolbar>
-      </AppBar>
+            </RouterLink>
+          </>
+        }
+      >
+        <NavActions current="login" />
+      </AppHeader>
 
-      <Container maxWidth="xs" sx={{ pt: 6 }}>
-        <Paper elevation={2} sx={{ p: 4 }}>
+      <div className="mx-auto max-w-sm px-4 pt-12">
+        <div className="rounded-panel border border-border bg-card p-8 text-card-foreground shadow-(--shadow-panel)">
           {!enabled ? (
-            <Alert severity="info">
-              Sign-in is not configured. Set VITE_SUPABASE_URL and
-              VITE_SUPABASE_ANON_KEY to enable accounts.
+            <Alert>
+              <AlertDescription>
+                Sign-in is not configured. Set VITE_SUPABASE_URL and
+                VITE_SUPABASE_ANON_KEY to enable accounts.
+              </AlertDescription>
             </Alert>
           ) : loading ? (
-            <Box sx={{ display: "flex", justifyContent: "center", py: 4 }}>
-              <CircularProgress />
-            </Box>
+            <div className="flex justify-center py-4">
+              <Spinner className="size-8" />
+            </div>
           ) : user ? (
-            <Stack spacing={2} alignItems="center" textAlign="center">
-              <MarkEmailReadIcon color="primary" sx={{ fontSize: 48 }} />
-              <Typography variant="h6">You&apos;re signed in</Typography>
-              <Typography
-                variant="body2"
-                color="text.secondary"
-                sx={{ wordBreak: "break-all" }}
-              >
+            <div className="flex flex-col items-center gap-2 text-center">
+              <MailCheckIcon className="size-12 text-primary" />
+              <h1 className="text-lg font-semibold">You&apos;re signed in</h1>
+              <p className="text-sm break-all text-muted-foreground">
                 {displayName || user.email}
-              </Typography>
-              <Stack direction="row" spacing={1} sx={{ pt: 1 }}>
-                <Button variant="contained" onClick={() => navigate("/editor")}>
+              </p>
+              <div className="flex gap-2 pt-1">
+                <Button onClick={() => navigate("/editor")}>
                   Go to editor
                 </Button>
-                <Button onClick={() => signOut()}>Sign out</Button>
-              </Stack>
-            </Stack>
+                <Button variant="outline" onClick={() => signOut()}>
+                  Sign out
+                </Button>
+              </div>
+            </div>
           ) : sent ? (
-            <Stack spacing={2} alignItems="center" textAlign="center">
-              <MarkEmailReadIcon color="primary" sx={{ fontSize: 48 }} />
-              <Typography variant="h6">Check your email</Typography>
-              <Typography variant="body2" color="text.secondary">
+            <div className="flex flex-col items-center gap-2 text-center">
+              <MailCheckIcon className="size-12 text-primary" />
+              <h1 className="text-lg font-semibold">Check your email</h1>
+              <p className="text-sm text-muted-foreground">
                 We sent a sign-in link to <strong>{email.trim()}</strong>. Open
                 it on this device to finish signing in.
-              </Typography>
+              </p>
               <Button
-                size="small"
+                variant="ghost"
+                size="sm"
                 onClick={() => {
                   setSent(false);
                   setError("");
@@ -148,40 +133,38 @@ export default function LoginPage() {
               >
                 Use a different email
               </Button>
-            </Stack>
+            </div>
           ) : (
-            <Stack component="form" spacing={2} onSubmit={submit}>
-              <Typography variant="body2" color="text.secondary">
+            <form onSubmit={submit} className="flex flex-col gap-4">
+              <p className="text-sm text-muted-foreground">
                 Enter your email and we&apos;ll send you a one-time sign-in link
                 — no password needed. You only need an account to publish
                 lessons to the hub.
-              </Typography>
-              {error && <Alert severity="error">{error}</Alert>}
-              <TextField
-                autoFocus
-                fullWidth
-                type="email"
-                label="Email address"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                disabled={sending}
-              />
-              <Button
-                type="submit"
-                variant="contained"
-                disabled={sending}
-                startIcon={
-                  sending ? (
-                    <CircularProgress size={16} color="inherit" />
-                  ) : undefined
-                }
-              >
+              </p>
+              {error && (
+                <Alert variant="destructive">
+                  <AlertDescription>{error}</AlertDescription>
+                </Alert>
+              )}
+              <Field>
+                <FieldLabel htmlFor="login-email">Email address</FieldLabel>
+                <Input
+                  id="login-email"
+                  autoFocus
+                  type="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  disabled={sending}
+                />
+              </Field>
+              <Button type="submit" disabled={sending}>
+                {sending && <Spinner data-icon="inline-start" />}
                 Send magic link
               </Button>
-            </Stack>
+            </form>
           )}
-        </Paper>
-      </Container>
-    </Box>
+        </div>
+      </div>
+    </div>
   );
 }
