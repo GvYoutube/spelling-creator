@@ -5,41 +5,38 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link as RouterLink, useNavigate, useLocation } from "react-router-dom";
-import AppBar from "@mui/material/AppBar";
-import Toolbar from "@mui/material/Toolbar";
-import Typography from "@mui/material/Typography";
-import Button from "@mui/material/Button";
-import Box from "@mui/material/Box";
-import Container from "@mui/material/Container";
-import Stack from "@mui/material/Stack";
-import Grid from "@mui/material/Grid2";
-import Card from "@mui/material/Card";
-import CardActionArea from "@mui/material/CardActionArea";
-import CardContent from "@mui/material/CardContent";
-import Paper from "@mui/material/Paper";
-import Dialog from "@mui/material/Dialog";
-import DialogTitle from "@mui/material/DialogTitle";
-import DialogContent from "@mui/material/DialogContent";
-import DialogActions from "@mui/material/DialogActions";
-import DialogContentText from "@mui/material/DialogContentText";
-import TextField from "@mui/material/TextField";
-import CircularProgress from "@mui/material/CircularProgress";
-import Alert from "@mui/material/Alert";
+// Snackbar stays MUI for now — see the note in ModerationPage.jsx.
 import Snackbar from "@mui/material/Snackbar";
-import IconButton from "@mui/material/IconButton";
-import InputAdornment from "@mui/material/InputAdornment";
-import Chip from "@mui/material/Chip";
-import EditIcon from "@mui/icons-material/Edit";
-import DeleteOutlineIcon from "@mui/icons-material/DeleteOutline";
-import RefreshIcon from "@mui/icons-material/Refresh";
-import RssFeedIcon from "@mui/icons-material/RssFeed";
-import SearchIcon from "@mui/icons-material/Search";
-import ClearIcon from "@mui/icons-material/Clear";
-import CloudQueueIcon from "@mui/icons-material/CloudQueue";
-import Tooltip from "@mui/material/Tooltip";
-import useMediaQuery from "@mui/material/useMediaQuery";
-import { useTheme } from "@mui/material/styles";
+import {
+  CloudIcon,
+  PencilIcon,
+  RefreshCwIcon,
+  RssIcon,
+  SearchIcon,
+  Trash2Icon,
+  XIcon,
+} from "lucide-react";
+import AppHeader from "../components/AppHeader.jsx";
 import NavActions from "../components/NavActions.jsx";
+import IconActionButton from "../components/IconActionButton.jsx";
+import { Button } from "../components/ui/button.jsx";
+import { Badge } from "../components/ui/badge.jsx";
+import { Alert, AlertDescription } from "../components/ui/alert.jsx";
+import { Field, FieldLabel } from "../components/ui/field.jsx";
+import { Input } from "../components/ui/input.jsx";
+import { Spinner } from "../components/ui/spinner.jsx";
+import {
+  Tooltip,
+  TooltipTrigger,
+  TooltipContent,
+} from "../components/ui/tooltip.jsx";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from "../components/ui/dialog.jsx";
 import {
   fetchPublishedLessons,
   fetchMyLessons,
@@ -68,6 +65,88 @@ function formatDate(value) {
   });
 }
 
+// A published/draft lesson card: the whole thing links to the lesson, with
+// the owner's edit/delete controls layered on top as siblings (not nested
+// inside the link — an <a> can't contain interactive descendants).
+function LessonCard({ lesson, draft, editable, onEdit, onDelete }) {
+  const navigate = useNavigate();
+  return (
+    <div className="relative h-full rounded-md border border-border">
+      {editable && (
+        <div className="absolute top-1 right-1 z-10 flex gap-0.5">
+          <IconActionButton
+            tooltip={draft ? "Edit this draft" : "Edit this lesson"}
+            aria-label={draft ? "edit draft" : "edit lesson"}
+            onClick={(e) => onEdit(e, lesson)}
+            className="bg-card hover:bg-accent"
+          >
+            <PencilIcon />
+          </IconActionButton>
+          <IconActionButton
+            tooltip={draft ? "Delete this draft" : "Delete this lesson"}
+            aria-label={draft ? "delete draft" : "delete lesson"}
+            onClick={(e) => onDelete(e, lesson)}
+            destructive
+            className="bg-card hover:bg-destructive/10"
+          >
+            <Trash2Icon />
+          </IconActionButton>
+        </div>
+      )}
+      <RouterLink
+        to={`/hub/${lesson.id}`}
+        className="flex h-full flex-col rounded-md p-4 no-underline transition-colors hover:bg-accent"
+      >
+        {draft && (
+          <Badge variant="outline" className="mb-2 w-fit gap-1">
+            <CloudIcon />
+            Draft
+          </Badge>
+        )}
+        <h3 className="truncate pr-8 text-base font-semibold text-foreground">
+          {lesson.title || "Untitled Lesson"}
+        </h3>
+        {!draft && (
+          <p className="text-sm text-muted-foreground">
+            {lesson.authorId ? (
+              // The whole card is already a link, so the author can't be a
+              // nested <a>. Use a clickable span that navigates to the
+              // profile and stops the card's own navigation.
+              <span
+                role="link"
+                tabIndex={0}
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  navigate(`/users/${lesson.authorId}`);
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    navigate(`/users/${lesson.authorId}`);
+                  }
+                }}
+                className="cursor-pointer hover:underline"
+              >
+                {lesson.author || "Anonymous"}
+              </span>
+            ) : (
+              lesson.author || "Anonymous"
+            )}
+          </p>
+        )}
+        <p className="mt-1 text-xs text-muted-foreground">
+          {typeof lesson.sectionCount === "number"
+            ? `${lesson.sectionCount} section${lesson.sectionCount === 1 ? "" : "s"}`
+            : ""}
+          {lesson.createdAt ? ` · ${formatDate(lesson.createdAt)}` : ""}
+        </p>
+      </RouterLink>
+    </div>
+  );
+}
+
 export default function HubPage() {
   useDocumentMeta({
     title: "Lesson hub",
@@ -77,8 +156,6 @@ export default function HubPage() {
   const { user, accessToken } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
-  const theme = useTheme();
-  const isMobile = useMediaQuery(theme.breakpoints.down("md"));
 
   const [lessons, setLessons] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -230,254 +307,147 @@ export default function HubPage() {
   };
 
   return (
-    <Box sx={{ minHeight: "100vh", pb: 8 }}>
-      <AppBar position="sticky" elevation={1}>
-        <Toolbar>
-          {isMobile ? (
-            <Tooltip title="Editor">
-              <IconButton
-                color="inherit"
-                component={RouterLink}
+    <div className="min-h-screen bg-background pb-16 text-foreground">
+      <AppHeader
+        title="Lesson hub"
+        left={
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <RouterLink
                 to="/editor"
                 aria-label="editor"
-                sx={{ mr: 0.5 }}
+                className="mr-1 inline-flex shrink-0 items-center gap-2 rounded-md border-0 bg-transparent px-2.5 py-2 text-sm font-medium text-primary-foreground no-underline transition-colors hover:bg-primary-foreground/10 md:px-4"
               >
-                <EditIcon />
-              </IconButton>
-            </Tooltip>
-          ) : (
-            <Button
-              color="inherit"
-              component={RouterLink}
-              to="/editor"
-              startIcon={<EditIcon />}
-              sx={{ mr: 1 }}
-            >
-              Editor
-            </Button>
-          )}
-          <Typography
-            variant="h6"
-            noWrap
-            sx={{ flexGrow: 1, minWidth: 0, mr: 1 }}
-          >
-            Lesson hub
-          </Typography>
-          <Stack direction="row" spacing={1} alignItems="center">
-            <NavActions current="hub" />
-          </Stack>
-        </Toolbar>
-      </AppBar>
+                <PencilIcon data-icon="inline-start" />
+                <span className="hidden md:inline">Editor</span>
+              </RouterLink>
+            </TooltipTrigger>
+            <TooltipContent className="md:hidden">Editor</TooltipContent>
+          </Tooltip>
+        }
+      >
+        <NavActions current="hub" />
+      </AppHeader>
 
-      <Container maxWidth="lg" sx={{ pt: 3 }}>
-        <Stack
-          direction="row"
-          alignItems="center"
-          justifyContent="space-between"
-          sx={{ mb: 2 }}
-        >
-          <Typography variant="body1" color="text.secondary">
+      <div className="mx-auto max-w-5xl px-4 pt-6">
+        <div className="mb-4 flex items-center justify-between gap-2">
+          <p className="text-sm text-muted-foreground">
             Browse lessons shared by the community. Open one to preview it.
-          </Typography>
+          </p>
           {lessonHubEnabled && (
-            <Stack direction="row" spacing={0.5} alignItems="center">
-              <Tooltip title="Subscribe to the latest lessons (RSS)">
-                <IconButton
-                  component="a"
+            <div className="flex shrink-0 items-center gap-0.5">
+              <IconActionButton
+                tooltip="Subscribe to the latest lessons (RSS)"
+                aria-label="latest lessons RSS feed"
+                asChild
+              >
+                <a
                   href={lessonsFeedUrl()}
                   target="_blank"
                   rel="noopener noreferrer"
-                  aria-label="latest lessons RSS feed"
                 >
-                  <RssFeedIcon />
-                </IconButton>
-              </Tooltip>
-              <IconButton
+                  <RssIcon />
+                </a>
+              </IconActionButton>
+              <IconActionButton
+                tooltip="Refresh"
+                aria-label="refresh"
+                disabled={loading}
                 onClick={() => {
                   load();
                   loadDrafts();
                 }}
-                disabled={loading}
-                aria-label="refresh"
               >
-                <RefreshIcon />
-              </IconButton>
-            </Stack>
+                <RefreshCwIcon />
+              </IconActionButton>
+            </div>
           )}
-        </Stack>
+        </div>
 
         {lessonHubEnabled && drafts.length > 0 && (
-          <Box sx={{ mb: 4 }}>
-            <Stack
-              direction="row"
-              spacing={1}
-              alignItems="center"
-              flexWrap="wrap"
-              useFlexGap
-              sx={{ mb: 1.5 }}
-            >
-              <CloudQueueIcon fontSize="small" color="action" />
-              <Typography variant="h6">Your drafts</Typography>
-              <Typography variant="body2" color="text.secondary">
+          <div className="mb-8">
+            <div className="mb-3 flex flex-wrap items-center gap-2">
+              <CloudIcon className="size-4 text-muted-foreground" />
+              <h2 className="text-lg font-semibold">Your drafts</h2>
+              <p className="text-sm text-muted-foreground">
                 Backed up to the cloud, visible only to you. Open one to edit
                 and publish it.
-              </Typography>
-            </Stack>
-            <Grid container spacing={2}>
+              </p>
+            </div>
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 md:grid-cols-3">
               {drafts.map((lesson) => (
-                <Grid key={lesson.id} size={{ xs: 12, sm: 6, md: 4 }}>
-                  <Card
-                    variant="outlined"
-                    sx={{ height: "100%", position: "relative" }}
-                  >
-                    <Stack
-                      direction="row"
-                      spacing={0.5}
-                      sx={{
-                        position: "absolute",
-                        top: 4,
-                        right: 4,
-                        zIndex: 1,
-                      }}
-                    >
-                      <Tooltip title="Edit this draft">
-                        <IconButton
-                          size="small"
-                          aria-label="edit draft"
-                          onClick={(e) => editLesson(e, lesson)}
-                          sx={{
-                            bgcolor: "background.paper",
-                            "&:hover": { bgcolor: "action.hover" },
-                          }}
-                        >
-                          <EditIcon fontSize="small" />
-                        </IconButton>
-                      </Tooltip>
-                      <Tooltip title="Delete this draft">
-                        <IconButton
-                          size="small"
-                          aria-label="delete draft"
-                          onClick={(e) => askDelete(e, lesson)}
-                          sx={{
-                            bgcolor: "background.paper",
-                            "&:hover": {
-                              bgcolor: "error.light",
-                              color: "error.contrastText",
-                            },
-                          }}
-                        >
-                          <DeleteOutlineIcon fontSize="small" />
-                        </IconButton>
-                      </Tooltip>
-                    </Stack>
-                    <CardActionArea
-                      component={RouterLink}
-                      to={`/hub/${lesson.id}`}
-                      sx={{ height: "100%", alignItems: "stretch" }}
-                    >
-                      <CardContent>
-                        <Chip
-                          size="small"
-                          variant="outlined"
-                          icon={<CloudQueueIcon />}
-                          label="Draft"
-                          sx={{ mb: 1 }}
-                        />
-                        <Typography
-                          variant="h6"
-                          gutterBottom
-                          noWrap
-                          sx={{ pr: 4 }}
-                        >
-                          {lesson.title || "Untitled Lesson"}
-                        </Typography>
-                        <Typography
-                          variant="caption"
-                          color="text.secondary"
-                          sx={{ display: "block", mt: 1 }}
-                        >
-                          {typeof lesson.sectionCount === "number"
-                            ? `${lesson.sectionCount} section${lesson.sectionCount === 1 ? "" : "s"}`
-                            : ""}
-                          {lesson.createdAt
-                            ? ` · ${formatDate(lesson.createdAt)}`
-                            : ""}
-                        </Typography>
-                      </CardContent>
-                    </CardActionArea>
-                  </Card>
-                </Grid>
+                <LessonCard
+                  key={lesson.id}
+                  lesson={lesson}
+                  draft
+                  editable
+                  onEdit={editLesson}
+                  onDelete={askDelete}
+                />
               ))}
-            </Grid>
-          </Box>
+            </div>
+          </div>
         )}
 
         {lessonHubEnabled && !loading && !error && lessons.length > 0 && (
-          <TextField
-            fullWidth
-            size="small"
-            placeholder="Search lessons by title or author…"
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            sx={{ mb: 2 }}
-            slotProps={{
-              input: {
-                startAdornment: (
-                  <InputAdornment position="start">
-                    <SearchIcon fontSize="small" />
-                  </InputAdornment>
-                ),
-                endAdornment: query ? (
-                  <InputAdornment position="end">
-                    <IconButton
-                      size="small"
-                      aria-label="clear search"
-                      onClick={() => setQuery("")}
-                      edge="end"
-                    >
-                      <ClearIcon fontSize="small" />
-                    </IconButton>
-                  </InputAdornment>
-                ) : null,
-              },
-            }}
-          />
+          <Field className="mb-4">
+            <FieldLabel htmlFor="hub-search" className="sr-only">
+              Search lessons
+            </FieldLabel>
+            <div className="relative">
+              <SearchIcon className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                id="hub-search"
+                placeholder="Search lessons by title or author…"
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                className="pl-9 pr-9"
+              />
+              {query && (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon-sm"
+                  aria-label="clear search"
+                  onClick={() => setQuery("")}
+                  className="absolute top-1/2 right-1 -translate-y-1/2"
+                >
+                  <XIcon />
+                </Button>
+              )}
+            </div>
+          </Field>
         )}
 
         {!lessonHubEnabled && (
-          <Alert severity="info">
-            The lesson hub is not configured (VITE_API_URL is missing).
+          <Alert className="border-primary/40 bg-primary/10 text-primary">
+            <AlertDescription className="text-primary">
+              The lesson hub is not configured (VITE_API_URL is missing).
+            </AlertDescription>
           </Alert>
         )}
 
         {lessonHubEnabled && error && (
-          <Alert
-            severity="error"
-            action={
-              <Button color="inherit" size="small" onClick={load}>
+          <Alert variant="destructive">
+            <AlertDescription className="flex items-center justify-between gap-2">
+              {error}
+              <Button variant="ghost" size="sm" onClick={load}>
                 Retry
               </Button>
-            }
-          >
-            {error}
+            </AlertDescription>
           </Alert>
         )}
 
         {lessonHubEnabled && loading && <LessonGridSkeleton />}
 
         {lessonHubEnabled && !loading && !error && lessons.length === 0 && (
-          <Paper
-            variant="outlined"
-            sx={{ p: 6, textAlign: "center", borderStyle: "dashed" }}
-          >
-            <Typography variant="h6" gutterBottom>
-              No lessons yet
-            </Typography>
-            <Typography variant="body2" color="text.secondary">
+          <div className="rounded-md border border-dashed border-border p-12 text-center">
+            <p className="mb-1 text-lg font-semibold">No lessons yet</p>
+            <p className="text-sm text-muted-foreground">
               Be the first to publish — build a lesson in the editor and press{" "}
               <strong>Publish to hub</strong>.
-            </Typography>
-          </Paper>
+            </p>
+          </div>
         )}
 
         {lessonHubEnabled &&
@@ -486,192 +456,93 @@ export default function HubPage() {
           lessons.length > 0 &&
           searching &&
           visibleLessons.length === 0 && (
-            <Paper
-              variant="outlined"
-              sx={{ p: 6, textAlign: "center", borderStyle: "dashed" }}
-            >
-              <Typography variant="h6" gutterBottom>
-                No matches
-              </Typography>
-              <Typography variant="body2" color="text.secondary">
-                No lessons match “{debouncedQuery}”. Try a different search.
-              </Typography>
-            </Paper>
+            <div className="rounded-md border border-dashed border-border p-12 text-center">
+              <p className="mb-1 text-lg font-semibold">No matches</p>
+              <p className="text-sm text-muted-foreground">
+                No lessons match &ldquo;{debouncedQuery}&rdquo;. Try a different
+                search.
+              </p>
+            </div>
           )}
 
         {lessonHubEnabled &&
           !loading &&
           !error &&
           visibleLessons.length > 0 && (
-            <Grid container spacing={2}>
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 md:grid-cols-3">
               {visibleLessons.map((lesson) => (
-                <Grid key={lesson.id} size={{ xs: 12, sm: 6, md: 4 }}>
-                  <Card
-                    variant="outlined"
-                    sx={{ height: "100%", position: "relative" }}
-                  >
-                    {user && lesson.authorId && lesson.authorId === user.id && (
-                      <Stack
-                        direction="row"
-                        spacing={0.5}
-                        sx={{
-                          position: "absolute",
-                          top: 4,
-                          right: 4,
-                          zIndex: 1,
-                        }}
-                      >
-                        <Tooltip title="Edit this lesson">
-                          <IconButton
-                            size="small"
-                            aria-label="edit lesson"
-                            onClick={(e) => editLesson(e, lesson)}
-                            sx={{
-                              bgcolor: "background.paper",
-                              "&:hover": { bgcolor: "action.hover" },
-                            }}
-                          >
-                            <EditIcon fontSize="small" />
-                          </IconButton>
-                        </Tooltip>
-                        <Tooltip title="Delete this lesson">
-                          <IconButton
-                            size="small"
-                            aria-label="delete lesson"
-                            onClick={(e) => askDelete(e, lesson)}
-                            sx={{
-                              bgcolor: "background.paper",
-                              "&:hover": {
-                                bgcolor: "error.light",
-                                color: "error.contrastText",
-                              },
-                            }}
-                          >
-                            <DeleteOutlineIcon fontSize="small" />
-                          </IconButton>
-                        </Tooltip>
-                      </Stack>
-                    )}
-                    <CardActionArea
-                      component={RouterLink}
-                      to={`/hub/${lesson.id}`}
-                      sx={{ height: "100%", alignItems: "stretch" }}
-                    >
-                      <CardContent>
-                        <Typography
-                          variant="h6"
-                          gutterBottom
-                          noWrap
-                          sx={{ pr: 4 }}
-                        >
-                          {lesson.title || "Untitled Lesson"}
-                        </Typography>
-                        <Typography variant="body2" color="text.secondary">
-                          {lesson.authorId ? (
-                            // The whole card is already a link, so the author can't
-                            // be a nested <a>. Use a clickable span that navigates
-                            // to the profile and stops the card's own navigation.
-                            <Box
-                              component="span"
-                              role="link"
-                              tabIndex={0}
-                              onClick={(e) => {
-                                e.preventDefault();
-                                e.stopPropagation();
-                                navigate(`/users/${lesson.authorId}`);
-                              }}
-                              onKeyDown={(e) => {
-                                if (e.key === "Enter") {
-                                  e.preventDefault();
-                                  e.stopPropagation();
-                                  navigate(`/users/${lesson.authorId}`);
-                                }
-                              }}
-                              sx={{
-                                cursor: "pointer",
-                                "&:hover": { textDecoration: "underline" },
-                              }}
-                            >
-                              {lesson.author || "Anonymous"}
-                            </Box>
-                          ) : (
-                            lesson.author || "Anonymous"
-                          )}
-                        </Typography>
-                        <Typography
-                          variant="caption"
-                          color="text.secondary"
-                          sx={{ display: "block", mt: 1 }}
-                        >
-                          {typeof lesson.sectionCount === "number"
-                            ? `${lesson.sectionCount} section${lesson.sectionCount === 1 ? "" : "s"}`
-                            : ""}
-                          {lesson.createdAt
-                            ? ` · ${formatDate(lesson.createdAt)}`
-                            : ""}
-                        </Typography>
-                      </CardContent>
-                    </CardActionArea>
-                  </Card>
-                </Grid>
+                <LessonCard
+                  key={lesson.id}
+                  lesson={lesson}
+                  editable={Boolean(
+                    user && lesson.authorId && lesson.authorId === user.id,
+                  )}
+                  onEdit={editLesson}
+                  onDelete={askDelete}
+                />
               ))}
-            </Grid>
+            </div>
           )}
-      </Container>
+      </div>
 
       <Dialog
         open={Boolean(deleting)}
-        onClose={closeDelete}
-        fullWidth
-        maxWidth="xs"
+        onOpenChange={(next) => !next && closeDelete()}
       >
-        <DialogTitle>Delete this lesson?</DialogTitle>
-        <DialogContent>
-          <DialogContentText sx={{ mb: 2 }}>
-            This permanently deletes <strong>{deleteTarget}</strong>. This can’t
-            be undone. To confirm, type the lesson’s name below.
-          </DialogContentText>
-          <TextField
-            autoFocus
-            fullWidth
-            size="small"
-            label="Lesson name"
-            placeholder={deleteTarget}
-            value={deleteText}
-            onChange={(e) => setDeleteText(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter" && deleteConfirmed && !deleteBusy) {
-                confirmDelete();
-              }
-            }}
-            disabled={deleteBusy}
-          />
+        <DialogContent className="sm:max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Delete this lesson?</DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-muted-foreground">
+            This permanently deletes <strong>{deleteTarget}</strong>. This
+            can&rsquo;t be undone. To confirm, type the lesson&rsquo;s name
+            below.
+          </p>
+          <Field>
+            <FieldLabel htmlFor="hub-delete-name" className="sr-only">
+              Lesson name
+            </FieldLabel>
+            <Input
+              id="hub-delete-name"
+              autoFocus
+              placeholder={deleteTarget}
+              value={deleteText}
+              onChange={(e) => setDeleteText(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && deleteConfirmed && !deleteBusy) {
+                  confirmDelete();
+                }
+              }}
+              disabled={deleteBusy}
+            />
+          </Field>
           {deleteError && (
-            <Alert severity="error" sx={{ mt: 2 }}>
-              {deleteError}
+            <Alert variant="destructive">
+              <AlertDescription>{deleteError}</AlertDescription>
             </Alert>
           )}
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={closeDelete} disabled={deleteBusy}>
-            Cancel
-          </Button>
-          <Button
-            color="error"
-            variant="contained"
-            onClick={confirmDelete}
-            disabled={!deleteConfirmed || deleteBusy}
-            startIcon={
-              deleteBusy ? (
-                <CircularProgress size={16} color="inherit" />
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={closeDelete}
+              disabled={deleteBusy}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={confirmDelete}
+              disabled={!deleteConfirmed || deleteBusy}
+            >
+              {deleteBusy ? (
+                <Spinner data-icon="inline-start" />
               ) : (
-                <DeleteOutlineIcon />
-              )
-            }
-          >
-            Delete
-          </Button>
-        </DialogActions>
+                <Trash2Icon data-icon="inline-start" />
+              )}
+              Delete
+            </Button>
+          </DialogFooter>
+        </DialogContent>
       </Dialog>
 
       <Snackbar
@@ -681,6 +552,6 @@ export default function HubPage() {
         message={toast}
         anchorOrigin={{ vertical: "bottom", horizontal: "center" }}
       />
-    </Box>
+    </div>
   );
 }
