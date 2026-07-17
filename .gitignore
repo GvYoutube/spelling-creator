@@ -29,3 +29,6 @@ logs/
 
 # OS
 .DS_Store
+
+# Playwright MCP screenshots/snapshots (browser-based verification artifacts)
+.playwright-mcp/

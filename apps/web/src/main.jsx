@@ -1,6 +1,10 @@
 import React from "react";
 import ReactDOM from "react-dom/client";
 import { BrowserRouter } from "react-router-dom";
+// Tailwind + shadcn/ui tokens (theme + utilities layers only, no preflight —
+// see the comment at the top of globals.css for why). Imported once here so
+// every migrated component can use the utility classes and CSS variables.
+import "./styles/globals.css";
 // Self-hosted Roboto via Fontsource (loads faster than the Google Fonts CDN).
 // Weights match the theme's typography (300/400/500/700).
 import "@fontsource/roboto/300.css";
@@ -30,24 +34,30 @@ import { ThemeProvider } from "@mui/material/styles";
 import App from "./App.jsx";
 import theme from "./theme.js";
 import { AuthProvider } from "./lib/auth.jsx";
+import { ColorSchemeProvider } from "./lib/colorScheme.jsx";
 import DisplayNameGate from "./components/DisplayNameGate.jsx";
 
 // BrowserRouter gives every page a real path (e.g. /hub/:id) so the Worker can
 // see which page a crawler requested and return a prerendered snapshot. The
 // Worker serves index.html for unknown paths (assets single-page-application
 // fallback), so client-side deep links resolve. AuthProvider exposes the
-// Supabase session to every page.
+// Supabase session to every page. ColorSchemeProvider is outermost (and reads
+// a value already applied pre-paint by index.html's inline script) so
+// light/dark is available everywhere, including to still-MUI pages once they
+// start adopting the new tokens.
 ReactDOM.createRoot(document.getElementById("root")).render(
   <React.StrictMode>
-    <ThemeProvider theme={theme}>
-      <CssBaseline />
-      <BrowserRouter>
-        <AuthProvider>
-          <DisplayNameGate>
-            <App />
-          </DisplayNameGate>
-        </AuthProvider>
-      </BrowserRouter>
-    </ThemeProvider>
+    <ColorSchemeProvider>
+      <ThemeProvider theme={theme}>
+        <CssBaseline />
+        <BrowserRouter>
+          <AuthProvider>
+            <DisplayNameGate>
+              <App />
+            </DisplayNameGate>
+          </AuthProvider>
+        </BrowserRouter>
+      </ThemeProvider>
+    </ColorSchemeProvider>
   </React.StrictMode>,
 );

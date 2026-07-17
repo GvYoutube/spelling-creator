@@ -47,6 +47,26 @@
     <!-- Google Identity Services. Provides the OAuth2 token client used to
          save lessons to the signed-in user's Google Drive as Google Docs. -->
     <script src="https://accounts.google.com/gsi/client" async defer></script>
+    <!-- Apply the stored/OS color scheme before first paint so there's no
+         flash of the wrong theme. Mirrors src/lib/colorScheme.jsx, which
+         takes over once React mounts. Keep the storage key in sync with the
+         STORAGE_KEY constant there. -->
+    <script>
+      (function () {
+        try {
+          var stored = localStorage.getItem("spelling-creator:color-scheme");
+          var resolved =
+            stored === "light" || stored === "dark"
+              ? stored
+              : window.matchMedia("(prefers-color-scheme: dark)").matches
+                ? "dark"
+                : "light";
+          document.documentElement.setAttribute("data-theme", resolved);
+        } catch (e) {
+          // localStorage/matchMedia unavailable — leave unset, defaults to light.
+        }
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>

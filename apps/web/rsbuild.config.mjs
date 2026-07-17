@@ -1,5 +1,10 @@
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { defineConfig, loadEnv } from "@rsbuild/core";
 import { pluginReact } from "@rsbuild/plugin-react";
+import { pluginTailwindcss } from "@rsbuild/plugin-tailwindcss";
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 // Expose the VITE_-prefixed env vars to client code as `import.meta.env.VITE_*`,
 // preserving the previous Vite behaviour. loadEnv reads apps/web/.env (and
@@ -11,6 +16,7 @@ export default defineConfig({
     pluginReact({
       reactCompiler: true,
     }),
+    pluginTailwindcss(),
   ],
   source: {
     entry: {
@@ -21,6 +27,13 @@ export default defineConfig({
       // html2pdf.js / mammoth reference a Node-ish `global`; map it to
       // globalThis so the browser build resolves it (was Vite's `define`).
       global: "globalThis",
+    },
+  },
+  resolve: {
+    // "@/..." mirrors shadcn/ui's default alias convention. New shadcn-sourced
+    // code uses it; pre-existing app code keeps its relative imports.
+    alias: {
+      "@": path.resolve(__dirname, "src"),
     },
   },
   html: {

@@ -1,0 +1,206 @@
+/* Tailwind v4, theme + utilities only — preflight (the reset) is deliberately
+   left out while MUI's <CssBaseline /> is still mounted, so the two resets
+   don't fight. Swapped for the full `@import "tailwindcss";` in the cleanup
+   phase once CssBaseline is removed. See CLAUDE.md migration plan. */
+@import "tailwindcss/theme.css" layer(theme);
+@import "tailwindcss/utilities.css" layer(utilities);
+@import "tw-animate-css";
+
+/* Dark mode is driven by data-theme="dark"|"light" on <html> (set by
+   ColorSchemeProvider, src/lib/colorScheme.jsx), not shadcn's default .dark
+   class — matches the approved design mockup's own toggle mechanism. */
+@custom-variant dark (&:is([data-theme="dark"] *));
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+
+  /* Spelling Creator semantic accents — distinct from shadcn's defaults. */
+  --color-success: var(--success);
+  --color-success-foreground: var(--success-foreground);
+  --color-flag: var(--flag);
+  --color-flag-foreground: var(--flag-foreground);
+  --color-focus: var(--focus);
+  --color-focus-foreground: var(--focus-foreground);
+
+  --radius-sm: calc(var(--radius) * 0.6);
+  --radius-md: calc(var(--radius) * 0.8);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) * 1.4);
+  --radius-panel: var(--radius-panel);
+  --radius-tile: var(--radius-tile);
+  --radius-pill: var(--radius-pill);
+}
+
+:root {
+  --radius: 0.875rem; /* 14px, --radius-card from the mockup */
+  --radius-panel: 1.25rem; /* 20px */
+  --radius-tile: 0.5rem; /* 8px */
+  --radius-pill: 999px;
+
+  --background: #dee3f3;
+  --foreground: #1e2138;
+  --card: rgba(255, 255, 255, 0.72);
+  --card-foreground: #1e2138;
+  --popover: rgba(255, 255, 255, 0.86);
+  --popover-foreground: #1e2138;
+  --primary: #4f5fd9;
+  --primary-foreground: #f2f3ff;
+  --secondary: rgba(255, 255, 255, 0.86);
+  --secondary-foreground: #1e2138;
+  --muted: rgba(255, 255, 255, 0.86);
+  --muted-foreground: #585d80;
+  --accent: rgba(79, 95, 217, 0.12);
+  --accent-foreground: #4f5fd9;
+  --destructive: #d94b64;
+  --destructive-foreground: #f2f3ff;
+  --border: rgba(255, 255, 255, 0.85);
+  --input: rgba(30, 33, 56, 0.09);
+  --ring: #4f5fd9;
+
+  --success: #2f9e6e;
+  --success-foreground: #f2f3ff;
+  --flag: #d94b64;
+  --flag-foreground: #f2f3ff;
+  --focus: #b9791f;
+  --focus-foreground: #1e2138;
+
+  --glass-blur: 18px;
+  --glass-border-outer: rgba(30, 33, 56, 0.09);
+  --shadow-panel:
+    0 24px 48px -24px rgba(30, 34, 70, 0.32), 0 2px 8px rgba(30, 34, 70, 0.06);
+  --shadow-tile:
+    inset 0 1px 0 rgba(255, 255, 255, 0.7), 0 1px 2px rgba(30, 34, 70, 0.14);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --background: #12131f;
+    --foreground: #eef0fb;
+    --card: rgba(35, 38, 61, 0.58);
+    --card-foreground: #eef0fb;
+    --popover: rgba(40, 43, 68, 0.74);
+    --popover-foreground: #eef0fb;
+    --primary: #8891f2;
+    --primary-foreground: #14162a;
+    --secondary: rgba(40, 43, 68, 0.74);
+    --secondary-foreground: #eef0fb;
+    --muted: rgba(40, 43, 68, 0.74);
+    --muted-foreground: #aeb3d1;
+    --accent: rgba(124, 136, 238, 0.16);
+    --accent-foreground: #8891f2;
+    --destructive: #f0788d;
+    --destructive-foreground: #14162a;
+    --border: rgba(255, 255, 255, 0.1);
+    --input: rgba(255, 255, 255, 0.12);
+    --ring: #8891f2;
+
+    --success: #57cd99;
+    --success-foreground: #14162a;
+    --flag: #f0788d;
+    --flag-foreground: #14162a;
+    --focus: #e3b567;
+    --focus-foreground: #14162a;
+
+    --glass-border-outer: rgba(0, 0, 0, 0.45);
+    --shadow-panel:
+      0 28px 60px -22px rgba(0, 0, 0, 0.65), 0 2px 10px rgba(0, 0, 0, 0.4);
+    --shadow-tile:
+      inset 0 1px 0 rgba(255, 255, 255, 0.08), 0 1px 3px rgba(0, 0, 0, 0.4);
+  }
+}
+
+:root[data-theme="dark"] {
+  --background: #12131f;
+  --foreground: #eef0fb;
+  --card: rgba(35, 38, 61, 0.58);
+  --card-foreground: #eef0fb;
+  --popover: rgba(40, 43, 68, 0.74);
+  --popover-foreground: #eef0fb;
+  --primary: #8891f2;
+  --primary-foreground: #14162a;
+  --secondary: rgba(40, 43, 68, 0.74);
+  --secondary-foreground: #eef0fb;
+  --muted: rgba(40, 43, 68, 0.74);
+  --muted-foreground: #aeb3d1;
+  --accent: rgba(124, 136, 238, 0.16);
+  --accent-foreground: #8891f2;
+  --destructive: #f0788d;
+  --destructive-foreground: #14162a;
+  --border: rgba(255, 255, 255, 0.1);
+  --input: rgba(255, 255, 255, 0.12);
+  --ring: #8891f2;
+
+  --success: #57cd99;
+  --success-foreground: #14162a;
+  --flag: #f0788d;
+  --flag-foreground: #14162a;
+  --focus: #e3b567;
+  --focus-foreground: #14162a;
+
+  --glass-border-outer: rgba(0, 0, 0, 0.45);
+  --shadow-panel:
+    0 28px 60px -22px rgba(0, 0, 0, 0.65), 0 2px 10px rgba(0, 0, 0, 0.4);
+  --shadow-tile:
+    inset 0 1px 0 rgba(255, 255, 255, 0.08), 0 1px 3px rgba(0, 0, 0, 0.4);
+}
+
+:root[data-theme="light"] {
+  --background: #dee3f3;
+  --foreground: #1e2138;
+  --card: rgba(255, 255, 255, 0.72);
+  --card-foreground: #1e2138;
+  --popover: rgba(255, 255, 255, 0.86);
+  --popover-foreground: #1e2138;
+  --primary: #4f5fd9;
+  --primary-foreground: #f2f3ff;
+  --secondary: rgba(255, 255, 255, 0.86);
+  --secondary-foreground: #1e2138;
+  --muted: rgba(255, 255, 255, 0.86);
+  --muted-foreground: #585d80;
+  --accent: rgba(79, 95, 217, 0.12);
+  --accent-foreground: #4f5fd9;
+  --destructive: #d94b64;
+  --destructive-foreground: #f2f3ff;
+  --border: rgba(255, 255, 255, 0.85);
+  --input: rgba(30, 33, 56, 0.09);
+  --ring: #4f5fd9;
+
+  --success: #2f9e6e;
+  --success-foreground: #f2f3ff;
+  --flag: #d94b64;
+  --flag-foreground: #f2f3ff;
+  --focus: #b9791f;
+  --focus-foreground: #1e2138;
+
+  --glass-blur: 18px;
+  --glass-border-outer: rgba(30, 33, 56, 0.09);
+  --shadow-panel:
+    0 24px 48px -24px rgba(30, 34, 70, 0.32), 0 2px 8px rgba(30, 34, 70, 0.06);
+  --shadow-tile:
+    inset 0 1px 0 rgba(255, 255, 255, 0.7), 0 1px 2px rgba(30, 34, 70, 0.14);
+}
+
+/* A global body background/text-color reset and the body font-family are
+   intentionally NOT set yet — MUI's <CssBaseline /> still owns those
+   globally. Wiring them here would repaint every not-yet-migrated MUI page.
+   Both move here in the Phase 6 cleanup, once CssBaseline is removed.
+   Migrated components set their own background and text utility classes in
+   the meantime. */
