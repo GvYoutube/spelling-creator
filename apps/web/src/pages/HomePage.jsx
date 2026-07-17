@@ -12,36 +12,27 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { Link as RouterLink, useNavigate } from "react-router-dom";
-import AppBar from "@mui/material/AppBar";
-import Toolbar from "@mui/material/Toolbar";
-import Typography from "@mui/material/Typography";
-import Button from "@mui/material/Button";
-import Box from "@mui/material/Box";
-import Container from "@mui/material/Container";
-import Stack from "@mui/material/Stack";
-import Grid from "@mui/material/Grid2";
-import Paper from "@mui/material/Paper";
-import Card from "@mui/material/Card";
-import CardActionArea from "@mui/material/CardActionArea";
-import CircularProgress from "@mui/material/CircularProgress";
-import Divider from "@mui/material/Divider";
-import Alert from "@mui/material/Alert";
-import useMediaQuery from "@mui/material/useMediaQuery";
-import { useTheme } from "@mui/material/styles";
-import EditIcon from "@mui/icons-material/Edit";
-import SpellcheckIcon from "@mui/icons-material/Spellcheck";
-import CollectionsBookmarkIcon from "@mui/icons-material/CollectionsBookmark";
-import AutoAwesomeIcon from "@mui/icons-material/AutoAwesome";
-import ImageSearchIcon from "@mui/icons-material/ImageSearch";
-import GroupsIcon from "@mui/icons-material/Groups";
-import DescriptionIcon from "@mui/icons-material/Description";
-import RssFeedIcon from "@mui/icons-material/RssFeed";
-import NotificationsNoneIcon from "@mui/icons-material/NotificationsNone";
-import HistoryIcon from "@mui/icons-material/History";
-import PeopleAltIcon from "@mui/icons-material/PeopleAlt";
+import {
+  BellIcon,
+  BookMarkedIcon,
+  FileTextIcon,
+  HistoryIcon,
+  ImagePlusIcon,
+  PencilIcon,
+  RssIcon,
+  SparklesIcon,
+  SpellCheckIcon,
+  Users2Icon,
+  UsersIcon,
+} from "lucide-react";
+import AppHeader from "../components/AppHeader.jsx";
 import NavActions from "../components/NavActions.jsx";
 import FloatingWords from "../components/FloatingWords.jsx";
 import { FeedListSkeleton } from "../components/Skeletons.jsx";
+import { Button } from "../components/ui/button.jsx";
+import { Alert, AlertDescription } from "../components/ui/alert.jsx";
+import { Spinner } from "../components/ui/spinner.jsx";
+import { cn } from "../lib/utils.js";
 import { useAuth } from "../lib/auth.jsx";
 import { useDocumentMeta } from "../lib/seo.js";
 import { fetchLatestLessons, lessonHubEnabled } from "../lib/lessons.js";
@@ -54,42 +45,42 @@ import { fetchNotifications } from "../lib/notifications.js";
 const FEATURES = [
   {
     key: "editor",
-    icon: EditIcon,
+    icon: PencilIcon,
     title: "A focused lesson editor",
     body: "Build lessons from named sections, each holding text, images, spelling-word lists and question blocks. Everything autosaves as you go.",
     image: "/home/feature-editor.jpg",
   },
   {
     key: "ai",
-    icon: AutoAwesomeIcon,
+    icon: SparklesIcon,
     title: "AI that helps you write",
     body: "Draft passage text, generate question ideas, or spin up a whole lesson concept with built-in AI suggestions — then edit anything to taste.",
     image: "/home/feature-ai.jpg",
   },
   {
     key: "images",
-    icon: ImageSearchIcon,
+    icon: ImagePlusIcon,
     title: "Find the perfect picture",
     body: "Search free image libraries without leaving the editor and drop an illustration straight into any section.",
     image: "/home/feature-images.jpg",
   },
   {
     key: "hub",
-    icon: CollectionsBookmarkIcon,
+    icon: BookMarkedIcon,
     title: "Share to the community hub",
     body: "Publish a lesson for everyone, browse what others have made, and copy any lesson to remix it into your own.",
     image: "/home/feature-hub.jpg",
   },
   {
     key: "collab",
-    icon: GroupsIcon,
+    icon: UsersIcon,
     title: "Collaborate live",
     body: "Invite a colleague to edit the same lesson in real time, with live cursors and a built-in chat.",
     image: "/home/feature-collab.jpg",
   },
   {
     key: "export",
-    icon: DescriptionIcon,
+    icon: FileTextIcon,
     title: "Export anywhere",
     body: "Download a finished lesson as a Word document or PDF, or save it straight to Google Docs for printing and sharing.",
     image: "/home/feature-export.jpg",
@@ -127,44 +118,19 @@ function FeatureImage({ src, alt, Icon }) {
   const [broken, setBroken] = useState(false);
   if (broken || !src) {
     return (
-      <Box
-        sx={{
-          width: "100%",
-          aspectRatio: "16 / 10",
-          borderRadius: 3,
-          display: "flex",
-          flexDirection: "column",
-          alignItems: "center",
-          justifyContent: "center",
-          gap: 1,
-          color: "primary.main",
-          bgcolor: "action.hover",
-          border: "1px dashed",
-          borderColor: "divider",
-        }}
-      >
-        <Icon sx={{ fontSize: 48, opacity: 0.6 }} />
-        <Typography variant="caption" color="text.secondary">
-          {alt}
-        </Typography>
-      </Box>
+      <div className="flex aspect-16/10 w-full flex-col items-center justify-center gap-2 rounded-xl border border-dashed border-border bg-accent text-primary">
+        <Icon className="size-12 opacity-60" />
+        <p className="text-xs text-muted-foreground">{alt}</p>
+      </div>
     );
   }
   return (
-    <Box
-      component="img"
+    <img
       src={src}
       alt={alt}
       loading="lazy"
       onError={() => setBroken(true)}
-      sx={{
-        width: "100%",
-        aspectRatio: "16 / 10",
-        objectFit: "cover",
-        borderRadius: 3,
-        boxShadow: 3,
-        display: "block",
-      }}
+      className="block aspect-16/10 w-full rounded-xl object-cover shadow-[var(--shadow-panel)]"
     />
   );
 }
@@ -173,35 +139,20 @@ function FeatureImage({ src, alt, Icon }) {
 function FeatureRow({ feature, flip }) {
   const Icon = feature.icon;
   return (
-    <Grid container spacing={{ xs: 3, md: 6 }} alignItems="center">
-      <Grid size={{ xs: 12, md: 6 }} order={{ xs: 1, md: flip ? 2 : 1 }}>
+    <div className="grid grid-cols-1 items-center gap-6 md:grid-cols-2 md:gap-12">
+      <div className={cn("order-1", flip ? "md:order-2" : "md:order-1")}>
         <FeatureImage src={feature.image} alt={feature.title} Icon={Icon} />
-      </Grid>
-      <Grid size={{ xs: 12, md: 6 }} order={{ xs: 2, md: flip ? 1 : 2 }}>
-        <Stack spacing={1.5}>
-          <Box
-            sx={{
-              width: 48,
-              height: 48,
-              borderRadius: 2,
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              bgcolor: "primary.main",
-              color: "primary.contrastText",
-            }}
-          >
-            <Icon />
-          </Box>
-          <Typography variant="h5" component="h3">
-            {feature.title}
-          </Typography>
-          <Typography variant="body1" color="text.secondary">
-            {feature.body}
-          </Typography>
-        </Stack>
-      </Grid>
-    </Grid>
+      </div>
+      <div className={cn("order-2", flip ? "md:order-1" : "md:order-2")}>
+        <div className="flex flex-col gap-3">
+          <div className="flex size-12 items-center justify-center rounded-lg bg-primary text-primary-foreground">
+            <Icon className="size-5" />
+          </div>
+          <h3 className="text-xl font-semibold md:text-2xl">{feature.title}</h3>
+          <p className="text-base text-muted-foreground">{feature.body}</p>
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -209,105 +160,77 @@ function FeatureRow({ feature, flip }) {
 function LandingView() {
   return (
     <>
-      {/* Hero: floating spelling words behind a headline + calls to action. */}
-      <Box
-        sx={{
-          position: "relative",
-          overflow: "hidden",
-          minHeight: { xs: "70vh", md: "78vh" },
-          display: "flex",
-          alignItems: "center",
-          color: "common.white",
+      {/* Hero: floating spelling words behind a headline + calls to action.
+          A fixed, theme-independent gradient (not tied to --primary, which
+          shifts between light/dark) — this banner always shows white text on
+          a bold brand-blue-to-violet backdrop, drawn from the same hex values
+          as --foreground/--primary-foreground (dark) and --primary (light),
+          which are also this design system's real brand colors, in place of
+          the old MUI theme.js hex triplet this replaced. */}
+      <div
+        className="relative flex min-h-[70vh] items-center overflow-hidden text-white md:min-h-[78vh]"
+        style={{
           background:
-            "linear-gradient(135deg, #1b2a6b 0%, #3b5bdb 55%, #5f3dc4 100%)",
+            "linear-gradient(135deg, #14162a 0%, #4f5fd9 55%, #5f3dc4 100%)",
         }}
       >
         <FloatingWords />
         {/* Darkening veil so the headline stays legible over the words. */}
-        <Box
-          sx={{
-            position: "absolute",
-            inset: 0,
+        <div
+          className="pointer-events-none absolute inset-0"
+          style={{
             background:
               "radial-gradient(circle at 50% 40%, rgba(0,0,0,0.15), rgba(0,0,0,0.55))",
-            pointerEvents: "none",
           }}
         />
-        <Container
-          maxWidth="md"
-          sx={{ position: "relative", textAlign: "center", py: 8 }}
-        >
-          <Typography
-            variant="h2"
-            component="h1"
-            sx={{
-              fontWeight: 800,
-              mb: 2,
-              textShadow: "0 2px 18px rgba(0,0,0,0.4)",
-            }}
+        <div className="relative mx-auto max-w-3xl px-4 py-16 text-center">
+          <h1
+            className="mb-4 text-4xl font-extrabold md:text-6xl"
+            style={{ textShadow: "0 2px 18px rgba(0,0,0,0.4)" }}
           >
             Spelling lessons that stick
-          </Typography>
-          <Typography
-            variant="h6"
-            sx={{
-              fontWeight: 400,
-              mb: 4,
-              opacity: 0.95,
-              textShadow: "0 1px 10px rgba(0,0,0,0.4)",
-            }}
+          </h1>
+          <p
+            className="mx-auto mb-8 max-w-xl text-lg opacity-95 md:text-xl"
+            style={{ textShadow: "0 1px 10px rgba(0,0,0,0.4)" }}
           >
             Build, share and print Spelling (S2C) lessons — with a focused
             editor, AI help, images and live collaboration.
-          </Typography>
-          <Stack
-            direction={{ xs: "column", sm: "row" }}
-            spacing={2}
-            justifyContent="center"
-          >
-            <Button
-              size="large"
-              variant="contained"
-              color="secondary"
-              component={RouterLink}
+          </p>
+          {/* Hand-styled rather than the shadcn Button variants — this hero
+              is a fixed-color surface regardless of app theme (see the note
+              above), and Button's variants carry their own dark: overrides
+              (meant for a normal page background) that would fight it. */}
+          <div className="flex flex-col justify-center gap-3 sm:flex-row">
+            <RouterLink
               to="/editor"
-              startIcon={<EditIcon />}
-              sx={{ px: 4, py: 1.25, fontSize: "1.05rem" }}
+              className="inline-flex items-center justify-center gap-2 rounded-md bg-white px-8 py-3 text-base font-medium text-[#1e2138] no-underline transition-colors hover:bg-white/90"
             >
+              <PencilIcon data-icon="inline-start" />
               Open the editor
-            </Button>
-            <Button
-              size="large"
-              variant="outlined"
-              component={RouterLink}
+            </RouterLink>
+            <RouterLink
               to="/hub"
-              startIcon={<CollectionsBookmarkIcon />}
-              sx={{
-                px: 4,
-                py: 1.25,
-                fontSize: "1.05rem",
-                color: "common.white",
-                borderColor: "rgba(255,255,255,0.7)",
-                "&:hover": { borderColor: "common.white" },
-              }}
+              className="inline-flex items-center justify-center gap-2 rounded-md border border-white/70 bg-transparent px-8 py-3 text-base font-medium text-white no-underline transition-colors hover:border-white hover:bg-white/10"
             >
+              <BookMarkedIcon data-icon="inline-start" />
               Browse the hub
-            </Button>
-          </Stack>
-        </Container>
-      </Box>
+            </RouterLink>
+          </div>
+        </div>
+      </div>
 
       {/* Calm feature run. */}
-      <Container maxWidth="lg" sx={{ py: { xs: 6, md: 10 } }}>
-        <Box sx={{ textAlign: "center", mb: { xs: 5, md: 8 } }}>
-          <Typography variant="overline" color="primary">
+      <div className="mx-auto max-w-6xl px-4 py-12 md:py-20">
+        <div className="mb-10 text-center md:mb-16">
+          <p className="text-sm font-semibold tracking-wide text-primary uppercase">
             Everything you need
-          </Typography>
-          <Typography variant="h3" component="h2" sx={{ fontWeight: 700 }}>
+          </p>
+          <h2 className="text-3xl font-bold md:text-4xl">
             From blank page to printed lesson
-          </Typography>
-        </Box>
-        <Stack spacing={{ xs: 7, md: 12 }}>
+          </h2>
+        </div>
+        <div className="flex flex-col gap-14 md:gap-24">
           {FEATURES.map((feature, i) => (
             <FeatureRow
               key={feature.key}
@@ -315,36 +238,24 @@ function LandingView() {
               flip={i % 2 === 1}
             />
           ))}
-        </Stack>
+        </div>
 
-        <Paper
-          variant="outlined"
-          sx={{
-            mt: { xs: 8, md: 12 },
-            p: { xs: 4, md: 6 },
-            textAlign: "center",
-            borderRadius: 4,
-          }}
-        >
-          <Typography variant="h4" sx={{ fontWeight: 700, mb: 1.5 }}>
+        <div className="mt-16 rounded-panel border border-border bg-card p-8 text-center text-card-foreground shadow-(--shadow-panel) md:mt-24 md:p-12">
+          <h2 className="mb-1.5 text-2xl font-bold md:text-3xl">
             Ready to make your first lesson?
-          </Typography>
-          <Typography variant="body1" color="text.secondary" sx={{ mb: 3 }}>
+          </h2>
+          <p className="mb-6 text-muted-foreground">
             No account needed to start building — sign in only when you want to
             publish or collaborate.
-          </Typography>
-          <Button
-            size="large"
-            variant="contained"
-            component={RouterLink}
-            to="/editor"
-            startIcon={<EditIcon />}
-            sx={{ px: 4, py: 1.25 }}
-          >
-            Open the editor
+          </p>
+          <Button size="lg" className="px-8" asChild>
+            <RouterLink to="/editor" className="no-underline">
+              <PencilIcon data-icon="inline-start" />
+              Open the editor
+            </RouterLink>
           </Button>
-        </Paper>
-      </Container>
+        </div>
+      </div>
     </>
   );
 }
@@ -354,51 +265,47 @@ function LandingView() {
 function FeedList({ entries, emptyText }) {
   const navigate = useNavigate();
   if (entries.length === 0) {
-    return (
-      <Typography variant="body2" color="text.secondary" sx={{ py: 2 }}>
-        {emptyText}
-      </Typography>
-    );
+    return <p className="py-2 text-sm text-muted-foreground">{emptyText}</p>;
   }
   return (
-    <Stack divider={<Divider flexItem />} spacing={0}>
+    <div className="flex flex-col divide-y divide-border">
       {entries.map((e) => {
         const path = toPath(e.link);
         return (
-          <Card
+          <button
             key={e.id || e.link}
-            elevation={0}
-            sx={{ bgcolor: "transparent" }}
+            type="button"
+            onClick={() => path && navigate(path)}
+            className="cursor-pointer rounded-md border-0 bg-transparent px-2 py-2.5 text-left transition-colors hover:bg-accent"
           >
-            <CardActionArea
-              onClick={() => path && navigate(path)}
-              sx={{ px: 1, py: 1.25, borderRadius: 2 }}
-            >
-              <Typography variant="subtitle2" noWrap>
-                {e.title || "Untitled"}
-              </Typography>
-              {e.summary && (
-                <Typography
-                  variant="body2"
-                  color="text.secondary"
-                  sx={{
-                    display: "-webkit-box",
-                    WebkitLineClamp: 2,
-                    WebkitBoxOrient: "vertical",
-                    overflow: "hidden",
-                  }}
-                >
-                  {e.summary}
-                </Typography>
-              )}
-              <Typography variant="caption" color="text.secondary">
-                {formatDateTime(e.updated)}
-              </Typography>
-            </CardActionArea>
-          </Card>
+            <p className="truncate text-sm font-medium">
+              {e.title || "Untitled"}
+            </p>
+            {e.summary && (
+              <p className="line-clamp-2 text-sm text-muted-foreground">
+                {e.summary}
+              </p>
+            )}
+            <p className="text-xs text-muted-foreground">
+              {formatDateTime(e.updated)}
+            </p>
+          </button>
         );
       })}
-    </Stack>
+    </div>
+  );
+}
+
+// A titled dashboard panel shared by every section below.
+function DashboardPanel({ icon: Icon, title, children }) {
+  return (
+    <div className="rounded-panel border border-border bg-card p-4 text-card-foreground shadow-(--shadow-panel) md:p-6">
+      <div className="mb-3 flex items-center gap-2">
+        <Icon className="size-4 text-primary" />
+        <h2 className="text-lg font-semibold">{title}</h2>
+      </div>
+      {children}
+    </div>
   );
 }
 
@@ -435,58 +342,43 @@ function DashboardView() {
   }, [load]);
 
   return (
-    <Container maxWidth="lg" sx={{ py: { xs: 3, md: 5 } }}>
-      <Stack
-        direction={{ xs: "column", sm: "row" }}
-        justifyContent="space-between"
-        alignItems={{ xs: "flex-start", sm: "center" }}
-        spacing={2}
-        sx={{ mb: 3 }}
-      >
-        <Box>
-          <Typography variant="h4" sx={{ fontWeight: 700 }}>
+    <div className="mx-auto max-w-5xl px-4 py-6 md:py-10">
+      <div className="mb-6 flex flex-col items-start justify-between gap-4 sm:flex-row sm:items-center">
+        <div>
+          <h1 className="text-2xl font-bold md:text-3xl">
             Welcome back{displayName ? `, ${displayName}` : ""}
-          </Typography>
-          <Typography variant="body1" color="text.secondary">
+          </h1>
+          <p className="text-muted-foreground">
             Pick up where you left off, or start something new.
-          </Typography>
-        </Box>
-        <Stack direction="row" spacing={1}>
-          <Button
-            variant="contained"
-            component={RouterLink}
-            to="/editor"
-            startIcon={<EditIcon />}
-          >
-            New lesson
+          </p>
+        </div>
+        <div className="flex shrink-0 gap-2">
+          <Button asChild>
+            <RouterLink to="/editor" className="no-underline">
+              <PencilIcon data-icon="inline-start" />
+              New lesson
+            </RouterLink>
           </Button>
-          <Button
-            variant="outlined"
-            component={RouterLink}
-            to="/hub"
-            startIcon={<CollectionsBookmarkIcon />}
-          >
-            Hub
+          <Button variant="outline" asChild>
+            <RouterLink to="/hub" className="no-underline">
+              <BookMarkedIcon data-icon="inline-start" />
+              Hub
+            </RouterLink>
           </Button>
-        </Stack>
-      </Stack>
+        </div>
+      </div>
 
       {/* The dashboard layout renders immediately; each feed shows skeleton rows
           until its data arrives, so panels don't jump in as a spinner clears. */}
-      <Stack spacing={3}>
+      <div className="flex flex-col gap-4">
         {/* Latest lessons + your activity, together in one section. */}
-        <Paper variant="outlined" sx={{ p: { xs: 2, md: 3 }, borderRadius: 3 }}>
-          <Grid container spacing={{ xs: 3, md: 4 }}>
-            <Grid size={{ xs: 12, md: 6 }}>
-              <Stack
-                direction="row"
-                spacing={1}
-                alignItems="center"
-                sx={{ mb: 1.5 }}
-              >
-                <RssFeedIcon color="primary" fontSize="small" />
-                <Typography variant="h6">Latest from the hub</Typography>
-              </Stack>
+        <div className="rounded-panel border border-border bg-card p-4 text-card-foreground shadow-(--shadow-panel) md:p-6">
+          <div className="grid grid-cols-1 gap-6 md:grid-cols-2 md:gap-8">
+            <div>
+              <div className="mb-2 flex items-center gap-2">
+                <RssIcon className="size-4 text-primary" />
+                <h2 className="text-lg font-semibold">Latest from the hub</h2>
+              </div>
               {loading ? (
                 <FeedListSkeleton count={5} />
               ) : (
@@ -495,17 +387,12 @@ function DashboardView() {
                   emptyText="No published lessons yet — be the first to share one."
                 />
               )}
-            </Grid>
-            <Grid size={{ xs: 12, md: 6 }}>
-              <Stack
-                direction="row"
-                spacing={1}
-                alignItems="center"
-                sx={{ mb: 1.5 }}
-              >
-                <HistoryIcon color="primary" fontSize="small" />
-                <Typography variant="h6">Your recent activity</Typography>
-              </Stack>
+            </div>
+            <div>
+              <div className="mb-2 flex items-center gap-2">
+                <HistoryIcon className="size-4 text-primary" />
+                <h2 className="text-lg font-semibold">Your recent activity</h2>
+              </div>
               {loading ? (
                 <FeedListSkeleton count={5} />
               ) : (
@@ -514,21 +401,12 @@ function DashboardView() {
                   emptyText="You haven't published or commented yet. Your activity will show up here."
                 />
               )}
-            </Grid>
-          </Grid>
-        </Paper>
+            </div>
+          </div>
+        </div>
 
         {/* Activity from the people this user follows (lessons + comments). */}
-        <Paper variant="outlined" sx={{ p: { xs: 2, md: 3 }, borderRadius: 3 }}>
-          <Stack
-            direction="row"
-            spacing={1}
-            alignItems="center"
-            sx={{ mb: 1.5 }}
-          >
-            <PeopleAltIcon color="primary" fontSize="small" />
-            <Typography variant="h6">From people you follow</Typography>
-          </Stack>
+        <DashboardPanel icon={Users2Icon} title="From people you follow">
           {loading ? (
             <FeedListSkeleton count={4} />
           ) : (
@@ -537,95 +415,69 @@ function DashboardView() {
               emptyText="Follow people from their profile to see their latest lessons and comments here."
             />
           )}
-        </Paper>
+        </DashboardPanel>
 
-        {/* Notifications, in a roomier view than the AppBar bell. */}
-        <Paper variant="outlined" sx={{ p: { xs: 2, md: 3 }, borderRadius: 3 }}>
-          <Stack
-            direction="row"
-            spacing={1}
-            alignItems="center"
-            sx={{ mb: 1.5 }}
-          >
-            <NotificationsNoneIcon color="primary" fontSize="small" />
-            <Typography variant="h6">Notifications</Typography>
-          </Stack>
+        {/* Notifications, in a roomier view than the header bell. */}
+        <DashboardPanel icon={BellIcon} title="Notifications">
           {loading ? (
             <FeedListSkeleton count={4} />
           ) : notifications.length === 0 ? (
-            <Typography variant="body2" color="text.secondary" sx={{ py: 2 }}>
+            <p className="py-2 text-sm text-muted-foreground">
               You&apos;re all caught up — no notifications.
-            </Typography>
+            </p>
           ) : (
-            <Stack divider={<Divider flexItem />} spacing={0}>
+            <div className="flex flex-col divide-y divide-border">
               {notifications.map((n) => {
                 const path = n.link?.startsWith("/") ? n.link : null;
                 const content = (
                   <>
-                    <Stack
-                      direction="row"
-                      spacing={1}
-                      alignItems="center"
-                      sx={{ mb: 0.25 }}
-                    >
+                    <div className="mb-0.5 flex items-center gap-1.5">
                       {!n.read && (
-                        <Box
-                          sx={{
-                            width: 8,
-                            height: 8,
-                            borderRadius: "50%",
-                            bgcolor: "error.main",
-                            flexShrink: 0,
-                          }}
-                        />
+                        <span className="size-2 shrink-0 rounded-full bg-destructive" />
                       )}
-                      <Typography
-                        variant="subtitle2"
-                        sx={{ fontWeight: n.read ? 500 : 700 }}
+                      <p
+                        className={cn(
+                          "text-sm",
+                          n.read ? "font-medium" : "font-bold",
+                        )}
                       >
                         {n.title}
-                      </Typography>
-                    </Stack>
+                      </p>
+                    </div>
                     {n.body && (
-                      <Typography
-                        variant="body2"
-                        color="text.secondary"
-                        sx={{
-                          whiteSpace: "pre-wrap",
-                          wordBreak: "break-word",
-                        }}
-                      >
+                      <p className="text-sm whitespace-pre-wrap break-words text-muted-foreground">
                         {n.body}
-                      </Typography>
+                      </p>
                     )}
-                    <Typography variant="caption" color="text.secondary">
+                    <p className="text-xs text-muted-foreground">
                       {formatDateTime(n.createdAt)}
-                    </Typography>
+                    </p>
                   </>
                 );
                 return n.link ? (
-                  <CardActionArea
+                  <button
                     key={n.id}
+                    type="button"
                     onClick={() =>
                       path
                         ? navigate(path)
                         : window.open(n.link, "_blank", "noopener")
                     }
-                    sx={{ px: 1, py: 1.5, borderRadius: 2 }}
+                    className="cursor-pointer rounded-md border-0 bg-transparent px-2 py-3 text-left transition-colors hover:bg-accent"
                   >
                     {content}
-                  </CardActionArea>
+                  </button>
                 ) : (
-                  <Box key={n.id} sx={{ px: 1, py: 1.5 }}>
+                  <div key={n.id} className="px-2 py-3">
                     {content}
-                  </Box>
+                  </div>
                 );
               })}
-            </Stack>
+            </div>
           )}
-        </Paper>
-      </Stack>
-    </Container>
+        </DashboardPanel>
+      </div>
+    </div>
   );
 }
 
@@ -636,8 +488,6 @@ export default function HomePage() {
       "Create, share and print Spelling (S2C) lessons with a focused editor, AI help, images and live collaboration.",
   });
   const { enabled, loading, user } = useAuth();
-  const theme = useTheme();
-  const isMobile = useMediaQuery(theme.breakpoints.down("md"));
 
   // Wait for the session to resolve before choosing a face, so a returning user
   // doesn't see the marketing splash flash before their dashboard.
@@ -645,62 +495,47 @@ export default function HomePage() {
   const signedIn = enabled && !!user;
 
   return (
-    <Box sx={{ minHeight: "100vh", pb: 8 }}>
-      <AppBar position="sticky" elevation={1}>
-        <Toolbar>
-          <SpellcheckIcon sx={{ mr: 1.5, flexShrink: 0 }} />
-          <Typography
-            variant="h6"
-            noWrap
-            component={RouterLink}
-            to="/"
-            sx={{
-              flexGrow: 1,
-              minWidth: 0,
-              mr: 1,
-              color: "inherit",
-              textDecoration: "none",
-            }}
-          >
+    <div className="min-h-screen bg-background pb-16 text-foreground">
+      <AppHeader
+        title={
+          <span className="inline-flex items-center gap-2">
+            <SpellCheckIcon className="size-5 shrink-0" />
             Spelling Creator
-          </Typography>
-          <Stack direction="row" spacing={1} alignItems="center">
-            {isMobile ? null : (
-              <Button
-                color="inherit"
-                variant="outlined"
-                component={RouterLink}
-                to="/editor"
-                startIcon={<EditIcon />}
-                sx={{ borderColor: "rgba(255,255,255,0.6)" }}
-              >
-                Editor
-              </Button>
-            )}
-            <NavActions current="home" />
-          </Stack>
-        </Toolbar>
-      </AppBar>
+          </span>
+        }
+        titleHref="/"
+      >
+        <RouterLink
+          to="/editor"
+          className="mr-1 hidden shrink-0 items-center gap-2 rounded-md border border-primary-foreground/60 bg-transparent px-4 py-2 text-sm font-medium text-primary-foreground no-underline transition-colors hover:bg-primary-foreground/10 md:inline-flex"
+        >
+          <PencilIcon data-icon="inline-start" />
+          Editor
+        </RouterLink>
+        <NavActions current="home" />
+      </AppHeader>
 
       {deciding ? (
-        <Box sx={{ display: "flex", justifyContent: "center", py: 12 }}>
-          <CircularProgress />
-        </Box>
+        <div className="flex justify-center py-24">
+          <Spinner className="size-8" />
+        </div>
       ) : signedIn ? (
         <DashboardView />
       ) : (
         <>
           {!enabled && (
-            <Container maxWidth="lg" sx={{ pt: 2 }}>
-              <Alert severity="info">
-                Accounts aren&apos;t configured, so sign-in and the dashboard
-                are unavailable — the editor and hub still work.
+            <div className="mx-auto max-w-6xl px-4 pt-4">
+              <Alert className="border-primary/40 bg-primary/10 text-primary">
+                <AlertDescription className="text-primary">
+                  Accounts aren&apos;t configured, so sign-in and the dashboard
+                  are unavailable — the editor and hub still work.
+                </AlertDescription>
               </Alert>
-            </Container>
+            </div>
           )}
           <LandingView />
         </>
       )}
-    </Box>
+    </div>
   );
 }
