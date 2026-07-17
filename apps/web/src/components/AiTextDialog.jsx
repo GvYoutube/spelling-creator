@@ -1,19 +1,18 @@
 import { useEffect, useRef, useState } from "react";
-import Dialog from "@mui/material/Dialog";
-import DialogTitle from "@mui/material/DialogTitle";
-import DialogContent from "@mui/material/DialogContent";
-import DialogActions from "@mui/material/DialogActions";
-import DialogContentText from "@mui/material/DialogContentText";
-import Button from "@mui/material/Button";
-import Box from "@mui/material/Box";
-import Stack from "@mui/material/Stack";
-import Alert from "@mui/material/Alert";
-import Tooltip from "@mui/material/Tooltip";
-import IconButton from "@mui/material/IconButton";
-import Typography from "@mui/material/Typography";
-import CircularProgress from "@mui/material/CircularProgress";
-import AutoAwesomeIcon from "@mui/icons-material/AutoAwesome";
-import ThumbDownAltOutlinedIcon from "@mui/icons-material/ThumbDownAltOutlined";
+import { SparklesIcon, ThumbsDownIcon } from "lucide-react";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+} from "./ui/dialog.jsx";
+import { Button } from "./ui/button.jsx";
+import { Alert, AlertDescription } from "./ui/alert.jsx";
+import { Spinner } from "./ui/spinner.jsx";
+import { Tooltip, TooltipTrigger, TooltipContent } from "./ui/tooltip.jsx";
+import { cn } from "../lib/utils.js";
 import { suggestText, dislikeText } from "../lib/aiSuggest.js";
 import { useAuth } from "../lib/auth.jsx";
 import { TURNSTILE_SITE_KEY, whenTurnstileReady } from "../lib/turnstile.js";
@@ -158,112 +157,110 @@ export default function AiTextDialog({
   return (
     <Dialog
       open={open}
-      onClose={working ? undefined : onClose}
-      fullWidth
-      maxWidth="xs"
+      onOpenChange={(next) => {
+        if (!next && !working) onClose?.();
+      }}
     >
-      <DialogTitle>Suggest text with AI</DialogTitle>
-      <DialogContent>
-        <Stack spacing={2} sx={{ mt: 0.5 }}>
-          <DialogContentText>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle>Suggest text with AI</DialogTitle>
+          <DialogDescription>
             {subject ? (
               <>
                 Generate a block of text for the section{" "}
-                <strong>“{subject}”</strong>.
+                <strong className="font-medium text-foreground">
+                  “{subject}”
+                </strong>
+                .
               </>
             ) : (
               "Give this section a name first, that's what the text will be about."
             )}
-          </DialogContentText>
+          </DialogDescription>
+        </DialogHeader>
 
+        <div className="flex flex-col gap-3">
           {result && (
-            <Box>
-              <Box
-                sx={{
-                  p: 1.5,
-                  borderRadius: 1,
-                  border: 1,
-                  borderColor: "divider",
-                  bgcolor: "action.hover",
-                  maxHeight: 220,
-                  overflowY: "auto",
-                  whiteSpace: "pre-wrap",
-                  typography: "body2",
-                }}
-              >
+            <div>
+              <div className="max-h-[220px] overflow-y-auto rounded-md border border-border bg-muted p-3 text-sm whitespace-pre-wrap">
                 {result}
-              </Box>
-              <Stack
-                direction="row"
-                spacing={1}
-                alignItems="center"
-                sx={{ mt: 1 }}
-              >
-                <Tooltip title={dislikeReason}>
-                  {/* span so the tooltip still shows while the button is disabled */}
-                  <span>
-                    <IconButton
-                      size="small"
-                      color={disliked ? "error" : "default"}
-                      onClick={handleDislike}
-                      disabled={!user || disliked || working}
-                      aria-label="Remove this suggestion from the cache"
-                    >
-                      {dislikeBusy ? (
-                        <CircularProgress size={18} color="inherit" />
-                      ) : (
-                        <ThumbDownAltOutlinedIcon fontSize="small" />
-                      )}
-                    </IconButton>
-                  </span>
+              </div>
+              <div className="mt-1.5 flex items-center gap-1.5">
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    {/* span so the tooltip still shows while the button is disabled */}
+                    <span>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon-sm"
+                        className={cn(disliked && "text-destructive")}
+                        onClick={handleDislike}
+                        disabled={!user || disliked || working}
+                        aria-label="Remove this suggestion from the cache"
+                      >
+                        {dislikeBusy ? <Spinner /> : <ThumbsDownIcon />}
+                      </Button>
+                    </span>
+                  </TooltipTrigger>
+                  <TooltipContent>{dislikeReason}</TooltipContent>
                 </Tooltip>
-                <Typography variant="caption" color="text.secondary">
+                <span className="text-xs text-muted-foreground">
                   {disliked
                     ? "Removed from the cache — generate a fresh one below."
                     : "Don’t like it? Remove it so the next try is freshly written."}
-                </Typography>
-              </Stack>
-            </Box>
+                </span>
+              </div>
+            </div>
           )}
 
           {/* The widget powers the initial generate and any regenerate. */}
-          <Box ref={widgetRef} sx={{ minHeight: 65 }} />
-          {error && <Alert severity="error">{error}</Alert>}
-        </Stack>
-      </DialogContent>
-      <DialogActions>
-        <Button onClick={onClose} disabled={working}>
-          Cancel
-        </Button>
-        {/* Insert is available once there is a reviewed suggestion. After a
-            dislike it is demoted to "Insert anyway" in favour of regenerating. */}
-        {result && (
+          <div ref={widgetRef} className="min-h-[65px]" />
+          {error && (
+            <Alert variant="destructive">
+              <AlertDescription>{error}</AlertDescription>
+            </Alert>
+          )}
+        </div>
+
+        <DialogFooter>
           <Button
-            variant={disliked ? "outlined" : "contained"}
-            onClick={handleInsert}
+            type="button"
+            variant="ghost"
+            onClick={onClose}
             disabled={working}
           >
-            {disliked ? "Insert anyway" : "Insert"}
+            Cancel
           </Button>
-        )}
-        {/* Generate the first suggestion, or a fresh one after a dislike. */}
-        {(!result || disliked) && (
-          <Button
-            variant="contained"
-            onClick={handleGenerate}
-            disabled={working || !token || !subject}
-            startIcon={
-              busy ? (
-                <CircularProgress size={16} color="inherit" />
+          {/* Insert is available once there is a reviewed suggestion. After a
+              dislike it is demoted to "Insert anyway" in favour of regenerating. */}
+          {result && (
+            <Button
+              type="button"
+              variant={disliked ? "outline" : "default"}
+              onClick={handleInsert}
+              disabled={working}
+            >
+              {disliked ? "Insert anyway" : "Insert"}
+            </Button>
+          )}
+          {/* Generate the first suggestion, or a fresh one after a dislike. */}
+          {(!result || disliked) && (
+            <Button
+              type="button"
+              onClick={handleGenerate}
+              disabled={working || !token || !subject}
+            >
+              {busy ? (
+                <Spinner data-icon="inline-start" />
               ) : (
-                <AutoAwesomeIcon />
-              )
-            }
-          >
-            {busy ? "Generating…" : result ? "Generate fresh" : "Generate"}
-          </Button>
-        )}
-      </DialogActions>
+                <SparklesIcon data-icon="inline-start" />
+              )}
+              {busy ? "Generating…" : result ? "Generate fresh" : "Generate"}
+            </Button>
+          )}
+        </DialogFooter>
+      </DialogContent>
     </Dialog>
   );
 }

@@ -1,18 +1,24 @@
 import { useEffect, useRef, useState } from "react";
-import Dialog from "@mui/material/Dialog";
-import DialogTitle from "@mui/material/DialogTitle";
-import DialogContent from "@mui/material/DialogContent";
-import DialogActions from "@mui/material/DialogActions";
-import DialogContentText from "@mui/material/DialogContentText";
-import Button from "@mui/material/Button";
-import Box from "@mui/material/Box";
-import Stack from "@mui/material/Stack";
-import Alert from "@mui/material/Alert";
-import TextField from "@mui/material/TextField";
-import MenuItem from "@mui/material/MenuItem";
-import ListItemText from "@mui/material/ListItemText";
-import CircularProgress from "@mui/material/CircularProgress";
-import AutoAwesomeIcon from "@mui/icons-material/AutoAwesome";
+import { SparklesIcon } from "lucide-react";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+} from "./ui/dialog.jsx";
+import { Button } from "./ui/button.jsx";
+import { Alert, AlertDescription } from "./ui/alert.jsx";
+import { Spinner } from "./ui/spinner.jsx";
+import {
+  Select,
+  SelectTrigger,
+  SelectValue,
+  SelectContent,
+  SelectItem,
+} from "./ui/select.jsx";
+import { Field, FieldLabel } from "./ui/field.jsx";
 import { suggestQuestion } from "../lib/aiSuggest.js";
 import { QUESTION_TYPE_LIST } from "../lib/questions.js";
 import { TURNSTILE_SITE_KEY, whenTurnstileReady } from "../lib/turnstile.js";
@@ -119,77 +125,88 @@ export default function AiQuestionDialog({
   return (
     <Dialog
       open={open}
-      onClose={busy ? undefined : onClose}
-      fullWidth
-      maxWidth="xs"
+      onOpenChange={(next) => {
+        if (!next && !busy) onClose?.();
+      }}
     >
-      <DialogTitle>Suggest a question with AI</DialogTitle>
-      <DialogContent>
-        <Stack spacing={2} sx={{ mt: 0.5 }}>
-          <DialogContentText>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle>Suggest a question with AI</DialogTitle>
+          <DialogDescription>
             {subject ? (
               <>
-                Generate a question for the section <strong>“{subject}”</strong>
+                Generate a question for the section{" "}
+                <strong className="font-medium text-foreground">
+                  “{subject}”
+                </strong>
                 .
               </>
             ) : (
               "Give this section a name first, that's what the question will be about."
             )}
-          </DialogContentText>
-          <TextField
-            select
-            label="Question type"
-            value={questionType}
-            onChange={(e) => setQuestionType(e.target.value)}
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="flex flex-col gap-3">
+          <Field>
+            <FieldLabel htmlFor="question-type">Question type</FieldLabel>
+            <Select
+              value={questionType}
+              onValueChange={setQuestionType}
+              disabled={busy}
+            >
+              <SelectTrigger id="question-type" className="w-full">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {QUESTION_TYPE_LIST.map((q) => (
+                  <SelectItem key={q.key} value={q.key}>
+                    <span
+                      className="inline-block size-3 shrink-0 rounded-full"
+                      style={{ backgroundColor: q.color }}
+                    />
+                    <span className="flex flex-col">
+                      <span>{q.label}</span>
+                      <span className="text-xs text-muted-foreground">
+                        {q.description}
+                      </span>
+                    </span>
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </Field>
+          <div ref={widgetRef} className="min-h-[65px]" />
+          {error && (
+            <Alert variant="destructive">
+              <AlertDescription>{error}</AlertDescription>
+            </Alert>
+          )}
+        </div>
+
+        <DialogFooter>
+          <Button
+            type="button"
+            variant="ghost"
+            onClick={onClose}
             disabled={busy}
-            fullWidth
-            size="small"
           >
-            {QUESTION_TYPE_LIST.map((q) => (
-              <MenuItem key={q.key} value={q.key}>
-                <Box
-                  component="span"
-                  sx={{
-                    display: "inline-block",
-                    width: 12,
-                    height: 12,
-                    borderRadius: "50%",
-                    bgcolor: q.color,
-                    mr: 1.5,
-                    flexShrink: 0,
-                  }}
-                />
-                <ListItemText
-                  primary={q.label}
-                  secondary={q.description}
-                  sx={{ my: 0 }}
-                />
-              </MenuItem>
-            ))}
-          </TextField>
-          <Box ref={widgetRef} sx={{ minHeight: 65 }} />
-          {error && <Alert severity="error">{error}</Alert>}
-        </Stack>
-      </DialogContent>
-      <DialogActions>
-        <Button onClick={onClose} disabled={busy}>
-          Cancel
-        </Button>
-        <Button
-          variant="contained"
-          onClick={handleGenerate}
-          disabled={busy || !token || !subject}
-          startIcon={
-            busy ? (
-              <CircularProgress size={16} color="inherit" />
+            Cancel
+          </Button>
+          <Button
+            type="button"
+            onClick={handleGenerate}
+            disabled={busy || !token || !subject}
+          >
+            {busy ? (
+              <Spinner data-icon="inline-start" />
             ) : (
-              <AutoAwesomeIcon />
-            )
-          }
-        >
-          {busy ? "Generating…" : "Generate"}
-        </Button>
-      </DialogActions>
+              <SparklesIcon data-icon="inline-start" />
+            )}
+            {busy ? "Generating…" : "Generate"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
     </Dialog>
   );
 }

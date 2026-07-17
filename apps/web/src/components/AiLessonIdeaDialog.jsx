@@ -1,17 +1,17 @@
 import { useEffect, useRef, useState } from "react";
-import Dialog from "@mui/material/Dialog";
-import DialogTitle from "@mui/material/DialogTitle";
-import DialogContent from "@mui/material/DialogContent";
-import DialogActions from "@mui/material/DialogActions";
-import DialogContentText from "@mui/material/DialogContentText";
-import Button from "@mui/material/Button";
-import Box from "@mui/material/Box";
-import Stack from "@mui/material/Stack";
-import Alert from "@mui/material/Alert";
-import Typography from "@mui/material/Typography";
-import Chip from "@mui/material/Chip";
-import CircularProgress from "@mui/material/CircularProgress";
-import AutoAwesomeIcon from "@mui/icons-material/AutoAwesome";
+import { SparklesIcon } from "lucide-react";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+} from "./ui/dialog.jsx";
+import { Button } from "./ui/button.jsx";
+import { Alert, AlertDescription } from "./ui/alert.jsx";
+import { Spinner } from "./ui/spinner.jsx";
+import { Badge } from "./ui/badge.jsx";
 import { suggestLessonIdeas } from "../lib/aiSuggest.js";
 import { TURNSTILE_SITE_KEY, whenTurnstileReady } from "../lib/turnstile.js";
 
@@ -118,78 +118,82 @@ export default function AiLessonIdeaDialog({
   return (
     <Dialog
       open={open}
-      onClose={busy ? undefined : onClose}
-      fullWidth
-      maxWidth="sm"
+      onOpenChange={(next) => {
+        if (!next && !busy) onClose?.();
+      }}
     >
-      <DialogTitle>Suggest lesson ideas with AI</DialogTitle>
-      <DialogContent>
-        <Stack spacing={2} sx={{ mt: 0.5 }}>
-          <DialogContentText component="div">
+      <DialogContent className="sm:max-w-lg">
+        <DialogHeader>
+          <DialogTitle>Suggest lesson ideas with AI</DialogTitle>
+          <DialogDescription>
             {ageRange ? (
               <>
                 Ideas for lessons aimed at{" "}
-                <Chip size="small" label={ageRange} sx={{ mx: 0.25 }} />.
+                <Badge variant="secondary" className="align-middle">
+                  {ageRange}
+                </Badge>
+                .
               </>
             ) : (
               "Set an age range above to tailor the ideas, or generate general ideas now."
             )}{" "}
             Pick one to use it as your lesson title.
-          </DialogContentText>
+          </DialogDescription>
+        </DialogHeader>
 
+        <div className="flex flex-col gap-3">
           {ideas.length > 0 && (
-            <Stack spacing={1}>
+            <div className="flex flex-col gap-2">
               {ideas.map((idea, i) => (
-                <Box
+                <button
                   key={i}
+                  type="button"
                   onClick={() => handlePick(idea)}
-                  sx={{
-                    p: 1.5,
-                    borderRadius: 1,
-                    border: 1,
-                    borderColor: "divider",
-                    cursor: "pointer",
-                    "&:hover": {
-                      borderColor: "primary.main",
-                      bgcolor: "action.hover",
-                    },
-                  }}
+                  className="cursor-pointer rounded-md border border-border bg-transparent p-3 text-left transition-colors hover:border-primary hover:bg-accent"
                 >
-                  <Typography variant="subtitle2">{idea.title}</Typography>
+                  <p className="text-sm font-medium">{idea.title}</p>
                   {idea.description && (
-                    <Typography variant="body2" color="text.secondary">
+                    <p className="text-sm text-muted-foreground">
                       {idea.description}
-                    </Typography>
+                    </p>
                   )}
-                </Box>
+                </button>
               ))}
-            </Stack>
+            </div>
           )}
 
           {/* The widget powers the initial generate and any regenerate. */}
-          <Box ref={widgetRef} sx={{ minHeight: 65 }} />
-          {error && <Alert severity="error">{error}</Alert>}
-        </Stack>
-      </DialogContent>
-      <DialogActions>
-        <Button onClick={onClose} disabled={busy}>
-          Cancel
-        </Button>
-        <Button
-          variant="contained"
-          onClick={handleGenerate}
-          disabled={busy || !token}
-          startIcon={
-            busy ? (
-              <CircularProgress size={16} color="inherit" />
+          <div ref={widgetRef} className="min-h-[65px]" />
+          {error && (
+            <Alert variant="destructive">
+              <AlertDescription>{error}</AlertDescription>
+            </Alert>
+          )}
+        </div>
+
+        <DialogFooter>
+          <Button
+            type="button"
+            variant="ghost"
+            onClick={onClose}
+            disabled={busy}
+          >
+            Cancel
+          </Button>
+          <Button
+            type="button"
+            onClick={handleGenerate}
+            disabled={busy || !token}
+          >
+            {busy ? (
+              <Spinner data-icon="inline-start" />
             ) : (
-              <AutoAwesomeIcon />
-            )
-          }
-        >
-          {busy ? "Generating…" : ideas.length ? "Generate more" : "Generate"}
-        </Button>
-      </DialogActions>
+              <SparklesIcon data-icon="inline-start" />
+            )}
+            {busy ? "Generating…" : ideas.length ? "Generate more" : "Generate"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
     </Dialog>
   );
 }
