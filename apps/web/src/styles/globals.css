@@ -11,7 +11,14 @@
    popover/dropdown/select panels, MergeDialog's diff boxes, etc.) was
    silently rendering a solid text-colored ring instead of the intended soft
    `--border` glass edge. Full preflight would fix this on its own, but
-   pulling in the rest of it this early would fight with CssBaseline. */
+   pulling in the rest of it this early would fight with CssBaseline.
+
+   A second preflight rule is cherry-picked alongside it: form controls don't
+   inherit typography or color from their ancestors without preflight —
+   `<textarea>` fell back to the browser's UA monospace font and every native
+   control fell back to UA black text, regardless of our `text-foreground`
+   classes elsewhere. Found via ContentBlock.jsx's LiveTextarea rendering in
+   a monospace font with near-invisible text. */
 @layer theme, base, utilities;
 @import "tailwindcss/theme.css" layer(theme);
 @import "tailwindcss/utilities.css" layer(utilities);
@@ -66,6 +73,18 @@
   ::before,
   ::after {
     border-color: var(--border);
+  }
+
+  button,
+  input,
+  optgroup,
+  select,
+  textarea {
+    font-family: inherit;
+    font-size: 100%;
+    font-weight: inherit;
+    line-height: inherit;
+    color: inherit;
   }
 }
 

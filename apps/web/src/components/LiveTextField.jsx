@@ -1,5 +1,5 @@
-import { useEffect, useRef, useState } from "react";
 import TextField from "@mui/material/TextField";
+import { useLiveField } from "../lib/useLiveField.js";
 
 // A controlled MUI TextField that keeps the value it's displaying in *local*
 // state while the user is typing, and only commits up to the parent (via
@@ -15,6 +15,11 @@ import TextField from "@mui/material/TextField";
 //
 // onCommit receives the new string. All other props are forwarded to TextField,
 // so callers keep using `slotProps`, `multiline`, `label`, etc. as before.
+//
+// This MUI-backed component still has two callers not yet migrated to
+// shadcn (SectionCard.jsx, EditorPage.jsx). Migrated callers use the
+// shadcn-flavored LiveInput/LiveTextarea below instead, which share the same
+// buffering logic via useLiveField.
 export default function LiveTextField({
   value,
   onCommit,
@@ -23,63 +28,25 @@ export default function LiveTextField({
   commitDelay = 200,
   ...rest
 }) {
-  const [local, setLocal] = useState(value ?? "");
-  const focusedRef = useRef(false);
-  const timerRef = useRef(null);
-
-  // Adopt upstream changes (a remote collaborator's edit, the spelling "fill"
-  // button, a fork/import) — but not while we're mid-edit, so the caret never
-  // jumps and our own in-flight keystrokes aren't clobbered by the value we just
-  // committed echoing back.
-  useEffect(() => {
-    if (!focusedRef.current) setLocal(value ?? "");
-  }, [value]);
-
-  // Flush any pending commit if the field unmounts while focused (e.g. the block
-  // is deleted or reordered mid-edit) so the last keystrokes aren't lost.
-  useEffect(
-    () => () => {
-      if (timerRef.current) clearTimeout(timerRef.current);
-    },
-    [],
+  const { local, handleChange, handleFocus, handleBlur } = useLiveField(
+    value,
+    onCommit,
+    commitDelay,
   );
-
-  const commit = (next) => {
-    if (timerRef.current) {
-      clearTimeout(timerRef.current);
-      timerRef.current = null;
-    }
-    if (next !== (value ?? "")) onCommit(next);
-  };
-
-  const handleChange = (e) => {
-    const next = e.target.value;
-    setLocal(next);
-    if (timerRef.current) clearTimeout(timerRef.current);
-    timerRef.current = setTimeout(() => {
-      timerRef.current = null;
-      if (next !== (value ?? "")) onCommit(next);
-    }, commitDelay);
-  };
-
-  const handleFocus = (e) => {
-    focusedRef.current = true;
-    onFocus?.(e);
-  };
-
-  const handleBlur = (e) => {
-    focusedRef.current = false;
-    commit(local);
-    onBlur?.(e);
-  };
 
   return (
     <TextField
       {...rest}
       value={local}
       onChange={handleChange}
-      onFocus={handleFocus}
-      onBlur={handleBlur}
+      onFocus={(e) => {
+        handleFocus();
+        onFocus?.(e);
+      }}
+      onBlur={(e) => {
+        handleBlur();
+        onBlur?.(e);
+      }}
     />
   );
 }

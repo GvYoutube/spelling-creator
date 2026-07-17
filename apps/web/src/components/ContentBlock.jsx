@@ -1,27 +1,28 @@
-import { memo, useRef, useState } from "react";
-import Box from "@mui/material/Box";
-import Stack from "@mui/material/Stack";
-import LiveTextField from "./LiveTextField.jsx";
-import IconButton from "@mui/material/IconButton";
-import Tooltip from "@mui/material/Tooltip";
-import Paper from "@mui/material/Paper";
-import Chip from "@mui/material/Chip";
-import Button from "@mui/material/Button";
-import Menu from "@mui/material/Menu";
-import MenuItem from "@mui/material/MenuItem";
-import ListItemText from "@mui/material/ListItemText";
-import Typography from "@mui/material/Typography";
-import ToggleButton from "@mui/material/ToggleButton";
-import ToggleButtonGroup from "@mui/material/ToggleButtonGroup";
-import DeleteOutlineIcon from "@mui/icons-material/DeleteOutline";
-import ArrowUpwardIcon from "@mui/icons-material/ArrowUpward";
-import ArrowDownwardIcon from "@mui/icons-material/ArrowDownward";
-import AddIcon from "@mui/icons-material/Add";
-import FormatAlignLeftIcon from "@mui/icons-material/FormatAlignLeft";
-import FormatAlignCenterIcon from "@mui/icons-material/FormatAlignCenter";
-import FormatAlignRightIcon from "@mui/icons-material/FormatAlignRight";
-import SwapHorizIcon from "@mui/icons-material/SwapHoriz";
-import AutoFixHighIcon from "@mui/icons-material/AutoFixHigh";
+import { memo, useRef } from "react";
+import {
+  Trash2Icon,
+  ArrowUpIcon,
+  ArrowDownIcon,
+  PlusIcon,
+  AlignLeftIcon,
+  AlignCenterIcon,
+  AlignRightIcon,
+  ArrowLeftRightIcon,
+  WandSparklesIcon,
+} from "lucide-react";
+import { Button } from "./ui/button.jsx";
+import { Badge } from "./ui/badge.jsx";
+import { Field, FieldLabel } from "./ui/field.jsx";
+import { Tooltip, TooltipTrigger, TooltipContent } from "./ui/tooltip.jsx";
+import { ToggleGroup, ToggleGroupItem } from "./ui/toggle-group.jsx";
+import {
+  DropdownMenu,
+  DropdownMenuTrigger,
+  DropdownMenuContent,
+  DropdownMenuItem,
+} from "./ui/dropdown-menu.jsx";
+import { LiveInput, LiveTextarea } from "./LiveField.jsx";
+import { cn } from "../lib/utils.js";
 import {
   fitWithin,
   imageSizeScale,
@@ -33,6 +34,32 @@ import { newId } from "../lib/id.js";
 import { useImageSrc } from "../lib/useImageSrc.js";
 import { questionMeta } from "../lib/questions.js";
 import { SPELLING_COLOR } from "../lib/spelling.js";
+
+// Small icon-button + tooltip, used throughout for the move/delete row —
+// wrapped in a <span> so the tooltip still shows while the button is
+// disabled (a plain disabled <button> doesn't fire pointer events at all).
+function ControlButton({ tooltip, disabled, destructive, ...props }) {
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <span>
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon-sm"
+            disabled={disabled}
+            className={cn(
+              destructive &&
+                "text-destructive hover:bg-destructive/10 hover:text-destructive",
+            )}
+            {...props}
+          />
+        </span>
+      </TooltipTrigger>
+      <TooltipContent>{tooltip}</TooltipContent>
+    </Tooltip>
+  );
+}
 
 function ContentBlock({
   block,
@@ -48,33 +75,18 @@ function ContentBlock({
   onReplaceImageSearch = null,
 }) {
   const controls = (
-    <Stack
-      direction="row"
-      spacing={0.5}
-      alignItems="center"
-      sx={{ flexShrink: 0 }}
-    >
+    <div className="flex shrink-0 items-center gap-1">
       {dragHandle}
-      <Tooltip title="Move up">
-        <span>
-          <IconButton size="small" onClick={onMoveUp} disabled={isFirst}>
-            <ArrowUpwardIcon fontSize="small" />
-          </IconButton>
-        </span>
-      </Tooltip>
-      <Tooltip title="Move down">
-        <span>
-          <IconButton size="small" onClick={onMoveDown} disabled={isLast}>
-            <ArrowDownwardIcon fontSize="small" />
-          </IconButton>
-        </span>
-      </Tooltip>
-      <Tooltip title="Delete block">
-        <IconButton size="small" color="error" onClick={onDelete}>
-          <DeleteOutlineIcon fontSize="small" />
-        </IconButton>
-      </Tooltip>
-    </Stack>
+      <ControlButton tooltip="Move up" onClick={onMoveUp} disabled={isFirst}>
+        <ArrowUpIcon />
+      </ControlButton>
+      <ControlButton tooltip="Move down" onClick={onMoveDown} disabled={isLast}>
+        <ArrowDownIcon />
+      </ControlButton>
+      <ControlButton tooltip="Delete block" onClick={onDelete} destructive>
+        <Trash2Icon />
+      </ControlButton>
+    </div>
   );
 
   if (block.type === "question") {
@@ -113,22 +125,18 @@ function ContentBlock({
 
   // text block
   return (
-    <Paper variant="outlined" sx={{ p: 2 }}>
-      <Stack direction="row" alignItems="flex-start" spacing={1}>
-        <LiveTextField
-          fullWidth
-          multiline
-          minRows={2}
+    <div className="rounded-md border border-border bg-card p-4 text-card-foreground">
+      <div className="flex items-start gap-2">
+        <LiveTextarea
           placeholder="Type lesson text here…"
           value={block.text || ""}
           onCommit={(text) => onChange({ ...block, text })}
-          slotProps={{
-            htmlInput: { "data-collab-field": `block:${block.id}:text` },
-          }}
+          data-collab-field={`block:${block.id}:text`}
+          className="min-h-16"
         />
         {controls}
-      </Stack>
-    </Paper>
+      </div>
+    </div>
   );
 }
 
@@ -144,7 +152,6 @@ function ImageBlock({
   onReplaceSearch = null,
 }) {
   const src = useImageSrc(block);
-  const [menuAnchor, setMenuAnchor] = useState(null);
   const fileRef = useRef(null);
   const canReplace = Boolean(onReplaceFile || onReplaceSearch);
 
@@ -169,130 +176,100 @@ function ImageBlock({
         ? "0 0 0 auto"
         : "0 auto";
   return (
-    <Paper variant="outlined" sx={{ p: 2 }}>
-      <Stack
-        direction="row"
-        justifyContent="space-between"
-        alignItems="flex-start"
-        spacing={1}
-      >
-        <Box sx={{ flexGrow: 1, minWidth: 0 }}>
+    <div className="rounded-md border border-border bg-card p-4 text-card-foreground">
+      <div className="flex items-start justify-between gap-2">
+        <div className="min-w-0 grow">
           {src ? (
-            <Box
-              component="img"
+            <img
               src={src}
               alt={block.caption || "lesson image"}
-              sx={{
-                display: "block",
-                maxWidth: "100%",
+              className="mb-3 block max-w-full rounded-md border border-border"
+              style={{
                 width: preview.width,
                 height: "auto",
-                borderRadius: 1,
-                border: "1px solid",
-                borderColor: "divider",
                 margin: imgMargin,
-                mb: 1.5,
               }}
             />
           ) : (
-            <Box
-              sx={{
+            <div
+              className="mb-3 rounded-md border border-border bg-muted"
+              style={{
                 width: preview.width,
                 maxWidth: "100%",
                 height: preview.height,
-                borderRadius: 1,
-                border: "1px solid",
-                borderColor: "divider",
-                bgcolor: "action.hover",
                 margin: imgMargin,
-                mb: 1.5,
               }}
             />
           )}
-          <Stack
-            direction="row"
-            spacing={2}
-            alignItems="center"
-            useFlexGap
-            flexWrap="wrap"
-            sx={{ mb: 1.5 }}
-          >
-            <ToggleButtonGroup
-              size="small"
-              exclusive
+          <div className="mb-3 flex flex-wrap items-center gap-3">
+            <ToggleGroup
+              type="single"
+              size="sm"
               value={align}
-              onChange={(e, value) =>
-                value && onChange({ ...block, align: value })
+              onValueChange={(next) =>
+                next && onChange({ ...block, align: next })
               }
               aria-label="image alignment"
             >
-              <ToggleButton value="left" aria-label="align left">
-                <FormatAlignLeftIcon fontSize="small" />
-              </ToggleButton>
-              <ToggleButton value="center" aria-label="align center">
-                <FormatAlignCenterIcon fontSize="small" />
-              </ToggleButton>
-              <ToggleButton value="right" aria-label="align right">
-                <FormatAlignRightIcon fontSize="small" />
-              </ToggleButton>
-            </ToggleButtonGroup>
-            <ToggleButtonGroup
-              size="small"
-              exclusive
+              <ToggleGroupItem value="left" aria-label="align left">
+                <AlignLeftIcon />
+              </ToggleGroupItem>
+              <ToggleGroupItem value="center" aria-label="align center">
+                <AlignCenterIcon />
+              </ToggleGroupItem>
+              <ToggleGroupItem value="right" aria-label="align right">
+                <AlignRightIcon />
+              </ToggleGroupItem>
+            </ToggleGroup>
+            <ToggleGroup
+              type="single"
+              size="sm"
               value={size}
-              onChange={(e, value) =>
-                value && onChange({ ...block, size: value })
+              onValueChange={(next) =>
+                next && onChange({ ...block, size: next })
               }
               aria-label="image size"
             >
               {IMAGE_SIZES.map((s) => (
-                <ToggleButton key={s.key} value={s.key}>
+                <ToggleGroupItem key={s.key} value={s.key}>
                   {s.label}
-                </ToggleButton>
+                </ToggleGroupItem>
               ))}
-            </ToggleButtonGroup>
+            </ToggleGroup>
             {canReplace && (
               <>
-                <Button
-                  size="small"
-                  variant="outlined"
-                  startIcon={<SwapHorizIcon fontSize="small" />}
-                  onClick={(e) => setMenuAnchor(e.currentTarget)}
-                >
-                  Replace
-                </Button>
-                <Menu
-                  anchorEl={menuAnchor}
-                  open={Boolean(menuAnchor)}
-                  onClose={() => setMenuAnchor(null)}
-                >
-                  {onReplaceFile && (
-                    <MenuItem
-                      onClick={() => {
-                        setMenuAnchor(null);
-                        fileRef.current?.click();
-                      }}
-                    >
-                      <ListItemText
-                        primary="Upload file"
-                        secondary="Swap in an image from your device"
-                      />
-                    </MenuItem>
-                  )}
-                  {onReplaceSearch && (
-                    <MenuItem
-                      onClick={() => {
-                        setMenuAnchor(null);
-                        onReplaceSearch();
-                      }}
-                    >
-                      <ListItemText
-                        primary="Search online"
-                        secondary="Find a replacement from Pixabay or Wikimedia"
-                      />
-                    </MenuItem>
-                  )}
-                </Menu>
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button type="button" variant="outline" size="sm">
+                      <ArrowLeftRightIcon data-icon="inline-start" />
+                      Replace
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="start">
+                    {onReplaceFile && (
+                      <DropdownMenuItem
+                        onSelect={() => fileRef.current?.click()}
+                      >
+                        <div className="flex flex-col gap-0.5">
+                          <span>Upload file</span>
+                          <span className="text-xs text-muted-foreground">
+                            Swap in an image from your device
+                          </span>
+                        </div>
+                      </DropdownMenuItem>
+                    )}
+                    {onReplaceSearch && (
+                      <DropdownMenuItem onSelect={() => onReplaceSearch()}>
+                        <div className="flex flex-col gap-0.5">
+                          <span>Search online</span>
+                          <span className="text-xs text-muted-foreground">
+                            Find a replacement from Pixabay or Wikimedia
+                          </span>
+                        </div>
+                      </DropdownMenuItem>
+                    )}
+                  </DropdownMenuContent>
+                </DropdownMenu>
                 <input
                   ref={fileRef}
                   type="file"
@@ -302,21 +279,22 @@ function ImageBlock({
                 />
               </>
             )}
-          </Stack>
-          <LiveTextField
-            fullWidth
-            size="small"
-            label="Caption (optional)"
-            value={block.caption || ""}
-            onCommit={(caption) => onChange({ ...block, caption })}
-            slotProps={{
-              htmlInput: { "data-collab-field": `block:${block.id}:caption` },
-            }}
-          />
-        </Box>
+          </div>
+          <Field>
+            <FieldLabel htmlFor={`${block.id}-caption`}>
+              Caption (optional)
+            </FieldLabel>
+            <LiveInput
+              id={`${block.id}-caption`}
+              value={block.caption || ""}
+              onCommit={(caption) => onChange({ ...block, caption })}
+              data-collab-field={`block:${block.id}:caption`}
+            />
+          </Field>
+        </div>
         {controls}
-      </Stack>
-    </Paper>
+      </div>
+    </div>
   );
 }
 
@@ -357,109 +335,78 @@ function SpellingBlock({
     });
 
   return (
-    <Paper
-      variant="outlined"
-      sx={{ p: 2, borderLeft: `5px solid ${SPELLING_COLOR}` }}
+    <div
+      className="rounded-md border border-border bg-card p-4 text-card-foreground"
+      style={{ borderLeftWidth: 5, borderLeftColor: SPELLING_COLOR }}
     >
-      <Stack direction="row" alignItems="flex-start" spacing={1}>
-        <Box sx={{ flexGrow: 1 }}>
-          <Chip
-            label="Spelling words"
-            size="small"
-            sx={{
-              bgcolor: SPELLING_COLOR,
-              color: "#fff",
-              fontWeight: 600,
-              mb: 1.5,
-            }}
-          />
-          <Stack spacing={1}>
+      <div className="flex items-start gap-2">
+        <div className="grow">
+          <Badge
+            style={{ backgroundColor: SPELLING_COLOR, color: "#fff" }}
+            className="mb-3"
+          >
+            Spelling words
+          </Badge>
+          <div className="flex flex-col gap-2">
             {words.map((w, i) => (
-              <Stack
-                key={w.id}
-                direction="row"
-                alignItems="center"
-                spacing={0.5}
-              >
-                <LiveTextField
-                  fullWidth
-                  size="small"
+              <div key={w.id} className="flex items-center gap-1">
+                <LiveInput
                   placeholder={`Word ${i + 1}`}
                   value={w.text}
                   onCommit={(text) => setWord(w.id, text)}
-                  slotProps={{
-                    htmlInput: {
-                      "data-collab-field": `block:${block.id}:word:${w.id}`,
-                    },
-                  }}
+                  data-collab-field={`block:${block.id}:word:${w.id}`}
                 />
-                <Tooltip title="Remove word">
-                  <span>
-                    <IconButton
-                      size="small"
-                      onClick={() => removeWord(w.id)}
-                      disabled={words.length <= 1}
-                    >
-                      <DeleteOutlineIcon fontSize="small" />
-                    </IconButton>
-                  </span>
-                </Tooltip>
-              </Stack>
+                <ControlButton
+                  tooltip="Remove word"
+                  onClick={() => removeWord(w.id)}
+                  disabled={words.length <= 1}
+                >
+                  <Trash2Icon />
+                </ControlButton>
+              </div>
             ))}
-            <Box>
-              <Button size="small" startIcon={<AddIcon />} onClick={addWord}>
+            <div>
+              <Button type="button" variant="ghost" size="sm" onClick={addWord}>
+                <PlusIcon data-icon="inline-start" />
                 Add word
               </Button>
-            </Box>
-          </Stack>
-        </Box>
-        <Stack
-          direction="row"
-          spacing={0.5}
-          alignItems="center"
-          sx={{ flexShrink: 0 }}
-        >
+            </div>
+          </div>
+        </div>
+        <div className="flex shrink-0 items-center gap-1">
           {dragHandle}
-          <Tooltip title="Move up">
-            <span>
-              <IconButton size="small" onClick={onMoveUp} disabled={isFirst}>
-                <ArrowUpwardIcon fontSize="small" />
-              </IconButton>
-            </span>
-          </Tooltip>
-          <Tooltip title="Move down">
-            <span>
-              <IconButton size="small" onClick={onMoveDown} disabled={isLast}>
-                <ArrowDownwardIcon fontSize="small" />
-              </IconButton>
-            </span>
-          </Tooltip>
-          <Tooltip
-            title={
+          <ControlButton
+            tooltip="Move up"
+            onClick={onMoveUp}
+            disabled={isFirst}
+          >
+            <ArrowUpIcon />
+          </ControlButton>
+          <ControlButton
+            tooltip="Move down"
+            onClick={onMoveDown}
+            disabled={isLast}
+          >
+            <ArrowDownIcon />
+          </ControlButton>
+          <ControlButton
+            tooltip={
               capitalizedWords.length
                 ? "Fill in every ALL-CAPS word from the lesson text"
                 : "No ALL-CAPS words in the lesson text yet"
             }
+            onClick={fillCapitalized}
+            disabled={!capitalizedWords.length}
+            className="text-primary"
           >
-            <span>
-              <IconButton
-                size="small"
-                color="primary"
-                onClick={fillCapitalized}
-                disabled={!capitalizedWords.length}
-              >
-                <AutoFixHighIcon fontSize="small" />
-              </IconButton>
-            </span>
-          </Tooltip>
-          <Tooltip title="Delete block">
-            <IconButton size="small" color="error" onClick={onDelete}>
-              <DeleteOutlineIcon fontSize="small" />
-            </IconButton>
-          </Tooltip>
-        </Stack>
-      </Stack>
-    </Paper>
+            <WandSparklesIcon />
+          </ControlButton>
+          <ControlButton tooltip="Delete block" onClick={onDelete} destructive>
+            <Trash2Icon />
+          </ControlButton>
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -480,134 +427,109 @@ function QuestionBlock({ block, onChange, controls }) {
     onChange({ ...block, answers: answers.filter((a) => a.id !== id) });
 
   return (
-    <Paper
-      variant="outlined"
-      sx={{ p: 2, borderLeft: `5px solid ${meta.color}` }}
+    <div
+      className="rounded-md border border-border bg-card p-4 text-card-foreground"
+      style={{ borderLeftWidth: 5, borderLeftColor: meta.color }}
     >
-      <Stack direction="row" alignItems="flex-start" spacing={1}>
-        <Box sx={{ flexGrow: 1 }}>
-          <Chip
-            label={meta.label}
-            size="small"
-            sx={{
-              bgcolor: meta.color,
-              color: "#fff",
-              fontWeight: 600,
-              mb: 1.5,
-            }}
-          />
-          <LiveTextField
-            fullWidth
-            multiline
-            minRows={1}
-            label="Question"
-            placeholder="Type the question…"
-            value={block.prompt || ""}
-            onCommit={(prompt) => onChange({ ...block, prompt })}
-            slotProps={{
-              htmlInput: { "data-collab-field": `block:${block.id}:prompt` },
-            }}
-          />
+      <div className="flex items-start gap-2">
+        <div className="grow">
+          <Badge
+            style={{ backgroundColor: meta.color, color: "#fff" }}
+            className="mb-3"
+          >
+            {meta.label}
+          </Badge>
+          <Field>
+            <FieldLabel htmlFor={`${block.id}-prompt`}>Question</FieldLabel>
+            <LiveTextarea
+              id={`${block.id}-prompt`}
+              placeholder="Type the question…"
+              value={block.prompt || ""}
+              onCommit={(prompt) => onChange({ ...block, prompt })}
+              data-collab-field={`block:${block.id}:prompt`}
+              className="min-h-9"
+            />
+          </Field>
 
           {block.questionType === "number" && (
-            <LiveTextField
-              type="number"
-              size="small"
-              label="Answer"
-              value={block.answer ?? ""}
-              onCommit={(answer) => onChange({ ...block, answer })}
-              sx={{ mt: 1.5, maxWidth: 200 }}
-              slotProps={{
-                htmlInput: { "data-collab-field": `block:${block.id}:answer` },
-              }}
-            />
+            <Field className="mt-3 max-w-[200px]">
+              <FieldLabel htmlFor={`${block.id}-answer`}>Answer</FieldLabel>
+              <LiveInput
+                id={`${block.id}-answer`}
+                type="number"
+                value={block.answer ?? ""}
+                onCommit={(answer) => onChange({ ...block, answer })}
+                data-collab-field={`block:${block.id}:answer`}
+              />
+            </Field>
           )}
 
           {block.questionType === "single" && (
-            <LiveTextField
-              fullWidth
-              size="small"
-              label="Answer"
-              placeholder="The correct answer…"
-              value={block.answer ?? ""}
-              onCommit={(answer) => onChange({ ...block, answer })}
-              sx={{ mt: 1.5 }}
-              slotProps={{
-                htmlInput: { "data-collab-field": `block:${block.id}:answer` },
-              }}
-            />
+            <Field className="mt-3">
+              <FieldLabel htmlFor={`${block.id}-answer`}>Answer</FieldLabel>
+              <LiveInput
+                id={`${block.id}-answer`}
+                placeholder="The correct answer…"
+                value={block.answer ?? ""}
+                onCommit={(answer) => onChange({ ...block, answer })}
+                data-collab-field={`block:${block.id}:answer`}
+              />
+            </Field>
           )}
 
           {block.questionType === "multiple" && (
-            <Stack spacing={1} sx={{ mt: 1.5 }}>
+            <div className="mt-3 flex flex-col gap-2">
               {answers.map((ans, i) => (
-                <Stack
-                  key={ans.id}
-                  direction="row"
-                  alignItems="center"
-                  spacing={0.5}
-                >
-                  <LiveTextField
-                    fullWidth
-                    size="small"
+                <div key={ans.id} className="flex items-center gap-1">
+                  <LiveInput
                     placeholder={`Answer ${i + 1}`}
                     value={ans.text}
                     onCommit={(text) => setAnswer(ans.id, text)}
-                    slotProps={{
-                      htmlInput: {
-                        "data-collab-field": `block:${block.id}:answer:${ans.id}`,
-                      },
-                    }}
+                    data-collab-field={`block:${block.id}:answer:${ans.id}`}
                   />
-                  <Tooltip title="Remove answer">
-                    <span>
-                      <IconButton
-                        size="small"
-                        onClick={() => removeAnswer(ans.id)}
-                        disabled={answers.length <= 1}
-                      >
-                        <DeleteOutlineIcon fontSize="small" />
-                      </IconButton>
-                    </span>
-                  </Tooltip>
-                </Stack>
+                  <ControlButton
+                    tooltip="Remove answer"
+                    onClick={() => removeAnswer(ans.id)}
+                    disabled={answers.length <= 1}
+                  >
+                    <Trash2Icon />
+                  </ControlButton>
+                </div>
               ))}
-              <Box>
+              <div>
                 <Button
-                  size="small"
-                  startIcon={<AddIcon />}
+                  type="button"
+                  variant="ghost"
+                  size="sm"
                   onClick={addAnswer}
                 >
+                  <PlusIcon data-icon="inline-start" />
                   Add answer
                 </Button>
-              </Box>
-              <Typography variant="caption" color="text.secondary">
+              </div>
+              <p className="text-xs text-muted-foreground">
                 Type every accepted answer. The student only needs to give one
                 of them to be correct.
-              </Typography>
-            </Stack>
+              </p>
+            </div>
           )}
 
           {block.questionType === "background" && (
-            <LiveTextField
-              fullWidth
-              size="small"
-              label="Answer"
-              placeholder="The correct answer…"
-              value={block.answer ?? ""}
-              onCommit={(answer) => onChange({ ...block, answer })}
-              sx={{ mt: 1.5 }}
-              slotProps={{
-                htmlInput: {
-                  "data-collab-field": `block:${block.id}:answer`,
-                },
-              }}
-            />
+            <Field className="mt-3">
+              <FieldLabel htmlFor={`${block.id}-answer`}>Answer</FieldLabel>
+              <LiveInput
+                id={`${block.id}-answer`}
+                placeholder="The correct answer…"
+                value={block.answer ?? ""}
+                onCommit={(answer) => onChange({ ...block, answer })}
+                data-collab-field={`block:${block.id}:answer`}
+              />
+            </Field>
           )}
-        </Box>
+        </div>
         {controls}
-      </Stack>
-    </Paper>
+      </div>
+    </div>
   );
 }
 
