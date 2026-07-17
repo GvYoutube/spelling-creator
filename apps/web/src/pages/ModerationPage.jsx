@@ -11,25 +11,27 @@
 
 import { useEffect, useState } from "react";
 import { Link as RouterLink } from "react-router-dom";
-import AppBar from "@mui/material/AppBar";
-import Toolbar from "@mui/material/Toolbar";
-import Typography from "@mui/material/Typography";
-import Button from "@mui/material/Button";
-import Box from "@mui/material/Box";
-import Container from "@mui/material/Container";
-import Stack from "@mui/material/Stack";
-import Paper from "@mui/material/Paper";
-import TextField from "@mui/material/TextField";
-import IconButton from "@mui/material/IconButton";
-import Divider from "@mui/material/Divider";
-import Alert from "@mui/material/Alert";
+// Snackbar stays MUI for now — no shadcn toast primitive exists yet, and it's
+// not worth building one for a single caller. HubPage/LessonPage/EditorPage/
+// CommentsSection all still use MUI's Snackbar too; a real Toast component is
+// worth building once one of those migrates and this stops being the only
+// other user.
 import Snackbar from "@mui/material/Snackbar";
-import CircularProgress from "@mui/material/CircularProgress";
-import Chip from "@mui/material/Chip";
-import Link from "@mui/material/Link";
-import ArrowBackIcon from "@mui/icons-material/ArrowBack";
-import DeleteOutlineIcon from "@mui/icons-material/DeleteOutline";
+import {
+  ArrowLeftIcon,
+  Trash2Icon,
+  XIcon,
+  TriangleAlertIcon,
+} from "lucide-react";
+import AppHeader from "../components/AppHeader.jsx";
 import NavActions from "../components/NavActions.jsx";
+import { Button } from "../components/ui/button.jsx";
+import { Badge } from "../components/ui/badge.jsx";
+import { Field, FieldLabel } from "../components/ui/field.jsx";
+import { Input } from "../components/ui/input.jsx";
+import { Alert, AlertDescription } from "../components/ui/alert.jsx";
+import { Spinner } from "../components/ui/spinner.jsx";
+import IconActionButton from "../components/IconActionButton.jsx";
 import { ListRowsSkeleton } from "../components/Skeletons.jsx";
 import { useAuth } from "../lib/auth.jsx";
 import {
@@ -56,12 +58,27 @@ function formatDate(value) {
 // A titled card wrapper shared by every section.
 function Section({ title, children }) {
   return (
-    <Paper variant="outlined" sx={{ p: 2.5, mb: 3 }}>
-      <Typography variant="h6" gutterBottom>
-        {title}
-      </Typography>
+    <div className="rounded-panel border border-border bg-card p-5 text-card-foreground shadow-(--shadow-panel)">
+      <h2 className="mb-3 text-lg font-semibold">{title}</h2>
       {children}
-    </Paper>
+    </div>
+  );
+}
+
+// A removable pill — banned names/IPs, matching MUI Chip's onDelete shape.
+function RemovableBadge({ label, onRemove, removeLabel }) {
+  return (
+    <Badge variant="secondary" className="gap-1 py-1 pr-1 pl-2.5">
+      {label}
+      <button
+        type="button"
+        onClick={onRemove}
+        aria-label={removeLabel}
+        className="cursor-pointer rounded-full border-0 bg-transparent p-0.5 text-secondary-foreground transition-colors hover:bg-foreground/10"
+      >
+        <XIcon className="size-3" />
+      </button>
+    </Badge>
   );
 }
 
@@ -99,7 +116,7 @@ function BansSection({ accessToken, isAdmin, onToast }) {
     try {
       await banName(name, accessToken);
       setNameDraft("");
-      onToast(`Banned “${name}”.`);
+      onToast(`Banned "${name}".`);
       load();
     } catch (err) {
       onToast(err.message || "Could not ban the name.");
@@ -144,88 +161,86 @@ function BansSection({ accessToken, isAdmin, onToast }) {
       {loading ? (
         <ListRowsSkeleton />
       ) : error ? (
-        <Alert severity="error">{error}</Alert>
+        <Alert variant="destructive">
+          <AlertDescription>{error}</AlertDescription>
+        </Alert>
       ) : (
-        <Stack spacing={2}>
-          <Box>
-            <Typography variant="subtitle2" gutterBottom>
-              Banned names
-            </Typography>
-            <Stack direction="row" spacing={1} sx={{ mb: 1 }}>
-              <TextField
-                size="small"
-                label="Display name"
-                value={nameDraft}
-                onChange={(e) => setNameDraft(e.target.value)}
-                onKeyDown={(e) => e.key === "Enter" && addName()}
-              />
-              <Button
-                variant="contained"
-                onClick={addName}
-                disabled={!nameDraft.trim()}
-              >
+        <div className="flex flex-col gap-4">
+          <div>
+            <h3 className="mb-2 text-sm font-medium">Banned names</h3>
+            <div className="mb-2 flex items-end gap-2">
+              <Field>
+                <FieldLabel htmlFor="ban-name" className="sr-only">
+                  Display name
+                </FieldLabel>
+                <Input
+                  id="ban-name"
+                  placeholder="Display name"
+                  value={nameDraft}
+                  onChange={(e) => setNameDraft(e.target.value)}
+                  onKeyDown={(e) => e.key === "Enter" && addName()}
+                />
+              </Field>
+              <Button onClick={addName} disabled={!nameDraft.trim()}>
                 Ban
               </Button>
-            </Stack>
+            </div>
             {names.length === 0 ? (
-              <Typography variant="body2" color="text.secondary">
-                No name bans.
-              </Typography>
+              <p className="text-sm text-muted-foreground">No name bans.</p>
             ) : (
-              <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
+              <div className="flex flex-wrap gap-1.5">
                 {names.map((n) => (
-                  <Chip
+                  <RemovableBadge
                     key={n.name_lower}
                     label={n.display_name || n.name_lower}
-                    onDelete={() => liftName(n.name_lower)}
+                    onRemove={() => liftName(n.name_lower)}
+                    removeLabel={`Lift ban on ${n.display_name || n.name_lower}`}
                   />
                 ))}
-              </Stack>
+              </div>
             )}
-          </Box>
+          </div>
 
           {isAdmin && (
             <>
-              <Divider />
-              <Box>
-                <Typography variant="subtitle2" gutterBottom>
-                  Banned IPs
-                </Typography>
-                <Stack direction="row" spacing={1} sx={{ mb: 1 }}>
-                  <TextField
-                    size="small"
-                    label="IP address"
-                    value={ipDraft}
-                    onChange={(e) => setIpDraft(e.target.value)}
-                    onKeyDown={(e) => e.key === "Enter" && addIp()}
-                  />
-                  <Button
-                    variant="contained"
-                    onClick={addIp}
-                    disabled={!ipDraft.trim()}
-                  >
+              <hr className="border-border" />
+              <div>
+                <h3 className="mb-2 text-sm font-medium">Banned IPs</h3>
+                <div className="mb-2 flex items-end gap-2">
+                  <Field>
+                    <FieldLabel htmlFor="ban-ip" className="sr-only">
+                      IP address
+                    </FieldLabel>
+                    <Input
+                      id="ban-ip"
+                      placeholder="IP address"
+                      value={ipDraft}
+                      onChange={(e) => setIpDraft(e.target.value)}
+                      onKeyDown={(e) => e.key === "Enter" && addIp()}
+                    />
+                  </Field>
+                  <Button onClick={addIp} disabled={!ipDraft.trim()}>
                     Ban
                   </Button>
-                </Stack>
+                </div>
                 {ips.length === 0 ? (
-                  <Typography variant="body2" color="text.secondary">
-                    No IP bans.
-                  </Typography>
+                  <p className="text-sm text-muted-foreground">No IP bans.</p>
                 ) : (
-                  <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
+                  <div className="flex flex-wrap gap-1.5">
                     {ips.map((i) => (
-                      <Chip
+                      <RemovableBadge
                         key={i.ip}
                         label={i.ip}
-                        onDelete={() => liftIp(i.ip)}
+                        onRemove={() => liftIp(i.ip)}
+                        removeLabel={`Lift ban on ${i.ip}`}
                       />
                     ))}
-                  </Stack>
+                  </div>
                 )}
-              </Box>
+              </div>
             </>
           )}
-        </Stack>
+        </div>
       )}
     </Section>
   );
@@ -269,39 +284,37 @@ function ShadowbannedSection({ accessToken, onToast }) {
       {loading ? (
         <ListRowsSkeleton />
       ) : error ? (
-        <Alert severity="error">{error}</Alert>
+        <Alert variant="destructive">
+          <AlertDescription>{error}</AlertDescription>
+        </Alert>
       ) : lessons.length === 0 ? (
-        <Typography variant="body2" color="text.secondary">
+        <p className="text-sm text-muted-foreground">
           No shadowbanned lessons.
-        </Typography>
+        </p>
       ) : (
-        <Stack spacing={1} divider={<Divider flexItem />}>
+        <div className="flex flex-col divide-y divide-border">
           {lessons.map((l) => (
-            <Stack
+            <div
               key={l.id}
-              direction="row"
-              spacing={1}
-              alignItems="center"
-              justifyContent="space-between"
+              className="flex items-center justify-between gap-2 py-2 first:pt-0 last:pb-0"
             >
-              <Box sx={{ minWidth: 0 }}>
-                <Link component={RouterLink} to={`/hub/${l.id}`} noWrap>
-                  {l.title || "Untitled Lesson"}
-                </Link>
-                <Typography
-                  variant="caption"
-                  color="text.secondary"
-                  display="block"
+              <div className="min-w-0">
+                <RouterLink
+                  to={`/hub/${l.id}`}
+                  className="block truncate text-sm font-medium text-primary hover:underline"
                 >
+                  {l.title || "Untitled Lesson"}
+                </RouterLink>
+                <p className="text-xs text-muted-foreground">
                   {l.author || "Anonymous"}
-                </Typography>
-              </Box>
-              <Button size="small" onClick={() => restore(l.id)}>
+                </p>
+              </div>
+              <Button variant="ghost" size="sm" onClick={() => restore(l.id)}>
                 Un-shadowban
               </Button>
-            </Stack>
+            </div>
           ))}
-        </Stack>
+        </div>
       )}
     </Section>
   );
@@ -345,56 +358,51 @@ function DeleteRequestsSection({ accessToken, onToast }) {
       {loading ? (
         <ListRowsSkeleton />
       ) : error ? (
-        <Alert severity="error">{error}</Alert>
+        <Alert variant="destructive">
+          <AlertDescription>{error}</AlertDescription>
+        </Alert>
       ) : requests.length === 0 ? (
-        <Typography variant="body2" color="text.secondary">
-          No pending requests.
-        </Typography>
+        <p className="text-sm text-muted-foreground">No pending requests.</p>
       ) : (
-        <Stack spacing={2} divider={<Divider flexItem />}>
+        <div className="flex flex-col divide-y divide-border">
           {requests.map((r) => (
-            <Box key={r.id}>
-              <Stack
-                direction="row"
-                spacing={1}
-                alignItems="center"
-                justifyContent="space-between"
-              >
-                <Box sx={{ minWidth: 0 }}>
-                  <Link component={RouterLink} to={`/hub/${r.lessonId}`} noWrap>
-                    {r.lessonTitle || "(deleted lesson)"}
-                  </Link>
-                  <Typography
-                    variant="caption"
-                    color="text.secondary"
-                    display="block"
+            <div key={r.id} className="py-3 first:pt-0 last:pb-0">
+              <div className="flex items-center justify-between gap-2">
+                <div className="min-w-0">
+                  <RouterLink
+                    to={`/hub/${r.lessonId}`}
+                    className="block truncate text-sm font-medium text-primary hover:underline"
                   >
+                    {r.lessonTitle || "(deleted lesson)"}
+                  </RouterLink>
+                  <p className="text-xs text-muted-foreground">
                     {r.lessonAuthor || "Anonymous"} · {formatDate(r.createdAt)}
-                  </Typography>
-                </Box>
-                <Stack direction="row" spacing={1}>
+                  </p>
+                </div>
+                <div className="flex shrink-0 gap-2">
                   <Button
-                    size="small"
-                    color="error"
-                    variant="contained"
-                    startIcon={<DeleteOutlineIcon />}
+                    variant="destructive"
+                    size="sm"
                     onClick={() => resolve(r.id, true)}
                   >
+                    <Trash2Icon data-icon="inline-start" />
                     Approve
                   </Button>
-                  <Button size="small" onClick={() => resolve(r.id, false)}>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => resolve(r.id, false)}
+                  >
                     Deny
                   </Button>
-                </Stack>
-              </Stack>
+                </div>
+              </div>
               {r.reason && (
-                <Typography variant="body2" sx={{ mt: 0.5 }}>
-                  “{r.reason}”
-                </Typography>
+                <p className="mt-1 text-sm">&ldquo;{r.reason}&rdquo;</p>
               )}
-            </Box>
+            </div>
           ))}
-        </Stack>
+        </div>
       )}
     </Section>
   );
@@ -453,57 +461,50 @@ function ModeratorsSection({ accessToken, onToast }) {
 
   return (
     <Section title="Moderators">
-      <Stack direction="row" spacing={1} sx={{ mb: 2 }}>
-        <TextField
-          size="small"
-          label="User email"
-          value={emailDraft}
-          onChange={(e) => setEmailDraft(e.target.value)}
-          onKeyDown={(e) => e.key === "Enter" && !adding && add()}
-          sx={{ minWidth: 240 }}
-        />
-        <Button
-          variant="contained"
-          onClick={add}
-          disabled={adding || !emailDraft.trim()}
-          startIcon={
-            adding ? <CircularProgress size={16} color="inherit" /> : null
-          }
-        >
+      <div className="mb-3 flex items-end gap-2">
+        <Field className="min-w-[240px]">
+          <FieldLabel htmlFor="moderator-email" className="sr-only">
+            User email
+          </FieldLabel>
+          <Input
+            id="moderator-email"
+            placeholder="User email"
+            value={emailDraft}
+            onChange={(e) => setEmailDraft(e.target.value)}
+            onKeyDown={(e) => e.key === "Enter" && !adding && add()}
+          />
+        </Field>
+        <Button onClick={add} disabled={adding || !emailDraft.trim()}>
+          {adding && <Spinner data-icon="inline-start" />}
           Add moderator
         </Button>
-      </Stack>
+      </div>
       {loading ? (
         <ListRowsSkeleton />
       ) : error ? (
-        <Alert severity="error">{error}</Alert>
+        <Alert variant="destructive">
+          <AlertDescription>{error}</AlertDescription>
+        </Alert>
       ) : moderators.length === 0 ? (
-        <Typography variant="body2" color="text.secondary">
-          No moderators yet.
-        </Typography>
+        <p className="text-sm text-muted-foreground">No moderators yet.</p>
       ) : (
-        <Stack spacing={1} divider={<Divider flexItem />}>
+        <div className="flex flex-col divide-y divide-border">
           {moderators.map((m) => (
-            <Stack
+            <div
               key={m.userId}
-              direction="row"
-              spacing={1}
-              alignItems="center"
-              justifyContent="space-between"
+              className="flex items-center justify-between gap-2 py-2 first:pt-0 last:pb-0"
             >
-              <Typography variant="body2" sx={{ wordBreak: "break-all" }}>
-                {m.email || m.userId}
-              </Typography>
-              <IconButton
-                size="small"
-                aria-label="remove moderator"
+              <p className="text-sm break-all">{m.email || m.userId}</p>
+              <IconActionButton
+                tooltip="Remove moderator"
                 onClick={() => remove(m.userId)}
+                destructive
               >
-                <DeleteOutlineIcon fontSize="small" />
-              </IconButton>
-            </Stack>
+                <Trash2Icon />
+              </IconActionButton>
+            </div>
           ))}
-        </Stack>
+        </div>
       )}
     </Section>
   );
@@ -526,65 +527,51 @@ export default function ModerationPage() {
   const showAccessNotice = !resolvingAuth && user && !isModerator;
 
   return (
-    <Box sx={{ minHeight: "100vh", pb: 8 }}>
-      <AppBar position="sticky" elevation={1}>
-        <Toolbar>
-          <Button
-            color="inherit"
-            component={RouterLink}
+    <div className="min-h-screen bg-background pb-16">
+      <AppHeader
+        title="Moderation"
+        left={
+          <RouterLink
             to="/hub"
-            startIcon={<ArrowBackIcon />}
-            sx={{ mr: 1 }}
+            className="mr-1 inline-flex shrink-0 items-center gap-2 rounded-md border-0 bg-transparent px-4 py-2 text-sm font-medium text-primary-foreground no-underline transition-colors hover:bg-primary-foreground/10"
           >
+            <ArrowLeftIcon data-icon="inline-start" />
             Lesson hub
-          </Button>
-          <Typography variant="h6" sx={{ flexGrow: 1 }}>
-            Moderation
-          </Typography>
-          <NavActions current="moderation" />
-        </Toolbar>
-      </AppBar>
+          </RouterLink>
+        }
+      >
+        <NavActions current="moderation" />
+      </AppHeader>
 
-      <Container maxWidth="md" sx={{ pt: 3 }}>
+      <div className="mx-auto max-w-3xl px-4 pt-6">
         {resolvingAuth ? (
-          <Box sx={{ display: "flex", justifyContent: "center", py: 8 }}>
-            <CircularProgress />
-          </Box>
+          <div className="flex justify-center py-16">
+            <Spinner className="size-8" />
+          </div>
         ) : showSignIn ? (
-          <Alert
-            severity="info"
-            action={
-              <Button
-                color="inherit"
-                size="small"
-                component={RouterLink}
-                to="/login"
-              >
-                Sign in
+          <Alert>
+            <AlertDescription className="flex items-center justify-between gap-2">
+              Please sign in to access moderation tools.
+              <Button variant="ghost" size="sm" asChild>
+                <RouterLink to="/login">Sign in</RouterLink>
               </Button>
-            }
-          >
-            Please sign in to access moderation tools.
+            </AlertDescription>
           </Alert>
         ) : showAccessNotice ? (
-          <Alert
-            severity="warning"
-            action={
-              <Button
-                color="inherit"
-                size="small"
-                component={RouterLink}
-                to="/hub"
-              >
-                Back to hub
+          <Alert className="border-focus/40 bg-focus/10 text-focus">
+            <TriangleAlertIcon />
+            <AlertDescription className="flex items-center justify-between gap-2 text-focus">
+              You don&rsquo;t have moderation access.
+              <Button variant="ghost" size="sm" asChild>
+                <RouterLink to="/hub" className="text-focus">
+                  Back to hub
+                </RouterLink>
               </Button>
-            }
-          >
-            You don’t have moderation access.
+            </AlertDescription>
           </Alert>
         ) : (
           isModerator && (
-            <>
+            <div className="flex flex-col gap-4">
               {isAdmin && (
                 <DeleteRequestsSection
                   accessToken={accessToken}
@@ -606,10 +593,10 @@ export default function ModerationPage() {
                   onToast={setToast}
                 />
               )}
-            </>
+            </div>
           )
         )}
-      </Container>
+      </div>
 
       <Snackbar
         open={Boolean(toast)}
@@ -618,6 +605,6 @@ export default function ModerationPage() {
         message={toast}
         anchorOrigin={{ vertical: "bottom", horizontal: "center" }}
       />
-    </Box>
+    </div>
   );
 }
