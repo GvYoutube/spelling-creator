@@ -7,26 +7,20 @@
 // between two commits is recoverable exactly, per block, without guessing.
 
 import { useCallback, useEffect, useState } from "react";
-import Alert from "@mui/material/Alert";
-import Box from "@mui/material/Box";
-import Button from "@mui/material/Button";
-import Chip from "@mui/material/Chip";
-import Dialog from "@mui/material/Dialog";
-import DialogActions from "@mui/material/DialogActions";
-import DialogContent from "@mui/material/DialogContent";
-import DialogTitle from "@mui/material/DialogTitle";
-import Divider from "@mui/material/Divider";
-import Grid from "@mui/material/Grid2";
-import List from "@mui/material/List";
-import ListItemButton from "@mui/material/ListItemButton";
-import Paper from "@mui/material/Paper";
-import Stack from "@mui/material/Stack";
-import Tooltip from "@mui/material/Tooltip";
-import Typography from "@mui/material/Typography";
-import CallMergeIcon from "@mui/icons-material/CallMerge";
-import HistoryIcon from "@mui/icons-material/History";
-import RestoreIcon from "@mui/icons-material/Restore";
+import { GitMergeIcon, HistoryIcon, RotateCcwIcon, XIcon } from "lucide-react";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from "./ui/dialog.jsx";
+import { Button } from "./ui/button.jsx";
+import { Badge } from "./ui/badge.jsx";
+import { Alert, AlertDescription } from "./ui/alert.jsx";
+import { Tooltip, TooltipTrigger, TooltipContent } from "./ui/tooltip.jsx";
 import { HistorySkeleton } from "./Skeletons.jsx";
+import { cn } from "../lib/utils.js";
 import { describeOp } from "../lib/git/ops.js";
 
 /** "just now" / "12 minutes ago" / "3 days ago" — then fall back to a date. */
@@ -70,6 +64,16 @@ function tally(ops) {
   return counts;
 }
 
+// Chip colors, mapped from MUI's semantic palette onto this app's tokens —
+// success/destructive already exist; "changed" borrows --primary for the
+// same blue-ish "info" read, "moved" stays neutral (MUI's "default").
+const CHIP_STYLES = {
+  success: "border-success/40 bg-success/10 text-success",
+  info: "border-primary/40 bg-primary/10 text-primary",
+  error: "border-destructive/40 bg-destructive/10 text-destructive",
+  default: "border-border bg-transparent text-muted-foreground",
+};
+
 function ChangeChips({ ops }) {
   const counts = tally(ops);
   const chips = [
@@ -81,23 +85,13 @@ function ChangeChips({ ops }) {
 
   if (chips.length === 0) return null;
   return (
-    <Stack
-      direction="row"
-      spacing={0.5}
-      sx={{ mt: 0.5 }}
-      flexWrap="wrap"
-      useFlexGap
-    >
+    <div className="mt-1.5 flex flex-wrap gap-1.5">
       {chips.map(([label, n, color]) => (
-        <Chip
-          key={label}
-          size="small"
-          variant="outlined"
-          color={color}
-          label={`${n} ${label}`}
-        />
+        <Badge key={label} variant="outline" className={CHIP_STYLES[color]}>
+          {n} {label}
+        </Badge>
       ))}
-    </Stack>
+    </div>
   );
 }
 
@@ -169,133 +163,137 @@ export default function HistoryDialog({ open, onClose, git, onRestore }) {
   const isCurrent = commits && selected === commits[0]?.oid;
 
   return (
-    <Dialog open={open} onClose={onClose} maxWidth="md" fullWidth>
-      <DialogTitle>
-        <Stack direction="row" alignItems="center" spacing={1}>
-          <HistoryIcon fontSize="small" />
-          <span>Version history</span>
-        </Stack>
-      </DialogTitle>
+    <Dialog open={open} onOpenChange={(next) => !next && onClose()}>
+      <DialogContent className="flex max-h-[85vh] flex-col sm:max-w-3xl">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <HistoryIcon className="size-4" />
+            Version history
+          </DialogTitle>
+        </DialogHeader>
 
-      <DialogContent dividers>
-        {error && (
-          <Alert severity="error" sx={{ mb: 2 }} onClose={() => setError(null)}>
-            {error}
-          </Alert>
-        )}
-        {pending > 0 && (
-          <Alert severity="info" sx={{ mb: 2 }}>
-            You have {pending} change{pending === 1 ? "" : "s"} since the last
-            saved version. They&apos;ll be saved automatically in a moment.
-          </Alert>
-        )}
-
-        {commits === null ? (
-          <HistorySkeleton />
-        ) : commits.length === 0 ? (
-          <Typography color="text.secondary">
-            No versions saved yet. Edit the lesson and a version is saved
-            automatically whenever you pause.
-          </Typography>
-        ) : (
-          <Grid container spacing={2}>
-            {/* The timeline. */}
-            <Grid size={{ xs: 12, md: 5 }}>
-              <List
-                dense
-                disablePadding
-                sx={{ maxHeight: 420, overflowY: "auto" }}
+        <div className="flex flex-col gap-3 overflow-y-auto border-t border-border pt-4">
+          {error && (
+            <Alert variant="destructive" className="relative pr-9">
+              <AlertDescription>{error}</AlertDescription>
+              <button
+                type="button"
+                onClick={() => setError(null)}
+                aria-label="Dismiss"
+                className="absolute top-3 right-3 cursor-pointer rounded-sm border-0 bg-transparent p-0.5 text-current opacity-70 transition-opacity hover:opacity-100"
               >
-                {commits.map((commit, i) => (
-                  <ListItemButton
-                    key={commit.oid}
-                    selected={commit.oid === selected}
-                    onClick={() => setSelected(commit.oid)}
-                    sx={{ borderRadius: 1, mb: 0.5, alignItems: "flex-start" }}
-                  >
-                    <Box sx={{ flexGrow: 1, minWidth: 0 }}>
-                      <Stack direction="row" alignItems="center" spacing={0.75}>
-                        {commit.isMerge && (
-                          <Tooltip title="A merge — two histories joined here">
-                            <CallMergeIcon
-                              fontSize="inherit"
-                              color="secondary"
-                            />
-                          </Tooltip>
-                        )}
-                        <Typography
-                          variant="body2"
-                          sx={{ fontWeight: i === 0 ? 600 : 400 }}
-                          noWrap
-                        >
-                          {commit.summary}
-                        </Typography>
-                      </Stack>
-                      <Typography variant="caption" color="text.secondary">
-                        {i === 0 ? "Current · " : ""}
-                        {timeAgo(commit.timestamp)} · {commit.author}
-                      </Typography>
-                    </Box>
-                  </ListItemButton>
-                ))}
-              </List>
-            </Grid>
+                <XIcon className="size-3.5" />
+              </button>
+            </Alert>
+          )}
+          {pending > 0 && (
+            <Alert className="border-primary/40 bg-primary/10 text-primary">
+              <AlertDescription className="text-primary">
+                You have {pending} change{pending === 1 ? "" : "s"} since the
+                last saved version. They&apos;ll be saved automatically in a
+                moment.
+              </AlertDescription>
+            </Alert>
+          )}
 
-            {/* What that version changed. */}
-            <Grid size={{ xs: 12, md: 7 }}>
-              <Paper variant="outlined" sx={{ p: 2, minHeight: 200 }}>
+          {commits === null ? (
+            <HistorySkeleton />
+          ) : commits.length === 0 ? (
+            <p className="text-sm text-muted-foreground">
+              No versions saved yet. Edit the lesson and a version is saved
+              automatically whenever you pause.
+            </p>
+          ) : (
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-12">
+              {/* The timeline. */}
+              <div className="flex max-h-[420px] flex-col gap-0.5 overflow-y-auto md:col-span-5">
+                {commits.map((commit, i) => (
+                  <button
+                    key={commit.oid}
+                    type="button"
+                    onClick={() => setSelected(commit.oid)}
+                    className={cn(
+                      "cursor-pointer rounded-md border-0 px-2 py-1.5 text-left transition-colors",
+                      commit.oid === selected
+                        ? "bg-accent text-accent-foreground"
+                        : "bg-transparent hover:bg-accent/50",
+                    )}
+                  >
+                    <div className="flex items-center gap-1.5">
+                      {commit.isMerge && (
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <GitMergeIcon className="size-3.5 shrink-0 text-secondary-foreground" />
+                          </TooltipTrigger>
+                          <TooltipContent>
+                            A merge — two histories joined here
+                          </TooltipContent>
+                        </Tooltip>
+                      )}
+                      <p
+                        className={cn(
+                          "truncate text-sm",
+                          i === 0 ? "font-semibold" : "font-normal",
+                        )}
+                      >
+                        {commit.summary}
+                      </p>
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      {i === 0 ? "Current · " : ""}
+                      {timeAgo(commit.timestamp)} · {commit.author}
+                    </p>
+                  </button>
+                ))}
+              </div>
+
+              {/* What that version changed. */}
+              <div className="min-h-[200px] rounded-md border border-border p-3 md:col-span-7">
                 {detail === null ? (
                   <HistorySkeleton count={3} />
                 ) : detail.length === 0 ? (
-                  <Typography variant="body2" color="text.secondary">
+                  <p className="text-sm text-muted-foreground">
                     This is where the lesson began.
-                  </Typography>
+                  </p>
                 ) : (
                   <>
-                    <Typography variant="subtitle2" gutterBottom>
-                      What changed
-                    </Typography>
+                    <p className="text-sm font-medium">What changed</p>
                     <ChangeChips ops={detail} />
-                    <Divider sx={{ my: 1.5 }} />
-                    <Stack
-                      component="ul"
-                      spacing={0.5}
-                      sx={{ m: 0, pl: 2, maxHeight: 260, overflowY: "auto" }}
-                    >
+                    <hr className="my-3 border-border" />
+                    <ul className="m-0 flex max-h-[260px] flex-col gap-1 overflow-y-auto pl-4">
                       {detail.map((op, i) => (
-                        <Typography
+                        <li
                           key={i}
-                          component="li"
-                          variant="body2"
-                          color="text.secondary"
+                          className="list-disc text-sm text-muted-foreground"
                         >
                           {/* describeOp renders "- edit text block <id>"; drop the
                               leading marker, the list already provides one. */}
                           {describeOp(op).replace(/^- /, "")}
-                        </Typography>
+                        </li>
                       ))}
-                    </Stack>
+                    </ul>
                   </>
                 )}
-              </Paper>
-            </Grid>
-          </Grid>
-        )}
-      </DialogContent>
+              </div>
+            </div>
+          )}
+        </div>
 
-      <DialogActions>
-        <Button onClick={onClose}>Close</Button>
-        <Button
-          variant="contained"
-          startIcon={<RestoreIcon />}
-          disabled={
-            !selected || restoring || isCurrent || commits?.length === 0
-          }
-          onClick={handleRestore}
-        >
-          {isCurrent ? "This is the current version" : "Restore this version"}
-        </Button>
-      </DialogActions>
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose}>
+            Close
+          </Button>
+          <Button
+            disabled={
+              !selected || restoring || isCurrent || commits?.length === 0
+            }
+            onClick={handleRestore}
+          >
+            <RotateCcwIcon data-icon="inline-start" />
+            {isCurrent ? "This is the current version" : "Restore this version"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
     </Dialog>
   );
 }
