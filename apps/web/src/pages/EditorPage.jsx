@@ -1,64 +1,70 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { useDocumentMeta } from "../lib/seo.js";
-import AppBar from "@mui/material/AppBar";
-import Toolbar from "@mui/material/Toolbar";
-import Typography from "@mui/material/Typography";
-import Button from "@mui/material/Button";
-import Box from "@mui/material/Box";
-import Container from "@mui/material/Container";
-import Stack from "@mui/material/Stack";
-import TextField from "@mui/material/TextField";
-import Paper from "@mui/material/Paper";
-import Fab from "@mui/material/Fab";
-import Dialog from "@mui/material/Dialog";
-import DialogTitle from "@mui/material/DialogTitle";
-import DialogContent from "@mui/material/DialogContent";
-import DialogActions from "@mui/material/DialogActions";
+// Snackbar stays MUI for now — see the note in ModerationPage.jsx.
 import Snackbar from "@mui/material/Snackbar";
-import Alert from "@mui/material/Alert";
-import CircularProgress from "@mui/material/CircularProgress";
-import Tooltip from "@mui/material/Tooltip";
-import IconButton from "@mui/material/IconButton";
-import Chip from "@mui/material/Chip";
-import Backdrop from "@mui/material/Backdrop";
-import Menu from "@mui/material/Menu";
-import MenuItem from "@mui/material/MenuItem";
-import Select from "@mui/material/Select";
-import FormControl from "@mui/material/FormControl";
-import InputLabel from "@mui/material/InputLabel";
-import ListItemIcon from "@mui/material/ListItemIcon";
-import ListItemText from "@mui/material/ListItemText";
-import Divider from "@mui/material/Divider";
-import useMediaQuery from "@mui/material/useMediaQuery";
-import { useTheme } from "@mui/material/styles";
-import AddIcon from "@mui/icons-material/Add";
-import MoreVertIcon from "@mui/icons-material/MoreVert";
-import DescriptionIcon from "@mui/icons-material/Description";
-import PictureAsPdfIcon from "@mui/icons-material/PictureAsPdf";
-import AddToDriveIcon from "@mui/icons-material/AddToDrive";
-import VisibilityIcon from "@mui/icons-material/Visibility";
-import CloudUploadIcon from "@mui/icons-material/CloudUpload";
-import CloudIcon from "@mui/icons-material/Cloud";
-import CloudQueueIcon from "@mui/icons-material/CloudQueue";
-import CallSplitIcon from "@mui/icons-material/CallSplit";
-import CallMergeIcon from "@mui/icons-material/CallMerge";
-import MergeTypeIcon from "@mui/icons-material/MergeType";
-import HistoryIcon from "@mui/icons-material/History";
-import SpellcheckIcon from "@mui/icons-material/Spellcheck";
-import GroupsIcon from "@mui/icons-material/Groups";
-import IosShareIcon from "@mui/icons-material/IosShare";
-import ArrowDropDownIcon from "@mui/icons-material/ArrowDropDown";
-import HelpOutlineIcon from "@mui/icons-material/HelpOutline";
-import AutoAwesomeIcon from "@mui/icons-material/AutoAwesome";
-import GitHubIcon from "@mui/icons-material/GitHub";
-import UploadFileIcon from "@mui/icons-material/UploadFile";
-import DataObjectIcon from "@mui/icons-material/DataObject";
-import WarningAmberIcon from "@mui/icons-material/WarningAmber";
-import Badge from "@mui/material/Badge";
+import MuiAlert from "@mui/material/Alert";
+import MuiButton from "@mui/material/Button";
+import {
+  BracesIcon,
+  ChevronDownIcon,
+  CircleHelpIcon,
+  CloudIcon,
+  CloudUploadIcon,
+  CodeIcon,
+  DownloadIcon,
+  EllipsisVerticalIcon,
+  EyeIcon,
+  FileTextIcon,
+  FileUpIcon,
+  GitForkIcon,
+  GitMergeIcon,
+  GitPullRequestIcon,
+  HistoryIcon,
+  PlusIcon,
+  PrinterIcon,
+  SaveIcon,
+  SparklesIcon,
+  SpellCheckIcon,
+  TriangleAlertIcon,
+  UsersIcon,
+} from "lucide-react";
+import AppHeader from "../components/AppHeader.jsx";
+import { Button } from "../components/ui/button.jsx";
+import { Badge } from "../components/ui/badge.jsx";
+import { Field, FieldLabel } from "../components/ui/field.jsx";
+import { Input } from "../components/ui/input.jsx";
+import { Spinner } from "../components/ui/spinner.jsx";
+import {
+  Tooltip,
+  TooltipTrigger,
+  TooltipContent,
+} from "../components/ui/tooltip.jsx";
+import {
+  Select,
+  SelectTrigger,
+  SelectValue,
+  SelectContent,
+  SelectItem,
+} from "../components/ui/select.jsx";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from "../components/ui/dialog.jsx";
+import {
+  DropdownMenu,
+  DropdownMenuTrigger,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+} from "../components/ui/dropdown-menu.jsx";
+import { cn } from "../lib/utils.js";
 import SectionCard from "../components/SectionCard.jsx";
 import { SectionsSkeleton } from "../components/Skeletons.jsx";
-import LiveTextField from "../components/LiveTextField.jsx";
+import { LiveInput } from "../components/LiveField.jsx";
 import NavActions from "../components/NavActions.jsx";
 import CollaborateDialog from "../components/CollaborateDialog.jsx";
 import CollabCursors from "../components/CollabCursors.jsx";
@@ -170,8 +176,6 @@ function applyBlockDrag(
   return { ...doc, sections };
 }
 
-const inheritBorder = { borderColor: "rgba(255,255,255,0.6)" };
-
 export default function EditorPage() {
   useDocumentMeta();
   const [doc, setDoc] = useState(createInitialDoc);
@@ -181,9 +185,6 @@ export default function EditorPage() {
   const [busy, setBusy] = useState(null); // 'docx' | 'pdf' | 'gdocs' | 'preview' | 'publish' | 'import' | null
   const [toast, setToast] = useState(null); // { severity, message }
   const [previewContent, setPreviewContent] = useState(null); // HTML string | null
-  const [exportAnchor, setExportAnchor] = useState(null); // export dropdown anchor el | null
-  const [cloudAnchor, setCloudAnchor] = useState(null); // "Save to cloud" dropdown anchor el | null
-  const [mobileMenuAnchor, setMobileMenuAnchor] = useState(null); // overflow menu anchor on small screens | null
   // Word-import flow. `importWarnOpen` shows the "import is best-effort" warning
   // before the file picker; `importError` holds the reason a chosen file was
   // rejected (shown in a dialog — the editor is left untouched). The hidden
@@ -244,12 +245,6 @@ export default function EditorPage() {
   } = useAuth();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-  const theme = useTheme();
-  // Below "md" the toolbar can't fit all the action buttons, so they collapse
-  // into a single overflow menu.
-  const isMobile = useMediaQuery(theme.breakpoints.down("md"));
-
-  const closeMobileMenu = () => setMobileMenuAnchor(null);
   const showPublish = lessonHubEnabled && authEnabled;
 
   // Real-time collaboration over a Cloudflare Durable Object. The hook watches
@@ -825,7 +820,6 @@ export default function EditorPage() {
   // creating a duplicate. The draft<->published state is recorded so the chip and
   // menu stay accurate.
   const handleSaveToCloud = async (publish) => {
-    setCloudAnchor(null);
     if (doc.sections.length === 0) {
       setToast({
         severity: "warning",
@@ -1267,9 +1261,6 @@ export default function EditorPage() {
     return next;
   }, [doc]);
 
-  const [anchorEl, setAnchorEl] = useState(null);
-  const menuOpen = Boolean(anchorEl);
-
   // "Save to cloud" menu labels adapt to whether a lesson is already attached
   // (editingId) and, if so, whether it's currently published or a draft — so each
   // action reads as either creating, updating, or switching the lesson's state.
@@ -1280,562 +1271,480 @@ export default function EditorPage() {
   const draftActionLabel =
     editingId && !editingPublished ? "Update draft" : "Save as draft";
 
-  return (
-    <Box sx={{ minHeight: "100vh", pb: 12 }}>
-      <AppBar position="sticky" elevation={1}>
-        <Toolbar>
-          <Tooltip title="Account">
-            <IconButton
-              color="inherit"
-              onClick={(e) => setAnchorEl(e.currentTarget)}
-              aria-label="logo"
-            >
-              <SpellcheckIcon sx={{ mr: 1.5, flexShrink: 0 }} />
-            </IconButton>
-          </Tooltip>
-          <Menu
-            anchorEl={anchorEl}
-            open={menuOpen}
-            onClose={() => setAnchorEl(null)}
-            anchorOrigin={{ vertical: "bottom", horizontal: "right" }}
-            transformOrigin={{ vertical: "top", horizontal: "right" }}
-          >
-            <MenuItem
-              onClick={() => {
-                setAnchorEl(null);
-                openImportWarning();
-              }}
-              disabled={busy !== null}
-            >
-              <UploadFileIcon sx={{ mr: 1, fontSize: 20 }} />
-              Import Word document
-            </MenuItem>
-            <MenuItem
-              onClick={() => {
-                setAnchorEl(null);
-                triggerJsonImportPicker();
-              }}
-              disabled={busy !== null}
-            >
-              <DataObjectIcon sx={{ mr: 1, fontSize: 20 }} />
-              Import JSON
-            </MenuItem>
-            <Divider />
-            <MenuItem
-              onClick={() => {
-                setAnchorEl(null);
-                window.open(
-                  "https://github.com/playforge-coding/spelling-creator",
-                  "_blank",
-                );
-              }}
-            >
-              <GitHubIcon sx={{ mr: 1, fontSize: 20 }} />
-              GitHub
-            </MenuItem>
-          </Menu>
-          <Typography
-            variant="h6"
-            noWrap
-            sx={{ flexGrow: 1, minWidth: 0, mr: 1 }}
-          >
-            Spelling Lesson Maker
-          </Typography>
-          <Stack direction="row" spacing={1} alignItems="center">
-            {isMobile && (
-              <>
-                <Tooltip title="Lesson actions">
-                  <IconButton
-                    color="inherit"
-                    onClick={(e) => setMobileMenuAnchor(e.currentTarget)}
-                    aria-label="lesson actions"
-                  >
-                    <Badge
-                      color="success"
-                      badgeContent={
-                        collab.active ? collab.participants.length : 0
-                      }
-                      overlap="circular"
-                    >
-                      <MoreVertIcon />
-                    </Badge>
-                  </IconButton>
-                </Tooltip>
-                <Tooltip title="How to create a lesson">
-                  <IconButton
-                    color="inherit"
-                    onClick={openWizard}
-                    aria-label="how to create a lesson"
-                  >
-                    <HelpOutlineIcon />
-                  </IconButton>
-                </Tooltip>
-                <Menu
-                  anchorEl={mobileMenuAnchor}
-                  open={Boolean(mobileMenuAnchor)}
-                  onClose={closeMobileMenu}
-                  anchorOrigin={{ vertical: "bottom", horizontal: "right" }}
-                  transformOrigin={{ vertical: "top", horizontal: "right" }}
-                >
-                  <MenuItem
-                    onClick={() => {
-                      closeMobileMenu();
-                      handlePreview();
-                    }}
-                    disabled={busy !== null}
-                  >
-                    <ListItemIcon>
-                      <VisibilityIcon fontSize="small" />
-                    </ListItemIcon>
-                    <ListItemText>Preview</ListItemText>
-                  </MenuItem>
-                  <MenuItem
-                    onClick={() => {
-                      closeMobileMenu();
-                      openImportWarning();
-                    }}
-                    disabled={busy !== null}
-                  >
-                    <ListItemIcon>
-                      <UploadFileIcon fontSize="small" />
-                    </ListItemIcon>
-                    <ListItemText>Import Word document</ListItemText>
-                  </MenuItem>
-                  <MenuItem
-                    onClick={() => {
-                      closeMobileMenu();
-                      triggerJsonImportPicker();
-                    }}
-                    disabled={busy !== null}
-                  >
-                    <ListItemIcon>
-                      <DataObjectIcon fontSize="small" />
-                    </ListItemIcon>
-                    <ListItemText>Import JSON</ListItemText>
-                  </MenuItem>
-                  <Divider />
-                  <MenuItem
-                    onClick={() => {
-                      closeMobileMenu();
-                      handleExport("docx");
-                    }}
-                    disabled={busy !== null}
-                  >
-                    <ListItemIcon>
-                      <DescriptionIcon fontSize="small" />
-                    </ListItemIcon>
-                    <ListItemText>Export DOCX</ListItemText>
-                  </MenuItem>
-                  <MenuItem
-                    onClick={() => {
-                      closeMobileMenu();
-                      handleExport("json");
-                    }}
-                    disabled={busy !== null}
-                  >
-                    <ListItemIcon>
-                      <DataObjectIcon fontSize="small" />
-                    </ListItemIcon>
-                    <ListItemText>Export JSON</ListItemText>
-                  </MenuItem>
-                  <MenuItem
-                    onClick={() => {
-                      closeMobileMenu();
-                      handleExport("pdf");
-                    }}
-                    disabled={busy !== null}
-                  >
-                    <ListItemIcon>
-                      <PictureAsPdfIcon fontSize="small" />
-                    </ListItemIcon>
-                    <ListItemText>Print PDF</ListItemText>
-                  </MenuItem>
-                  {googleDriveEnabled && (
-                    <MenuItem
-                      onClick={() => {
-                        closeMobileMenu();
-                        handleSaveToGoogle();
-                      }}
-                      disabled={busy !== null}
-                    >
-                      <ListItemIcon>
-                        <AddToDriveIcon fontSize="small" />
-                      </ListItemIcon>
-                      <ListItemText>Save to Google Docs</ListItemText>
-                    </MenuItem>
-                  )}
-                  {showPublish && <Divider />}
-                  {showPublish && (
-                    <MenuItem
-                      onClick={() => {
-                        closeMobileMenu();
-                        handleSaveToCloud(true);
-                      }}
-                      disabled={busy !== null}
-                    >
-                      <ListItemIcon>
-                        <CloudUploadIcon fontSize="small" />
-                      </ListItemIcon>
-                      <ListItemText>{publishActionLabel}</ListItemText>
-                    </MenuItem>
-                  )}
-                  {showPublish && (
-                    <MenuItem
-                      onClick={() => {
-                        closeMobileMenu();
-                        handleSaveToCloud(false);
-                      }}
-                      disabled={busy !== null}
-                    >
-                      <ListItemIcon>
-                        <CloudQueueIcon fontSize="small" />
-                      </ListItemIcon>
-                      <ListItemText>{draftActionLabel}</ListItemText>
-                    </MenuItem>
-                  )}
-                  <Divider />
-                  <MenuItem
-                    onClick={() => {
-                      closeMobileMenu();
-                      setCollabOpen(true);
-                    }}
-                  >
-                    <ListItemIcon>
-                      <GroupsIcon fontSize="small" />
-                    </ListItemIcon>
-                    <ListItemText>
-                      {collab.active
-                        ? `Collaborating (${collab.participants.length})`
-                        : "Collaborate"}
-                    </ListItemText>
-                  </MenuItem>
-                </Menu>
-              </>
-            )}
-            {!isMobile && (
-              <>
-                <Tooltip title="How to create a lesson">
-                  <IconButton
-                    color="inherit"
-                    onClick={openWizard}
-                    aria-label="how to create a lesson"
-                  >
-                    <HelpOutlineIcon />
-                  </IconButton>
-                </Tooltip>
-                <Button
-                  color="inherit"
-                  variant="outlined"
-                  startIcon={
-                    busy === "preview" ? (
-                      <CircularProgress size={16} color="inherit" />
-                    ) : (
-                      <VisibilityIcon />
-                    )
-                  }
-                  onClick={handlePreview}
-                  disabled={busy !== null}
-                  sx={inheritBorder}
-                >
-                  Preview
-                </Button>
-                <Button
-                  color="inherit"
-                  variant="outlined"
-                  startIcon={
-                    busy === "docx" ||
-                    busy === "json" ||
-                    busy === "pdf" ||
-                    busy === "gdocs" ? (
-                      <CircularProgress size={16} color="inherit" />
-                    ) : (
-                      <IosShareIcon />
-                    )
-                  }
-                  endIcon={<ArrowDropDownIcon />}
-                  onClick={(e) => setExportAnchor(e.currentTarget)}
-                  disabled={busy !== null}
-                  sx={inheritBorder}
-                >
-                  Export
-                </Button>
-                <Menu
-                  anchorEl={exportAnchor}
-                  open={Boolean(exportAnchor)}
-                  onClose={() => setExportAnchor(null)}
-                  anchorOrigin={{ vertical: "bottom", horizontal: "right" }}
-                  transformOrigin={{ vertical: "top", horizontal: "right" }}
-                >
-                  <MenuItem
-                    onClick={() => {
-                      setExportAnchor(null);
-                      handleExport("docx");
-                    }}
-                  >
-                    <ListItemIcon>
-                      <DescriptionIcon fontSize="small" />
-                    </ListItemIcon>
-                    <ListItemText>Export DOCX</ListItemText>
-                  </MenuItem>
-                  <MenuItem
-                    onClick={() => {
-                      setExportAnchor(null);
-                      handleExport("json");
-                    }}
-                  >
-                    <ListItemIcon>
-                      <DataObjectIcon fontSize="small" />
-                    </ListItemIcon>
-                    <ListItemText
-                      primary="Export JSON"
-                      secondary="Re-importable lesson file"
-                    />
-                  </MenuItem>
-                  <MenuItem
-                    onClick={() => {
-                      setExportAnchor(null);
-                      handleExport("pdf");
-                    }}
-                  >
-                    <ListItemIcon>
-                      <PictureAsPdfIcon fontSize="small" />
-                    </ListItemIcon>
-                    <ListItemText>Print PDF</ListItemText>
-                  </MenuItem>
-                  {googleDriveEnabled && (
-                    <MenuItem
-                      onClick={() => {
-                        setExportAnchor(null);
-                        handleSaveToGoogle();
-                      }}
-                    >
-                      <ListItemIcon>
-                        <AddToDriveIcon fontSize="small" />
-                      </ListItemIcon>
-                      <ListItemText>Save to Google Docs</ListItemText>
-                    </MenuItem>
-                  )}
-                </Menu>
-                {showPublish && (
-                  <>
-                    <Button
-                      color="inherit"
-                      variant="outlined"
-                      startIcon={
-                        busy === "publish" ? (
-                          <CircularProgress size={16} color="inherit" />
-                        ) : (
-                          <CloudIcon />
-                        )
-                      }
-                      endIcon={<ArrowDropDownIcon />}
-                      onClick={(e) => setCloudAnchor(e.currentTarget)}
-                      disabled={busy !== null}
-                      sx={inheritBorder}
-                    >
-                      Save to cloud
-                    </Button>
-                    <Menu
-                      anchorEl={cloudAnchor}
-                      open={Boolean(cloudAnchor)}
-                      onClose={() => setCloudAnchor(null)}
-                      anchorOrigin={{ vertical: "bottom", horizontal: "right" }}
-                      transformOrigin={{ vertical: "top", horizontal: "right" }}
-                    >
-                      <MenuItem onClick={() => handleSaveToCloud(true)}>
-                        <ListItemIcon>
-                          <CloudUploadIcon fontSize="small" />
-                        </ListItemIcon>
-                        <ListItemText
-                          primary={publishActionLabel}
-                          secondary="Shared on the public hub"
-                        />
-                      </MenuItem>
-                      <MenuItem onClick={() => handleSaveToCloud(false)}>
-                        <ListItemIcon>
-                          <CloudQueueIcon fontSize="small" />
-                        </ListItemIcon>
-                        <ListItemText
-                          primary={draftActionLabel}
-                          secondary="Private backup — not published"
-                        />
-                      </MenuItem>
-                    </Menu>
-                  </>
-                )}
-                <Tooltip title="Collaborate live on this lesson">
-                  <Badge
-                    color="success"
-                    badgeContent={
-                      collab.active ? collab.participants.length : 0
-                    }
-                    overlap="circular"
-                  >
-                    <Button
-                      color="inherit"
-                      variant={collab.active ? "contained" : "outlined"}
-                      startIcon={<GroupsIcon />}
-                      onClick={() => setCollabOpen(true)}
-                      sx={collab.active ? undefined : inheritBorder}
-                    >
-                      Collaborate
-                    </Button>
-                  </Badge>
-                </Tooltip>
-              </>
-            )}
-            <NavActions current="editor" />
-          </Stack>
-        </Toolbar>
-      </AppBar>
+  const exportBusy =
+    busy === "docx" || busy === "json" || busy === "pdf" || busy === "gdocs";
 
-      <Container maxWidth="md" sx={{ pt: 3 }}>
-        <Paper elevation={2} sx={{ p: { xs: 2, sm: 3 }, mb: 3 }}>
-          <Typography variant="overline" color="text.secondary">
+  // Header icon-only triggers (help, the logo/import menu, the mobile
+  // overflow menu) sit on AppHeader's --primary surface, so they use
+  // --primary-foreground rather than the usual tokens — see the note at the
+  // top of NavActions.jsx, whose iconTrigger this mirrors.
+  const headerIconTrigger =
+    "relative inline-flex size-10 shrink-0 cursor-pointer items-center justify-center rounded-full border-0 bg-transparent text-primary-foreground no-underline transition-colors hover:bg-primary-foreground/10";
+  const headerGhostButton =
+    "text-primary-foreground hover:bg-primary-foreground/10 hover:text-primary-foreground";
+
+  // The small "N collaborators online" dot, overlaid on whichever trigger
+  // shows it (the mobile overflow menu, the desktop Collaborate button).
+  const collabCount = collab.active ? collab.participants.length : 0;
+  const CollabDot = collabCount > 0 && (
+    <span className="absolute -top-1 -right-1 flex size-4 items-center justify-center rounded-full bg-success text-[10px] font-medium text-success-foreground">
+      {collabCount}
+    </span>
+  );
+
+  return (
+    <div className="min-h-screen bg-background pb-24 text-foreground">
+      <AppHeader
+        title="Spelling Lesson Maker"
+        left={
+          <DropdownMenu>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <DropdownMenuTrigger asChild>
+                  <button
+                    type="button"
+                    aria-label="menu"
+                    className={cn(headerIconTrigger, "mr-1")}
+                  >
+                    <SpellCheckIcon />
+                  </button>
+                </DropdownMenuTrigger>
+              </TooltipTrigger>
+              <TooltipContent>Menu</TooltipContent>
+            </Tooltip>
+            <DropdownMenuContent align="start">
+              <DropdownMenuItem
+                onClick={openImportWarning}
+                disabled={busy !== null}
+              >
+                <FileUpIcon />
+                Import Word document
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onClick={triggerJsonImportPicker}
+                disabled={busy !== null}
+              >
+                <BracesIcon />
+                Import JSON
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem
+                onClick={() =>
+                  window.open(
+                    "https://github.com/playforge-coding/spelling-creator",
+                    "_blank",
+                  )
+                }
+              >
+                <CodeIcon />
+                GitHub
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        }
+      >
+        {/* Mobile: help + one overflow menu covering every other action. */}
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <button
+              type="button"
+              onClick={openWizard}
+              aria-label="how to create a lesson"
+              className={cn(headerIconTrigger, "md:hidden")}
+            >
+              <CircleHelpIcon />
+            </button>
+          </TooltipTrigger>
+          <TooltipContent>How to create a lesson</TooltipContent>
+        </Tooltip>
+        <DropdownMenu>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <DropdownMenuTrigger asChild>
+                <button
+                  type="button"
+                  aria-label="lesson actions"
+                  className={cn(headerIconTrigger, "md:hidden")}
+                >
+                  <EllipsisVerticalIcon />
+                  {CollabDot}
+                </button>
+              </DropdownMenuTrigger>
+            </TooltipTrigger>
+            <TooltipContent>Lesson actions</TooltipContent>
+          </Tooltip>
+          <DropdownMenuContent align="end">
+            <DropdownMenuItem onClick={handlePreview} disabled={busy !== null}>
+              <EyeIcon />
+              Preview
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              onClick={openImportWarning}
+              disabled={busy !== null}
+            >
+              <FileUpIcon />
+              Import Word document
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              onClick={triggerJsonImportPicker}
+              disabled={busy !== null}
+            >
+              <BracesIcon />
+              Import JSON
+            </DropdownMenuItem>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem
+              onClick={() => handleExport("docx")}
+              disabled={busy !== null}
+            >
+              <FileTextIcon />
+              Export DOCX
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              onClick={() => handleExport("json")}
+              disabled={busy !== null}
+            >
+              <BracesIcon />
+              Export JSON
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              onClick={() => handleExport("pdf")}
+              disabled={busy !== null}
+            >
+              <PrinterIcon />
+              Print PDF
+            </DropdownMenuItem>
+            {googleDriveEnabled && (
+              <DropdownMenuItem
+                onClick={handleSaveToGoogle}
+                disabled={busy !== null}
+              >
+                <SaveIcon />
+                Save to Google Docs
+              </DropdownMenuItem>
+            )}
+            {showPublish && <DropdownMenuSeparator />}
+            {showPublish && (
+              <DropdownMenuItem
+                onClick={() => handleSaveToCloud(true)}
+                disabled={busy !== null}
+              >
+                <CloudUploadIcon />
+                {publishActionLabel}
+              </DropdownMenuItem>
+            )}
+            {showPublish && (
+              <DropdownMenuItem
+                onClick={() => handleSaveToCloud(false)}
+                disabled={busy !== null}
+              >
+                <CloudIcon />
+                {draftActionLabel}
+              </DropdownMenuItem>
+            )}
+            <DropdownMenuSeparator />
+            <DropdownMenuItem onClick={() => setCollabOpen(true)}>
+              <UsersIcon />
+              {collab.active
+                ? `Collaborating (${collab.participants.length})`
+                : "Collaborate"}
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+
+        {/* Desktop: the actions as their own buttons. */}
+        <div className="hidden items-center gap-1 md:flex">
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <button
+                type="button"
+                onClick={openWizard}
+                aria-label="how to create a lesson"
+                className={headerIconTrigger}
+              >
+                <CircleHelpIcon />
+              </button>
+            </TooltipTrigger>
+            <TooltipContent>How to create a lesson</TooltipContent>
+          </Tooltip>
+          <Button
+            variant="ghost"
+            onClick={handlePreview}
+            disabled={busy !== null}
+            className={headerGhostButton}
+          >
+            {busy === "preview" ? (
+              <Spinner data-icon="inline-start" />
+            ) : (
+              <EyeIcon data-icon="inline-start" />
+            )}
+            Preview
+          </Button>
+
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button
+                variant="ghost"
+                disabled={busy !== null}
+                className={headerGhostButton}
+              >
+                {exportBusy ? (
+                  <Spinner data-icon="inline-start" />
+                ) : (
+                  <DownloadIcon data-icon="inline-start" />
+                )}
+                Export
+                <ChevronDownIcon className="opacity-70" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem onClick={() => handleExport("docx")}>
+                <FileTextIcon />
+                Export DOCX
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => handleExport("json")}>
+                <BracesIcon />
+                <div className="flex flex-col">
+                  <span>Export JSON</span>
+                  <span className="text-xs text-muted-foreground">
+                    Re-importable lesson file
+                  </span>
+                </div>
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => handleExport("pdf")}>
+                <PrinterIcon />
+                Print PDF
+              </DropdownMenuItem>
+              {googleDriveEnabled && (
+                <DropdownMenuItem onClick={handleSaveToGoogle}>
+                  <SaveIcon />
+                  Save to Google Docs
+                </DropdownMenuItem>
+              )}
+            </DropdownMenuContent>
+          </DropdownMenu>
+
+          {showPublish && (
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  variant="ghost"
+                  disabled={busy !== null}
+                  className={headerGhostButton}
+                >
+                  {busy === "publish" ? (
+                    <Spinner data-icon="inline-start" />
+                  ) : (
+                    <CloudIcon data-icon="inline-start" />
+                  )}
+                  Save to cloud
+                  <ChevronDownIcon className="opacity-70" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem onClick={() => handleSaveToCloud(true)}>
+                  <CloudUploadIcon />
+                  <div className="flex flex-col">
+                    <span>{publishActionLabel}</span>
+                    <span className="text-xs text-muted-foreground">
+                      Shared on the public hub
+                    </span>
+                  </div>
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => handleSaveToCloud(false)}>
+                  <CloudIcon />
+                  <div className="flex flex-col">
+                    <span>{draftActionLabel}</span>
+                    <span className="text-xs text-muted-foreground">
+                      Private backup — not published
+                    </span>
+                  </div>
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          )}
+
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <span className="relative inline-flex">
+                <Button
+                  variant={collab.active ? "default" : "ghost"}
+                  onClick={() => setCollabOpen(true)}
+                  className={collab.active ? undefined : headerGhostButton}
+                >
+                  <UsersIcon data-icon="inline-start" />
+                  Collaborate
+                </Button>
+                {CollabDot}
+              </span>
+            </TooltipTrigger>
+            <TooltipContent>Collaborate live on this lesson</TooltipContent>
+          </Tooltip>
+        </div>
+
+        <NavActions current="editor" />
+      </AppHeader>
+
+      <div className="mx-auto max-w-3xl px-4 pt-6">
+        <div className="rounded-panel border border-border bg-card p-4 text-card-foreground shadow-(--shadow-panel) sm:p-6">
+          <p className="text-xs font-semibold tracking-wide text-muted-foreground uppercase">
             Document title
-          </Typography>
-          <LiveTextField
-            fullWidth
-            variant="standard"
-            placeholder="Untitled Lesson"
+          </p>
+          <LiveInput
             value={doc.title}
             onCommit={setTitle}
-            slotProps={{
-              input: { sx: { fontSize: 28, fontWeight: 700 } },
-              htmlInput: { "data-collab-field": "doc:title" },
-            }}
+            placeholder="Untitled Lesson"
+            data-collab-field="doc:title"
+            className="h-auto rounded-none border-0 border-b-2 border-transparent bg-transparent px-0 py-1 text-2xl font-bold shadow-none focus-visible:border-b-primary focus-visible:ring-0"
           />
-          <Stack
-            direction="row"
-            spacing={1.5}
-            alignItems="center"
-            flexWrap="wrap"
-            useFlexGap
-            sx={{ mt: 1.5 }}
-          >
-            <FormControl size="small" sx={{ minWidth: 160 }}>
-              <InputLabel id="age-range-label">Age range</InputLabel>
-              <Select
-                labelId="age-range-label"
-                label="Age range"
-                value={doc.ageRange || ""}
-                onChange={(e) => setAgeRange(e.target.value)}
+          <div className="mt-3 flex flex-wrap items-center gap-3">
+            <Select
+              value={doc.ageRange || "any"}
+              onValueChange={(v) => setAgeRange(v === "any" ? "" : v)}
+            >
+              <SelectTrigger
+                size="sm"
+                className="w-[160px]"
+                aria-label="Age range"
               >
-                <MenuItem value="">
-                  <em>Any age</em>
-                </MenuItem>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="any">Any age</SelectItem>
                 {AGE_RANGES.map((range) => (
-                  <MenuItem key={range} value={range}>
+                  <SelectItem key={range} value={range}>
                     {range}
-                  </MenuItem>
+                  </SelectItem>
                 ))}
-              </Select>
-            </FormControl>
-            <Tooltip title="Get AI lesson ideas tailored to this age range">
-              <Button
-                size="small"
-                variant="outlined"
-                startIcon={<AutoAwesomeIcon />}
-                onClick={() => setIdeaDialogOpen(true)}
-              >
-                Suggest ideas
-              </Button>
+              </SelectContent>
+            </Select>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => setIdeaDialogOpen(true)}
+                >
+                  <SparklesIcon data-icon="inline-start" />
+                  Suggest ideas
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>
+                Get AI lesson ideas tailored to this age range
+              </TooltipContent>
             </Tooltip>
-          </Stack>
-          <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
+          </div>
+          <p className="mt-2 text-sm text-muted-foreground">
             {sectionCount} section{sectionCount === 1 ? "" : "s"} · {blockCount}{" "}
             content block
             {blockCount === 1 ? "" : "s"}
-          </Typography>
+          </p>
+
           {(editingId || git.ready) && (
-            <Stack
-              direction="row"
-              spacing={1}
-              alignItems="center"
-              flexWrap="wrap"
-              useFlexGap
-              sx={{ mt: 1.5 }}
-            >
+            <div className="mt-3 flex flex-wrap items-center gap-2">
               {editingId && (
-                <Tooltip
-                  title={
-                    editingPublished
-                      ? "You're editing a lesson you published. Saving to the cloud overwrites it in the hub. This status is saved until you update it or fork into a new lesson."
-                      : "You're editing a draft backed up to the cloud. Only you can see it; saving updates the backup, or you can publish it to the hub. This status is saved until you change it or fork into a new lesson."
-                  }
-                >
-                  <Chip
-                    size="small"
-                    color={editingPublished ? "primary" : "default"}
-                    variant="outlined"
-                    icon={
-                      editingPublished ? (
-                        <CloudUploadIcon />
-                      ) : (
-                        <CloudQueueIcon />
-                      )
-                    }
-                    label={
-                      editingPublished
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Badge
+                      variant="outline"
+                      className={cn(
+                        "gap-1",
+                        editingPublished
+                          ? "border-primary/40 bg-primary/10 text-primary"
+                          : "border-border bg-transparent text-muted-foreground",
+                      )}
+                    >
+                      {editingPublished ? <CloudUploadIcon /> : <CloudIcon />}
+                      {editingPublished
                         ? "Editing a published lesson"
-                        : "Editing a cloud draft"
-                    }
-                  />
+                        : "Editing a cloud draft"}
+                    </Badge>
+                  </TooltipTrigger>
+                  <TooltipContent className="max-w-xs">
+                    {editingPublished
+                      ? "You're editing a lesson you published. Saving to the cloud overwrites it in the hub. This status is saved until you update it or fork into a new lesson."
+                      : "You're editing a draft backed up to the cloud. Only you can see it; saving updates the backup, or you can publish it to the hub. This status is saved until you change it or fork into a new lesson."}
+                  </TooltipContent>
                 </Tooltip>
               )}
 
               {/* Version history. Every edit is committed to the lesson's own git
                   repository when you pause; this is the way in to that timeline. */}
               {git.ready && (
-                <Tooltip title="Every version of this lesson is saved automatically as you work. Click to browse them and go back to any one.">
-                  <Chip
-                    size="small"
-                    variant="outlined"
-                    color={git.pending > 0 ? "default" : "success"}
-                    icon={<HistoryIcon />}
-                    onClick={() => setHistoryOpen(true)}
-                    label={
-                      git.pending > 0
-                        ? `${git.pending} unsaved change${git.pending === 1 ? "" : "s"}`
-                        : git.lastCommit
-                          ? `Version saved ${timeAgo(git.lastCommit.at)}`
-                          : "Version history"
-                    }
-                  />
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <button
+                      type="button"
+                      onClick={() => setHistoryOpen(true)}
+                      className="cursor-pointer border-0 bg-transparent p-0"
+                    >
+                      <Badge
+                        variant="outline"
+                        className={cn(
+                          "gap-1",
+                          git.pending > 0
+                            ? "border-border bg-transparent text-muted-foreground"
+                            : "border-success/40 bg-success/10 text-success",
+                        )}
+                      >
+                        <HistoryIcon />
+                        {git.pending > 0
+                          ? `${git.pending} unsaved change${git.pending === 1 ? "" : "s"}`
+                          : git.lastCommit
+                            ? `Version saved ${timeAgo(git.lastCommit.at)}`
+                            : "Version history"}
+                      </Badge>
+                    </button>
+                  </TooltipTrigger>
+                  <TooltipContent className="max-w-xs">
+                    Every version of this lesson is saved automatically as you
+                    work. Click to browse them and go back to any one.
+                  </TooltipContent>
                 </Tooltip>
               )}
 
               {editingId && (
-                <Tooltip title="Detach from this saved lesson and start a new one. The new lesson keeps this one's history, so you can merge them later. Saving to the cloud will create a separate copy instead of overwriting the original.">
-                  <Button
-                    size="small"
-                    variant="text"
-                    startIcon={<CallSplitIcon />}
-                    onClick={handleFork}
-                  >
-                    Fork into a new lesson
-                  </Button>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button variant="ghost" size="sm" onClick={handleFork}>
+                      <GitForkIcon data-icon="inline-start" />
+                      Fork into a new lesson
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent className="max-w-xs">
+                    Detach from this saved lesson and start a new one. The new
+                    lesson keeps this one&rsquo;s history, so you can merge them
+                    later. Saving to the cloud will create a separate copy
+                    instead of overwriting the original.
+                  </TooltipContent>
                 </Tooltip>
               )}
 
               {/* This lesson is a fork. Offer to pull in whatever the original
                   has changed since — merged block by block. */}
               {forkedFrom && gitRemoteEnabled && (
-                <Tooltip
-                  title={`Bring in the changes made to ${forkedFromTitle || "the original lesson"} since you forked it. Edits to different blocks — or to different parts of the same block — merge automatically; anything genuinely clashing is put to you.`}
-                >
-                  <Button
-                    size="small"
-                    variant="text"
-                    color="secondary"
-                    startIcon={<CallMergeIcon />}
-                    onClick={handleSyncUpstream}
-                    disabled={busy !== null}
-                  >
-                    {busy === "merge"
-                      ? "Checking..."
-                      : `Sync with ${forkedFromTitle || "the original"}`}
-                  </Button>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={handleSyncUpstream}
+                      disabled={busy !== null}
+                      className="text-primary hover:bg-primary/10 hover:text-primary"
+                    >
+                      <GitMergeIcon data-icon="inline-start" />
+                      {busy === "merge"
+                        ? "Checking..."
+                        : `Sync with ${forkedFromTitle || "the original"}`}
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent className="max-w-xs">
+                    Bring in the changes made to{" "}
+                    {forkedFromTitle || "the original lesson"} since you forked
+                    it. Edits to different blocks — or to different parts of the
+                    same block — merge automatically; anything genuinely
+                    clashing is put to you.
+                  </TooltipContent>
                 </Tooltip>
               )}
 
@@ -1843,26 +1752,31 @@ export default function EditorPage() {
                   so we can merge our work back INTO it — the contribution flow.
                   Anyone else can fork and sync, but only push their own copy. */}
               {forkedFrom && canContribute && gitRemoteEnabled && (
-                <Tooltip
-                  title={`You're a trusted collaborator on ${forkedFromTitle || "the original lesson"}, so you can merge your changes back into it. Its latest changes are pulled in first, block by block, and only genuine clashes are put to you. Its author is notified.`}
-                >
-                  <Button
-                    size="small"
-                    variant="contained"
-                    color="secondary"
-                    startIcon={<MergeTypeIcon />}
-                    onClick={handleContribute}
-                    disabled={busy !== null}
-                  >
-                    {busy === "contribute"
-                      ? "Merging..."
-                      : `Merge back into ${forkedFromTitle || "the original"}`}
-                  </Button>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      size="sm"
+                      onClick={handleContribute}
+                      disabled={busy !== null}
+                    >
+                      <GitPullRequestIcon data-icon="inline-start" />
+                      {busy === "contribute"
+                        ? "Merging..."
+                        : `Merge back into ${forkedFromTitle || "the original"}`}
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent className="max-w-xs">
+                    You&rsquo;re a trusted collaborator on{" "}
+                    {forkedFromTitle || "the original lesson"}, so you can merge
+                    your changes back into it. Its latest changes are pulled in
+                    first, block by block, and only genuine clashes are put to
+                    you. Its author is notified.
+                  </TooltipContent>
                 </Tooltip>
               )}
-            </Stack>
+            </div>
           )}
-        </Paper>
+        </div>
 
         {/* Until the saved draft has hydrated from storage, show section
             placeholders rather than the doc's empty starter state — otherwise the
@@ -1870,10 +1784,12 @@ export default function EditorPage() {
             in. The same applies while a hub lesson is being fetched into an as-yet
             empty editor (sectionCount === 0 && editLoading). */}
         {!hydrated ? (
-          <SectionsSkeleton />
+          <div className="mt-4">
+            <SectionsSkeleton />
+          </div>
         ) : (
           <>
-            <Stack spacing={3}>
+            <div className="mt-4 flex flex-col gap-4">
               {/* eslint-disable-next-line react-hooks/refs -- capitalizedWords is a stable cached array, safe to read here */}
               {doc.sections.map((section, i) => (
                 <SectionCard
@@ -1905,145 +1821,124 @@ export default function EditorPage() {
                   onBlockDragEnd={endBlockDrag}
                 />
               ))}
-            </Stack>
+            </div>
 
             {sectionCount === 0 &&
               (editLoading ? (
-                <SectionsSkeleton />
+                <div className="mt-4">
+                  <SectionsSkeleton />
+                </div>
               ) : (
-                <Paper
-                  variant="outlined"
-                  sx={{
-                    p: 6,
-                    textAlign: "center",
-                    borderStyle: "dashed",
-                    mt: 1,
-                  }}
-                >
-                  <Typography variant="h6" gutterBottom>
-                    No sections yet
-                  </Typography>
-                  <Typography
-                    variant="body2"
-                    color="text.secondary"
-                    sx={{ mb: 2 }}
-                  >
+                <div className="mt-4 rounded-md border border-dashed border-border p-12 text-center">
+                  <p className="mb-1 text-lg font-semibold">No sections yet</p>
+                  <p className="mb-4 text-sm text-muted-foreground">
                     Tap the <strong>+</strong> button to create your first
                     lesson section.
-                  </Typography>
-                  <Stack
-                    direction={{ xs: "column", sm: "row" }}
-                    spacing={1.5}
-                    justifyContent="center"
-                  >
-                    <Button
-                      variant="contained"
-                      startIcon={<AddIcon />}
-                      onClick={openAddDialog}
-                    >
+                  </p>
+                  <div className="flex flex-col justify-center gap-3 sm:flex-row">
+                    <Button onClick={openAddDialog}>
+                      <PlusIcon data-icon="inline-start" />
                       Add section
                     </Button>
                     <Button
-                      variant="outlined"
-                      startIcon={<UploadFileIcon />}
+                      variant="outline"
                       onClick={openImportWarning}
                       disabled={busy !== null}
                     >
+                      <FileUpIcon data-icon="inline-start" />
                       Import Word document
                     </Button>
                     <Button
-                      variant="outlined"
-                      startIcon={<DataObjectIcon />}
+                      variant="outline"
                       onClick={triggerJsonImportPicker}
                       disabled={busy !== null}
                     >
+                      <BracesIcon data-icon="inline-start" />
                       Import JSON
                     </Button>
-                  </Stack>
-                </Paper>
+                  </div>
+                </div>
               ))}
           </>
         )}
-      </Container>
+      </div>
 
-      <Tooltip title="Add section">
-        <Fab
-          color="primary"
-          onClick={openAddDialog}
-          sx={{
-            position: "fixed",
-            bottom: { xs: 16, sm: 32 },
-            right: { xs: 16, sm: 32 },
-          }}
-          aria-label="add section"
-        >
-          <AddIcon />
-        </Fab>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <Button
+            size="icon-lg"
+            onClick={openAddDialog}
+            aria-label="add section"
+            className="fixed right-4 bottom-4 z-40 size-14 rounded-full shadow-[var(--shadow-panel)] sm:right-8 sm:bottom-8"
+          >
+            <PlusIcon className="size-6" />
+          </Button>
+        </TooltipTrigger>
+        <TooltipContent>Add section</TooltipContent>
       </Tooltip>
 
-      <Dialog
-        open={dialogOpen}
-        onClose={() => setDialogOpen(false)}
-        fullWidth
-        maxWidth="xs"
-      >
-        <DialogTitle>New section</DialogTitle>
-        <DialogContent>
-          <TextField
-            autoFocus
-            fullWidth
-            margin="dense"
-            label="Section name"
-            placeholder={`Section ${sectionCount + 1}`}
-            value={newSectionName}
-            onChange={(e) => setNewSectionName(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") confirmAddSection();
-            }}
-          />
+      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+        <DialogContent className="sm:max-w-xs">
+          <DialogHeader>
+            <DialogTitle>New section</DialogTitle>
+          </DialogHeader>
+          <Field>
+            <FieldLabel htmlFor="new-section-name" className="sr-only">
+              Section name
+            </FieldLabel>
+            <Input
+              id="new-section-name"
+              autoFocus
+              placeholder={`Section ${sectionCount + 1}`}
+              value={newSectionName}
+              onChange={(e) => setNewSectionName(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") confirmAddSection();
+              }}
+            />
+          </Field>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDialogOpen(false)}>
+              Cancel
+            </Button>
+            <Button onClick={confirmAddSection}>Add</Button>
+          </DialogFooter>
         </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setDialogOpen(false)}>Cancel</Button>
-          <Button variant="contained" onClick={confirmAddSection}>
-            Add
-          </Button>
-        </DialogActions>
       </Dialog>
 
       <Dialog
         open={Boolean(previewContent)}
-        onClose={() => setPreviewContent(null)}
-        fullWidth
-        maxWidth="md"
-        scroll="paper"
-        fullScreen={isMobile}
+        onOpenChange={(next) => !next && setPreviewContent(null)}
       >
-        <DialogTitle>Preview</DialogTitle>
-        <DialogContent dividers>
-          <Box
-            className="s2c-preview-root"
-            sx={{ bgcolor: "#fff", color: "#1a1a1a", p: 2 }}
+        <DialogContent className="flex max-h-[90vh] w-full flex-col sm:max-w-3xl">
+          <DialogHeader>
+            <DialogTitle>Preview</DialogTitle>
+          </DialogHeader>
+          <div
+            className="s2c-preview-root overflow-y-auto rounded-md border border-border bg-white p-4 text-[#1a1a1a]"
             dangerouslySetInnerHTML={{
               __html: `<style>${PREVIEW_STYLES}</style>${previewContent || ""}`,
             }}
           />
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setPreviewContent(null)}>
+              Close
+            </Button>
+          </DialogFooter>
         </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setPreviewContent(null)}>Close</Button>
-        </DialogActions>
       </Dialog>
 
       {/* Overwrite warning: opening a published lesson for editing replaces the
           working doc (and its auto-saved draft). Confirm before discarding it. */}
       <Dialog
         open={Boolean(pendingEdit)}
-        onClose={() => setPendingEdit(null)}
-        fullWidth
-        maxWidth="xs"
+        onOpenChange={(next) => !next && setPendingEdit(null)}
       >
-        <DialogTitle>Replace your current work?</DialogTitle>
-        <DialogContent>
-          <Typography variant="body2">
+        <DialogContent className="sm:max-w-xs">
+          <DialogHeader>
+            <DialogTitle>Replace your current work?</DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-muted-foreground">
             {pendingEdit?.mode === "fork"
               ? "Forking "
               : pendingEdit?.mode === "import"
@@ -2051,24 +1946,25 @@ export default function EditorPage() {
                 : "Opening "}
             <strong>{pendingEdit?.title || "this lesson"}</strong>
             {pendingEdit?.mode === "edit" ? " for editing" : ""} will replace
-            the lesson you’re working on now. Your in-progress work is
-            auto-saved in this browser, and replacing it can’t be undone.
-          </Typography>
+            the lesson you&rsquo;re working on now. Your in-progress work is
+            auto-saved in this browser, and replacing it can&rsquo;t be undone.
+          </p>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setPendingEdit(null)}>
+              Keep my work
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={() => applyEdit(pendingEdit)}
+            >
+              {pendingEdit?.mode === "fork"
+                ? "Replace and fork"
+                : pendingEdit?.mode === "import"
+                  ? "Replace and import"
+                  : "Replace and edit"}
+            </Button>
+          </DialogFooter>
         </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setPendingEdit(null)}>Keep my work</Button>
-          <Button
-            color="error"
-            variant="contained"
-            onClick={() => applyEdit(pendingEdit)}
-          >
-            {pendingEdit?.mode === "fork"
-              ? "Replace and fork"
-              : pendingEdit?.mode === "import"
-                ? "Replace and import"
-                : "Replace and edit"}
-          </Button>
-        </DialogActions>
       </Dialog>
 
       {/* Hidden picker for Word import, triggered from the warning dialog. */}
@@ -2090,72 +1986,73 @@ export default function EditorPage() {
       />
 
       {/* Warn before importing: the docx → lesson conversion is best-effort. */}
-      <Dialog
-        open={importWarnOpen}
-        onClose={() => setImportWarnOpen(false)}
-        fullWidth
-        maxWidth="xs"
-      >
-        <DialogTitle>Import a Word document</DialogTitle>
-        <DialogContent>
-          <Typography variant="body2" gutterBottom>
-            Importing a <strong>.docx</strong> file is{" "}
-            <strong>best-effort and lossy</strong>. It works best with documents
-            exported from this app; files written elsewhere may import poorly or
-            not at all.
-          </Typography>
-          <Typography variant="body2" gutterBottom>
-            For the import to work, the document must use{" "}
-            <strong>Heading 2</strong> styles for its section headings. Images,
-            colours, and exact formatting may be lost.
-          </Typography>
-          <Typography variant="body2">
-            If the document isn’t structured as a lesson, it won’t be opened.
-            Your current work is replaced only after you confirm.
-          </Typography>
+      <Dialog open={importWarnOpen} onOpenChange={setImportWarnOpen}>
+        <DialogContent className="sm:max-w-xs">
+          <DialogHeader>
+            <DialogTitle>Import a Word document</DialogTitle>
+          </DialogHeader>
+          <div className="flex flex-col gap-3 text-sm text-muted-foreground">
+            <p>
+              Importing a <strong className="text-foreground">.docx</strong>{" "}
+              file is{" "}
+              <strong className="text-foreground">best-effort and lossy</strong>
+              . It works best with documents exported from this app; files
+              written elsewhere may import poorly or not at all.
+            </p>
+            <p>
+              For the import to work, the document must use{" "}
+              <strong className="text-foreground">Heading 2</strong> styles for
+              its section headings. Images, colours, and exact formatting may be
+              lost.
+            </p>
+            <p>
+              If the document isn&rsquo;t structured as a lesson, it won&rsquo;t
+              be opened. Your current work is replaced only after you confirm.
+            </p>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setImportWarnOpen(false)}>
+              Cancel
+            </Button>
+            <Button onClick={triggerImportPicker}>
+              <FileUpIcon data-icon="inline-start" />
+              Choose file
+            </Button>
+          </DialogFooter>
         </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setImportWarnOpen(false)}>Cancel</Button>
-          <Button
-            variant="contained"
-            startIcon={<UploadFileIcon />}
-            onClick={triggerImportPicker}
-          >
-            Choose file
-          </Button>
-        </DialogActions>
       </Dialog>
 
       {/* Refusal: a readable file that isn't structured as a lesson. The editor
           is left untouched; we just explain why it couldn't be opened. */}
       <Dialog
         open={Boolean(importError)}
-        onClose={() => setImportError(null)}
-        fullWidth
-        maxWidth="xs"
+        onOpenChange={(next) => !next && setImportError(null)}
       >
-        <DialogTitle sx={{ display: "flex", alignItems: "center", gap: 1 }}>
-          <WarningAmberIcon color="warning" />
-          Couldn’t import this document
-        </DialogTitle>
-        <DialogContent>
-          <Typography variant="body2">{importError}</Typography>
+        <DialogContent className="sm:max-w-xs">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <TriangleAlertIcon className="size-5 text-focus" />
+              Couldn&rsquo;t import this document
+            </DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-muted-foreground">{importError}</p>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setImportError(null)}>
+              Close
+            </Button>
+            <Button
+              onClick={() => {
+                setImportError(null);
+                const ref =
+                  importErrorSource === "json" ? jsonInputRef : importInputRef;
+                ref.current?.click();
+              }}
+            >
+              <FileUpIcon data-icon="inline-start" />
+              Try another file
+            </Button>
+          </DialogFooter>
         </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setImportError(null)}>Close</Button>
-          <Button
-            variant="contained"
-            startIcon={<UploadFileIcon />}
-            onClick={() => {
-              setImportError(null);
-              const ref =
-                importErrorSource === "json" ? jsonInputRef : importInputRef;
-              ref.current?.click();
-            }}
-          >
-            Try another file
-          </Button>
-        </DialogActions>
       </Dialog>
 
       <FirstLessonWizard open={wizardOpen} onClose={closeWizard} />
@@ -2210,9 +2107,11 @@ export default function EditorPage() {
       {/* Floating live-chat panel, pinned to the bottom-left while collaborating. */}
       <CollabChat collab={collab} />
 
-      <Backdrop open={editLoading} sx={{ zIndex: (t) => t.zIndex.modal + 1 }}>
-        <CircularProgress color="inherit" />
-      </Backdrop>
+      {editLoading && (
+        <div className="fixed inset-0 z-(--z-overlay) flex items-center justify-center bg-black/50">
+          <Spinner className="size-10 text-white" />
+        </div>
+      )}
 
       <Snackbar
         open={Boolean(toast)}
@@ -2221,13 +2120,13 @@ export default function EditorPage() {
         anchorOrigin={{ vertical: "bottom", horizontal: "center" }}
       >
         {toast ? (
-          <Alert
+          <MuiAlert
             severity={toast.severity}
             onClose={() => setToast(null)}
             variant="filled"
             action={
               toast.link ? (
-                <Button
+                <MuiButton
                   color="inherit"
                   size="small"
                   href={toast.link.href}
@@ -2235,9 +2134,9 @@ export default function EditorPage() {
                   rel="noopener noreferrer"
                 >
                   {toast.link.label}
-                </Button>
+                </MuiButton>
               ) : toast.route ? (
-                <Button
+                <MuiButton
                   color="inherit"
                   size="small"
                   onClick={() => {
@@ -2246,14 +2145,14 @@ export default function EditorPage() {
                   }}
                 >
                   {toast.route.label}
-                </Button>
+                </MuiButton>
               ) : undefined
             }
           >
             {toast.message}
-          </Alert>
+          </MuiAlert>
         ) : undefined}
       </Snackbar>
-    </Box>
+    </div>
   );
 }
