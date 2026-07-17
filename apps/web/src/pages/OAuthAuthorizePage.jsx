@@ -9,19 +9,14 @@
 
 import { useEffect, useState } from "react";
 import { useSearchParams } from "react-router-dom";
-import Box from "@mui/material/Box";
-import Container from "@mui/material/Container";
-import Paper from "@mui/material/Paper";
-import Stack from "@mui/material/Stack";
-import Typography from "@mui/material/Typography";
-import TextField from "@mui/material/TextField";
-import Button from "@mui/material/Button";
-import Alert from "@mui/material/Alert";
-import Divider from "@mui/material/Divider";
-import CircularProgress from "@mui/material/CircularProgress";
-import Skeleton from "@mui/material/Skeleton";
-import LockOpenIcon from "@mui/icons-material/LockOpen";
-import MarkEmailReadIcon from "@mui/icons-material/MarkEmailRead";
+import { LockOpenIcon, MailCheckIcon } from "lucide-react";
+import { Button } from "../components/ui/button.jsx";
+import { Input } from "../components/ui/input.jsx";
+import { Field, FieldLabel } from "../components/ui/field.jsx";
+import { Alert, AlertDescription } from "../components/ui/alert.jsx";
+import { Separator } from "../components/ui/separator.jsx";
+import { Skeleton } from "../components/ui/skeleton.jsx";
+import { Spinner } from "../components/ui/spinner.jsx";
 import { useAuth } from "../lib/auth.jsx";
 import { fetchOAuthRequest, approveOAuthRequest } from "../lib/mcpOAuth.js";
 import { useDocumentMeta } from "../lib/seo.js";
@@ -115,108 +110,114 @@ export default function OAuthAuthorizePage() {
   };
 
   return (
-    <Box sx={{ minHeight: "100vh", display: "flex", alignItems: "center" }}>
-      <Container maxWidth="xs">
-        <Paper elevation={2} sx={{ p: 4 }}>
-          {!enabled ? (
-            <Alert severity="info">
+    <div className="flex min-h-screen items-center justify-center bg-background p-4">
+      <div className="w-full max-w-sm rounded-[var(--radius-panel)] border border-border bg-card p-8 text-card-foreground shadow-[var(--shadow-panel)]">
+        {!enabled ? (
+          <Alert>
+            <AlertDescription>
               Sign-in is not configured on this deployment.
-            </Alert>
-          ) : reqLoading || loading ? (
-            <Stack spacing={2}>
-              <Skeleton
-                variant="text"
-                sx={{ fontSize: "1.5rem" }}
-                width="70%"
-              />
-              <Skeleton variant="text" width="90%" />
-              <Skeleton variant="text" width="80%" />
-              <Skeleton variant="rounded" height={40} />
-            </Stack>
-          ) : reqError ? (
-            <Alert severity="error">{reqError}</Alert>
-          ) : !user ? (
-            <Stack component="form" spacing={2} onSubmit={sendMagicLink}>
-              <Stack alignItems="center" spacing={1} textAlign="center">
-                <LockOpenIcon color="primary" sx={{ fontSize: 40 }} />
-                <Typography variant="h6">Sign in to connect</Typography>
-                <Typography variant="body2" color="text.secondary">
-                  <strong>{reqInfo.clientName}</strong> wants to publish and
-                  manage spelling lessons on your behalf. Sign in to continue.
-                </Typography>
-              </Stack>
-              {sent ? (
-                <Alert
-                  icon={<MarkEmailReadIcon fontSize="inherit" />}
-                  severity="info"
-                >
+            </AlertDescription>
+          </Alert>
+        ) : reqLoading || loading ? (
+          <div className="flex flex-col gap-3">
+            <Skeleton className="h-7 w-[70%]" />
+            <Skeleton className="h-4 w-[90%]" />
+            <Skeleton className="h-4 w-[80%]" />
+            <Skeleton className="h-10 w-full rounded-md" />
+          </div>
+        ) : reqError ? (
+          <Alert variant="destructive">
+            <AlertDescription>{reqError}</AlertDescription>
+          </Alert>
+        ) : !user ? (
+          <form onSubmit={sendMagicLink} className="flex flex-col gap-4">
+            <div className="flex flex-col items-center gap-2 text-center">
+              <LockOpenIcon className="size-10 text-primary" />
+              <h1 className="text-lg font-semibold">Sign in to connect</h1>
+              <p className="text-sm text-muted-foreground">
+                <strong className="font-medium text-foreground">
+                  {reqInfo.clientName}
+                </strong>{" "}
+                wants to publish and manage spelling lessons on your behalf.
+                Sign in to continue.
+              </p>
+            </div>
+            {sent ? (
+              <Alert>
+                <MailCheckIcon />
+                <AlertDescription>
                   Check your email for a sign-in link — opening it on this
                   device brings you right back here.
-                </Alert>
-              ) : (
-                <>
-                  {signInError && <Alert severity="error">{signInError}</Alert>}
-                  <TextField
+                </AlertDescription>
+              </Alert>
+            ) : (
+              <>
+                {signInError && (
+                  <Alert variant="destructive">
+                    <AlertDescription>{signInError}</AlertDescription>
+                  </Alert>
+                )}
+                <Field>
+                  <FieldLabel htmlFor="oauth-email">Email address</FieldLabel>
+                  <Input
+                    id="oauth-email"
                     autoFocus
-                    fullWidth
                     type="email"
-                    label="Email address"
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
                     disabled={sending}
                   />
-                  <Button
-                    type="submit"
-                    variant="contained"
-                    disabled={sending}
-                    startIcon={
-                      sending ? (
-                        <CircularProgress size={16} color="inherit" />
-                      ) : undefined
-                    }
-                  >
-                    Send magic link
-                  </Button>
-                </>
-              )}
-            </Stack>
-          ) : (
-            <Stack spacing={2}>
-              <Stack alignItems="center" spacing={1} textAlign="center">
-                <LockOpenIcon color="primary" sx={{ fontSize: 40 }} />
-                <Typography variant="h6">
-                  Connect {reqInfo.clientName}
-                </Typography>
-              </Stack>
-              <Typography variant="body2" color="text.secondary">
-                Signed in as <strong>{displayName || user.email}</strong>. This
-                will let <strong>{reqInfo.clientName}</strong> publish, update,
-                and delete spelling lessons on your behalf — the same as you can
-                do yourself in the editor.
-              </Typography>
-              <Divider />
-              {decideError && <Alert severity="error">{decideError}</Alert>}
-              <Stack direction="row" spacing={1} justifyContent="flex-end">
-                <Button onClick={deny} disabled={deciding}>
-                  Deny
+                </Field>
+                <Button type="submit" disabled={sending}>
+                  {sending && <Spinner data-icon="inline-start" />}
+                  Send magic link
                 </Button>
-                <Button
-                  variant="contained"
-                  onClick={approve}
-                  disabled={deciding}
-                  startIcon={
-                    deciding ? (
-                      <CircularProgress size={16} color="inherit" />
-                    ) : undefined
-                  }
-                >
-                  Approve
-                </Button>
-              </Stack>
-            </Stack>
-          )}
-        </Paper>
-      </Container>
-    </Box>
+              </>
+            )}
+          </form>
+        ) : (
+          <div className="flex flex-col gap-4">
+            <div className="flex flex-col items-center gap-2 text-center">
+              <LockOpenIcon className="size-10 text-primary" />
+              <h1 className="text-lg font-semibold">
+                Connect {reqInfo.clientName}
+              </h1>
+            </div>
+            <p className="text-sm text-muted-foreground">
+              Signed in as{" "}
+              <strong className="font-medium text-foreground">
+                {displayName || user.email}
+              </strong>
+              . This will let{" "}
+              <strong className="font-medium text-foreground">
+                {reqInfo.clientName}
+              </strong>{" "}
+              publish, update, and delete spelling lessons on your behalf — the
+              same as you can do yourself in the editor.
+            </p>
+            <Separator />
+            {decideError && (
+              <Alert variant="destructive">
+                <AlertDescription>{decideError}</AlertDescription>
+              </Alert>
+            )}
+            <div className="flex justify-end gap-2">
+              <Button
+                type="button"
+                variant="ghost"
+                onClick={deny}
+                disabled={deciding}
+              >
+                Deny
+              </Button>
+              <Button type="button" onClick={approve} disabled={deciding}>
+                {deciding && <Spinner data-icon="inline-start" />}
+                Approve
+              </Button>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
   );
 }
