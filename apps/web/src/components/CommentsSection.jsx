@@ -20,28 +20,26 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import Box from "@mui/material/Box";
-import Stack from "@mui/material/Stack";
-import Typography from "@mui/material/Typography";
-import Button from "@mui/material/Button";
-import Rating from "@mui/material/Rating";
-import Divider from "@mui/material/Divider";
-import Alert from "@mui/material/Alert";
-import AlertTitle from "@mui/material/AlertTitle";
-import CircularProgress from "@mui/material/CircularProgress";
-import Avatar from "@mui/material/Avatar";
-import IconButton from "@mui/material/IconButton";
-import Menu from "@mui/material/Menu";
-import MenuItem from "@mui/material/MenuItem";
-import ListItemIcon from "@mui/material/ListItemIcon";
-import ListItemText from "@mui/material/ListItemText";
+// Snackbar stays MUI for now — see the note in ModerationPage.jsx; this file
+// is one of the other still-MUI-Snackbar callers that will justify a real
+// shadcn Toast once one of them migrates.
 import Snackbar from "@mui/material/Snackbar";
-import MoreVertIcon from "@mui/icons-material/MoreVert";
-import DeleteOutlineIcon from "@mui/icons-material/DeleteOutline";
-import BlockIcon from "@mui/icons-material/Block";
+import { EllipsisVerticalIcon, Trash2Icon, BanIcon, XIcon } from "lucide-react";
+import { Button } from "./ui/button.jsx";
+import { Alert, AlertTitle, AlertDescription } from "./ui/alert.jsx";
+import { Avatar, AvatarFallback } from "./ui/avatar.jsx";
+import { Spinner } from "./ui/spinner.jsx";
+import { StarRating } from "./ui/star-rating.jsx";
+import {
+  DropdownMenu,
+  DropdownMenuTrigger,
+  DropdownMenuContent,
+  DropdownMenuItem,
+} from "./ui/dropdown-menu.jsx";
 import { CommentsSkeleton } from "./Skeletons.jsx";
 import RichText from "./RichText.jsx";
 import RichTextInput from "./RichTextInput.jsx";
+import { cn } from "../lib/utils.js";
 import { useAuth } from "../lib/auth.jsx";
 import {
   fetchComments,
@@ -82,6 +80,38 @@ function isSubmittable(html) {
   return !isRichTextEmpty(html) && richTextLength(html) <= COMMENT_MAX;
 }
 
+// A dismissible post/reply/edit notice. `severity: "warning"` is an expected,
+// user-correctable outcome (a profanity block) shown with a title; "error" is
+// a genuine failure shown plainly, matching Alert's destructive variant.
+function Notice({ notice, blockedTitle, onDismiss }) {
+  if (!notice) return null;
+  const warning = notice.severity === "warning";
+  return (
+    <Alert
+      variant={warning ? undefined : "destructive"}
+      className={cn(
+        "relative mt-2 pr-9",
+        warning && "border-focus/40 bg-focus/10 text-focus",
+      )}
+    >
+      {warning && (
+        <AlertTitle className="text-focus">{blockedTitle}</AlertTitle>
+      )}
+      <AlertDescription className={warning ? "text-focus" : undefined}>
+        {notice.message}
+      </AlertDescription>
+      <button
+        type="button"
+        onClick={onDismiss}
+        aria-label="Dismiss"
+        className="absolute top-3 right-3 cursor-pointer rounded-sm border-0 bg-transparent p-0.5 text-current opacity-70 transition-opacity hover:opacity-100"
+      >
+        <XIcon className="size-3.5" />
+      </button>
+    </Alert>
+  );
+}
+
 export default function CommentsSection({ lessonId, onRated }) {
   const navigate = useNavigate();
   const { enabled: authEnabled, user, accessToken, isModerator } = useAuth();
@@ -118,11 +148,7 @@ export default function CommentsSection({ lessonId, onRated }) {
   const [editSaving, setEditSaving] = useState(false);
   const [editNotice, setEditNotice] = useState(null);
 
-  // Moderator-only per-comment action menu (delete / ban author), keyed by the
-  // comment it was opened on, plus a feedback toast for those actions.
-  const [modMenu, setModMenu] = useState({ anchor: null, comment: null });
   const [modNotice, setModNotice] = useState("");
-  const closeModMenu = () => setModMenu({ anchor: null, comment: null });
 
   // Group the flat list into parent -> [replies] (preserving the oldest-first
   // order the Worker returns) so we can render the thread recursively.
@@ -291,7 +317,6 @@ export default function CommentsSection({ lessonId, onRated }) {
   // Moderator: delete a comment. The Worker cascades its replies, so mirror that
   // locally by dropping the comment and every descendant from the flat list.
   const handleDeleteComment = async (c) => {
-    closeModMenu();
     try {
       await deleteComment(c.id, accessToken);
       setComments((prev) => {
@@ -312,7 +337,6 @@ export default function CommentsSection({ lessonId, onRated }) {
   // Moderator: ban the comment author by display name (blocks them from posting
   // further comments or lessons). Existing content is left in place.
   const handleBanAuthor = async (c) => {
-    closeModMenu();
     const name = c.author || "";
     if (!name) {
       setModNotice("This comment has no author name to ban.");
@@ -320,7 +344,7 @@ export default function CommentsSection({ lessonId, onRated }) {
     }
     try {
       await banName(name, accessToken);
-      setModNotice(`Banned “${name}” from posting.`);
+      setModNotice(`Banned "${name}" from posting.`);
     } catch (err) {
       setModNotice(err.message || "Could not ban the author.");
     }
@@ -332,62 +356,62 @@ export default function CommentsSection({ lessonId, onRated }) {
     const replies = childrenByParent.get(c.id) || [];
     const indented = depth > 0;
     return (
-      <Box key={c.id}>
-        <Stack direction="row" spacing={1.5} alignItems="flex-start">
-          <Avatar sx={{ width: 32, height: 32, fontSize: 14 }}>
-            {initial(c.author)}
+      <div key={c.id}>
+        <div className="flex items-start gap-3">
+          <Avatar className="shrink-0">
+            <AvatarFallback>{initial(c.author)}</AvatarFallback>
           </Avatar>
-          <Box sx={{ flexGrow: 1 }}>
-            <Stack direction="row" spacing={1} alignItems="baseline">
-              <Typography variant="subtitle2">
+          <div className="min-w-0 flex-1">
+            <div className="flex items-baseline gap-2">
+              <span className="text-sm font-semibold">
                 {c.authorId ? (
-                  <Box
-                    component="span"
-                    role="link"
-                    tabIndex={0}
+                  <button
+                    type="button"
                     onClick={() => navigate(`/users/${c.authorId}`)}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter") navigate(`/users/${c.authorId}`);
-                    }}
-                    sx={{
-                      cursor: "pointer",
-                      "&:hover": { textDecoration: "underline" },
-                    }}
+                    className="cursor-pointer border-0 bg-transparent p-0 font-semibold text-foreground hover:underline"
                   >
                     {c.author || "Anonymous"}
-                  </Box>
+                  </button>
                 ) : (
                   c.author || "Anonymous"
                 )}
-              </Typography>
-              <Typography variant="caption" color="text.secondary">
+              </span>
+              <span className="text-xs text-muted-foreground">
                 {formatDateTime(c.createdAt)}
                 {/* An edit is never silent: say so, so a reader can tell the comment
                     they're looking at isn't necessarily the one that was replied to. */}
                 {c.editedAt ? " · edited" : ""}
-              </Typography>
+              </span>
               {/* Moderator-only actions on this comment. */}
               {isModerator && (
-                <IconButton
-                  size="small"
-                  sx={{ ml: "auto", p: 0.25 }}
-                  aria-label="moderate comment"
-                  onClick={(e) =>
-                    setModMenu({ anchor: e.currentTarget, comment: c })
-                  }
-                >
-                  <MoreVertIcon fontSize="small" />
-                </IconButton>
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      size="icon-xs"
+                      aria-label="moderate comment"
+                      className="ml-auto"
+                    >
+                      <EllipsisVerticalIcon />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end">
+                    <DropdownMenuItem onSelect={() => handleDeleteComment(c)}>
+                      <Trash2Icon />
+                      Delete comment
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onSelect={() => handleBanAuthor(c)}>
+                      <BanIcon />
+                      Ban author by name
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
               )}
-            </Stack>
+            </div>
             {/* Editing swaps the body for an editor seeded with it; otherwise the
                 stored rich text renders (or plain text, for older comments). */}
             {editing === c.id ? (
-              <Box
-                component="form"
-                onSubmit={(e) => submitEdit(e, c)}
-                sx={{ mt: 1 }}
-              >
+              <form onSubmit={(e) => submitEdit(e, c)} className="mt-2">
                 <RichTextInput
                   value={editDraft}
                   onChange={setEditDraft}
@@ -396,26 +420,15 @@ export default function CommentsSection({ lessonId, onRated }) {
                   disabled={editSaving}
                   autoFocus
                 />
-                {editNotice && (
-                  <Alert
-                    severity={editNotice.severity}
-                    sx={{ mt: 1 }}
-                    onClose={() => setEditNotice(null)}
-                  >
-                    {editNotice.severity === "warning" && (
-                      <AlertTitle>Edit blocked</AlertTitle>
-                    )}
-                    {editNotice.message}
-                  </Alert>
-                )}
-                <Stack
-                  direction="row"
-                  spacing={1}
-                  justifyContent="flex-end"
-                  sx={{ mt: 1 }}
-                >
+                <Notice
+                  notice={editNotice}
+                  blockedTitle="Edit blocked"
+                  onDismiss={() => setEditNotice(null)}
+                />
+                <div className="mt-2 flex justify-end gap-2">
                   <Button
-                    size="small"
+                    variant="ghost"
+                    size="sm"
                     onClick={cancelEdit}
                     disabled={editSaving}
                   >
@@ -423,19 +436,14 @@ export default function CommentsSection({ lessonId, onRated }) {
                   </Button>
                   <Button
                     type="submit"
-                    size="small"
-                    variant="contained"
+                    size="sm"
                     disabled={editSaving || !isSubmittable(editDraft)}
-                    startIcon={
-                      editSaving ? (
-                        <CircularProgress size={16} color="inherit" />
-                      ) : null
-                    }
                   >
+                    {editSaving && <Spinner data-icon="inline-start" />}
                     {editSaving ? "Saving…" : "Save changes"}
                   </Button>
-                </Stack>
-              </Box>
+                </div>
+              </form>
             ) : (
               <RichText value={c.body} />
             )}
@@ -443,11 +451,12 @@ export default function CommentsSection({ lessonId, onRated }) {
             {/* Replying and editing both need a signed-in session; editing further
                 needs the comment to be yours (the Worker checks this for real). */}
             {editing !== c.id && authEnabled && user && (
-              <Stack direction="row" spacing={0.5} sx={{ mt: 0.5 }}>
+              <div className="mt-1 flex gap-1">
                 {replyTo !== c.id && (
                   <Button
-                    size="small"
-                    sx={{ px: 0.5, minWidth: 0 }}
+                    variant="ghost"
+                    size="sm"
+                    className="h-auto min-w-0 px-1 py-0.5"
                     onClick={() => openReply(c.id)}
                   >
                     Reply
@@ -455,18 +464,19 @@ export default function CommentsSection({ lessonId, onRated }) {
                 )}
                 {c.authorId === user.id && (
                   <Button
-                    size="small"
-                    sx={{ px: 0.5, minWidth: 0 }}
+                    variant="ghost"
+                    size="sm"
+                    className="h-auto min-w-0 px-1 py-0.5"
                     onClick={() => openEdit(c)}
                   >
                     Edit
                   </Button>
                 )}
-              </Stack>
+              </div>
             )}
 
             {replyTo === c.id && (
-              <Box component="form" onSubmit={submitReply} sx={{ mt: 1 }}>
+              <form onSubmit={submitReply} className="mt-2">
                 <RichTextInput
                   value={replyDraft}
                   onChange={setReplyDraft}
@@ -476,26 +486,15 @@ export default function CommentsSection({ lessonId, onRated }) {
                   disabled={replyPosting}
                   autoFocus
                 />
-                {replyNotice && (
-                  <Alert
-                    severity={replyNotice.severity}
-                    sx={{ mt: 1 }}
-                    onClose={() => setReplyNotice(null)}
-                  >
-                    {replyNotice.severity === "warning" && (
-                      <AlertTitle>Reply blocked</AlertTitle>
-                    )}
-                    {replyNotice.message}
-                  </Alert>
-                )}
-                <Stack
-                  direction="row"
-                  spacing={1}
-                  justifyContent="flex-end"
-                  sx={{ mt: 1 }}
-                >
+                <Notice
+                  notice={replyNotice}
+                  blockedTitle="Reply blocked"
+                  onDismiss={() => setReplyNotice(null)}
+                />
+                <div className="mt-2 flex justify-end gap-2">
                   <Button
-                    size="small"
+                    variant="ghost"
+                    size="sm"
                     onClick={cancelReply}
                     disabled={replyPosting}
                   >
@@ -503,87 +502,74 @@ export default function CommentsSection({ lessonId, onRated }) {
                   </Button>
                   <Button
                     type="submit"
-                    size="small"
-                    variant="contained"
+                    size="sm"
                     disabled={replyPosting || !isSubmittable(replyDraft)}
-                    startIcon={
-                      replyPosting ? (
-                        <CircularProgress size={16} color="inherit" />
-                      ) : null
-                    }
                   >
+                    {replyPosting && <Spinner data-icon="inline-start" />}
                     {replyPosting ? "Posting…" : "Post reply"}
                   </Button>
-                </Stack>
-              </Box>
+                </div>
+              </form>
             )}
-          </Box>
-        </Stack>
+          </div>
+        </div>
 
         {replies.length > 0 && (
-          <Stack
-            spacing={2}
-            sx={{
-              mt: 2,
-              // Indent and rule each nested level, capped so deep threads don't
-              // run off the edge.
-              ml: indented ? 0 : 2,
-              pl: 2,
-              borderLeft: 1,
-              borderColor: "divider",
-            }}
+          <div
+            className={cn(
+              "mt-3 flex flex-col gap-3 border-l border-border pl-4",
+              !indented && "ml-2",
+            )}
           >
             {replies.map((r) =>
               renderComment(r, Math.min(depth + 1, MAX_INDENT_DEPTH)),
             )}
-          </Stack>
+          </div>
         )}
-      </Box>
+      </div>
     );
   };
 
   return (
-    <Box sx={{ mt: 1 }}>
-      <Divider sx={{ mb: 2 }} />
-      <Typography variant="subtitle1" gutterBottom>
+    <div className="mt-2">
+      <hr className="mb-3 border-border" />
+      <h2 className="mb-2 text-base font-semibold">
         Comments
         {!loading && !error ? ` (${comments.length})` : ""}
-      </Typography>
+      </h2>
 
       {loading && <CommentsSkeleton />}
 
       {!loading && error && (
-        <Alert
-          severity="error"
-          action={
-            <Button color="inherit" size="small" onClick={load}>
+        <Alert variant="destructive">
+          <AlertDescription className="flex items-center justify-between gap-2">
+            {error}
+            <Button variant="ghost" size="sm" onClick={load}>
               Retry
             </Button>
-          }
-        >
-          {error}
+          </AlertDescription>
         </Alert>
       )}
 
       {!loading && !error && (
-        <Stack spacing={2}>
+        <div className="flex flex-col gap-3">
           {topLevel.length === 0 && (
-            <Typography variant="body2" color="text.secondary">
+            <p className="text-sm text-muted-foreground">
               No comments yet. Be the first to share your thoughts.
-            </Typography>
+            </p>
           )}
 
           {topLevel.map((c) => renderComment(c, 0))}
 
-          <Divider />
+          <hr className="border-border" />
 
           {/* Posting needs a signed-in session, mirroring how publishing works. */}
           {!authEnabled ? (
-            <Typography variant="body2" color="text.secondary">
+            <p className="text-sm text-muted-foreground">
               Sign-in is not configured, so commenting is unavailable.
-            </Typography>
+            </p>
           ) : user ? (
-            <Box component="form" onSubmit={submit}>
+            <form onSubmit={submit}>
               <RichTextInput
                 key={draftKey}
                 value={draft}
@@ -593,96 +579,49 @@ export default function CommentsSection({ lessonId, onRated }) {
                 placeholder="Add a comment…"
                 disabled={posting}
               />
-              {postNotice && (
-                <Alert
-                  severity={postNotice.severity}
-                  sx={{ mt: 1 }}
-                  onClose={() => setPostNotice(null)}
-                >
-                  {postNotice.severity === "warning" && (
-                    <AlertTitle>Comment blocked</AlertTitle>
-                  )}
-                  {postNotice.message}
-                </Alert>
-              )}
-              <Stack
-                direction="row"
-                spacing={2}
-                alignItems="center"
-                justifyContent="space-between"
-                flexWrap="wrap"
-                useFlexGap
-                sx={{ mt: 1 }}
-              >
+              <Notice
+                notice={postNotice}
+                blockedTitle="Comment blocked"
+                onDismiss={() => setPostNotice(null)}
+              />
+              <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
                 {/* Optional star rating for the lesson, posted with the comment. */}
-                <Stack direction="row" spacing={1} alignItems="center">
-                  <Typography variant="body2" color="text.secondary">
+                <div className="flex items-center gap-2">
+                  <span className="text-sm text-muted-foreground">
                     Rate this lesson
-                  </Typography>
-                  <Rating
+                  </span>
+                  <StarRating
                     value={ratingValue}
-                    onChange={(e, value) => setRatingValue(value)}
+                    onChange={setRatingValue}
                     disabled={posting}
                     aria-label="lesson rating"
                   />
-                </Stack>
+                </div>
                 <Button
                   type="submit"
-                  variant="contained"
                   disabled={posting || !isSubmittable(draft)}
-                  startIcon={
-                    posting ? (
-                      <CircularProgress size={16} color="inherit" />
-                    ) : null
-                  }
                 >
+                  {posting && <Spinner data-icon="inline-start" />}
                   {posting ? "Posting…" : "Post comment"}
                 </Button>
-              </Stack>
-            </Box>
+              </div>
+            </form>
           ) : (
-            <Stack
-              direction="row"
-              spacing={1}
-              alignItems="center"
-              justifyContent="space-between"
-            >
-              <Typography variant="body2" color="text.secondary">
+            <div className="flex items-center justify-between gap-2">
+              <p className="text-sm text-muted-foreground">
                 Sign in to join the conversation.
-              </Typography>
+              </p>
               <Button
-                variant="outlined"
-                size="small"
+                variant="outline"
+                size="sm"
                 onClick={() => navigate("/login")}
               >
                 Sign in
               </Button>
-            </Stack>
+            </div>
           )}
-        </Stack>
+        </div>
       )}
-
-      {/* Moderator action menu (shared across comments; opened per comment). */}
-      <Menu
-        anchorEl={modMenu.anchor}
-        open={Boolean(modMenu.anchor)}
-        onClose={closeModMenu}
-        anchorOrigin={{ vertical: "bottom", horizontal: "right" }}
-        transformOrigin={{ vertical: "top", horizontal: "right" }}
-      >
-        <MenuItem onClick={() => handleDeleteComment(modMenu.comment)}>
-          <ListItemIcon>
-            <DeleteOutlineIcon fontSize="small" />
-          </ListItemIcon>
-          <ListItemText>Delete comment</ListItemText>
-        </MenuItem>
-        <MenuItem onClick={() => handleBanAuthor(modMenu.comment)}>
-          <ListItemIcon>
-            <BlockIcon fontSize="small" />
-          </ListItemIcon>
-          <ListItemText>Ban author by name</ListItemText>
-        </MenuItem>
-      </Menu>
 
       <Snackbar
         open={Boolean(modNotice)}
@@ -691,6 +630,6 @@ export default function CommentsSection({ lessonId, onRated }) {
         message={modNotice}
         anchorOrigin={{ vertical: "bottom", horizontal: "center" }}
       />
-    </Box>
+    </div>
   );
 }
