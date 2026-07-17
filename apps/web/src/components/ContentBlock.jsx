@@ -13,7 +13,6 @@ import {
 import { Button } from "./ui/button.jsx";
 import { Badge } from "./ui/badge.jsx";
 import { Field, FieldLabel } from "./ui/field.jsx";
-import { Tooltip, TooltipTrigger, TooltipContent } from "./ui/tooltip.jsx";
 import { ToggleGroup, ToggleGroupItem } from "./ui/toggle-group.jsx";
 import {
   DropdownMenu,
@@ -22,7 +21,7 @@ import {
   DropdownMenuItem,
 } from "./ui/dropdown-menu.jsx";
 import { LiveInput, LiveTextarea } from "./LiveField.jsx";
-import { cn } from "../lib/utils.js";
+import IconActionButton from "./IconActionButton.jsx";
 import {
   fitWithin,
   imageSizeScale,
@@ -34,32 +33,6 @@ import { newId } from "../lib/id.js";
 import { useImageSrc } from "../lib/useImageSrc.js";
 import { questionMeta } from "../lib/questions.js";
 import { SPELLING_COLOR } from "../lib/spelling.js";
-
-// Small icon-button + tooltip, used throughout for the move/delete row —
-// wrapped in a <span> so the tooltip still shows while the button is
-// disabled (a plain disabled <button> doesn't fire pointer events at all).
-function ControlButton({ tooltip, disabled, destructive, ...props }) {
-  return (
-    <Tooltip>
-      <TooltipTrigger asChild>
-        <span>
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon-sm"
-            disabled={disabled}
-            className={cn(
-              destructive &&
-                "text-destructive hover:bg-destructive/10 hover:text-destructive",
-            )}
-            {...props}
-          />
-        </span>
-      </TooltipTrigger>
-      <TooltipContent>{tooltip}</TooltipContent>
-    </Tooltip>
-  );
-}
 
 function ContentBlock({
   block,
@@ -77,15 +50,19 @@ function ContentBlock({
   const controls = (
     <div className="flex shrink-0 items-center gap-1">
       {dragHandle}
-      <ControlButton tooltip="Move up" onClick={onMoveUp} disabled={isFirst}>
+      <IconActionButton tooltip="Move up" onClick={onMoveUp} disabled={isFirst}>
         <ArrowUpIcon />
-      </ControlButton>
-      <ControlButton tooltip="Move down" onClick={onMoveDown} disabled={isLast}>
+      </IconActionButton>
+      <IconActionButton
+        tooltip="Move down"
+        onClick={onMoveDown}
+        disabled={isLast}
+      >
         <ArrowDownIcon />
-      </ControlButton>
-      <ControlButton tooltip="Delete block" onClick={onDelete} destructive>
+      </IconActionButton>
+      <IconActionButton tooltip="Delete block" onClick={onDelete} destructive>
         <Trash2Icon />
-      </ControlButton>
+      </IconActionButton>
     </div>
   );
 
@@ -356,13 +333,13 @@ function SpellingBlock({
                   onCommit={(text) => setWord(w.id, text)}
                   data-collab-field={`block:${block.id}:word:${w.id}`}
                 />
-                <ControlButton
+                <IconActionButton
                   tooltip="Remove word"
                   onClick={() => removeWord(w.id)}
                   disabled={words.length <= 1}
                 >
                   <Trash2Icon />
-                </ControlButton>
+                </IconActionButton>
               </div>
             ))}
             <div>
@@ -375,21 +352,21 @@ function SpellingBlock({
         </div>
         <div className="flex shrink-0 items-center gap-1">
           {dragHandle}
-          <ControlButton
+          <IconActionButton
             tooltip="Move up"
             onClick={onMoveUp}
             disabled={isFirst}
           >
             <ArrowUpIcon />
-          </ControlButton>
-          <ControlButton
+          </IconActionButton>
+          <IconActionButton
             tooltip="Move down"
             onClick={onMoveDown}
             disabled={isLast}
           >
             <ArrowDownIcon />
-          </ControlButton>
-          <ControlButton
+          </IconActionButton>
+          <IconActionButton
             tooltip={
               capitalizedWords.length
                 ? "Fill in every ALL-CAPS word from the lesson text"
@@ -400,10 +377,14 @@ function SpellingBlock({
             className="text-primary"
           >
             <WandSparklesIcon />
-          </ControlButton>
-          <ControlButton tooltip="Delete block" onClick={onDelete} destructive>
+          </IconActionButton>
+          <IconActionButton
+            tooltip="Delete block"
+            onClick={onDelete}
+            destructive
+          >
             <Trash2Icon />
-          </ControlButton>
+          </IconActionButton>
         </div>
       </div>
     </div>
@@ -487,13 +468,13 @@ function QuestionBlock({ block, onChange, controls }) {
                     onCommit={(text) => setAnswer(ans.id, text)}
                     data-collab-field={`block:${block.id}:answer:${ans.id}`}
                   />
-                  <ControlButton
+                  <IconActionButton
                     tooltip="Remove answer"
                     onClick={() => removeAnswer(ans.id)}
                     disabled={answers.length <= 1}
                   >
                     <Trash2Icon />
-                  </ControlButton>
+                  </IconActionButton>
                 </div>
               ))}
               <div>

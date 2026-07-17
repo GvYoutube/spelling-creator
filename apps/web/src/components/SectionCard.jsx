@@ -1,31 +1,31 @@
 import { memo, useCallback, useRef, useState } from "react";
-import Card from "@mui/material/Card";
-import CardContent from "@mui/material/CardContent";
-import Stack from "@mui/material/Stack";
-import Box from "@mui/material/Box";
-import Button from "@mui/material/Button";
-import IconButton from "@mui/material/IconButton";
-import Tooltip from "@mui/material/Tooltip";
-import Typography from "@mui/material/Typography";
-import Divider from "@mui/material/Divider";
-import Menu from "@mui/material/Menu";
-import MenuItem from "@mui/material/MenuItem";
-import ListItemText from "@mui/material/ListItemText";
-import TextFieldsIcon from "@mui/icons-material/TextFields";
-import ImageIcon from "@mui/icons-material/Image";
-import ImageSearchIcon from "@mui/icons-material/ImageSearch";
-import QuizIcon from "@mui/icons-material/Quiz";
-import SpellcheckIcon from "@mui/icons-material/Spellcheck";
-import AutoAwesomeIcon from "@mui/icons-material/AutoAwesome";
-import DeleteOutlineIcon from "@mui/icons-material/DeleteOutline";
-import ArrowUpwardIcon from "@mui/icons-material/ArrowUpward";
-import ArrowDownwardIcon from "@mui/icons-material/ArrowDownward";
-import DragIndicatorIcon from "@mui/icons-material/DragIndicator";
+import {
+  TypeIcon,
+  ImageIcon,
+  SearchIcon,
+  CircleHelpIcon,
+  SpellCheckIcon,
+  SparklesIcon,
+  Trash2Icon,
+  ArrowUpIcon,
+  ArrowDownIcon,
+  GripVerticalIcon,
+} from "lucide-react";
+import { Button } from "./ui/button.jsx";
+import { Tooltip, TooltipTrigger, TooltipContent } from "./ui/tooltip.jsx";
+import {
+  DropdownMenu,
+  DropdownMenuTrigger,
+  DropdownMenuContent,
+  DropdownMenuItem,
+} from "./ui/dropdown-menu.jsx";
 import ContentBlock from "./ContentBlock.jsx";
-import LiveTextField from "./LiveTextField.jsx";
+import { LiveInput } from "./LiveField.jsx";
+import IconActionButton from "./IconActionButton.jsx";
 import AiTextDialog from "./AiTextDialog.jsx";
 import AiQuestionDialog from "./AiQuestionDialog.jsx";
 import ImageSearchDialog from "./ImageSearchDialog.jsx";
+import { cn } from "../lib/utils.js";
 import { newId } from "../lib/id.js";
 import { readImageFile } from "../lib/image.js";
 import { storeImageBytes } from "../lib/imageRef.js";
@@ -74,8 +74,6 @@ function SectionCard({
   const sectionRef = useRef(section);
   // eslint-disable-next-line react-hooks/refs -- intentional mirror ref, read only in stable callbacks below
   sectionRef.current = section;
-  const [questionMenuAnchor, setQuestionMenuAnchor] = useState(null);
-  const [aiMenuAnchor, setAiMenuAnchor] = useState(null);
   const [aiOpen, setAiOpen] = useState(false);
   const [aiQuestionOpen, setAiQuestionOpen] = useState(false);
   const [imageSearchOpen, setImageSearchOpen] = useState(false);
@@ -140,7 +138,6 @@ function SectionCard({
   };
 
   const addQuestionBlock = (questionType) => {
-    setQuestionMenuAnchor(null);
     insertBlocks([createQuestionBlock(newId, questionType)]);
   };
 
@@ -330,55 +327,84 @@ function SectionCard({
   const activeIndex = section.blocks.findIndex((b) => b.id === activeBlockId);
 
   const addToolbar = (
-    <Stack direction="row" spacing={1} useFlexGap flexWrap="wrap">
-      <Button
-        startIcon={<TextFieldsIcon />}
-        onClick={addTextBlock}
-        variant="outlined"
-        size="small"
-      >
+    <div className="flex flex-wrap gap-2">
+      <Button variant="outline" size="sm" onClick={addTextBlock}>
+        <TypeIcon data-icon="inline-start" />
         Add text
       </Button>
       <Button
-        startIcon={<ImageIcon />}
+        variant="outline"
+        size="sm"
         onClick={() => fileInputRef.current?.click()}
-        variant="outlined"
-        size="small"
       >
+        <ImageIcon data-icon="inline-start" />
         Add image
       </Button>
       <Button
-        startIcon={<ImageSearchIcon />}
+        variant="outline"
+        size="sm"
         onClick={() => setImageSearchOpen(true)}
-        variant="outlined"
-        size="small"
       >
+        <SearchIcon data-icon="inline-start" />
         Search images
       </Button>
-      <Button
-        startIcon={<QuizIcon />}
-        onClick={(e) => setQuestionMenuAnchor(e.currentTarget)}
-        variant="outlined"
-        size="small"
-      >
-        Add question
-      </Button>
-      <Button
-        startIcon={<SpellcheckIcon />}
-        onClick={addSpellingBlock}
-        variant="outlined"
-        size="small"
-      >
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button variant="outline" size="sm">
+            <CircleHelpIcon data-icon="inline-start" />
+            Add question
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="start">
+          {QUESTION_TYPE_LIST.map((q) => (
+            <DropdownMenuItem
+              key={q.key}
+              onSelect={() => addQuestionBlock(q.key)}
+            >
+              <span
+                className="inline-block size-3 shrink-0 rounded-full"
+                style={{ backgroundColor: q.color }}
+              />
+              <div className="flex flex-col gap-0.5">
+                <span>{q.label}</span>
+                <span className="text-xs text-muted-foreground">
+                  {q.description}
+                </span>
+              </div>
+            </DropdownMenuItem>
+          ))}
+        </DropdownMenuContent>
+      </DropdownMenu>
+      <Button variant="outline" size="sm" onClick={addSpellingBlock}>
+        <SpellCheckIcon data-icon="inline-start" />
         Spelling words
       </Button>
-      <Button
-        startIcon={<AutoAwesomeIcon />}
-        onClick={(e) => setAiMenuAnchor(e.currentTarget)}
-        variant="outlined"
-        size="small"
-      >
-        Generate with AI
-      </Button>
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button variant="outline" size="sm">
+            <SparklesIcon data-icon="inline-start" />
+            Generate with AI
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="start">
+          <DropdownMenuItem onSelect={() => setAiOpen(true)}>
+            <div className="flex flex-col gap-0.5">
+              <span>Text</span>
+              <span className="text-xs text-muted-foreground">
+                Generate a text block with AI
+              </span>
+            </div>
+          </DropdownMenuItem>
+          <DropdownMenuItem onSelect={() => setAiQuestionOpen(true)}>
+            <div className="flex flex-col gap-0.5">
+              <span>Question</span>
+              <span className="text-xs text-muted-foreground">
+                Generate a question with AI
+              </span>
+            </div>
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
       <input
         ref={fileInputRef}
         type="file"
@@ -387,110 +413,83 @@ function SectionCard({
         hidden
         onChange={onPickImages}
       />
-    </Stack>
+    </div>
   );
 
   return (
-    <Card elevation={2}>
-      <CardContent
+    <div className="rounded-panel border border-border bg-card text-card-foreground shadow-(--shadow-panel)">
+      <div
+        className="p-4"
         onDragOver={handleDragOver}
         onDrop={handleDrop}
         onDragLeave={handleDragLeave}
       >
-        <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 2 }}>
-          <Box
-            sx={{
-              width: 30,
-              height: 30,
-              borderRadius: "50%",
-              bgcolor: "primary.main",
-              color: "primary.contrastText",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              fontWeight: 700,
-              fontSize: 14,
-              flexShrink: 0,
-            }}
-          >
+        <div className="mb-3 flex items-center gap-2">
+          <div className="flex size-[30px] shrink-0 items-center justify-center rounded-full bg-primary text-sm font-bold text-primary-foreground">
             {index + 1}
-          </Box>
-          <LiveTextField
-            fullWidth
-            variant="standard"
+          </div>
+          <LiveInput
             placeholder="Section name"
             value={section.name}
             onCommit={(name) => onChange(section.id, { ...section, name })}
-            slotProps={{
-              input: { sx: { fontSize: 20, fontWeight: 600 } },
-              htmlInput: { "data-collab-field": `section:${section.id}:name` },
-            }}
+            data-collab-field={`section:${section.id}:name`}
+            className="border-0 border-b border-transparent bg-transparent px-0 text-xl font-semibold shadow-none focus-visible:border-b-ring focus-visible:ring-0"
           />
-          <Tooltip title="Move section up">
-            <span>
-              <IconButton
-                size="small"
-                onClick={() => onMove(section.id, -1)}
-                disabled={isFirst}
-              >
-                <ArrowUpwardIcon fontSize="small" />
-              </IconButton>
-            </span>
-          </Tooltip>
-          <Tooltip title="Move section down">
-            <span>
-              <IconButton
-                size="small"
-                onClick={() => onMove(section.id, 1)}
-                disabled={isLast}
-              >
-                <ArrowDownwardIcon fontSize="small" />
-              </IconButton>
-            </span>
-          </Tooltip>
-          <Tooltip title="Delete section">
-            <IconButton
-              size="small"
-              color="error"
-              onClick={() => onDelete(section.id)}
-            >
-              <DeleteOutlineIcon fontSize="small" />
-            </IconButton>
-          </Tooltip>
-        </Stack>
+          <IconActionButton
+            tooltip="Move section up"
+            onClick={() => onMove(section.id, -1)}
+            disabled={isFirst}
+          >
+            <ArrowUpIcon />
+          </IconActionButton>
+          <IconActionButton
+            tooltip="Move section down"
+            onClick={() => onMove(section.id, 1)}
+            disabled={isLast}
+          >
+            <ArrowDownIcon />
+          </IconActionButton>
+          <IconActionButton
+            tooltip="Delete section"
+            onClick={() => onDelete(section.id)}
+            destructive
+          >
+            <Trash2Icon />
+          </IconActionButton>
+        </div>
 
-        <Divider sx={{ mb: 2 }} />
+        <hr className="mb-3 border-border" />
 
         {section.blocks.length === 0 ? (
           // An empty section has no row for the insertion line to sit against,
           // so while a block is in flight the placeholder text becomes the drop
           // zone itself — otherwise there'd be nothing telling the user that an
           // empty section will happily take the block.
-          <Box
-            sx={{
-              mb: 2,
-              ...(dragBlockId && {
-                p: 2,
-                borderRadius: 1,
-                border: "2px dashed",
-                borderColor: isDropSection ? "primary.main" : "divider",
-                bgcolor: isDropSection ? "action.hover" : "transparent",
-                transition:
-                  "border-color 0.12s ease, background-color 0.12s ease",
-              }),
-            }}
+          <div
+            className={cn(
+              "mb-3",
+              dragBlockId &&
+                cn(
+                  "rounded-md border-2 border-dashed p-4 transition-colors",
+                  isDropSection
+                    ? "border-primary bg-accent"
+                    : "border-border bg-transparent",
+                ),
+            )}
           >
-            <Typography
-              variant="body2"
-              color={isDropSection ? "primary.main" : "text.secondary"}
+            <p
+              className={cn(
+                "text-sm",
+                isDropSection ? "text-primary" : "text-muted-foreground",
+              )}
             >
               {dragBlockId
                 ? "Drop the block here to move it into this section."
                 : "No content yet. Add a text block or an image below."}
-            </Typography>
-          </Box>
+            </p>
+          </div>
         ) : (
-          <Stack ref={listRef} spacing={1.5} sx={{ mb: 2 }}>
+          <div ref={listRef} className="mb-3 flex flex-col gap-3">
             {section.blocks.map((block, i) => [
               <BlockRow
                 key={block.id}
@@ -515,66 +514,15 @@ function SectionCard({
               />,
               // The toolbar sits directly beneath the block being edited.
               i === activeIndex ? (
-                <Box key={`${block.id}-toolbar`}>{addToolbar}</Box>
+                <div key={`${block.id}-toolbar`}>{addToolbar}</div>
               ) : null,
             ])}
-          </Stack>
+          </div>
         )}
 
         {/* When no block in this section is active, the toolbar stays at the
             bottom (its original home). */}
         {activeIndex === -1 && addToolbar}
-
-        <Menu
-          anchorEl={questionMenuAnchor}
-          open={Boolean(questionMenuAnchor)}
-          onClose={() => setQuestionMenuAnchor(null)}
-        >
-          {QUESTION_TYPE_LIST.map((q) => (
-            <MenuItem key={q.key} onClick={() => addQuestionBlock(q.key)}>
-              <Box
-                sx={{
-                  width: 14,
-                  height: 14,
-                  borderRadius: "50%",
-                  bgcolor: q.color,
-                  mr: 1.5,
-                  flexShrink: 0,
-                }}
-              />
-              <ListItemText primary={q.label} secondary={q.description} />
-            </MenuItem>
-          ))}
-        </Menu>
-
-        <Menu
-          anchorEl={aiMenuAnchor}
-          open={Boolean(aiMenuAnchor)}
-          onClose={() => setAiMenuAnchor(null)}
-        >
-          <MenuItem
-            onClick={() => {
-              setAiMenuAnchor(null);
-              setAiOpen(true);
-            }}
-          >
-            <ListItemText
-              primary="Text"
-              secondary="Generate a text block with AI"
-            />
-          </MenuItem>
-          <MenuItem
-            onClick={() => {
-              setAiMenuAnchor(null);
-              setAiQuestionOpen(true);
-            }}
-          >
-            <ListItemText
-              primary="Question"
-              secondary="Generate a question with AI"
-            />
-          </MenuItem>
-        </Menu>
 
         <AiTextDialog
           open={aiOpen}
@@ -603,8 +551,8 @@ function SectionCard({
             setReplaceTarget(null);
           }}
         />
-      </CardContent>
-    </Card>
+      </div>
+    </div>
   );
 }
 
@@ -633,12 +581,12 @@ function dropTargetAt(list, clientY, dragId) {
 }
 
 // Memoized so typing in one block doesn't re-render every other block in the
-// section (each block is a deep MUI tree, the dominant cost on large lessons).
-// All callback props it receives are stable and id-based, and drag state arrives
-// as plain booleans, so an unedited, undragged block keeps identical props and
-// skips re-rendering. The parameterless handlers it builds here are recreated
-// per BlockRow render — fine, since a BlockRow only renders when its own block
-// (or drag state) actually changes.
+// section (each block is a deep component tree, the dominant cost on large
+// lessons). All callback props it receives are stable and id-based, and drag
+// state arrives as plain booleans, so an unedited, undragged block keeps
+// identical props and skips re-rendering. The parameterless handlers it
+// builds here are recreated per BlockRow render — fine, since a BlockRow
+// only renders when its own block (or drag state) actually changes.
 const BlockRow = memo(function BlockRow({
   block,
   isFirst,
@@ -660,43 +608,24 @@ const BlockRow = memo(function BlockRow({
     // Focusing any field inside a block makes it the active block, so the
     // toolbar follows the user's edit point. onFocus bubbles from the inner
     // inputs. `data-block-id` is what the section's drop targeting measures
-    // against the pointer while a block is in flight.
-    <Box
+    // against the pointer while a block is in flight. The insertion bars
+    // (before/after) are drawn via the before:/after: pseudo-element
+    // utilities, fading in only on the side the drop would land.
+    <div
       data-block-id={block.id}
       onFocus={() => onActivate(block.id)}
-      sx={{
-        position: "relative",
-        borderRadius: 1,
-        transition:
-          "opacity 0.15s ease, box-shadow 0.15s ease, transform 0.15s ease",
+      className={cn(
+        "relative rounded-md transition-[opacity,box-shadow,transform] duration-150",
+        "before:pointer-events-none before:absolute before:inset-x-0 before:top-[-5px] before:h-1 before:rounded-full before:bg-primary before:transition-opacity before:duration-100",
+        "after:pointer-events-none after:absolute after:inset-x-0 after:bottom-[-5px] after:h-1 after:rounded-full after:bg-primary after:transition-opacity after:duration-100",
+        dropBefore ? "before:opacity-100" : "before:opacity-0",
+        dropAfter ? "after:opacity-100" : "after:opacity-0",
         // The block being dragged collapses to a faint, dashed placeholder so
         // the gap it leaves behind reads as "this is moving" rather than just
         // dimming in place.
-        ...(isDragging && {
-          opacity: 0.5,
-          transform: "scale(0.99)",
-          outline: "2px dashed",
-          outlineColor: "primary.light",
-          outlineOffset: 2,
-          "& > *": { boxShadow: "none" },
-        }),
-        // A rounded insertion bar sits above/below the hovered block (via
-        // ::before / ::after), fading in only on the side the drop would land,
-        // marking exactly where the block goes.
-        "&::before, &::after": {
-          content: '""',
-          position: "absolute",
-          left: 0,
-          right: 0,
-          height: 4,
-          borderRadius: 2,
-          bgcolor: "primary.main",
-          transition: "opacity 0.1s ease",
-          pointerEvents: "none",
-        },
-        "&::before": { top: -5, opacity: dropBefore ? 1 : 0 },
-        "&::after": { bottom: -5, opacity: dropAfter ? 1 : 0 },
-      }}
+        isDragging &&
+          "scale-[0.99] opacity-50 outline-2 outline-dashed outline-primary/60 outline-offset-2 *:shadow-none",
+      )}
     >
       <ContentBlock
         block={block}
@@ -713,40 +642,24 @@ const BlockRow = memo(function BlockRow({
         // reads as part of the card rather than a bar above it. Drag must start
         // here so editing fields never drags by accident.
         dragHandle={
-          <Tooltip title="Drag to reorder">
-            <Box
-              component="span"
-              draggable
-              onDragStart={(e) => onDragStart(e, block.id)}
-              onDragEnd={onDragEnd}
-              role="button"
-              aria-label="Drag to reorder block"
-              sx={{
-                display: "inline-flex",
-                alignItems: "center",
-                justifyContent: "center",
-                borderRadius: 1,
-                p: 0.25,
-                color: "text.disabled",
-                cursor: "grab",
-                touchAction: "none",
-                transition: "color 0.12s ease, background-color 0.12s ease",
-                "&:active": {
-                  cursor: "grabbing",
-                  bgcolor: "action.selected",
-                },
-                "&:hover": {
-                  color: "text.primary",
-                  bgcolor: "action.hover",
-                },
-              }}
-            >
-              <DragIndicatorIcon fontSize="small" />
-            </Box>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <span
+                draggable
+                onDragStart={(e) => onDragStart(e, block.id)}
+                onDragEnd={onDragEnd}
+                role="button"
+                aria-label="Drag to reorder block"
+                className="inline-flex cursor-grab touch-none items-center justify-center rounded-md p-0.5 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground active:cursor-grabbing active:bg-accent"
+              >
+                <GripVerticalIcon className="size-4" />
+              </span>
+            </TooltipTrigger>
+            <TooltipContent>Drag to reorder</TooltipContent>
           </Tooltip>
         }
       />
-    </Box>
+    </div>
   );
 });
 
