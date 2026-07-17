@@ -2,20 +2,22 @@
 // notification API, shows an unread count as a badge, and opens a menu listing
 // notifications (newest first). Opening the menu marks everything read.
 //
-// Rendered with color="inherit" so it sits naturally inside the coloured AppBar,
-// matching NavActions.
+// Styled to match NavActions.jsx's interim AppBar-inherit trigger — see the
+// comment at the top of that file for why.
 
 import { useCallback, useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import IconButton from "@mui/material/IconButton";
-import Badge from "@mui/material/Badge";
-import Menu from "@mui/material/Menu";
-import Box from "@mui/material/Box";
-import Typography from "@mui/material/Typography";
-import Divider from "@mui/material/Divider";
-import Tooltip from "@mui/material/Tooltip";
-import ListItemButton from "@mui/material/ListItemButton";
-import NotificationsIcon from "@mui/icons-material/Notifications";
+import { BellIcon } from "lucide-react";
+import { cn } from "../lib/utils.js";
+import {
+  DropdownMenu,
+  DropdownMenuTrigger,
+  DropdownMenuContent,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuItem,
+} from "./ui/dropdown-menu.jsx";
+import { Tooltip, TooltipTrigger, TooltipContent } from "./ui/tooltip.jsx";
 import { useAuth } from "../lib/auth.jsx";
 import {
   fetchNotifications,
@@ -42,8 +44,7 @@ export default function NotificationBell() {
   const navigate = useNavigate();
 
   const [notifications, setNotifications] = useState([]);
-  const [anchorEl, setAnchorEl] = useState(null);
-  const menuOpen = Boolean(anchorEl);
+  const [menuOpen, setMenuOpen] = useState(false);
 
   const load = useCallback(async () => {
     if (!accessToken) return;
@@ -70,8 +71,7 @@ export default function NotificationBell() {
 
   const unread = notifications.filter((n) => !n.read).length;
 
-  const openMenu = async (e) => {
-    setAnchorEl(e.currentTarget);
+  const openMenu = async () => {
     // Opening the menu marks everything read (optimistically, then on the server).
     if (unread > 0) {
       setNotifications((prev) => prev.map((n) => ({ ...n, read: true })));
@@ -84,7 +84,7 @@ export default function NotificationBell() {
   };
 
   const openNotification = (n) => {
-    setAnchorEl(null);
+    setMenuOpen(false);
     if (!n.link) return;
     // Internal links route within the app; external ones open in a new tab.
     if (n.link.startsWith("/")) {
@@ -95,73 +95,71 @@ export default function NotificationBell() {
   };
 
   return (
-    <>
-      <Tooltip title="Notifications">
-        <IconButton
-          color="inherit"
-          onClick={openMenu}
-          aria-label={`notifications${unread ? ` (${unread} unread)` : ""}`}
-        >
-          <Badge badgeContent={unread} color="error" max={9}>
-            <NotificationsIcon />
-          </Badge>
-        </IconButton>
+    <DropdownMenu
+      open={menuOpen}
+      onOpenChange={(next) => {
+        setMenuOpen(next);
+        if (next) openMenu();
+      }}
+    >
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <DropdownMenuTrigger asChild>
+            <button
+              type="button"
+              aria-label={`notifications${unread ? ` (${unread} unread)` : ""}`}
+              // Interim AppBar-inherit styling, matching NavActions.jsx —
+              // bg-transparent is explicit since Tailwind preflight is off
+              // for now (see the memory note on this).
+              className="relative inline-flex size-10 cursor-pointer items-center justify-center rounded-full border-0 bg-transparent text-white transition-colors hover:bg-white/10"
+            >
+              <BellIcon />
+              {unread > 0 && (
+                <span className="absolute top-1.5 right-1.5 flex size-4 items-center justify-center rounded-full bg-destructive text-[10px] font-medium text-destructive-foreground">
+                  {unread > 9 ? "9+" : unread}
+                </span>
+              )}
+            </button>
+          </DropdownMenuTrigger>
+        </TooltipTrigger>
+        <TooltipContent>Notifications</TooltipContent>
       </Tooltip>
 
-      <Menu
-        anchorEl={anchorEl}
-        open={menuOpen}
-        onClose={() => setAnchorEl(null)}
-        anchorOrigin={{ vertical: "bottom", horizontal: "right" }}
-        transformOrigin={{ vertical: "top", horizontal: "right" }}
-        slotProps={{ paper: { sx: { width: 340, maxWidth: "90vw" } } }}
-      >
-        <Box sx={{ px: 2, py: 1 }}>
-          <Typography variant="subtitle1">Notifications</Typography>
-        </Box>
-        <Divider />
+      <DropdownMenuContent align="end" className="w-[340px] max-w-[90vw] p-0">
+        <DropdownMenuLabel className="px-4 py-2 text-base font-normal">
+          Notifications
+        </DropdownMenuLabel>
+        <DropdownMenuSeparator className="mx-0" />
 
         {notifications.length === 0 ? (
-          <Typography
-            variant="body2"
-            color="text.secondary"
-            sx={{ px: 2, py: 2 }}
-          >
+          <p className="px-4 py-4 text-sm text-muted-foreground">
             No notifications yet.
-          </Typography>
+          </p>
         ) : (
-          <Box sx={{ maxHeight: 360, overflowY: "auto" }}>
+          <div className="max-h-[360px] overflow-y-auto">
             {notifications.map((n) => (
-              <ListItemButton
+              <DropdownMenuItem
                 key={n.id}
                 onClick={() => openNotification(n)}
-                disableRipple={!n.link}
-                sx={{
-                  alignItems: "flex-start",
-                  cursor: n.link ? "pointer" : "default",
-                  display: "block",
-                }}
-              >
-                <Typography variant="body2" sx={{ fontWeight: 500 }}>
-                  {n.title}
-                </Typography>
-                {n.body && (
-                  <Typography
-                    variant="body2"
-                    color="text.secondary"
-                    sx={{ whiteSpace: "pre-wrap", wordBreak: "break-word" }}
-                  >
-                    {n.body}
-                  </Typography>
+                className={cn(
+                  "flex flex-col items-start gap-0.5 rounded-none px-4 py-2",
+                  !n.link && "cursor-default",
                 )}
-                <Typography variant="caption" color="text.secondary">
+              >
+                <span className="text-sm font-medium">{n.title}</span>
+                {n.body && (
+                  <span className="whitespace-pre-wrap break-words text-sm text-muted-foreground">
+                    {n.body}
+                  </span>
+                )}
+                <span className="text-xs text-muted-foreground">
                   {formatDateTime(n.createdAt)}
-                </Typography>
-              </ListItemButton>
+                </span>
+              </DropdownMenuItem>
             ))}
-          </Box>
+          </div>
         )}
-      </Menu>
-    </>
+      </DropdownMenuContent>
+    </DropdownMenu>
   );
 }
