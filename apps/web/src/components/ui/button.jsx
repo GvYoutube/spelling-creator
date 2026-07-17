@@ -1,3 +1,4 @@
+import { forwardRef } from "react";
 import { cva } from "class-variance-authority";
 import { Slot } from "radix-ui";
 
@@ -37,17 +38,24 @@ const buttonVariants = cva(
   },
 );
 
-function Button({
-  className,
-  variant = "default",
-  size = "default",
-  asChild = false,
-  ...props
-}) {
+// forwardRef so Button can be an asChild target of Radix components (Dialog,
+// Popover, Tooltip triggers, etc.) — React 18 requires it explicitly (React
+// 19 accepts ref as a plain prop, but this project is still on 18).
+const Button = forwardRef(function Button(
+  {
+    className,
+    variant = "default",
+    size = "default",
+    asChild = false,
+    ...props
+  },
+  ref,
+) {
   const Comp = asChild ? Slot.Root : "button";
 
   return (
     <Comp
+      ref={ref}
       data-slot="button"
       data-variant={variant}
       data-size={size}
@@ -55,6 +63,6 @@ function Button({
       {...props}
     />
   );
-}
+});
 
 export { Button, buttonVariants };

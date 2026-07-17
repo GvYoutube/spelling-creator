@@ -1,6 +1,7 @@
-// The rich-text editor used to write comments and bios, wrapping mui-tiptap's
-// RichTextEditor so both call sites get the same toolbar, the same limits and the
-// same rules.
+// The rich-text editor used to write comments and bios, built directly on
+// @tiptap/react (see RichTextToolbar.jsx for why this no longer wraps
+// mui-tiptap's RichTextEditor). Both call sites get the same toolbar, the
+// same limits and the same rules.
 //
 // No media, by design, and enforced three ways here:
 //   - the toolbar has no image/media button, so nothing offers it;
@@ -15,30 +16,14 @@
 // exists so the UI never offers something the server would only strip back out.
 
 import { useMemo } from "react";
-import Box from "@mui/material/Box";
-import Typography from "@mui/material/Typography";
+import { useEditor, EditorContent } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 import Underline from "@tiptap/extension-underline";
 import Link from "@tiptap/extension-link";
 import Placeholder from "@tiptap/extension-placeholder";
-import {
-  LinkBubbleMenu,
-  LinkBubbleMenuHandler,
-  MenuButtonBlockquote,
-  MenuButtonBold,
-  MenuButtonBulletedList,
-  MenuButtonCode,
-  MenuButtonEditLink,
-  MenuButtonItalic,
-  MenuButtonOrderedList,
-  MenuButtonRemoveFormatting,
-  MenuButtonStrikethrough,
-  MenuButtonUnderline,
-  MenuControlsContainer,
-  MenuDivider,
-  RichTextEditor,
-} from "mui-tiptap";
+import { cn } from "../lib/utils.js";
 import { richTextLength } from "../lib/richText.js";
+import RichTextToolbar from "./RichTextToolbar.jsx";
 
 // The editable feature set: everything the sanitizer's allow-list keeps, and nothing
 // it would only strip again on the way to the database.
@@ -53,8 +38,9 @@ const BASE_EXTENSIONS = [
   }),
   Underline,
   Link.configure({
-    // The bubble menu is how you edit a link; clicking one inside the editor should
-    // place the cursor, not navigate away mid-sentence.
+    // Editing a link always goes through the toolbar's link popover; clicking
+    // one inside the editor should place the cursor, not navigate away
+    // mid-sentence.
     openOnClick: false,
     autolink: true,
     protocols: ["http", "https", "mailto"],
@@ -63,8 +49,6 @@ const BASE_EXTENSIONS = [
       rel: "nofollow ugc noopener noreferrer",
     },
   }),
-  // Required by MenuButtonEditLink / LinkBubbleMenu below.
-  LinkBubbleMenuHandler,
 ];
 
 // Refuse dropped and pasted files. Returning true tells ProseMirror the event is
@@ -111,50 +95,44 @@ export default function RichTextInput({
   const editorProps = useMemo(
     () => ({
       ...EDITOR_PROPS,
-      attributes: label ? { "aria-label": label } : {},
+      attributes: {
+        class: "prose-editor min-h-24 px-3 py-2 text-sm outline-none",
+        ...(label ? { "aria-label": label } : {}),
+      },
     }),
     [label],
   );
 
+  const editor = useEditor({
+    extensions,
+    content: value,
+    editable: !disabled,
+    editorProps,
+    autofocus: autoFocus,
+    onUpdate: ({ editor }) => onChange(editor.getHTML()),
+  });
+
   return (
-    <Box>
-      <RichTextEditor
-        extensions={extensions}
-        content={value}
-        editable={!disabled}
-        editorProps={editorProps}
-        autofocus={autoFocus}
-        onUpdate={({ editor }) => onChange(editor.getHTML())}
-        renderControls={() => (
-          <MenuControlsContainer>
-            <MenuButtonBold />
-            <MenuButtonItalic />
-            <MenuButtonUnderline />
-            <MenuButtonStrikethrough />
-            <MenuButtonCode />
-            <MenuDivider />
-            <MenuButtonBulletedList />
-            <MenuButtonOrderedList />
-            <MenuButtonBlockquote />
-            <MenuDivider />
-            {/* A link is the only thing a user may embed. The sanitizer keeps only
-                http/https/mailto targets, and marks every one nofollow. */}
-            <MenuButtonEditLink />
-            <MenuDivider />
-            <MenuButtonRemoveFormatting />
-          </MenuControlsContainer>
+    <div>
+      <div
+        className={cn(
+          "overflow-hidden rounded-md border border-input transition-[color,box-shadow]",
+          "focus-within:border-ring focus-within:ring-[3px] focus-within:ring-ring/50",
+          disabled && "opacity-50",
         )}
       >
-        {() => <LinkBubbleMenu />}
-      </RichTextEditor>
+        {editor && !disabled && <RichTextToolbar editor={editor} />}
+        <EditorContent editor={editor} />
+      </div>
 
-      <Typography
-        variant="caption"
-        color={overLimit ? "error" : "text.secondary"}
-        sx={{ display: "block", mt: 0.5, textAlign: "right" }}
+      <p
+        className={cn(
+          "mt-1 text-right text-xs",
+          overLimit ? "text-destructive" : "text-muted-foreground",
+        )}
       >
         {length}/{maxLength} characters
-      </Typography>
-    </Box>
+      </p>
+    </div>
   );
 }

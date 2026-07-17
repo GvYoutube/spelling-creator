@@ -204,3 +204,64 @@
    Both move here in the Phase 6 cleanup, once CssBaseline is removed.
    Migrated components set their own background and text utility classes in
    the meantime. */
+
+/* Shared spacing for rendered rich text — both the live tiptap editor
+   (RichTextInput.jsx, class="prose-editor") and stored-HTML display
+   (RichText.jsx) use this, so a comment looks the same while being written
+   and after it's posted. */
+.prose-editor,
+.prose-content {
+  word-break: break-word;
+}
+.prose-editor > :first-child,
+.prose-content > :first-child {
+  margin-top: 0;
+}
+.prose-editor > :last-child,
+.prose-content > :last-child {
+  margin-bottom: 0;
+}
+.prose-editor p,
+.prose-content p {
+  margin-top: 0.5em;
+  margin-bottom: 0.5em;
+}
+.prose-editor ul,
+.prose-editor ol,
+.prose-content ul,
+.prose-content ol {
+  margin-top: 0.5em;
+  margin-bottom: 0.5em;
+  padding-left: 1.5em;
+}
+.prose-editor li > p,
+.prose-content li > p {
+  margin-top: 0;
+  margin-bottom: 0;
+}
+.prose-editor blockquote,
+.prose-content blockquote {
+  margin: 0.5em 0;
+  padding-left: 0.75em;
+  border-left: 3px solid var(--border);
+  color: var(--muted-foreground);
+}
+.prose-editor code,
+.prose-content code {
+  font-family: var(--font-mono, monospace);
+  font-size: 0.875em;
+  background: var(--accent);
+  padding: 0.125em 0.375em;
+  border-radius: 0.25em;
+}
+.prose-editor a,
+.prose-content a {
+  color: var(--primary);
+}
+.prose-editor p.is-editor-empty:first-child::before {
+  content: attr(data-placeholder);
+  float: left;
+  height: 0;
+  color: var(--muted-foreground);
+  pointer-events: none;
+}
