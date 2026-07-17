@@ -5,8 +5,7 @@
 // glued to the text as the page scrolls or the document changes underneath.
 
 import { useEffect, useState } from "react";
-import Box from "@mui/material/Box";
-import Avatar from "@mui/material/Avatar";
+import { Avatar, AvatarImage, AvatarFallback } from "./ui/avatar.jsx";
 import { getCaretCoordinates } from "../lib/presence.js";
 
 // Drop a collaborator's marker if we haven't heard a fresh selection from them
@@ -78,75 +77,41 @@ export default function CollabCursors({ selections }) {
   }
 
   return (
-    <Box
+    <div
       aria-hidden
-      sx={{
-        position: "fixed",
-        inset: 0,
-        pointerEvents: "none",
-        overflow: "hidden",
-        zIndex: (t) => t.zIndex.appBar + 1,
-      }}
+      className="fixed inset-0 z-[1101] overflow-hidden pointer-events-none"
     >
       {markers.map((m) => (
-        <Box key={m.key} sx={{ position: "absolute", left: m.x, top: m.y }}>
+        <div key={m.key} className="absolute" style={{ left: m.x, top: m.y }}>
           {/* The caret bar sitting in the text. */}
-          <Box
-            sx={{
-              position: "absolute",
-              top: 0,
-              left: 0,
-              width: "2px",
-              height: m.h,
-              bgcolor: m.color,
-              borderRadius: "1px",
-            }}
+          <div
+            className="absolute top-0 left-0 w-0.5 rounded-full"
+            style={{ height: m.h, backgroundColor: m.color }}
           />
           {/* The floating profile picture + name, anchored just above the caret. */}
-          <Box
-            sx={{
-              position: "absolute",
-              left: "-2px",
-              top: "-4px",
-              transform: "translateY(-100%)",
-              display: "flex",
-              alignItems: "center",
-              gap: 0.5,
-              whiteSpace: "nowrap",
-            }}
-          >
+          <div className="absolute -left-0.5 -top-1 flex -translate-y-full items-center gap-1 whitespace-nowrap">
             <Avatar
-              src={m.avatarUrl}
-              sx={{
-                width: 24,
-                height: 24,
-                fontSize: 12,
-                bgcolor: m.color,
-                color: "#fff",
-                border: "2px solid #fff",
-                boxShadow: 2,
-              }}
+              size="sm"
+              className="border-2 border-white shadow-md"
+              style={{ backgroundColor: m.color }}
             >
-              {m.label}
+              <AvatarImage src={m.avatarUrl} alt={m.name} />
+              <AvatarFallback
+                className="text-xs font-medium text-white"
+                style={{ backgroundColor: m.color }}
+              >
+                {m.label}
+              </AvatarFallback>
             </Avatar>
-            <Box
-              sx={{
-                px: 0.75,
-                py: "1px",
-                borderRadius: 1,
-                bgcolor: m.color,
-                color: "#fff",
-                fontSize: 11,
-                fontWeight: 600,
-                lineHeight: 1.6,
-                boxShadow: 1,
-              }}
+            <div
+              className="rounded px-1.5 py-px text-[11px] leading-relaxed font-semibold text-white shadow-sm"
+              style={{ backgroundColor: m.color }}
             >
               {m.name}
-            </Box>
-          </Box>
-        </Box>
+            </div>
+          </div>
+        </div>
       ))}
-    </Box>
+    </div>
   );
 }
