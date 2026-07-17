@@ -1,10 +1,17 @@
+import { forwardRef } from "react";
 import { Avatar as AvatarPrimitive } from "radix-ui";
 
 import { cn } from "@/lib/utils";
 
-function Avatar({ className, size = "default", ...props }) {
+// forwardRef so these can be asChild/Slot targets under React 18 — see the
+// note in dialog.jsx.
+const Avatar = forwardRef(function Avatar(
+  { className, size = "default", ...props },
+  ref,
+) {
   return (
     <AvatarPrimitive.Root
+      ref={ref}
       data-slot="avatar"
       data-size={size}
       className={cn(
@@ -14,21 +21,29 @@ function Avatar({ className, size = "default", ...props }) {
       {...props}
     />
   );
-}
+});
 
-function AvatarImage({ className, ...props }) {
+const AvatarImage = forwardRef(function AvatarImage(
+  { className, ...props },
+  ref,
+) {
   return (
     <AvatarPrimitive.Image
+      ref={ref}
       data-slot="avatar-image"
       className={cn("aspect-square size-full", className)}
       {...props}
     />
   );
-}
+});
 
-function AvatarFallback({ className, ...props }) {
+const AvatarFallback = forwardRef(function AvatarFallback(
+  { className, ...props },
+  ref,
+) {
   return (
     <AvatarPrimitive.Fallback
+      ref={ref}
       data-slot="avatar-fallback"
       className={cn(
         "flex size-full items-center justify-center rounded-full bg-muted text-sm text-muted-foreground group-data-[size=sm]/avatar:text-xs",
@@ -37,7 +52,7 @@ function AvatarFallback({ className, ...props }) {
       {...props}
     />
   );
-}
+});
 
 function AvatarBadge({ className, ...props }) {
   return (

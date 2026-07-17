@@ -7,16 +7,25 @@
 // name and stores it; on success we refresh the session so `user` reflects it.
 
 import { useEffect, useState } from "react";
-import Dialog from "@mui/material/Dialog";
-import DialogTitle from "@mui/material/DialogTitle";
-import DialogContent from "@mui/material/DialogContent";
-import DialogContentText from "@mui/material/DialogContentText";
-import DialogActions from "@mui/material/DialogActions";
-import Button from "@mui/material/Button";
-import Stack from "@mui/material/Stack";
-import TextField from "@mui/material/TextField";
-import Alert from "@mui/material/Alert";
-import CircularProgress from "@mui/material/CircularProgress";
+import { CircleAlertIcon } from "lucide-react";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+} from "./ui/dialog.jsx";
+import { Button } from "./ui/button.jsx";
+import {
+  Field,
+  FieldGroup,
+  FieldLabel,
+  FieldDescription,
+} from "./ui/field.jsx";
+import { Input } from "./ui/input.jsx";
+import { Alert, AlertDescription } from "./ui/alert.jsx";
+import { Spinner } from "./ui/spinner.jsx";
 import { useAuth } from "../lib/auth.jsx";
 import {
   setDisplayName,
@@ -69,56 +78,66 @@ export default function DisplayNameDialog({ open, required = false, onClose }) {
   return (
     <Dialog
       open={open}
-      onClose={required ? undefined : onClose}
-      disableEscapeKeyDown={required}
-      fullWidth
-      maxWidth="xs"
+      onOpenChange={(next) => {
+        if (!next && !required) onClose?.();
+      }}
     >
-      <DialogTitle>
-        {required ? "Choose a display name" : "Edit display name"}
-      </DialogTitle>
-      <Stack component="form" onSubmit={save}>
-        <DialogContent>
-          <DialogContentText sx={{ mb: 2 }}>
+      <DialogContent
+        className="sm:max-w-md"
+        showCloseButton={!required}
+        onEscapeKeyDown={(e) => required && e.preventDefault()}
+        onInteractOutside={(e) => required && e.preventDefault()}
+      >
+        <DialogHeader>
+          <DialogTitle>
+            {required ? "Choose a display name" : "Edit display name"}
+          </DialogTitle>
+          <DialogDescription>
             This is the name other people see on your lessons and comments. Your
             email address is never shown.
-          </DialogContentText>
-          {error && (
-            <Alert severity="error" sx={{ mb: 2 }}>
-              {error}
-            </Alert>
-          )}
-          <TextField
-            autoFocus
-            fullWidth
-            label="Display name"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            disabled={saving}
-            inputProps={{ maxLength: DISPLAY_NAME_MAX }}
-            helperText={`${DISPLAY_NAME_MIN}–${DISPLAY_NAME_MAX} characters.`}
-          />
-        </DialogContent>
-        <DialogActions>
-          {!required && (
-            <Button onClick={onClose} disabled={saving}>
-              Cancel
+          </DialogDescription>
+        </DialogHeader>
+        <form onSubmit={save}>
+          <FieldGroup>
+            {error && (
+              <Alert variant="destructive">
+                <CircleAlertIcon />
+                <AlertDescription>{error}</AlertDescription>
+              </Alert>
+            )}
+            <Field>
+              <FieldLabel htmlFor="display-name">Display name</FieldLabel>
+              <Input
+                id="display-name"
+                autoFocus
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                disabled={saving}
+                maxLength={DISPLAY_NAME_MAX}
+              />
+              <FieldDescription>
+                {DISPLAY_NAME_MIN}–{DISPLAY_NAME_MAX} characters.
+              </FieldDescription>
+            </Field>
+          </FieldGroup>
+          <DialogFooter className="mt-6">
+            {!required && (
+              <Button
+                type="button"
+                variant="ghost"
+                onClick={onClose}
+                disabled={saving}
+              >
+                Cancel
+              </Button>
+            )}
+            <Button type="submit" disabled={saving || tooShort || tooLong}>
+              {saving && <Spinner data-icon="inline-start" />}
+              Save
             </Button>
-          )}
-          <Button
-            type="submit"
-            variant="contained"
-            disabled={saving || tooShort || tooLong}
-            startIcon={
-              saving ? (
-                <CircularProgress size={16} color="inherit" />
-              ) : undefined
-            }
-          >
-            Save
-          </Button>
-        </DialogActions>
-      </Stack>
+          </DialogFooter>
+        </form>
+      </DialogContent>
     </Dialog>
   );
 }

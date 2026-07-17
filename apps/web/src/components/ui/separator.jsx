@@ -1,15 +1,19 @@
+"use client";
+
+import { forwardRef } from "react";
 import { Separator as SeparatorPrimitive } from "radix-ui";
 
 import { cn } from "@/lib/utils";
 
-function Separator({
-  className,
-  orientation = "horizontal",
-  decorative = true,
-  ...props
-}) {
+// forwardRef so this can be an asChild/Slot target under React 18 — see the
+// note in dialog.jsx.
+const Separator = forwardRef(function Separator(
+  { className, orientation = "horizontal", decorative = true, ...props },
+  ref,
+) {
   return (
     <SeparatorPrimitive.Root
+      ref={ref}
       data-slot="separator"
       decorative={decorative}
       orientation={orientation}
@@ -20,6 +24,6 @@ function Separator({
       {...props}
     />
   );
-}
+});
 
 export { Separator };

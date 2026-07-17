@@ -11,16 +11,15 @@ const ToggleGroupContext = React.createContext({
   spacing: 0,
 });
 
-function ToggleGroup({
-  className,
-  variant,
-  size,
-  spacing = 0,
-  children,
-  ...props
-}) {
+// forwardRef so these can be asChild/Slot targets under React 18 — see the
+// note in dialog.jsx.
+const ToggleGroup = React.forwardRef(function ToggleGroup(
+  { className, variant, size, spacing = 0, children, ...props },
+  ref,
+) {
   return (
     <ToggleGroupPrimitive.Root
+      ref={ref}
       data-slot="toggle-group"
       data-variant={variant}
       data-size={size}
@@ -39,13 +38,17 @@ function ToggleGroup({
       </ToggleGroupContext.Provider>
     </ToggleGroupPrimitive.Root>
   );
-}
+});
 
-function ToggleGroupItem({ className, children, variant, size, ...props }) {
+const ToggleGroupItem = React.forwardRef(function ToggleGroupItem(
+  { className, children, variant, size, ...props },
+  ref,
+) {
   const context = React.useContext(ToggleGroupContext);
 
   return (
     <ToggleGroupPrimitive.Item
+      ref={ref}
       data-slot="toggle-group-item"
       data-variant={context.variant || variant}
       data-size={context.size || size}
@@ -64,6 +67,6 @@ function ToggleGroupItem({ className, children, variant, size, ...props }) {
       {children}
     </ToggleGroupPrimitive.Item>
   );
-}
+});
 
 export { ToggleGroup, ToggleGroupItem };

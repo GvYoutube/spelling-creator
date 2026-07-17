@@ -1,26 +1,36 @@
 "use client";
 
+import { forwardRef } from "react";
 import { Popover as PopoverPrimitive } from "radix-ui";
 
 import { cn } from "@/lib/utils";
+
+// forwardRef so these can be asChild/Slot targets under React 18, and
+// because Content uses Presence internally for exit animations — see the
+// note in dialog.jsx.
 
 function Popover({ ...props }) {
   return <PopoverPrimitive.Root data-slot="popover" {...props} />;
 }
 
-function PopoverTrigger({ ...props }) {
-  return <PopoverPrimitive.Trigger data-slot="popover-trigger" {...props} />;
-}
+const PopoverTrigger = forwardRef(function PopoverTrigger(props, ref) {
+  return (
+    <PopoverPrimitive.Trigger
+      ref={ref}
+      data-slot="popover-trigger"
+      {...props}
+    />
+  );
+});
 
-function PopoverContent({
-  className,
-  align = "center",
-  sideOffset = 4,
-  ...props
-}) {
+const PopoverContent = forwardRef(function PopoverContent(
+  { className, align = "center", sideOffset = 4, ...props },
+  ref,
+) {
   return (
     <PopoverPrimitive.Portal>
       <PopoverPrimitive.Content
+        ref={ref}
         data-slot="popover-content"
         align={align}
         sideOffset={sideOffset}
@@ -32,11 +42,13 @@ function PopoverContent({
       />
     </PopoverPrimitive.Portal>
   );
-}
+});
 
-function PopoverAnchor({ ...props }) {
-  return <PopoverPrimitive.Anchor data-slot="popover-anchor" {...props} />;
-}
+const PopoverAnchor = forwardRef(function PopoverAnchor(props, ref) {
+  return (
+    <PopoverPrimitive.Anchor ref={ref} data-slot="popover-anchor" {...props} />
+  );
+});
 
 function PopoverHeader({ className, ...props }) {
   return (
