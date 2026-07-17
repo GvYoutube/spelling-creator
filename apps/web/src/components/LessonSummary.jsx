@@ -13,21 +13,20 @@
 // by the button click, never by an effect.
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import Alert from "@mui/material/Alert";
-import Box from "@mui/material/Box";
-import Button from "@mui/material/Button";
-import Chip from "@mui/material/Chip";
-import IconButton from "@mui/material/IconButton";
-import LinearProgress from "@mui/material/LinearProgress";
-import MenuItem from "@mui/material/MenuItem";
-import Paper from "@mui/material/Paper";
-import Stack from "@mui/material/Stack";
-import TextField from "@mui/material/TextField";
-import Tooltip from "@mui/material/Tooltip";
-import Typography from "@mui/material/Typography";
-import AutoAwesomeIcon from "@mui/icons-material/AutoAwesome";
-import CheckIcon from "@mui/icons-material/Check";
-import ContentCopyIcon from "@mui/icons-material/ContentCopy";
+import { SparklesIcon, CheckIcon, CopyIcon } from "lucide-react";
+import { Button } from "./ui/button.jsx";
+import { Badge } from "./ui/badge.jsx";
+import { Alert, AlertDescription } from "./ui/alert.jsx";
+import { Progress } from "./ui/progress.jsx";
+import { Tooltip, TooltipTrigger, TooltipContent } from "./ui/tooltip.jsx";
+import {
+  Select,
+  SelectTrigger,
+  SelectValue,
+  SelectContent,
+  SelectItem,
+} from "./ui/select.jsx";
+import { cn } from "../lib/utils.js";
 import { SummarySkeleton } from "./Skeletons.jsx";
 import {
   DEFAULT_SUMMARY_LENGTH,
@@ -76,17 +75,13 @@ function SummaryMarkdown({ text }) {
     const items = bullets;
     bullets = [];
     nodes.push(
-      <Box
-        key={`ul-${nodes.length}`}
-        component="ul"
-        sx={{ pl: 3, my: 0.5, "& li": { mb: 0.5 } }}
-      >
+      <ul key={`ul-${nodes.length}`} className="my-1 pl-6 [&>li]:mb-1">
         {items.map((item, i) => (
-          <Typography component="li" variant="body2" key={i}>
+          <li key={i} className="text-sm">
             {renderInline(item)}
-          </Typography>
+          </li>
         ))}
-      </Box>,
+      </ul>,
     );
   };
 
@@ -107,17 +102,13 @@ function SummaryMarkdown({ text }) {
     const heading = line.match(/^#{1,6}\s+(.*)$/);
     nodes.push(
       heading ? (
-        <Typography
-          key={nodes.length}
-          variant="subtitle2"
-          sx={{ mt: 1, mb: 0.5 }}
-        >
+        <p key={nodes.length} className="mt-2 mb-1 text-sm font-medium">
           {renderInline(heading[1])}
-        </Typography>
+        </p>
       ) : (
-        <Typography key={nodes.length} variant="body2" sx={{ mb: 1 }}>
+        <p key={nodes.length} className="mb-2 text-sm">
           {renderInline(line)}
-        </Typography>
+        </p>
       ),
     );
   }
@@ -247,9 +238,9 @@ export default function LessonSummary({ doc }) {
   // Changing the shape of the summary invalidates the one on screen, so clear it
   // and let the reader ask again — the button is also what gives us the transient
   // activation the next create() needs.
-  const changeOption = (setter) => (event) => {
+  const changeOption = (setter) => (value) => {
     abortRef.current?.abort();
-    setter(event.target.value);
+    setter(value);
     setSummary("");
     setError("");
     setPhase("idle");
@@ -268,87 +259,78 @@ export default function LessonSummary({ doc }) {
   if (!worthSummarizing || availability === "unavailable") return null;
 
   return (
-    <Paper variant="outlined" sx={{ p: 2, mb: 2 }}>
-      <Stack
-        direction={{ xs: "column", sm: "row" }}
-        spacing={1}
-        alignItems={{ xs: "stretch", sm: "center" }}
-        sx={{ mb: summary || running || error ? 1.5 : 0 }}
+    <div className="mb-4 rounded-md border border-border p-3">
+      <div
+        className={cn(
+          "flex flex-col gap-2 sm:flex-row sm:items-center",
+          (summary || running || error) && "mb-3",
+        )}
       >
-        <Stack
-          direction="row"
-          spacing={1}
-          alignItems="center"
-          sx={{ flexGrow: 1, minWidth: 0 }}
-        >
-          <AutoAwesomeIcon fontSize="small" color="primary" />
-          <Typography variant="subtitle1" sx={{ fontWeight: 600 }}>
-            Summary
-          </Typography>
-          <Chip size="small" variant="outlined" label="On-device AI" />
-        </Stack>
+        <div className="flex min-w-0 flex-1 items-center gap-2">
+          <SparklesIcon className="size-4 shrink-0 text-primary" />
+          <p className="text-base font-semibold">Summary</p>
+          <Badge variant="outline">On-device AI</Badge>
+        </div>
 
-        <TextField
-          select
-          size="small"
-          label="Style"
+        <Select
           value={type}
-          onChange={changeOption(setType)}
+          onValueChange={changeOption(setType)}
           disabled={running}
-          sx={{ minWidth: 130 }}
         >
-          {SUMMARY_TYPES.map((option) => (
-            <MenuItem key={option.value} value={option.value}>
-              {option.label}
-            </MenuItem>
-          ))}
-        </TextField>
+          <SelectTrigger size="sm" className="w-[130px]" aria-label="Style">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {SUMMARY_TYPES.map((option) => (
+              <SelectItem key={option.value} value={option.value}>
+                {option.label}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
 
-        <TextField
-          select
-          size="small"
-          label="Length"
+        <Select
           value={length}
-          onChange={changeOption(setLength)}
+          onValueChange={changeOption(setLength)}
           disabled={running}
-          sx={{ minWidth: 110 }}
         >
-          {SUMMARY_LENGTHS.map((option) => (
-            <MenuItem key={option.value} value={option.value}>
-              {option.label}
-            </MenuItem>
-          ))}
-        </TextField>
+          <SelectTrigger size="sm" className="w-[110px]" aria-label="Length">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {SUMMARY_LENGTHS.map((option) => (
+              <SelectItem key={option.value} value={option.value}>
+                {option.label}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
 
         {running ? (
-          <Button onClick={cancel} color="inherit">
+          <Button variant="ghost" onClick={cancel}>
             Cancel
           </Button>
         ) : (
-          <Button
-            variant="contained"
-            startIcon={<AutoAwesomeIcon />}
-            onClick={summarize}
-          >
+          <Button onClick={summarize}>
+            <SparklesIcon data-icon="inline-start" />
             {summary ? "Regenerate" : "Summarise"}
           </Button>
         )}
-      </Stack>
+      </div>
 
       {/* First run on this device: the model has to be fetched before it can
           summarise. `loaded` is a 0–1 fraction, so show real progress. */}
       {phase === "downloading" && (
-        <Box sx={{ mb: 1.5 }}>
-          <Typography variant="caption" color="text.secondary">
+        <div className="mb-3">
+          <p className="text-xs text-muted-foreground">
             Downloading the on-device model (one time)…{" "}
             {Math.round(progress * 100)}%
-          </Typography>
-          <LinearProgress
-            variant={progress > 0 ? "determinate" : "indeterminate"}
-            value={progress * 100}
-            sx={{ mt: 0.5, borderRadius: 1 }}
+          </p>
+          <Progress
+            value={progress > 0 ? progress * 100 : 100}
+            className={cn("mt-1", progress === 0 && "animate-pulse")}
           />
-        </Box>
+        </div>
       )}
 
       {/* Between the click and the model's first chunk. Once chunks arrive we
@@ -358,39 +340,40 @@ export default function LessonSummary({ doc }) {
       {summary && <SummaryMarkdown text={summary} />}
 
       {error && (
-        <Alert severity="error" sx={{ mt: 1 }}>
-          {error}
+        <Alert variant="destructive" className="mt-2">
+          <AlertDescription>{error}</AlertDescription>
         </Alert>
       )}
 
       {(summary || truncated) && phase !== "summarizing" && (
-        <Stack
-          direction="row"
-          spacing={1}
-          alignItems="center"
-          sx={{ mt: 1, pt: 1, borderTop: 1, borderColor: "divider" }}
-        >
-          <Typography
-            variant="caption"
-            color="text.secondary"
-            sx={{ flexGrow: 1 }}
-          >
+        <div className="mt-2 flex items-center gap-2 border-t border-border pt-2">
+          <p className="flex-1 text-xs text-muted-foreground">
             {truncated
               ? "Summarised the first part of this lesson (it's too long for the on-device model) — AI summaries can be wrong."
               : "Generated on your device by your browser's built-in AI — it can be wrong. Read the lesson before using it."}
-          </Typography>
+          </p>
           {summary && (
-            <Tooltip title={copied ? "Copied" : "Copy summary"}>
-              <IconButton size="small" onClick={copy} aria-label="copy summary">
-                {copied ? (
-                  <CheckIcon fontSize="small" color="success" />
-                ) : (
-                  <ContentCopyIcon fontSize="small" />
-                )}
-              </IconButton>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="icon-sm"
+                  onClick={copy}
+                  aria-label="copy summary"
+                >
+                  {copied ? (
+                    <CheckIcon className="text-success" />
+                  ) : (
+                    <CopyIcon />
+                  )}
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>
+                {copied ? "Copied" : "Copy summary"}
+              </TooltipContent>
             </Tooltip>
           )}
-        </Stack>
+        </div>
       )}
 
       {/* Nothing generated yet, and the model isn't on this machine — warn before
@@ -399,15 +382,11 @@ export default function LessonSummary({ doc }) {
         !summary &&
         !error &&
         availability !== "available" && (
-          <Typography
-            variant="caption"
-            color="text.secondary"
-            sx={{ display: "block", mt: 1 }}
-          >
-            The first summary downloads your browser’s on-device model, which
-            can take a while. Nothing is sent to a server.
-          </Typography>
+          <p className="mt-2 text-xs text-muted-foreground">
+            The first summary downloads your browser&rsquo;s on-device model,
+            which can take a while. Nothing is sent to a server.
+          </p>
         )}
-    </Paper>
+    </div>
   );
 }
