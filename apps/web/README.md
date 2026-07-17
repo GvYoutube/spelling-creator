@@ -5,7 +5,7 @@ as S2C) lessons. Create a document, add named sections, and fill each section wi
 text and images. Export the finished lesson as a Word document (`.docx`) or print
 it to PDF.
 
-Built with **React + Vite + MUI**, using [`docx`](https://docx.js.org) for Word
+Built with **React + Rsbuild + shadcn/ui + Tailwind**, using [`docx`](https://docx.js.org) for Word
 export and [`html2pdf.js`](https://github.com/eKoopmans/html2pdf.js) (via
 [`mammoth`](https://github.com/mwilliamson/mammoth.js) docx→HTML conversion) for
 PDF printing.
@@ -38,7 +38,7 @@ The docs source is in `apps/docs/docs/web-app`.
 
 ```bash
 pnpm install
-pnpm dev      # start the dev server (http://localhost:5173)
+pnpm dev      # start the dev server (http://localhost:3000)
 pnpm build    # production build into dist/
 pnpm preview  # preview the production build
 ```

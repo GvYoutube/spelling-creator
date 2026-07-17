@@ -6,9 +6,9 @@ sidebar_position: 9.5
 # Rich text (comments & bios)
 
 The two things users write about each other — **lesson comments** and **profile
-bios** — are rich text. Both are authored with
-[mui-tiptap](https://github.com/sjdemartini/mui-tiptap) and stored as **sanitized
-HTML**.
+bios** — are rich text. Both are authored with a small [tiptap](https://tiptap.dev)
+editor (`RichTextInput.jsx`, built directly on `@tiptap/react` with a shadcn
+`ToggleGroup` toolbar) and stored as **sanitized HTML**.
 
 Users can format text and link out. They **cannot embed media**: no images, video,
 audio or frames, whether uploaded, dragged in, pasted, or hand-written into a

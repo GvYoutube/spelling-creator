@@ -8,8 +8,8 @@ sidebar_position: 15
 ```
 src/
   App.jsx                 route table (editor / hub / lesson / profile / login / moderation)
-  main.jsx                React entry: BrowserRouter + AuthProvider + DisplayNameGate + theme
-  theme.js                MUI theme
+  main.jsx                React entry: ColorSchemeProvider + BrowserRouter + AuthProvider + DisplayNameGate + Toaster
+  styles/globals.css      Tailwind v4 + shadcn/ui design tokens (light/dark palettes, glass-surface shadows/blur)
   pages/
     EditorPage.jsx        the lesson builder (toolbar, section list, + button, publish, collaborate)
     HubPage.jsx           public gallery of published lessons + client-side search
@@ -18,15 +18,18 @@ src/
     LoginPage.jsx         magic-link sign-in / account status
     ModerationPage.jsx    moderator/admin queue for reported content
   components/
-    NavActions.jsx        shared header nav: hub link + account menu + notification bell
-    NotificationBell.jsx  AppBar bell that polls for and shows the user's notifications
+    AppHeader.jsx          shared sticky glass toolbar (title + left slot + children) every page mounts
+    NavActions.jsx        shared header nav: hub link + dark-mode toggle + account menu + notification bell
+    NotificationBell.jsx  header bell that polls for and shows the user's notifications
     DisplayNameGate.jsx   makes a signed-in user pick a display name before using the app
     DisplayNameDialog.jsx pick / change your public display name
     BioDialog.jsx         edit your public profile bio (rich text)
     FirstLessonWizard.jsx dismissable step-by-step welcome guide for newcomers
     CommentsSection.jsx   lesson comments list + post/reply/edit boxes, incl. the 1–5 star rating input
-    RichTextInput.jsx     the mui-tiptap editor used for comments + bios (formatting and links; no media)
+    RichTextInput.jsx     the tiptap-based editor used for comments + bios (formatting and links; no media)
+    RichTextToolbar.jsx   its shadcn ToggleGroup toolbar (bold/italic/underline/lists/link/etc.)
     RichText.jsx          renders a stored comment/bio: sanitized HTML, or plain text for pre-rich-text values
+    LiveField.jsx          debounced LiveInput/LiveTextarea (commit ~200ms after typing pauses, hold off remote updates while focused)
     LessonView.jsx        read-only renderer for the lesson page (blocks straight to React, lazy images)
     LessonSummary.jsx     on-device AI summary card on the lesson page (hidden unless the browser supports it)
     SectionCard.jsx       a named section with its content blocks + add buttons; measures the pointer against its own rows during a block drag, but the drag itself is owned by EditorPage (blocks can move between sections)
@@ -40,7 +43,10 @@ src/
     CollabChat.jsx         floating in-session chat panel
     HistoryDialog.jsx      the lesson's version timeline: what each commit changed, per block, + restore
     MergeDialog.jsx        settle a merge with the lesson this one was forked from (mine / theirs / keep both)
+    ui/                    shadcn/ui primitives (Button, Dialog, DropdownMenu, Select, Tooltip, Sonner Toaster, etc.) — Radix underneath, styled from the tokens in styles/globals.css
   lib/
+    colorScheme.jsx        ColorSchemeProvider + useColorScheme (light/dark/system, persisted, applied as data-theme on <html>)
+    useLiveField.js        shared debounce/commit buffering behind LiveField.jsx
     docxExport.js         build + download the .docx (text, images, questions)
     docxImport.js         best-effort import of a .docx back into the lesson model
     pdfExport.js          docx -> html (mammoth) -> pdf (html2pdf.js)
@@ -85,6 +91,6 @@ src/
     googleDrive.js        OAuth2 + upload the docx to Drive as a Google Doc
     turnstile.js          Cloudflare Turnstile loader + site key
     seo.js                per-page document title + Open Graph / Twitter tags
-    storage.js            localStorage auto-save
+    storage.js            IndexedDB auto-save for the working lesson (migrates any pre-IndexedDB localStorage draft once, idempotently)
     id.js                 id generation
 ```

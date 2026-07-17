@@ -3,11 +3,11 @@
 A pnpm monorepo containing the Spelling Lesson Maker web app and its Cloudflare
 Worker API.
 
-| Path       | Package                 | Description                                                                   |
-| ---------- | ----------------------- | ----------------------------------------------------------------------------- |
-| `apps/web` | `@spelling-creator/web` | Vite + React frontend (MUI, Supabase, react-router). Deploys to GitHub Pages. |
-| `apps/api` | `@spelling-creator/api` | Cloudflare Worker backend (Gemini, profanity filter, KV rate limiting).       |
-| `apps/mcp` | `@spelling-creator/mcp` | MCP server — lets an AI assistant author and publish lessons to the hub.      |
+| Path       | Package                 | Description                                                                                       |
+| ---------- | ----------------------- | ------------------------------------------------------------------------------------------------- |
+| `apps/web` | `@spelling-creator/web` | Rsbuild + React frontend (shadcn/ui + Tailwind, Supabase, react-router). Deploys to GitHub Pages. |
+| `apps/api` | `@spelling-creator/api` | Cloudflare Worker backend (Gemini, profanity filter, KV rate limiting).                           |
+| `apps/mcp` | `@spelling-creator/mcp` | MCP server — lets an AI assistant author and publish lessons to the hub.                          |
 
 ## Documentation
 
@@ -27,7 +27,7 @@ The docs source is in `apps/docs/docs`.
 
 ```bash
 pnpm install            # install all workspace deps
-pnpm dev:web            # run the frontend (Vite)
+pnpm dev:web            # run the frontend (Rsbuild)
 pnpm dev:api            # run the Worker locally (wrangler dev)
 ```
 

@@ -32,7 +32,7 @@ length, runs a profanity check (rejecting with `422` if it fails), and — like 
 display name — stores it in `user_metadata.bio` via the Admin API. An empty bio
 clears it. Bio is profile-only (never denormalised onto rows).
 
-**Bios are rich text**, written with the same [mui-tiptap](https://github.com/sjdemartini/mui-tiptap)
+**Bios are rich text**, written with the same [tiptap](https://tiptap.dev)-based
 editor as a comment (`RichTextInput.jsx`) and stored as sanitized HTML: formatting,
 lists and links, but **no embedded media** — see [Rich text](./rich-text.md). Two
 consequences worth knowing:

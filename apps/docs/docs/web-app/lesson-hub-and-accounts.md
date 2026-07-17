@@ -23,9 +23,8 @@ entirely by the Worker — it is never stored, and the user is shown why. Postin
 reply sends a [notification](./notifications.md) to the parent commenter and the
 lesson author.
 
-**Comments are rich text.** They're written with
-[mui-tiptap](https://github.com/sjdemartini/mui-tiptap) (`RichTextInput.jsx`) and
-stored as sanitized HTML: bold, italic, underline, strikethrough, inline code,
+**Comments are rich text.** They're written with a [tiptap](https://tiptap.dev)-based
+editor (`RichTextInput.jsx`) and stored as sanitized HTML: bold, italic, underline, strikethrough, inline code,
 lists, blockquotes and links. **Media cannot be embedded** — no images, video,
 audio or frames — and that rule is enforced by the Worker's sanitizer rather than
 by the toolbar, so it holds even against a hand-crafted request. See
@@ -38,8 +37,8 @@ the same sanitizing, length and profanity checks as posting, so it can't be used
 to launder content past the rules. Moderators can _delete_ a comment but not
 rewrite one — see [Moderation](./moderation.md).
 
-A commenter can also leave a **1–5 star rating** for the lesson (a MUI Rating in
-the comment box). Ratings are one-per-user-per-lesson — re-rating updates your
+A commenter can also leave a **1–5 star rating** for the lesson (a star-rating
+control in the comment box). Ratings are one-per-user-per-lesson — re-rating updates your
 existing star count rather than adding a second vote — and the lesson page shows
 the **average** rating and how many ratings it has.
 

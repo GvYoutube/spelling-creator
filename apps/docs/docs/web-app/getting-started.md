@@ -7,7 +7,7 @@ sidebar_position: 13
 
 ```bash
 pnpm install
-pnpm dev      # start the dev server (http://localhost:5173)
+pnpm dev      # start the dev server (http://localhost:3000)
 pnpm build    # production build into dist/
 pnpm preview  # preview the production build
 ```
@@ -15,7 +15,8 @@ pnpm preview  # preview the production build
 ## Environment variables
 
 The AI text feature needs two variables in a `.env` file at the project root
-(Vite exposes `VITE_`-prefixed vars to the client):
+(the app configures Rsbuild to expose `VITE_`-prefixed vars to the client,
+keeping the same convention it used before migrating off Vite):
 
 ```bash
 VITE_API_URL=https://your-worker.example.workers.dev   # apps/api Worker endpoint (AI, Pixabay, lesson hub)
