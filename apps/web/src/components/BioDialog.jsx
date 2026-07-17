@@ -8,15 +8,18 @@
 // arrives, so what it stores is only ever what the allow-list permits.
 
 import { useEffect, useState } from "react";
-import Dialog from "@mui/material/Dialog";
-import DialogTitle from "@mui/material/DialogTitle";
-import DialogContent from "@mui/material/DialogContent";
-import DialogContentText from "@mui/material/DialogContentText";
-import DialogActions from "@mui/material/DialogActions";
-import Button from "@mui/material/Button";
-import Stack from "@mui/material/Stack";
-import Alert from "@mui/material/Alert";
-import CircularProgress from "@mui/material/CircularProgress";
+import { CircleAlertIcon } from "lucide-react";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+} from "./ui/dialog.jsx";
+import { Button } from "./ui/button.jsx";
+import { Alert, AlertDescription } from "./ui/alert.jsx";
+import { Spinner } from "./ui/spinner.jsx";
 import RichTextInput from "./RichTextInput.jsx";
 import { useAuth } from "../lib/auth.jsx";
 import { setBio, BIO_MAX } from "../lib/profile.js";
@@ -70,48 +73,55 @@ export default function BioDialog({ open, initial = "", onClose, onSaved }) {
   };
 
   return (
-    <Dialog open={open} onClose={onClose} fullWidth maxWidth="sm">
-      <DialogTitle>Edit bio</DialogTitle>
-      <Stack component="form" onSubmit={save}>
-        <DialogContent>
-          <DialogContentText sx={{ mb: 2 }}>
+    <Dialog
+      open={open}
+      onOpenChange={(next) => {
+        if (!next) onClose?.();
+      }}
+    >
+      <DialogContent className="sm:max-w-lg">
+        <DialogHeader>
+          <DialogTitle>Edit bio</DialogTitle>
+          <DialogDescription>
             A short description shown on your public profile. Leave it empty to
             remove your bio.
-          </DialogContentText>
-          {error && (
-            <Alert severity="error" sx={{ mb: 2 }}>
-              {error}
-            </Alert>
-          )}
-          <RichTextInput
-            key={editorKey}
-            value={html}
-            onChange={setHtml}
-            maxLength={BIO_MAX}
-            label="Bio"
-            placeholder="Tell people a little about yourself…"
-            disabled={saving}
-            autoFocus
-          />
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={onClose} disabled={saving}>
-            Cancel
-          </Button>
-          <Button
-            type="submit"
-            variant="contained"
-            disabled={saving || tooLong}
-            startIcon={
-              saving ? (
-                <CircularProgress size={16} color="inherit" />
-              ) : undefined
-            }
-          >
-            Save
-          </Button>
-        </DialogActions>
-      </Stack>
+          </DialogDescription>
+        </DialogHeader>
+        <form onSubmit={save}>
+          <div className="flex flex-col gap-4">
+            {error && (
+              <Alert variant="destructive">
+                <CircleAlertIcon />
+                <AlertDescription>{error}</AlertDescription>
+              </Alert>
+            )}
+            <RichTextInput
+              key={editorKey}
+              value={html}
+              onChange={setHtml}
+              maxLength={BIO_MAX}
+              label="Bio"
+              placeholder="Tell people a little about yourself…"
+              disabled={saving}
+              autoFocus
+            />
+          </div>
+          <DialogFooter className="mt-6">
+            <Button
+              type="button"
+              variant="ghost"
+              onClick={onClose}
+              disabled={saving}
+            >
+              Cancel
+            </Button>
+            <Button type="submit" disabled={saving || tooLong}>
+              {saving && <Spinner data-icon="inline-start" />}
+              Save
+            </Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
     </Dialog>
   );
 }
