@@ -9,22 +9,16 @@
 // working document.
 
 import { useState } from "react";
-import Paper from "@mui/material/Paper";
-import Button from "@mui/material/Button";
-import IconButton from "@mui/material/IconButton";
-import Box from "@mui/material/Box";
-import Stack from "@mui/material/Stack";
-import Stepper from "@mui/material/Stepper";
-import Step from "@mui/material/Step";
-import StepLabel from "@mui/material/StepLabel";
-import Typography from "@mui/material/Typography";
-import Divider from "@mui/material/Divider";
-import Slide from "@mui/material/Slide";
-import CloseIcon from "@mui/icons-material/Close";
-import TitleIcon from "@mui/icons-material/Title";
-import AddIcon from "@mui/icons-material/Add";
-import SpellcheckIcon from "@mui/icons-material/Spellcheck";
-import IosShareIcon from "@mui/icons-material/IosShare";
+import {
+  XIcon,
+  TypeIcon,
+  PlusIcon,
+  SpellCheckIcon,
+  Share2Icon,
+  CheckIcon,
+} from "lucide-react";
+import { Button } from "./ui/button.jsx";
+import { cn } from "../lib/utils.js";
 
 // Each step pairs a short heading with a one-paragraph explanation and the icon
 // the matching control uses elsewhere in the editor, so the guide reads as a
@@ -32,7 +26,7 @@ import IosShareIcon from "@mui/icons-material/IosShare";
 const STEPS = [
   {
     label: "Name your lesson",
-    icon: <TitleIcon color="primary" />,
+    icon: TypeIcon,
     body: (
       <>
         Start at the top of the page and type a title for your lesson — for
@@ -43,7 +37,7 @@ const STEPS = [
   },
   {
     label: "Add a section",
-    icon: <AddIcon color="primary" />,
+    icon: PlusIcon,
     body: (
       <>
         Press the round <strong>+</strong> button (bottom-right) or{" "}
@@ -55,7 +49,7 @@ const STEPS = [
   },
   {
     label: "Fill in content",
-    icon: <SpellcheckIcon color="primary" />,
+    icon: SpellCheckIcon,
     body: (
       <>
         Inside a section, add content blocks: spelling words, instructions,
@@ -66,7 +60,7 @@ const STEPS = [
   },
   {
     label: "Preview & share",
-    icon: <IosShareIcon color="primary" />,
+    icon: Share2Icon,
     body: (
       <>
         When you’re happy, use <strong>Preview</strong> to see the printable
@@ -76,6 +70,58 @@ const STEPS = [
     ),
   },
 ];
+
+// A compact horizontal step indicator — shadcn has no Stepper component, so
+// this is hand-built: a dot per step (numbered, or checked once passed),
+// connected by a line, with the step's label underneath. Hidden below sm,
+// matching the original's alternativeLabel-on-desktop-only behavior.
+function StepIndicator({ activeStep }) {
+  return (
+    <ol className="my-4 hidden items-start sm:flex">
+      {STEPS.map((s, i) => (
+        <li key={s.label} className="flex flex-1 flex-col items-center gap-1.5">
+          <div className="flex w-full items-center">
+            <div
+              className={cn(
+                "h-px flex-1",
+                i === 0
+                  ? "invisible"
+                  : i <= activeStep
+                    ? "bg-primary"
+                    : "bg-border",
+              )}
+            />
+            <div
+              className={cn(
+                "flex size-6 shrink-0 items-center justify-center rounded-full text-xs font-medium",
+                i < activeStep
+                  ? "bg-primary text-primary-foreground"
+                  : i === activeStep
+                    ? "border-2 border-primary text-primary"
+                    : "border border-border text-muted-foreground",
+              )}
+            >
+              {i < activeStep ? <CheckIcon className="size-3.5" /> : i + 1}
+            </div>
+            <div
+              className={cn(
+                "h-px flex-1",
+                i === STEPS.length - 1
+                  ? "invisible"
+                  : i < activeStep
+                    ? "bg-primary"
+                    : "bg-border",
+              )}
+            />
+          </div>
+          <span className="text-center text-[11px] text-muted-foreground">
+            {s.label}
+          </span>
+        </li>
+      ))}
+    </ol>
+  );
+}
 
 export default function FirstLessonWizard({ open, onClose }) {
   const [activeStep, setActiveStep] = useState(0);
@@ -96,97 +142,68 @@ export default function FirstLessonWizard({ open, onClose }) {
 
   const handleBack = () => setActiveStep((s) => Math.max(0, s - 1));
 
+  if (!open) return null;
+
   const step = STEPS[activeStep];
+  const StepIcon = step.icon;
 
   return (
     // No Modal/Backdrop wrapper — the panel floats above the editor without
     // dimming it or stealing focus, so the editor stays fully usable. Sits above
     // the add-section FAB; on small screens it stretches to the side margins.
-    <Slide direction="up" in={open} mountOnEnter unmountOnExit>
-      <Paper
-        elevation={8}
-        role="complementary"
-        aria-label="How to create a lesson"
-        sx={{
-          position: "fixed",
-          zIndex: (t) => t.zIndex.drawer + 2,
-          bottom: { xs: 16, sm: 24 },
-          right: { xs: 16, sm: 24 },
-          left: { xs: 16, sm: "auto" },
-          width: { xs: "auto", sm: 380 },
-          maxWidth: "calc(100vw - 32px)",
-          p: 2,
-          borderRadius: 2,
-        }}
-      >
-        <Stack
-          direction="row"
-          alignItems="flex-start"
-          justifyContent="space-between"
-          spacing={1}
+    <div
+      role="complementary"
+      aria-label="How to create a lesson"
+      className={cn(
+        "fixed right-4 bottom-4 left-4 z-[1202] w-auto rounded-lg border border-border bg-card p-4 text-card-foreground shadow-[var(--shadow-panel)]",
+        "sm:right-6 sm:bottom-6 sm:left-auto sm:w-[380px]",
+        "max-w-[calc(100vw-32px)]",
+        "animate-in slide-in-from-bottom-4 fade-in duration-300",
+      )}
+    >
+      <div className="flex items-start justify-between gap-2">
+        <p className="text-sm font-bold">Create your first lesson</p>
+        <Button
+          variant="ghost"
+          size="icon-sm"
+          aria-label="close"
+          onClick={handleClose}
+          className="-mt-1 -mr-1"
         >
-          <Typography variant="subtitle1" sx={{ fontWeight: 700 }}>
-            Create your first lesson
-          </Typography>
-          <IconButton
-            size="small"
-            aria-label="close"
-            onClick={handleClose}
-            sx={{ mt: -0.5, mr: -0.5 }}
+          <XIcon className="size-4" />
+        </Button>
+      </div>
+
+      <StepIndicator activeStep={activeStep} />
+      <hr className="mt-1 mb-3 border-border sm:hidden" />
+
+      <div className="flex items-start gap-3">
+        <StepIcon className="mt-0.5 size-5 shrink-0 text-primary" />
+        <div>
+          <p className="mb-1 text-sm font-medium">{step.label}</p>
+          <p className="text-sm text-muted-foreground">{step.body}</p>
+        </div>
+      </div>
+
+      <div className="mt-4 flex items-center justify-between">
+        <span className="text-xs text-muted-foreground">
+          Step {activeStep + 1} of {STEPS.length}
+        </span>
+        <div className="flex gap-2">
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            onClick={handleBack}
+            disabled={activeStep === 0}
           >
-            <CloseIcon fontSize="small" />
-          </IconButton>
-        </Stack>
-
-        <Stepper
-          activeStep={activeStep}
-          alternativeLabel
-          sx={{ my: 2, display: { xs: "none", sm: "flex" } }}
-        >
-          {STEPS.map((s) => (
-            <Step key={s.label}>
-              <StepLabel>{s.label}</StepLabel>
-            </Step>
-          ))}
-        </Stepper>
-
-        <Divider sx={{ display: { sm: "none" }, mb: 1.5, mt: 1 }} />
-
-        <Stack direction="row" spacing={1.5} alignItems="flex-start">
-          <Box sx={{ fontSize: 0, mt: 0.25 }}>{step.icon}</Box>
-          <Box>
-            <Typography variant="subtitle2" gutterBottom>
-              {step.label}
-            </Typography>
-            <Typography variant="body2" color="text.secondary">
-              {step.body}
-            </Typography>
-          </Box>
-        </Stack>
-
-        <Stack
-          direction="row"
-          alignItems="center"
-          justifyContent="space-between"
-          sx={{ mt: 2 }}
-        >
-          <Typography variant="caption" color="text.secondary">
-            Step {activeStep + 1} of {STEPS.length}
-          </Typography>
-          <Stack direction="row" spacing={1}>
-            <Button
-              size="small"
-              onClick={handleBack}
-              disabled={activeStep === 0}
-            >
-              Back
-            </Button>
-            <Button size="small" variant="contained" onClick={handleNext}>
-              {lastStep ? "Done" : "Next"}
-            </Button>
-          </Stack>
-        </Stack>
-      </Paper>
-    </Slide>
+            Back
+          </Button>
+          <Button type="button" size="sm" onClick={handleNext}>
+            {lastStep ? "Done" : "Next"}
+          </Button>
+        </div>
+      </div>
+    </div>
   );
 }
