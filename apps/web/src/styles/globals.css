@@ -1,7 +1,18 @@
 /* Tailwind v4, theme + utilities only — preflight (the reset) is deliberately
    left out while MUI's <CssBaseline /> is still mounted, so the two resets
    don't fight. Swapped for the full `@import "tailwindcss";` in the cleanup
-   phase once CssBaseline is removed. See CLAUDE.md migration plan. */
+   phase once CssBaseline is removed. See CLAUDE.md migration plan.
+
+   One preflight rule is cherry-picked below despite that: the default
+   border-color (registered here, in the `base` layer, so it sits between
+   `theme` and `utilities` in the cascade — see the block further down).
+   Tailwind v4 dropped the old gray-200-ish default border color in favor of
+   `currentColor`, so every bare `border` utility in this app (dialog/
+   popover/dropdown/select panels, MergeDialog's diff boxes, etc.) was
+   silently rendering a solid text-colored ring instead of the intended soft
+   `--border` glass edge. Full preflight would fix this on its own, but
+   pulling in the rest of it this early would fight with CssBaseline. */
+@layer theme, base, utilities;
 @import "tailwindcss/theme.css" layer(theme);
 @import "tailwindcss/utilities.css" layer(utilities);
 @import "tw-animate-css";
@@ -49,6 +60,15 @@
   --radius-pill: var(--radius-pill);
 }
 
+/* See the note above the imports at the top of this file. */
+@layer base {
+  *,
+  ::before,
+  ::after {
+    border-color: var(--border);
+  }
+}
+
 :root {
   /* Tells the browser to render native chrome (scrollbars, form controls) in
      the light palette — without this, native scrollbars stay light-themed
@@ -60,6 +80,17 @@
   --radius-panel: 1.25rem; /* 20px */
   --radius-tile: 0.5rem; /* 8px */
   --radius-pill: 999px;
+
+  /* Radix-portaled surfaces (Dialog/Popover/DropdownMenu/Select/Tooltip) need
+     to sit above MUI's own z-index scale (AppBar 1100, Drawer 1200, Modal
+     1300, Snackbar 1400, Tooltip 1500) while pages still mix MUI chrome with
+     shadcn overlays — plain z-50 was rendering a sticky AppBar on top of an
+     open dropdown. --z-overlay-top out-ranks our own --z-overlay so a
+     tooltip triggered from inside a menu/popover still shows above it. Both
+     revert to the ordinary z-50 utility in the Phase 6 cleanup, once MUI's
+     AppBar is gone for good. */
+  --z-overlay: 1500;
+  --z-overlay-top: 1600;
 
   --background: #dee3f3;
   --foreground: #1e2138;

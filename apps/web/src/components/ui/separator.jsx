@@ -18,7 +18,13 @@ const Separator = forwardRef(function Separator(
       decorative={decorative}
       orientation={orientation}
       className={cn(
-        "shrink-0 bg-border data-[orientation=horizontal]:h-px data-[orientation=horizontal]:w-full data-[orientation=vertical]:h-full data-[orientation=vertical]:w-px",
+        // bg-input, not bg-border — --border is tuned to read as a crisp
+        // outer edge against a colorful blurred backdrop (see dialog.jsx),
+        // which makes it nearly invisible used as an internal divider on a
+        // popover/card's own near-white (or, in dark mode, near-black)
+        // surface. --input's darker/lighter-from-center rgba actually
+        // contrasts against the surface it's drawn on in both themes.
+        "shrink-0 bg-input data-[orientation=horizontal]:h-px data-[orientation=horizontal]:w-full data-[orientation=vertical]:h-full data-[orientation=vertical]:w-px",
         className,
       )}
       {...props}
