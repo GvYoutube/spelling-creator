@@ -10,19 +10,12 @@
 // scroll-to-newest anchor, and an unread count for while it's collapsed.
 
 import { useEffect, useRef, useState } from "react";
-import Box from "@mui/material/Box";
-import Stack from "@mui/material/Stack";
-import Paper from "@mui/material/Paper";
-import TextField from "@mui/material/TextField";
-import Typography from "@mui/material/Typography";
-import Avatar from "@mui/material/Avatar";
-import IconButton from "@mui/material/IconButton";
-import Badge from "@mui/material/Badge";
-import Tooltip from "@mui/material/Tooltip";
-import Fab from "@mui/material/Fab";
-import ChatIcon from "@mui/icons-material/Chat";
-import CloseIcon from "@mui/icons-material/Close";
-import SendIcon from "@mui/icons-material/Send";
+import { MessageCircleIcon, XIcon, SendIcon } from "lucide-react";
+import { Button } from "./ui/button.jsx";
+import { Input } from "./ui/input.jsx";
+import { Avatar, AvatarImage, AvatarFallback } from "./ui/avatar.jsx";
+import { Tooltip, TooltipTrigger, TooltipContent } from "./ui/tooltip.jsx";
+import { cn } from "../lib/utils.js";
 import { colorForId } from "../lib/presence.js";
 
 function initials(entry) {
@@ -89,153 +82,126 @@ export default function CollabChat({ collab }) {
     setDraft("");
   };
 
-  // Collapsed: a small launcher FAB with an unread badge.
+  // Collapsed: a small launcher FAB with an unread badge. z-[1202] matches
+  // FirstLessonWizard's fixed corner panel — comfortably above the still-MUI
+  // pages' sticky AppBar (z-1100).
   if (!open) {
     return (
-      <Box
-        sx={{
-          position: "fixed",
-          left: 16,
-          bottom: 16,
-          zIndex: (t) => t.zIndex.appBar + 1,
-        }}
-      >
-        <Badge color="error" badgeContent={unread} overlap="circular" max={99}>
-          <Tooltip title="Open chat" placement="right">
-            <Fab color="primary" size="medium" onClick={() => setOpen(true)}>
-              <ChatIcon />
-            </Fab>
-          </Tooltip>
-        </Badge>
-      </Box>
+      <div className="fixed bottom-4 left-4 z-[1202]">
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              type="button"
+              size="icon-lg"
+              className="relative rounded-full shadow-[var(--shadow-panel)]"
+              onClick={() => setOpen(true)}
+              aria-label="Open chat"
+            >
+              <MessageCircleIcon />
+              {unread > 0 && (
+                <span className="absolute -top-1 -right-1 flex size-5 items-center justify-center rounded-full bg-destructive text-[10px] font-medium text-destructive-foreground ring-2 ring-background">
+                  {unread > 99 ? "99+" : unread}
+                </span>
+              )}
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent side="right">Open chat</TooltipContent>
+        </Tooltip>
+      </div>
     );
   }
 
   return (
-    <Paper
-      elevation={6}
-      sx={{
-        position: "fixed",
-        left: 16,
-        bottom: 16,
-        width: { xs: "calc(100vw - 32px)", sm: 320 },
-        maxWidth: 360,
-        height: 420,
-        maxHeight: "calc(100vh - 32px)",
-        display: "flex",
-        flexDirection: "column",
-        overflow: "hidden",
-        borderRadius: 2,
-        zIndex: (t) => t.zIndex.appBar + 1,
-      }}
-    >
+    <div className="fixed bottom-4 left-4 z-[1202] flex h-[420px] max-h-[calc(100vh-32px)] w-[calc(100vw-32px)] max-w-[360px] flex-col overflow-hidden rounded-panel border border-border bg-card text-card-foreground shadow-[var(--shadow-panel),0_0_0_1px_var(--glass-border-outer)] backdrop-blur-(--glass-blur) backdrop-saturate-[1.4] sm:w-80">
       {/* Header */}
-      <Stack
-        direction="row"
-        alignItems="center"
-        spacing={1}
-        sx={{
-          px: 1.5,
-          py: 1,
-          bgcolor: "primary.main",
-          color: "primary.contrastText",
-        }}
-      >
-        <ChatIcon fontSize="small" />
-        <Typography variant="subtitle2" sx={{ flexGrow: 1 }}>
-          Chat
-        </Typography>
-        <Tooltip title="Close chat">
-          <IconButton
-            size="small"
-            onClick={() => setOpen(false)}
-            sx={{ color: "inherit" }}
-          >
-            <CloseIcon fontSize="small" />
-          </IconButton>
+      <div className="flex items-center gap-2 bg-primary px-3 py-2 text-primary-foreground">
+        <MessageCircleIcon className="size-4" />
+        <p className="flex-1 text-sm font-medium">Chat</p>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon-sm"
+              onClick={() => setOpen(false)}
+              className="text-primary-foreground hover:bg-primary-foreground/10"
+            >
+              <XIcon className="size-4" />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent>Close chat</TooltipContent>
         </Tooltip>
-      </Stack>
+      </div>
 
       {/* Transcript */}
-      <Box
-        sx={{ flexGrow: 1, overflowY: "auto", p: 1.5, bgcolor: "action.hover" }}
-      >
+      <div className="flex-1 overflow-y-auto bg-muted p-3">
         {messages.length === 0 ? (
-          <Typography
-            variant="body2"
-            color="text.secondary"
-            sx={{ textAlign: "center", py: 3 }}
-          >
+          <p className="py-6 text-center text-sm text-muted-foreground">
             No messages yet — say hello!
-          </Typography>
+          </p>
         ) : (
-          <Stack spacing={1}>
+          <div className="flex flex-col gap-2">
             {messages.map((m) => {
               const mine = m.uid === myId;
               return (
-                <Stack
+                <div
                   key={m.id}
-                  direction="row"
-                  spacing={1}
-                  sx={{ flexDirection: mine ? "row-reverse" : "row" }}
+                  className={cn("flex gap-2", mine && "flex-row-reverse")}
                 >
                   <Avatar
-                    src={m.avatarUrl || undefined}
-                    sx={{
-                      width: 28,
-                      height: 28,
-                      fontSize: 14,
-                      bgcolor: mine ? "primary.main" : colorForId(m.uid),
-                    }}
+                    size="sm"
+                    className={cn("size-7 shrink-0", mine && "bg-primary")}
+                    style={
+                      !mine ? { backgroundColor: colorForId(m.uid) } : undefined
+                    }
                   >
-                    {initials(m)}
+                    <AvatarImage
+                      src={m.avatarUrl}
+                      alt={m.name || "Collaborator"}
+                    />
+                    <AvatarFallback
+                      className={cn("text-xs text-white", mine && "bg-primary")}
+                      style={
+                        !mine
+                          ? { backgroundColor: colorForId(m.uid) }
+                          : undefined
+                      }
+                    >
+                      {initials(m)}
+                    </AvatarFallback>
                   </Avatar>
-                  <Box sx={{ minWidth: 0, maxWidth: "75%" }}>
-                    <Typography
-                      variant="caption"
-                      color="text.secondary"
-                      sx={{
-                        display: "block",
-                        textAlign: mine ? "right" : "left",
-                      }}
+                  <div className="min-w-0 max-w-[75%]">
+                    <p
+                      className={cn(
+                        "text-xs text-muted-foreground",
+                        mine ? "text-right" : "text-left",
+                      )}
                     >
                       {mine ? "You" : m.name || "Collaborator"} ·{" "}
                       {formatTime(m.ts)}
-                    </Typography>
-                    <Box
-                      sx={{
-                        px: 1.25,
-                        py: 0.75,
-                        borderRadius: 1.5,
-                        bgcolor: mine ? "primary.main" : "background.paper",
-                        color: mine ? "primary.contrastText" : "text.primary",
-                        border: mine ? 0 : 1,
-                        borderColor: "divider",
-                        wordBreak: "break-word",
-                        whiteSpace: "pre-wrap",
-                      }}
+                    </p>
+                    <div
+                      className={cn(
+                        "rounded-xl px-3 py-1.5 text-sm break-words whitespace-pre-wrap",
+                        mine
+                          ? "bg-primary text-primary-foreground"
+                          : "border border-border bg-card text-card-foreground",
+                      )}
                     >
-                      <Typography variant="body2">{m.text}</Typography>
-                    </Box>
-                  </Box>
-                </Stack>
+                      {m.text}
+                    </div>
+                  </div>
+                </div>
               );
             })}
             <div ref={endRef} />
-          </Stack>
+          </div>
         )}
-      </Box>
+      </div>
 
       {/* Composer */}
-      <Stack
-        direction="row"
-        spacing={1}
-        alignItems="flex-start"
-        sx={{ p: 1, borderTop: 1, borderColor: "divider" }}
-      >
-        <TextField
-          size="small"
-          fullWidth
+      <div className="flex items-start gap-2 border-t border-border p-2">
+        <Input
           autoFocus
           placeholder="Type a message"
           value={draft}
@@ -246,21 +212,26 @@ export default function CollabChat({ collab }) {
               submit();
             }
           }}
-          inputProps={{ maxLength: 2000 }}
+          maxLength={2000}
         />
-        <Tooltip title="Send">
-          <span>
-            <IconButton
-              color="primary"
-              onClick={submit}
-              disabled={!draft.trim()}
-              sx={{ mt: 0.25 }}
-            >
-              <SendIcon fontSize="small" />
-            </IconButton>
-          </span>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <span>
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                onClick={submit}
+                disabled={!draft.trim()}
+                className="text-primary"
+              >
+                <SendIcon className="size-4" />
+              </Button>
+            </span>
+          </TooltipTrigger>
+          <TooltipContent>Send</TooltipContent>
         </Tooltip>
-      </Stack>
-    </Paper>
+      </div>
+    </div>
   );
 }
