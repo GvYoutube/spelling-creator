@@ -2,45 +2,35 @@
 // the eventual layout — they read as "the page is nearly here" rather than the
 // open-ended "still working" of a spinner, so they feel faster and nag less. We use
 // them for content regions (lists, cards, a lesson's body); small in-button and
-// transient overlay spinners stay as CircularProgress, where a skeleton makes no
-// sense. Each export mirrors the real markup it replaces so the swap to real content
+// transient overlay spinners stay as <Spinner>, where a skeleton makes no sense.
+// Each export mirrors the real markup it replaces so the swap to real content
 // doesn't shift the layout.
 
-import Box from "@mui/material/Box";
-import Card from "@mui/material/Card";
-import CardContent from "@mui/material/CardContent";
-import Divider from "@mui/material/Divider";
-import Grid from "@mui/material/Grid2";
-import Stack from "@mui/material/Stack";
-import Skeleton from "@mui/material/Skeleton";
+import { Skeleton } from "./ui/skeleton.jsx";
 
 // A single lesson card placeholder, matching the hub/profile card: a title line and
 // a short meta line inside an outlined card.
 function LessonCardSkeleton() {
   return (
-    <Card variant="outlined" sx={{ height: "100%" }}>
-      <CardContent>
-        <Skeleton variant="text" sx={{ fontSize: "1.25rem" }} width="75%" />
-        <Skeleton variant="text" width="45%" />
-        <Skeleton variant="text" width="55%" sx={{ mt: 1 }} />
-      </CardContent>
-    </Card>
+    <div className="h-full rounded-md border border-border p-4">
+      <Skeleton className="h-5 w-3/4" />
+      <Skeleton className="mt-2 h-4 w-[45%]" />
+      <Skeleton className="mt-3 h-4 w-[55%]" />
+    </div>
   );
 }
 
 /**
  * A responsive grid of placeholder lesson cards, matching the hub and profile
- * listings (xs:12 / sm:6 / md:4). Used while the real lessons load.
+ * listings (1 col / 2 col sm+ / 3 col md+). Used while the real lessons load.
  */
 export function LessonGridSkeleton({ count = 6 }) {
   return (
-    <Grid container spacing={2}>
+    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 md:grid-cols-3">
       {Array.from({ length: count }, (_, i) => (
-        <Grid key={i} size={{ xs: 12, sm: 6, md: 4 }}>
-          <LessonCardSkeleton />
-        </Grid>
+        <LessonCardSkeleton key={i} />
       ))}
-    </Grid>
+    </div>
   );
 }
 
@@ -51,28 +41,17 @@ export function LessonGridSkeleton({ count = 6 }) {
 export function LessonContentSkeleton() {
   return (
     <>
-      <Stack sx={{ mb: 2 }}>
-        <Skeleton variant="text" sx={{ fontSize: "2.125rem" }} width="60%" />
-        <Skeleton variant="text" width="35%" />
-      </Stack>
-      <Box
-        sx={{
-          border: 1,
-          borderColor: "divider",
-          borderRadius: 1,
-          p: { xs: 2, sm: 3 },
-        }}
-      >
-        <Skeleton variant="text" sx={{ fontSize: "1.5rem" }} width="50%" />
-        <Skeleton
-          variant="rectangular"
-          height={180}
-          sx={{ my: 2, borderRadius: 1 }}
-        />
-        <Skeleton variant="text" />
-        <Skeleton variant="text" />
-        <Skeleton variant="text" width="80%" />
-      </Box>
+      <div className="mb-4 flex flex-col gap-1.5">
+        <Skeleton className="h-9 w-3/5" />
+        <Skeleton className="h-4 w-[35%]" />
+      </div>
+      <div className="rounded-md border border-border p-4 sm:p-6">
+        <Skeleton className="h-7 w-1/2" />
+        <Skeleton className="my-4 h-[180px] w-full rounded-md" />
+        <Skeleton className="h-4 w-full" />
+        <Skeleton className="mt-2 h-4 w-full" />
+        <Skeleton className="mt-2 h-4 w-4/5" />
+      </div>
     </>
   );
 }
@@ -81,25 +60,25 @@ export function LessonContentSkeleton() {
 // matching the comment row in CommentsSection.
 function CommentSkeleton() {
   return (
-    <Stack direction="row" spacing={1.5} alignItems="flex-start">
-      <Skeleton variant="circular" width={32} height={32} />
-      <Box sx={{ flexGrow: 1 }}>
-        <Skeleton variant="text" width="30%" />
-        <Skeleton variant="text" />
-        <Skeleton variant="text" width="85%" />
-      </Box>
-    </Stack>
+    <div className="flex items-start gap-3">
+      <Skeleton className="size-8 shrink-0 rounded-full" />
+      <div className="flex-1">
+        <Skeleton className="h-4 w-[30%]" />
+        <Skeleton className="mt-2 h-4 w-full" />
+        <Skeleton className="mt-2 h-4 w-[85%]" />
+      </div>
+    </div>
   );
 }
 
 /** A short stack of placeholder comments, used while a lesson's comments load. */
 export function CommentsSkeleton({ count = 3 }) {
   return (
-    <Stack spacing={2}>
+    <div className="flex flex-col gap-4">
       {Array.from({ length: count }, (_, i) => (
         <CommentSkeleton key={i} />
       ))}
-    </Stack>
+    </div>
   );
 }
 
@@ -108,16 +87,14 @@ export function CommentsSkeleton({ count = 3 }) {
 // hydrated sections don't shift the layout when they replace it.
 function SectionSkeleton() {
   return (
-    <Card elevation={2}>
-      <CardContent>
-        <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 2 }}>
-          <Skeleton variant="circular" width={30} height={30} />
-          <Skeleton variant="text" sx={{ fontSize: "1.25rem" }} width="40%" />
-        </Stack>
-        <Divider sx={{ mb: 2 }} />
-        <Skeleton variant="rounded" height={72} />
-      </CardContent>
-    </Card>
+    <div className="rounded-panel border border-border bg-card p-4 shadow-(--shadow-panel)">
+      <div className="mb-4 flex items-center gap-2">
+        <Skeleton className="size-[30px] shrink-0 rounded-full" />
+        <Skeleton className="h-5 w-[40%]" />
+      </div>
+      <hr className="mb-4 border-border" />
+      <Skeleton className="h-[72px] w-full rounded-md" />
+    </div>
   );
 }
 
@@ -128,11 +105,11 @@ function SectionSkeleton() {
  */
 export function SectionsSkeleton({ count = 2 }) {
   return (
-    <Stack spacing={3}>
+    <div className="flex flex-col gap-6">
       {Array.from({ length: count }, (_, i) => (
         <SectionSkeleton key={i} />
       ))}
-    </Stack>
+    </div>
   );
 }
 
@@ -140,11 +117,11 @@ export function SectionsSkeleton({ count = 2 }) {
 // line, a wrapped summary, and a short meta line.
 function FeedRowSkeleton() {
   return (
-    <Box sx={{ px: 1, py: 1.25 }}>
-      <Skeleton variant="text" width="65%" />
-      <Skeleton variant="text" width="90%" />
-      <Skeleton variant="text" width="35%" />
-    </Box>
+    <div className="px-2 py-2.5">
+      <Skeleton className="h-4 w-[65%]" />
+      <Skeleton className="mt-2 h-4 w-[90%]" />
+      <Skeleton className="mt-2 h-3 w-[35%]" />
+    </div>
   );
 }
 
@@ -155,11 +132,11 @@ function FeedRowSkeleton() {
  */
 export function FeedListSkeleton({ count = 4 }) {
   return (
-    <Stack divider={<Divider flexItem />} spacing={0}>
+    <div className="flex flex-col divide-y divide-border">
       {Array.from({ length: count }, (_, i) => (
         <FeedRowSkeleton key={i} />
       ))}
-    </Stack>
+    </div>
   );
 }
 
@@ -170,11 +147,11 @@ export function FeedListSkeleton({ count = 4 }) {
  */
 export function SummarySkeleton() {
   return (
-    <Box>
-      <Skeleton variant="text" width="92%" />
-      <Skeleton variant="text" width="85%" />
-      <Skeleton variant="text" width="60%" />
-    </Box>
+    <div>
+      <Skeleton className="h-4 w-[92%]" />
+      <Skeleton className="mt-2 h-4 w-[85%]" />
+      <Skeleton className="mt-2 h-4 w-[60%]" />
+    </div>
   );
 }
 
@@ -182,13 +159,13 @@ export function SummarySkeleton() {
 // rail, then the summary line and a shorter meta line beside it.
 function CommitSkeleton() {
   return (
-    <Stack direction="row" spacing={1.5} alignItems="flex-start" sx={{ py: 1 }}>
-      <Skeleton variant="circular" width={12} height={12} sx={{ mt: 0.75 }} />
-      <Box sx={{ flexGrow: 1 }}>
-        <Skeleton variant="text" width="70%" />
-        <Skeleton variant="text" width="40%" />
-      </Box>
-    </Stack>
+    <div className="flex items-start gap-3 py-2">
+      <Skeleton className="mt-1 size-3 shrink-0 rounded-full" />
+      <div className="flex-1">
+        <Skeleton className="h-4 w-[70%]" />
+        <Skeleton className="mt-2 h-4 w-[40%]" />
+      </div>
+    </div>
   );
 }
 
@@ -198,11 +175,11 @@ function CommitSkeleton() {
  */
 export function HistorySkeleton({ count = 5 }) {
   return (
-    <Stack spacing={0.5}>
+    <div className="flex flex-col gap-1">
       {Array.from({ length: count }, (_, i) => (
         <CommitSkeleton key={i} />
       ))}
-    </Stack>
+    </div>
   );
 }
 
@@ -212,10 +189,14 @@ export function HistorySkeleton({ count = 5 }) {
  */
 export function ListRowsSkeleton({ count = 3 }) {
   return (
-    <Stack spacing={1.5}>
+    <div className="flex flex-col gap-3">
       {Array.from({ length: count }, (_, i) => (
-        <Skeleton key={i} variant="text" width={`${85 - i * 10}%`} />
+        <Skeleton
+          key={i}
+          className="h-4"
+          style={{ width: `${85 - i * 10}%` }}
+        />
       ))}
-    </Stack>
+    </div>
   );
 }

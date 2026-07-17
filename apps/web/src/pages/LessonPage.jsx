@@ -6,47 +6,50 @@
 
 import { useEffect, useState } from "react";
 import { Link as RouterLink, useNavigate, useParams } from "react-router-dom";
-import AppBar from "@mui/material/AppBar";
-import Toolbar from "@mui/material/Toolbar";
-import Typography from "@mui/material/Typography";
-import Button from "@mui/material/Button";
-import Box from "@mui/material/Box";
-import Container from "@mui/material/Container";
-import Stack from "@mui/material/Stack";
-import Paper from "@mui/material/Paper";
-import Dialog from "@mui/material/Dialog";
-import DialogTitle from "@mui/material/DialogTitle";
-import DialogContent from "@mui/material/DialogContent";
-import DialogActions from "@mui/material/DialogActions";
-import DialogContentText from "@mui/material/DialogContentText";
-import TextField from "@mui/material/TextField";
-import CircularProgress from "@mui/material/CircularProgress";
-import Alert from "@mui/material/Alert";
+// Snackbar stays MUI for now — see the note in ModerationPage.jsx.
 import Snackbar from "@mui/material/Snackbar";
-import IconButton from "@mui/material/IconButton";
-import Menu from "@mui/material/Menu";
-import MenuItem from "@mui/material/MenuItem";
-import ListItemIcon from "@mui/material/ListItemIcon";
-import ListItemText from "@mui/material/ListItemText";
-import Divider from "@mui/material/Divider";
-import Tooltip from "@mui/material/Tooltip";
-import useMediaQuery from "@mui/material/useMediaQuery";
-import { useTheme } from "@mui/material/styles";
-import Chip from "@mui/material/Chip";
-import Rating from "@mui/material/Rating";
-import ArrowBackIcon from "@mui/icons-material/ArrowBack";
-import EditIcon from "@mui/icons-material/Edit";
-import DeleteOutlineIcon from "@mui/icons-material/DeleteOutline";
-import PictureAsPdfIcon from "@mui/icons-material/PictureAsPdf";
-import DescriptionIcon from "@mui/icons-material/Description";
-import ForkRightIcon from "@mui/icons-material/ForkRight";
-import MoreVertIcon from "@mui/icons-material/MoreVert";
-import ShieldIcon from "@mui/icons-material/Shield";
-import VisibilityOffIcon from "@mui/icons-material/VisibilityOff";
-import VisibilityIcon from "@mui/icons-material/Visibility";
-import BlockIcon from "@mui/icons-material/Block";
-import WifiOffIcon from "@mui/icons-material/WifiOff";
+import {
+  ArrowLeftIcon,
+  BanIcon,
+  EllipsisVerticalIcon,
+  EyeIcon,
+  EyeOffIcon,
+  FileDownIcon,
+  GitForkIcon,
+  PencilIcon,
+  PrinterIcon,
+  ShieldIcon,
+  Trash2Icon,
+  WifiOffIcon,
+} from "lucide-react";
+import AppHeader from "../components/AppHeader.jsx";
 import NavActions from "../components/NavActions.jsx";
+import { Button } from "../components/ui/button.jsx";
+import { Badge } from "../components/ui/badge.jsx";
+import { Alert, AlertDescription } from "../components/ui/alert.jsx";
+import { Field, FieldLabel } from "../components/ui/field.jsx";
+import { Input } from "../components/ui/input.jsx";
+import { Spinner } from "../components/ui/spinner.jsx";
+import { StarRating } from "../components/ui/star-rating.jsx";
+import {
+  Tooltip,
+  TooltipTrigger,
+  TooltipContent,
+} from "../components/ui/tooltip.jsx";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from "../components/ui/dialog.jsx";
+import {
+  DropdownMenu,
+  DropdownMenuTrigger,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+} from "../components/ui/dropdown-menu.jsx";
 import CommentsSection from "../components/CommentsSection.jsx";
 import LessonSummary from "../components/LessonSummary.jsx";
 import { LessonContentSkeleton } from "../components/Skeletons.jsx";
@@ -96,11 +99,6 @@ export default function LessonPage() {
     isAdmin,
   } = useAuth();
   const navigate = useNavigate();
-  const theme = useTheme();
-  // Below "md" the toolbar's action buttons collapse into an overflow menu.
-  const isMobile = useMediaQuery(theme.breakpoints.down("md"));
-  const [mobileMenuAnchor, setMobileMenuAnchor] = useState(null);
-  const closeMobileMenu = () => setMobileMenuAnchor(null);
 
   const [lesson, setLesson] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -120,9 +118,6 @@ export default function LessonPage() {
   const [deleteBusy, setDeleteBusy] = useState(false);
   const [deleteError, setDeleteError] = useState("");
 
-  // Moderation menu + its dialogs/feedback.
-  const [modMenuAnchor, setModMenuAnchor] = useState(null);
-  const closeModMenu = () => setModMenuAnchor(null);
   const [shadowBusy, setShadowBusy] = useState(false);
   // Deletion-request dialog (a moderator asking an admin to delete this lesson).
   const [reqOpen, setReqOpen] = useState(false);
@@ -266,7 +261,6 @@ export default function LessonPage() {
   // Moderator: hide/show this lesson on the public hub. Updates local state so
   // the badge and menu label flip immediately.
   const toggleShadowban = async () => {
-    closeModMenu();
     if (!lesson) return;
     setShadowBusy(true);
     try {
@@ -283,7 +277,6 @@ export default function LessonPage() {
 
   // Moderator: ban the lesson author by display name.
   const banAuthorName = async () => {
-    closeModMenu();
     const name = lesson?.author || "";
     if (!name) {
       setToast("This lesson has no author name to ban.");
@@ -362,336 +355,264 @@ export default function LessonPage() {
   );
 
   return (
-    <Box sx={{ minHeight: "100vh", pb: 8 }}>
-      <AppBar position="sticky" elevation={1}>
-        <Toolbar>
-          {isMobile ? (
-            <Tooltip title="Lesson hub">
-              <IconButton
-                color="inherit"
-                component={RouterLink}
+    <div className="min-h-screen bg-background pb-16 text-foreground">
+      <AppHeader
+        title={lesson?.title || "Lesson"}
+        left={
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <RouterLink
                 to="/hub"
                 aria-label="lesson hub"
-                sx={{ mr: 0.5 }}
+                className="mr-1 inline-flex shrink-0 items-center gap-2 rounded-md border-0 bg-transparent px-2.5 py-2 text-sm font-medium text-primary-foreground no-underline transition-colors hover:bg-primary-foreground/10 md:px-4"
               >
-                <ArrowBackIcon />
-              </IconButton>
-            </Tooltip>
-          ) : (
-            <Button
-              color="inherit"
-              component={RouterLink}
-              to="/hub"
-              startIcon={<ArrowBackIcon />}
-              sx={{ mr: 1 }}
-            >
-              Lesson hub
-            </Button>
-          )}
-          <Typography
-            variant="h6"
-            noWrap
-            sx={{ flexGrow: 1, minWidth: 0, mr: 1 }}
-            title={lesson?.title || ""}
-          >
-            {lesson?.title || "Lesson"}
-          </Typography>
-          <Stack direction="row" spacing={1} alignItems="center">
-            {lesson && isMobile && (
-              <>
-                <Tooltip title="Lesson actions">
-                  <IconButton
-                    color="inherit"
-                    onClick={(e) => setMobileMenuAnchor(e.currentTarget)}
-                    aria-label="lesson actions"
+                <ArrowLeftIcon data-icon="inline-start" />
+                <span className="hidden md:inline">Lesson hub</span>
+              </RouterLink>
+            </TooltipTrigger>
+            <TooltipContent className="md:hidden">Lesson hub</TooltipContent>
+          </Tooltip>
+        }
+      >
+        {lesson && (
+          <>
+            {/* Desktop: the actions as their own buttons. */}
+            <div className="hidden items-center gap-1 md:flex">
+              <Button
+                variant="ghost"
+                onClick={() => handleExport("pdf")}
+                disabled={Boolean(busy)}
+                className="text-primary-foreground hover:bg-primary-foreground/10 hover:text-primary-foreground"
+              >
+                {busy === "pdf" ? (
+                  <Spinner data-icon="inline-start" />
+                ) : (
+                  <PrinterIcon data-icon="inline-start" />
+                )}
+                Print PDF
+              </Button>
+              <Button
+                variant="ghost"
+                onClick={() => handleExport("docx")}
+                disabled={Boolean(busy)}
+                className="text-primary-foreground hover:bg-primary-foreground/10 hover:text-primary-foreground"
+              >
+                {busy === "docx" ? (
+                  <Spinner data-icon="inline-start" />
+                ) : (
+                  <FileDownIcon data-icon="inline-start" />
+                )}
+                Download Word
+              </Button>
+              <Button
+                variant="ghost"
+                onClick={forkLesson}
+                disabled={Boolean(busy)}
+                className="text-primary-foreground hover:bg-primary-foreground/10 hover:text-primary-foreground"
+              >
+                <GitForkIcon data-icon="inline-start" />
+                Fork
+              </Button>
+              {isAuthor && (
+                <>
+                  <Button
+                    variant="ghost"
+                    onClick={editLesson}
+                    className="text-primary-foreground hover:bg-primary-foreground/10 hover:text-primary-foreground"
                   >
-                    <MoreVertIcon />
-                  </IconButton>
-                </Tooltip>
-                <Menu
-                  anchorEl={mobileMenuAnchor}
-                  open={Boolean(mobileMenuAnchor)}
-                  onClose={closeMobileMenu}
-                  anchorOrigin={{ vertical: "bottom", horizontal: "right" }}
-                  transformOrigin={{ vertical: "top", horizontal: "right" }}
-                >
-                  <MenuItem
-                    onClick={() => {
-                      closeMobileMenu();
-                      handleExport("pdf");
-                    }}
-                    disabled={Boolean(busy)}
+                    <PencilIcon data-icon="inline-start" />
+                    Edit
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    onClick={() => openDelete("author")}
+                    className="text-primary-foreground hover:bg-primary-foreground/10 hover:text-primary-foreground"
                   >
-                    <ListItemIcon>
-                      <PictureAsPdfIcon fontSize="small" />
-                    </ListItemIcon>
-                    <ListItemText>Print PDF</ListItemText>
-                  </MenuItem>
-                  <MenuItem
-                    onClick={() => {
-                      closeMobileMenu();
-                      handleExport("docx");
-                    }}
-                    disabled={Boolean(busy)}
-                  >
-                    <ListItemIcon>
-                      <DescriptionIcon fontSize="small" />
-                    </ListItemIcon>
-                    <ListItemText>Download Word</ListItemText>
-                  </MenuItem>
-                  <MenuItem
-                    onClick={() => {
-                      closeMobileMenu();
-                      forkLesson();
-                    }}
-                    disabled={Boolean(busy)}
-                  >
-                    <ListItemIcon>
-                      <ForkRightIcon fontSize="small" />
-                    </ListItemIcon>
-                    <ListItemText>Fork</ListItemText>
-                  </MenuItem>
-                  {isAuthor && <Divider />}
-                  {isAuthor && (
-                    <MenuItem
-                      onClick={() => {
-                        closeMobileMenu();
-                        editLesson();
-                      }}
+                    <Trash2Icon data-icon="inline-start" />
+                    Delete
+                  </Button>
+                </>
+              )}
+            </div>
+
+            {/* Mobile: the same actions collapsed into one overflow menu. */}
+            <DropdownMenu>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <DropdownMenuTrigger asChild>
+                    <button
+                      type="button"
+                      aria-label="lesson actions"
+                      className="inline-flex size-10 shrink-0 cursor-pointer items-center justify-center rounded-full border-0 bg-transparent text-primary-foreground no-underline transition-colors hover:bg-primary-foreground/10 md:hidden"
                     >
-                      <ListItemIcon>
-                        <EditIcon fontSize="small" />
-                      </ListItemIcon>
-                      <ListItemText>Edit</ListItemText>
-                    </MenuItem>
-                  )}
-                  {isAuthor && (
-                    <MenuItem
-                      onClick={() => {
-                        closeMobileMenu();
-                        openDelete("author");
-                      }}
-                    >
-                      <ListItemIcon>
-                        <DeleteOutlineIcon fontSize="small" />
-                      </ListItemIcon>
-                      <ListItemText>Delete</ListItemText>
-                    </MenuItem>
-                  )}
-                </Menu>
-              </>
-            )}
-            {lesson && !isMobile && (
-              <>
-                <Button
-                  color="inherit"
-                  startIcon={
-                    busy === "pdf" ? (
-                      <CircularProgress size={16} color="inherit" />
-                    ) : (
-                      <PictureAsPdfIcon />
-                    )
-                  }
+                      <EllipsisVerticalIcon />
+                    </button>
+                  </DropdownMenuTrigger>
+                </TooltipTrigger>
+                <TooltipContent>Lesson actions</TooltipContent>
+              </Tooltip>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem
                   onClick={() => handleExport("pdf")}
                   disabled={Boolean(busy)}
                 >
+                  <PrinterIcon />
                   Print PDF
-                </Button>
-                <Button
-                  color="inherit"
-                  startIcon={
-                    busy === "docx" ? (
-                      <CircularProgress size={16} color="inherit" />
-                    ) : (
-                      <DescriptionIcon />
-                    )
-                  }
+                </DropdownMenuItem>
+                <DropdownMenuItem
                   onClick={() => handleExport("docx")}
                   disabled={Boolean(busy)}
                 >
+                  <FileDownIcon />
                   Download Word
-                </Button>
-                <Button
-                  color="inherit"
-                  startIcon={<ForkRightIcon />}
-                  onClick={forkLesson}
-                  disabled={Boolean(busy)}
-                >
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={forkLesson} disabled={Boolean(busy)}>
+                  <GitForkIcon />
                   Fork
-                </Button>
-              </>
-            )}
-            {!isMobile && isAuthor && (
-              <>
-                <Button
-                  color="inherit"
-                  startIcon={<EditIcon />}
-                  onClick={editLesson}
-                >
-                  Edit
-                </Button>
-                <Button
-                  color="inherit"
-                  startIcon={<DeleteOutlineIcon />}
-                  onClick={() => openDelete("author")}
-                >
-                  Delete
-                </Button>
-              </>
-            )}
+                </DropdownMenuItem>
+                {isAuthor && (
+                  <>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem onClick={editLesson}>
+                      <PencilIcon />
+                      Edit
+                    </DropdownMenuItem>
+                    <DropdownMenuItem
+                      variant="destructive"
+                      onClick={() => openDelete("author")}
+                    >
+                      <Trash2Icon />
+                      Delete
+                    </DropdownMenuItem>
+                  </>
+                )}
+              </DropdownMenuContent>
+            </DropdownMenu>
+
             {/* Moderator/admin tools — one menu, shown to mods and admins. */}
-            {isModerator && lesson && (
-              <>
-                <Tooltip title="Moderation">
-                  <IconButton
-                    color="inherit"
-                    onClick={(e) => setModMenuAnchor(e.currentTarget)}
-                    aria-label="moderation actions"
-                  >
-                    <ShieldIcon />
-                  </IconButton>
+            {isModerator && (
+              <DropdownMenu>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <DropdownMenuTrigger asChild>
+                      <button
+                        type="button"
+                        aria-label="moderation actions"
+                        className="inline-flex size-10 shrink-0 cursor-pointer items-center justify-center rounded-full border-0 bg-transparent text-primary-foreground no-underline transition-colors hover:bg-primary-foreground/10"
+                      >
+                        <ShieldIcon />
+                      </button>
+                    </DropdownMenuTrigger>
+                  </TooltipTrigger>
+                  <TooltipContent>Moderation</TooltipContent>
                 </Tooltip>
-                <Menu
-                  anchorEl={modMenuAnchor}
-                  open={Boolean(modMenuAnchor)}
-                  onClose={closeModMenu}
-                  anchorOrigin={{ vertical: "bottom", horizontal: "right" }}
-                  transformOrigin={{ vertical: "top", horizontal: "right" }}
-                >
-                  <MenuItem onClick={toggleShadowban} disabled={shadowBusy}>
-                    <ListItemIcon>
-                      {lesson.shadowbanned ? (
-                        <VisibilityIcon fontSize="small" />
-                      ) : (
-                        <VisibilityOffIcon fontSize="small" />
-                      )}
-                    </ListItemIcon>
-                    <ListItemText>
-                      {lesson.shadowbanned
-                        ? "Un-shadowban lesson"
-                        : "Shadowban lesson"}
-                    </ListItemText>
-                  </MenuItem>
-                  <MenuItem onClick={banAuthorName}>
-                    <ListItemIcon>
-                      <BlockIcon fontSize="small" />
-                    </ListItemIcon>
-                    <ListItemText>Ban author by name</ListItemText>
-                  </MenuItem>
+                <DropdownMenuContent align="end">
+                  <DropdownMenuItem
+                    onClick={toggleShadowban}
+                    disabled={shadowBusy}
+                  >
+                    {lesson.shadowbanned ? <EyeIcon /> : <EyeOffIcon />}
+                    {lesson.shadowbanned
+                      ? "Un-shadowban lesson"
+                      : "Shadowban lesson"}
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={banAuthorName}>
+                    <BanIcon />
+                    Ban author by name
+                  </DropdownMenuItem>
                   {/* Mods request deletion; admins delete outright. */}
                   {!isAdmin && (
-                    <MenuItem
+                    <DropdownMenuItem
                       onClick={() => {
-                        closeModMenu();
                         setReqReason("");
                         setReqError("");
                         setReqOpen(true);
                       }}
                     >
-                      <ListItemIcon>
-                        <DeleteOutlineIcon fontSize="small" />
-                      </ListItemIcon>
-                      <ListItemText>Request deletion…</ListItemText>
-                    </MenuItem>
+                      <Trash2Icon />
+                      Request deletion…
+                    </DropdownMenuItem>
                   )}
                   {isAdmin && (
-                    <MenuItem
-                      onClick={() => {
-                        closeModMenu();
-                        openDelete("admin");
-                      }}
+                    <DropdownMenuItem
+                      variant="destructive"
+                      onClick={() => openDelete("admin")}
                     >
-                      <ListItemIcon>
-                        <DeleteOutlineIcon fontSize="small" />
-                      </ListItemIcon>
-                      <ListItemText>Delete lesson fully…</ListItemText>
-                    </MenuItem>
+                      <Trash2Icon />
+                      Delete lesson fully…
+                    </DropdownMenuItem>
                   )}
                   {isAdmin && (
-                    <MenuItem
+                    <DropdownMenuItem
                       onClick={() => {
-                        closeModMenu();
                         setIpBanError("");
                         setIpBanOpen(true);
                       }}
                       disabled={!lesson.authorIp}
                     >
-                      <ListItemIcon>
-                        <WifiOffIcon fontSize="small" />
-                      </ListItemIcon>
-                      <ListItemText>
-                        {lesson.authorIp
-                          ? "Ban author by IP"
-                          : "Ban by IP (no IP on record)"}
-                      </ListItemText>
-                    </MenuItem>
+                      <WifiOffIcon />
+                      {lesson.authorIp
+                        ? "Ban author by IP"
+                        : "Ban by IP (no IP on record)"}
+                    </DropdownMenuItem>
                   )}
-                </Menu>
-              </>
+                </DropdownMenuContent>
+              </DropdownMenu>
             )}
-            <NavActions current="lesson" />
-          </Stack>
-        </Toolbar>
-      </AppBar>
+          </>
+        )}
+        <NavActions current="lesson" />
+      </AppHeader>
 
-      <Container maxWidth="md" sx={{ pt: 3 }}>
+      <div className="mx-auto max-w-3xl px-4 pt-6">
         {!lessonHubEnabled && (
-          <Alert severity="info">
-            The lesson hub is not configured (VITE_API_URL is missing).
+          <Alert className="border-primary/40 bg-primary/10 text-primary">
+            <AlertDescription className="text-primary">
+              The lesson hub is not configured (VITE_API_URL is missing).
+            </AlertDescription>
           </Alert>
         )}
 
         {lessonHubEnabled && loading && <LessonContentSkeleton />}
 
         {lessonHubEnabled && !loading && error && (
-          <Alert
-            severity="error"
-            action={
-              <Button
-                color="inherit"
-                size="small"
-                component={RouterLink}
-                to="/hub"
-              >
-                Back to hub
+          <Alert variant="destructive">
+            <AlertDescription className="flex items-center justify-between gap-2">
+              {error}
+              <Button variant="ghost" size="sm" asChild>
+                <RouterLink to="/hub">Back to hub</RouterLink>
               </Button>
-            }
-          >
-            {error}
+            </AlertDescription>
           </Alert>
         )}
 
         {lessonHubEnabled && !loading && !error && lesson && (
           <>
-            <Stack sx={{ mb: 2 }}>
-              <Stack direction="row" spacing={1} alignItems="center">
-                <Typography variant="h4">
+            <div className="mb-4 flex flex-col">
+              <div className="flex items-center gap-2">
+                <h1 className="text-3xl font-semibold">
                   {lesson.title || "Untitled Lesson"}
-                </Typography>
+                </h1>
                 {/* Only the author and mods/admins can load a shadowbanned
                     lesson, so this badge is never seen by the public. */}
                 {lesson.shadowbanned && (
-                  <Chip
-                    size="small"
-                    color="warning"
-                    icon={<VisibilityOffIcon />}
-                    label="Shadowbanned"
-                  />
+                  <Badge
+                    variant="outline"
+                    className="border-focus/40 bg-focus/10 text-focus"
+                  >
+                    <EyeOffIcon />
+                    Shadowbanned
+                  </Badge>
                 )}
-              </Stack>
-              <Typography variant="body2" color="text.secondary">
+              </div>
+              <p className="text-sm text-muted-foreground">
                 {lesson.authorId ? (
-                  <Box
-                    component={RouterLink}
+                  <RouterLink
                     to={`/users/${lesson.authorId}`}
-                    sx={{
-                      color: "inherit",
-                      textDecoration: "none",
-                      "&:hover": { textDecoration: "underline" },
-                    }}
+                    className="text-inherit no-underline hover:underline"
                   >
                     {lesson.author || "Anonymous"}
-                  </Box>
+                  </RouterLink>
                 ) : (
                   lesson.author || "Anonymous"
                 )}
@@ -699,185 +620,192 @@ export default function LessonPage() {
                   ? ` · ${lesson.sectionCount} section${lesson.sectionCount === 1 ? "" : "s"}`
                   : ""}
                 {lesson.createdAt ? ` · ${formatDate(lesson.createdAt)}` : ""}
-              </Typography>
+              </p>
               {/* Average star rating, once the lesson has any ratings. Ratings are
                   left from the comments box below; this updates live via onRated. */}
               {lesson.ratingCount > 0 && (
-                <Stack
-                  direction="row"
-                  spacing={0.75}
-                  alignItems="center"
-                  sx={{ mt: 0.5 }}
-                >
-                  <Rating
+                <div className="mt-1 flex items-center gap-1.5">
+                  <StarRating
                     value={lesson.avgRating || 0}
-                    precision={0.1}
                     readOnly
-                    size="small"
+                    size="sm"
+                    aria-label="average rating"
                   />
-                  <Typography variant="body2" color="text.secondary">
+                  <p className="text-sm text-muted-foreground">
                     {(lesson.avgRating || 0).toFixed(1)} · {lesson.ratingCount}{" "}
                     rating{lesson.ratingCount === 1 ? "" : "s"}
-                  </Typography>
-                </Stack>
+                  </p>
+                </div>
               )}
-            </Stack>
+            </div>
 
             {/* On-device AI summary, above the lesson itself so a reader can
                 decide whether to read on. Renders nothing unless the browser
                 supports the Summarizer API. */}
             <LessonSummary doc={lesson.doc} />
 
-            <Paper variant="outlined" sx={{ overflow: "hidden" }}>
+            {/* LessonView renders the same white "printed page" the docx/PDF
+                export produces (see the note on its own file) — the panel
+                frame around it is themed so that white sheet reads as a
+                deliberate page floating on the app's background, in both
+                light and dark mode, rather than an unstyled leftover. */}
+            <div className="overflow-hidden rounded-panel border border-border shadow-(--shadow-panel)">
               <LessonView doc={lesson.doc} />
-            </Paper>
+            </div>
 
-            <Box sx={{ mt: 3 }}>
+            <div className="mt-6">
               <CommentsSection lessonId={lesson.id} onRated={handleRated} />
-            </Box>
+            </div>
           </>
         )}
-      </Container>
+      </div>
 
-      <Dialog open={deleteOpen} onClose={closeDelete} fullWidth maxWidth="xs">
-        <DialogTitle>Delete this lesson?</DialogTitle>
-        <DialogContent>
-          <DialogContentText sx={{ mb: 2 }}>
+      <Dialog open={deleteOpen} onOpenChange={(next) => !next && closeDelete()}>
+        <DialogContent className="sm:max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Delete this lesson?</DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-muted-foreground">
             This permanently deletes <strong>{deleteTarget}</strong> from the
             hub. This can’t be undone. To confirm, type the lesson’s name below.
-          </DialogContentText>
-          <TextField
-            autoFocus
-            fullWidth
-            size="small"
-            label="Lesson name"
-            placeholder={deleteTarget}
-            value={deleteText}
-            onChange={(e) => setDeleteText(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter" && deleteConfirmed && !deleteBusy) {
-                confirmDelete();
-              }
-            }}
-            disabled={deleteBusy}
-          />
+          </p>
+          <Field>
+            <FieldLabel htmlFor="delete-lesson-name" className="sr-only">
+              Lesson name
+            </FieldLabel>
+            <Input
+              id="delete-lesson-name"
+              autoFocus
+              placeholder={deleteTarget}
+              value={deleteText}
+              onChange={(e) => setDeleteText(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && deleteConfirmed && !deleteBusy) {
+                  confirmDelete();
+                }
+              }}
+              disabled={deleteBusy}
+            />
+          </Field>
           {deleteError && (
-            <Alert severity="error" sx={{ mt: 2 }}>
-              {deleteError}
+            <Alert variant="destructive">
+              <AlertDescription>{deleteError}</AlertDescription>
             </Alert>
           )}
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={closeDelete} disabled={deleteBusy}>
-            Cancel
-          </Button>
-          <Button
-            color="error"
-            variant="contained"
-            onClick={confirmDelete}
-            disabled={!deleteConfirmed || deleteBusy}
-            startIcon={
-              deleteBusy ? (
-                <CircularProgress size={16} color="inherit" />
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={closeDelete}
+              disabled={deleteBusy}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={confirmDelete}
+              disabled={!deleteConfirmed || deleteBusy}
+            >
+              {deleteBusy ? (
+                <Spinner data-icon="inline-start" />
               ) : (
-                <DeleteOutlineIcon />
-              )
-            }
-          >
-            Delete
-          </Button>
-        </DialogActions>
+                <Trash2Icon data-icon="inline-start" />
+              )}
+              Delete
+            </Button>
+          </DialogFooter>
+        </DialogContent>
       </Dialog>
 
       {/* Moderator → admin: request that this lesson be fully deleted. */}
       <Dialog
         open={reqOpen}
-        onClose={() => !reqBusy && setReqOpen(false)}
-        fullWidth
-        maxWidth="xs"
+        onOpenChange={(next) => !next && !reqBusy && setReqOpen(false)}
       >
-        <DialogTitle>Request deletion</DialogTitle>
-        <DialogContent>
-          <DialogContentText sx={{ mb: 2 }}>
+        <DialogContent className="sm:max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Request deletion</DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-muted-foreground">
             Ask an admin to permanently delete <strong>{deleteTarget}</strong>.
             Add a reason to help them decide.
-          </DialogContentText>
-          <TextField
-            autoFocus
-            fullWidth
-            size="small"
-            label="Reason (optional)"
-            multiline
-            minRows={2}
-            value={reqReason}
-            onChange={(e) => setReqReason(e.target.value)}
-            disabled={reqBusy}
-            inputProps={{ maxLength: 1000 }}
-          />
+          </p>
+          <Field>
+            <FieldLabel htmlFor="delete-request-reason" className="sr-only">
+              Reason (optional)
+            </FieldLabel>
+            <Input
+              id="delete-request-reason"
+              autoFocus
+              placeholder="Reason (optional)"
+              value={reqReason}
+              onChange={(e) => setReqReason(e.target.value)}
+              disabled={reqBusy}
+              maxLength={1000}
+            />
+          </Field>
           {reqError && (
-            <Alert severity="error" sx={{ mt: 2 }}>
-              {reqError}
+            <Alert variant="destructive">
+              <AlertDescription>{reqError}</AlertDescription>
             </Alert>
           )}
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setReqOpen(false)}
+              disabled={reqBusy}
+            >
+              Cancel
+            </Button>
+            <Button onClick={submitDeleteRequest} disabled={reqBusy}>
+              {reqBusy && <Spinner data-icon="inline-start" />}
+              Send request
+            </Button>
+          </DialogFooter>
         </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setReqOpen(false)} disabled={reqBusy}>
-            Cancel
-          </Button>
-          <Button
-            variant="contained"
-            onClick={submitDeleteRequest}
-            disabled={reqBusy}
-            startIcon={
-              reqBusy ? <CircularProgress size={16} color="inherit" /> : null
-            }
-          >
-            Send request
-          </Button>
-        </DialogActions>
       </Dialog>
 
       {/* Admin: ban the IP this lesson was published from. */}
       <Dialog
         open={ipBanOpen}
-        onClose={() => !ipBanBusy && setIpBanOpen(false)}
-        fullWidth
-        maxWidth="xs"
+        onOpenChange={(next) => !next && !ipBanBusy && setIpBanOpen(false)}
       >
-        <DialogTitle>Ban this IP address?</DialogTitle>
-        <DialogContent>
-          <DialogContentText>
+        <DialogContent className="sm:max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Ban this IP address?</DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-muted-foreground">
             This blocks all posting from{" "}
             <strong>{lesson?.authorIp || "this address"}</strong> (the address{" "}
             <strong>{lesson?.author || "the author"}</strong> published this
             lesson from). Existing content stays in place.
-          </DialogContentText>
+          </p>
           {ipBanError && (
-            <Alert severity="error" sx={{ mt: 2 }}>
-              {ipBanError}
+            <Alert variant="destructive">
+              <AlertDescription>{ipBanError}</AlertDescription>
             </Alert>
           )}
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setIpBanOpen(false)} disabled={ipBanBusy}>
-            Cancel
-          </Button>
-          <Button
-            color="error"
-            variant="contained"
-            onClick={confirmIpBan}
-            disabled={ipBanBusy || !lesson?.authorIp}
-            startIcon={
-              ipBanBusy ? (
-                <CircularProgress size={16} color="inherit" />
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setIpBanOpen(false)}
+              disabled={ipBanBusy}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={confirmIpBan}
+              disabled={ipBanBusy || !lesson?.authorIp}
+            >
+              {ipBanBusy ? (
+                <Spinner data-icon="inline-start" />
               ) : (
-                <WifiOffIcon />
-              )
-            }
-          >
-            Ban IP
-          </Button>
-        </DialogActions>
+                <WifiOffIcon data-icon="inline-start" />
+              )}
+              Ban IP
+            </Button>
+          </DialogFooter>
+        </DialogContent>
       </Dialog>
 
       <Snackbar
@@ -887,6 +815,6 @@ export default function LessonPage() {
         message={toast}
         anchorOrigin={{ vertical: "bottom", horizontal: "center" }}
       />
-    </Box>
+    </div>
   );
 }
