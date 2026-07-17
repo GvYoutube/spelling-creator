@@ -1,22 +1,20 @@
 import { useEffect, useRef, useState } from "react";
-import Dialog from "@mui/material/Dialog";
-import DialogTitle from "@mui/material/DialogTitle";
-import DialogContent from "@mui/material/DialogContent";
-import DialogActions from "@mui/material/DialogActions";
-import DialogContentText from "@mui/material/DialogContentText";
-import Button from "@mui/material/Button";
-import Box from "@mui/material/Box";
-import Stack from "@mui/material/Stack";
-import Alert from "@mui/material/Alert";
-import Link from "@mui/material/Link";
-import TextField from "@mui/material/TextField";
-import ImageList from "@mui/material/ImageList";
-import ImageListItem from "@mui/material/ImageListItem";
-import Typography from "@mui/material/Typography";
-import CircularProgress from "@mui/material/CircularProgress";
-import ToggleButton from "@mui/material/ToggleButton";
-import ToggleButtonGroup from "@mui/material/ToggleButtonGroup";
-import SearchIcon from "@mui/icons-material/Search";
+import { SearchIcon } from "lucide-react";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+} from "./ui/dialog.jsx";
+import { Button } from "./ui/button.jsx";
+import { Input } from "./ui/input.jsx";
+import { Field, FieldLabel } from "./ui/field.jsx";
+import { Alert, AlertDescription } from "./ui/alert.jsx";
+import { Spinner } from "./ui/spinner.jsx";
+import { ToggleGroup, ToggleGroupItem } from "./ui/toggle-group.jsx";
+import { cn } from "../lib/utils.js";
 import { searchPixabayImages, fetchPixabayImage } from "../lib/pixabay.js";
 import {
   searchWikimediaImages,
@@ -177,7 +175,7 @@ export default function ImageSearchDialog({
     }
   };
 
-  const handleProviderChange = (_e, next) => {
+  const handleProviderChange = (next) => {
     if (!next || next === providerId || busy) return;
     setProviderId(next);
     setHits(null);
@@ -234,150 +232,136 @@ export default function ImageSearchDialog({
   return (
     <Dialog
       open={open}
-      onClose={busy ? undefined : onClose}
-      fullWidth
-      maxWidth="sm"
+      onOpenChange={(next) => {
+        if (!next && !busy) onClose();
+      }}
     >
-      <DialogTitle>{replacing ? "Replace image" : "Search images"}</DialogTitle>
-      <DialogContent>
-        <Stack spacing={2} sx={{ mt: 0.5 }}>
-          <ToggleButtonGroup
+      <DialogContent
+        className="sm:max-w-lg"
+        onEscapeKeyDown={(e) => busy && e.preventDefault()}
+        onInteractOutside={(e) => busy && e.preventDefault()}
+      >
+        <DialogHeader>
+          <DialogTitle>
+            {replacing ? "Replace image" : "Search images"}
+          </DialogTitle>
+        </DialogHeader>
+
+        <div className="flex flex-col gap-3">
+          <ToggleGroup
+            type="single"
             value={providerId}
-            exclusive
-            onChange={handleProviderChange}
-            size="small"
-            color="primary"
+            onValueChange={handleProviderChange}
             disabled={busy}
           >
             {PROVIDERS.map((p) => (
-              <ToggleButton
-                key={p.id}
-                value={p.id}
-                sx={{ textTransform: "none" }}
-              >
+              <ToggleGroupItem key={p.id} value={p.id}>
                 {p.label}
-              </ToggleButton>
+              </ToggleGroupItem>
             ))}
-          </ToggleButtonGroup>
+          </ToggleGroup>
 
-          <DialogContentText>
+          <DialogDescription>
             Search free images from{" "}
-            <Link href={provider.sourceUrl} target="_blank" rel="noopener">
+            <a
+              href={provider.sourceUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-primary underline-offset-4 hover:underline"
+            >
               {provider.sourceName}
-            </Link>{" "}
+            </a>{" "}
             and{" "}
             {replacing
               ? "swap it in for the current one"
               : "add one to this section"}
             .
-          </DialogContentText>
+          </DialogDescription>
 
-          <Stack direction="row" spacing={1} alignItems="flex-start">
-            <TextField
-              fullWidth
-              size="small"
-              label="Search images"
-              placeholder="e.g. solar system, tiger, castle"
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" && canSearch) handleSearch();
-              }}
-              disabled={busy}
-            />
+          <div className="flex items-start gap-2">
+            <Field className="flex-1">
+              <FieldLabel htmlFor="image-search-query">
+                Search images
+              </FieldLabel>
+              <Input
+                id="image-search-query"
+                placeholder="e.g. solar system, tiger, castle"
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && canSearch) handleSearch();
+                }}
+                disabled={busy}
+              />
+            </Field>
             <Button
-              variant="contained"
               onClick={handleSearch}
               disabled={!canSearch}
-              startIcon={
-                searching ? (
-                  <CircularProgress size={16} color="inherit" />
-                ) : (
-                  <SearchIcon />
-                )
-              }
-              sx={{ flexShrink: 0, height: 40 }}
+              className="mt-6 h-9 shrink-0"
             >
+              {searching ? (
+                <Spinner data-icon="inline-start" />
+              ) : (
+                <SearchIcon data-icon="inline-start" />
+              )}
               Search
             </Button>
-          </Stack>
+          </div>
 
           {/* Turnstile widget — only sources that proxy through the Worker need it. */}
           {provider.needsToken && (
-            <Box ref={widgetRef} sx={{ minHeight: 65 }} />
+            <div ref={widgetRef} className="min-h-[65px]" />
           )}
 
-          {error && <Alert severity="error">{error}</Alert>}
+          {error && (
+            <Alert variant="destructive">
+              <AlertDescription>{error}</AlertDescription>
+            </Alert>
+          )}
 
           {hits && hits.length === 0 && !searching && (
-            <Typography variant="body2" color="text.secondary">
+            <p className="text-sm text-muted-foreground">
               No images found. Try different words.
-            </Typography>
+            </p>
           )}
 
           {hits && hits.length > 0 && (
-            <ImageList
-              cols={3}
-              gap={8}
-              rowHeight={170}
-              sx={{ m: 0, maxHeight: 360 }}
-            >
+            <div className="grid max-h-[360px] grid-cols-3 gap-2 overflow-y-auto">
               {hits.map((hit) => (
-                <ImageListItem
+                <div
                   key={hit.id}
-                  sx={{
-                    cursor: busy ? "default" : "pointer",
-                    borderRadius: 1,
-                    overflow: "hidden",
-                    border: "1px solid",
-                    borderColor: "divider",
-                    "&:hover": {
-                      borderColor: busy ? "divider" : "primary.main",
-                    },
-                    // MUI's ImageListItem forces `> img { height:100%; object-fit:cover }`,
-                    // which crops the preview. Override with higher specificity (`&&`) so
-                    // the whole image shows, letterboxed against a subtle background.
-                    "&& > img": {
-                      objectFit: "contain",
-                      bgcolor: "action.hover",
-                    },
-                  }}
+                  onClick={() => handlePick(hit)}
+                  className={cn(
+                    "relative h-[170px] overflow-hidden rounded-md border border-border bg-muted transition-colors",
+                    !busy && "cursor-pointer hover:border-primary",
+                  )}
                 >
-                  <Box
-                    component="img"
+                  <img
                     src={hit.previewURL}
                     alt={provider.alt(hit)}
                     loading="lazy"
-                    onClick={() => handlePick(hit)}
-                    sx={{
-                      display: "block",
-                      opacity: insertingId === hit.id ? 0.4 : 1,
-                    }}
+                    className={cn(
+                      "size-full object-contain transition-opacity",
+                      insertingId === hit.id ? "opacity-40" : "opacity-100",
+                    )}
                   />
                   {insertingId === hit.id && (
-                    <Box
-                      sx={{
-                        position: "absolute",
-                        inset: 0,
-                        display: "flex",
-                        alignItems: "center",
-                        justifyContent: "center",
-                      }}
-                    >
-                      <CircularProgress size={24} />
-                    </Box>
+                    <div className="absolute inset-0 flex items-center justify-center">
+                      <Spinner className="size-6" />
+                    </div>
                   )}
-                </ImageListItem>
+                </div>
               ))}
-            </ImageList>
+            </div>
           )}
-        </Stack>
+        </div>
+
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose} disabled={busy}>
+            Close
+          </Button>
+        </DialogFooter>
       </DialogContent>
-      <DialogActions>
-        <Button onClick={onClose} disabled={busy}>
-          Close
-        </Button>
-      </DialogActions>
     </Dialog>
   );
 }
