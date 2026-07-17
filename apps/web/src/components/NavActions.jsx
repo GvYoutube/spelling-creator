@@ -1,176 +1,174 @@
-// Right-hand AppBar cluster shared by every page: a link to the lesson hub and
-// an account control that reflects the Supabase auth state (sign in / sign out).
-// Signed-in users also get a notification bell. Rendered with `color="inherit"`
-// so it sits naturally inside the coloured AppBar.
+// Right-hand AppBar cluster shared by every page: a link to the lesson hub, a
+// light/dark toggle, and an account control that reflects the Supabase auth
+// state (sign in / sign out). Signed-in users also get a notification bell.
+//
+// This still renders inside every page's MUI <AppBar color="primary">, which
+// hasn't migrated yet (that happens per-page, later in the migration) — so
+// the *trigger* elements below (the hub link, the icon buttons) intentionally
+// use plain white-on-transparent classes to stay legible on that still-MUI
+// colored bar, rather than the new semantic tokens (bg-card etc.), which
+// assume a light/dark page background this isn't sitting on yet. The dropdown
+// menu itself isn't constrained the same way — it floats above everything as
+// its own surface — so it uses the real design tokens throughout. Revisit the
+// trigger styling once each page's header is rebuilt on the new design.
 
 import { useState } from "react";
 import { Link as RouterLink, useNavigate } from "react-router-dom";
-import Button from "@mui/material/Button";
-import IconButton from "@mui/material/IconButton";
-import Menu from "@mui/material/Menu";
-import MenuItem from "@mui/material/MenuItem";
-import ListItemText from "@mui/material/ListItemText";
-import Divider from "@mui/material/Divider";
-import Tooltip from "@mui/material/Tooltip";
-import useMediaQuery from "@mui/material/useMediaQuery";
-import { useTheme } from "@mui/material/styles";
-import ListItemIcon from "@mui/material/ListItemIcon";
-import CollectionsBookmarkIcon from "@mui/icons-material/CollectionsBookmark";
-import AccountCircleIcon from "@mui/icons-material/AccountCircle";
-import ShieldIcon from "@mui/icons-material/Shield";
-import BadgeIcon from "@mui/icons-material/Badge";
-import PersonIcon from "@mui/icons-material/Person";
+import {
+  BookMarkedIcon,
+  CircleUserIcon,
+  ShieldIcon,
+  IdCardIcon,
+  UserIcon,
+  SunIcon,
+  MoonIcon,
+} from "lucide-react";
+import { cn } from "../lib/utils.js";
 import { useAuth } from "../lib/auth.jsx";
+import { useColorScheme } from "../lib/colorScheme.jsx";
+import { Tooltip, TooltipTrigger, TooltipContent } from "./ui/tooltip.jsx";
+import {
+  DropdownMenu,
+  DropdownMenuTrigger,
+  DropdownMenuContent,
+  DropdownMenuLabel,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+} from "./ui/dropdown-menu.jsx";
 import NotificationBell from "./NotificationBell.jsx";
 import DisplayNameDialog from "./DisplayNameDialog.jsx";
 
-const inheritBorder = { borderColor: "rgba(255,255,255,0.6)" };
+// Interim AppBar-inherit styling — see the file header. bg-transparent and
+// border-0/cursor-pointer are explicit here (not just hover:bg-white/10)
+// because Tailwind's preflight reset is off for now (see globals.css), so a
+// plain <button> still gets the browser's default gray button chrome.
+const iconTrigger =
+  "inline-flex size-10 cursor-pointer items-center justify-center rounded-full border-0 bg-transparent text-white transition-colors hover:bg-white/10";
+const outlineTrigger =
+  "inline-flex items-center gap-2 rounded-md border border-white/60 bg-transparent px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-white/10";
 
 export default function NavActions({ current }) {
   const { enabled, user, displayName, signOut, isModerator } = useAuth();
+  const { resolved, setScheme } = useColorScheme();
   const navigate = useNavigate();
-  const theme = useTheme();
-  // On narrow screens the AppBar can't fit full text buttons, so the hub and
-  // sign-in links collapse to icon-only buttons (the account control is already
-  // an icon).
-  const compact = useMediaQuery(theme.breakpoints.down("md"));
-  const [anchorEl, setAnchorEl] = useState(null);
-  const menuOpen = Boolean(anchorEl);
   const [nameDialogOpen, setNameDialogOpen] = useState(false);
-
-  const handleSignOut = async () => {
-    setAnchorEl(null);
-    await signOut();
-  };
 
   return (
     <>
-      {current !== "hub" &&
-        (compact ? (
-          <Tooltip title="Lesson hub">
-            <IconButton
-              color="inherit"
-              component={RouterLink}
-              to="/hub"
-              aria-label="lesson hub"
-            >
-              <CollectionsBookmarkIcon />
-            </IconButton>
+      {current !== "hub" && (
+        <>
+          {/* Full button on md+ screens, icon-only below (the AppBar can't
+              fit text buttons on narrow screens). */}
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <RouterLink
+                to="/hub"
+                aria-label="lesson hub"
+                className={cn(iconTrigger, "md:hidden")}
+              >
+                <BookMarkedIcon />
+              </RouterLink>
+            </TooltipTrigger>
+            <TooltipContent>Lesson hub</TooltipContent>
           </Tooltip>
-        ) : (
-          <Button
-            color="inherit"
-            variant="outlined"
-            component={RouterLink}
+          <RouterLink
             to="/hub"
-            startIcon={<CollectionsBookmarkIcon />}
-            sx={inheritBorder}
+            className={cn(outlineTrigger, "hidden md:inline-flex")}
           >
+            <BookMarkedIcon data-icon="inline-start" />
             Lesson hub
-          </Button>
-        ))}
+          </RouterLink>
+        </>
+      )}
+
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <button
+            type="button"
+            aria-label={
+              resolved === "dark"
+                ? "Switch to light mode"
+                : "Switch to dark mode"
+            }
+            onClick={() => setScheme(resolved === "dark" ? "light" : "dark")}
+            className={iconTrigger}
+          >
+            {resolved === "dark" ? <SunIcon /> : <MoonIcon />}
+          </button>
+        </TooltipTrigger>
+        <TooltipContent>
+          {resolved === "dark" ? "Switch to light mode" : "Switch to dark mode"}
+        </TooltipContent>
+      </Tooltip>
 
       {!enabled ? null : user ? (
         <>
           <NotificationBell />
-          <Tooltip title={user.email || "Account"}>
-            <IconButton
-              color="inherit"
-              onClick={(e) => setAnchorEl(e.currentTarget)}
-              aria-label="account menu"
-            >
-              <AccountCircleIcon />
-            </IconButton>
-          </Tooltip>
-          <Menu
-            anchorEl={anchorEl}
-            open={menuOpen}
-            onClose={() => setAnchorEl(null)}
-            anchorOrigin={{ vertical: "bottom", horizontal: "right" }}
-            transformOrigin={{ vertical: "top", horizontal: "right" }}
-          >
-            <MenuItem disabled>
-              <ListItemText
-                primary={displayName || "Signed in"}
-                secondary={user.email}
-                secondaryTypographyProps={{ sx: { wordBreak: "break-all" } }}
-              />
-            </MenuItem>
-            <Divider />
-            <MenuItem
-              onClick={() => {
-                setAnchorEl(null);
-                navigate(`/users/${user.id}`);
-              }}
-            >
-              <ListItemIcon>
-                <PersonIcon fontSize="small" />
-              </ListItemIcon>
-              <ListItemText>My profile</ListItemText>
-            </MenuItem>
-            <MenuItem
-              onClick={() => {
-                setAnchorEl(null);
-                setNameDialogOpen(true);
-              }}
-            >
-              <ListItemIcon>
-                <BadgeIcon fontSize="small" />
-              </ListItemIcon>
-              <ListItemText>Edit display name</ListItemText>
-            </MenuItem>
-            {isModerator && (
-              <MenuItem
-                onClick={() => {
-                  setAnchorEl(null);
-                  navigate("/moderation");
-                }}
-              >
-                <ListItemIcon>
-                  <ShieldIcon fontSize="small" />
-                </ListItemIcon>
-                <ListItemText>Moderation</ListItemText>
-              </MenuItem>
-            )}
-            <MenuItem onClick={handleSignOut}>Sign out</MenuItem>
-          </Menu>
+          <DropdownMenu>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <DropdownMenuTrigger asChild>
+                  <button
+                    type="button"
+                    aria-label="account menu"
+                    className={iconTrigger}
+                  >
+                    <CircleUserIcon />
+                  </button>
+                </DropdownMenuTrigger>
+              </TooltipTrigger>
+              <TooltipContent>{user.email || "Account"}</TooltipContent>
+            </Tooltip>
+            <DropdownMenuContent align="end">
+              <DropdownMenuLabel className="flex flex-col">
+                <span>{displayName || "Signed in"}</span>
+                <span className="break-all text-xs font-normal text-muted-foreground">
+                  {user.email}
+                </span>
+              </DropdownMenuLabel>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem onClick={() => navigate(`/users/${user.id}`)}>
+                <UserIcon />
+                My profile
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => setNameDialogOpen(true)}>
+                <IdCardIcon />
+                Edit display name
+              </DropdownMenuItem>
+              {isModerator && (
+                <DropdownMenuItem onClick={() => navigate("/moderation")}>
+                  <ShieldIcon />
+                  Moderation
+                </DropdownMenuItem>
+              )}
+              <DropdownMenuItem onClick={signOut}>Sign out</DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         </>
       ) : (
-        <>
-          <Tooltip title="Account">
-            <IconButton
-              color="inherit"
-              onClick={(e) => setAnchorEl(e.currentTarget)}
-              aria-label="account menu"
-            >
-              <AccountCircleIcon />
-            </IconButton>
+        <DropdownMenu>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <DropdownMenuTrigger asChild>
+                <button
+                  type="button"
+                  aria-label="account menu"
+                  className={iconTrigger}
+                >
+                  <CircleUserIcon />
+                </button>
+              </DropdownMenuTrigger>
+            </TooltipTrigger>
+            <TooltipContent>Account</TooltipContent>
           </Tooltip>
-          <Menu
-            anchorEl={anchorEl}
-            open={menuOpen}
-            onClose={() => setAnchorEl(null)}
-            anchorOrigin={{ vertical: "bottom", horizontal: "right" }}
-            transformOrigin={{ vertical: "top", horizontal: "right" }}
-          >
-            <MenuItem disabled>
-              <ListItemText
-                primary="Signed out"
-                secondary=""
-                secondaryTypographyProps={{ sx: { wordBreak: "break-all" } }}
-              />
-            </MenuItem>
-            <Divider />
-            <MenuItem
-              onClick={() => {
-                setAnchorEl(null);
-                navigate("/login");
-              }}
-            >
+          <DropdownMenuContent align="end">
+            <DropdownMenuLabel>Signed out</DropdownMenuLabel>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem onClick={() => navigate("/login")}>
               Sign in
-            </MenuItem>
-          </Menu>
-        </>
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
       )}
 
       {user && (

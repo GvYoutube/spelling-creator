@@ -35,6 +35,7 @@ import App from "./App.jsx";
 import theme from "./theme.js";
 import { AuthProvider } from "./lib/auth.jsx";
 import { ColorSchemeProvider } from "./lib/colorScheme.jsx";
+import { TooltipProvider } from "./components/ui/tooltip.jsx";
 import DisplayNameGate from "./components/DisplayNameGate.jsx";
 
 // BrowserRouter gives every page a real path (e.g. /hub/:id) so the Worker can
@@ -50,13 +51,15 @@ ReactDOM.createRoot(document.getElementById("root")).render(
     <ColorSchemeProvider>
       <ThemeProvider theme={theme}>
         <CssBaseline />
-        <BrowserRouter>
-          <AuthProvider>
-            <DisplayNameGate>
-              <App />
-            </DisplayNameGate>
-          </AuthProvider>
-        </BrowserRouter>
+        <TooltipProvider>
+          <BrowserRouter>
+            <AuthProvider>
+              <DisplayNameGate>
+                <App />
+              </DisplayNameGate>
+            </AuthProvider>
+          </BrowserRouter>
+        </TooltipProvider>
       </ThemeProvider>
     </ColorSchemeProvider>
   </React.StrictMode>,
