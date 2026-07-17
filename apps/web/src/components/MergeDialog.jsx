@@ -16,47 +16,40 @@
 // See lib/git/merge.js for the merge itself; this component only chooses.
 
 import { useState } from "react";
-import Alert from "@mui/material/Alert";
-import Box from "@mui/material/Box";
-import Button from "@mui/material/Button";
-import Chip from "@mui/material/Chip";
-import Dialog from "@mui/material/Dialog";
-import DialogActions from "@mui/material/DialogActions";
-import DialogContent from "@mui/material/DialogContent";
-import DialogTitle from "@mui/material/DialogTitle";
-import Paper from "@mui/material/Paper";
-import Stack from "@mui/material/Stack";
-import ToggleButton from "@mui/material/ToggleButton";
-import ToggleButtonGroup from "@mui/material/ToggleButtonGroup";
-import Typography from "@mui/material/Typography";
-import CallMergeIcon from "@mui/icons-material/CallMerge";
+import {
+  GitMergeIcon,
+  CircleCheckIcon,
+  TriangleAlertIcon,
+  InfoIcon,
+} from "lucide-react";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from "./ui/dialog.jsx";
+import { Button } from "./ui/button.jsx";
+import { Badge } from "./ui/badge.jsx";
+import { Alert, AlertDescription } from "./ui/alert.jsx";
+import { ToggleGroup, ToggleGroupItem } from "./ui/toggle-group.jsx";
+import { cn } from "../lib/utils.js";
 import { questionMeta } from "../lib/questions.js";
 
 /** A contested value, rendered readably whatever shape it has. */
 function ValueText({ value }) {
   if (value === null || value === undefined || value === "") {
-    return (
-      <Typography variant="body2" color="text.disabled" fontStyle="italic">
-        (empty)
-      </Typography>
-    );
+    return <p className="text-sm text-muted-foreground italic">(empty)</p>;
   }
   if (Array.isArray(value)) {
     // Spelling words and multiple-choice answers are [{ id, text }].
     const items = value.map((v) => (v && typeof v === "object" ? v.text : v));
-    return <Typography variant="body2">{items.join(", ")}</Typography>;
+    return <p className="text-sm">{items.join(", ")}</p>;
   }
   if (typeof value === "object") {
-    return (
-      <Typography
-        variant="body2"
-        sx={{ fontFamily: "monospace", fontSize: 12 }}
-      >
-        {JSON.stringify(value)}
-      </Typography>
-    );
+    return <p className="font-mono text-xs">{JSON.stringify(value)}</p>;
   }
-  return <Typography variant="body2">{String(value)}</Typography>;
+  return <p className="text-sm">{String(value)}</p>;
 }
 
 /** A human name for the block a conflict is about. */
@@ -73,25 +66,15 @@ function blockLabel(block) {
 // One side of a contested field, in a tinted panel.
 function Side({ label, value, chosen }) {
   return (
-    <Paper
-      variant="outlined"
-      sx={{
-        p: 1.25,
-        flex: 1,
-        minWidth: 0,
-        borderColor: chosen ? "primary.main" : "divider",
-        bgcolor: chosen ? "action.selected" : "transparent",
-      }}
+    <div
+      className={cn(
+        "min-w-0 flex-1 rounded-md border p-2.5",
+        chosen ? "border-primary bg-accent" : "border-border bg-transparent",
+      )}
     >
-      <Typography
-        variant="caption"
-        color="text.secondary"
-        sx={{ display: "block", mb: 0.5 }}
-      >
-        {label}
-      </Typography>
+      <span className="mb-1 block text-xs text-muted-foreground">{label}</span>
       <ValueText value={value} />
-    </Paper>
+    </div>
   );
 }
 
@@ -100,66 +83,54 @@ function ConflictCard({ conflict, choice, onChoose, theirName }) {
   const deleted = conflict.kind === "delete/edit";
 
   return (
-    <Paper variant="outlined" sx={{ p: 2 }}>
-      <Stack
-        direction="row"
-        alignItems="center"
-        justifyContent="space-between"
-        spacing={1}
-        sx={{ mb: 1.5 }}
-        flexWrap="wrap"
-        useFlexGap
-      >
-        <Stack direction="row" alignItems="center" spacing={1}>
-          <Typography variant="subtitle2">{blockLabel(block)}</Typography>
-          <Chip
-            size="small"
-            variant="outlined"
-            color={deleted ? "warning" : "default"}
-            label={
-              deleted
-                ? conflict.deletedBy === "theirs"
-                  ? `deleted in ${theirName}`
-                  : "you deleted this"
-                : conflict.fields.map((f) => f.field).join(", ")
-            }
-          />
-        </Stack>
+    <div className="rounded-md border border-border p-4">
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+        <div className="flex items-center gap-2">
+          <span className="text-sm font-medium">{blockLabel(block)}</span>
+          <Badge
+            variant="outline"
+            className={cn(deleted && "border-focus/40 bg-focus/10 text-focus")}
+          >
+            {deleted
+              ? conflict.deletedBy === "theirs"
+                ? `deleted in ${theirName}`
+                : "you deleted this"
+              : conflict.fields.map((f) => f.field).join(", ")}
+          </Badge>
+        </div>
 
-        <ToggleButtonGroup
-          size="small"
-          exclusive
+        <ToggleGroup
+          type="single"
+          size="sm"
           value={choice}
-          onChange={(_, next) => next && onChoose(next)}
+          onValueChange={(next) => next && onChoose(next)}
         >
-          <ToggleButton value="ours">
+          <ToggleGroupItem value="ours">
             {deleted ? "Keep it" : "Mine"}
-          </ToggleButton>
-          <ToggleButton value="theirs">
+          </ToggleGroupItem>
+          <ToggleGroupItem value="theirs">
             {deleted ? "Delete it" : "Theirs"}
-          </ToggleButton>
-          {!deleted && <ToggleButton value="both">Keep both</ToggleButton>}
-        </ToggleButtonGroup>
-      </Stack>
+          </ToggleGroupItem>
+          {!deleted && (
+            <ToggleGroupItem value="both">Keep both</ToggleGroupItem>
+          )}
+        </ToggleGroup>
+      </div>
 
       {deleted ? (
-        <Typography variant="body2" color="text.secondary">
+        <p className="text-sm text-muted-foreground">
           {conflict.deletedBy === "theirs"
             ? `You edited this block; ${theirName} deleted it. Keeping it preserves your edit.`
             : `You deleted this block; ${theirName} edited it. Keeping it restores their version.`}
-        </Typography>
+        </p>
       ) : (
-        <Stack spacing={1.5}>
+        <div className="flex flex-col gap-3">
           {conflict.fields.map((field) => (
-            <Box key={field.field}>
-              <Typography
-                variant="caption"
-                color="text.secondary"
-                sx={{ display: "block", mb: 0.5 }}
-              >
+            <div key={field.field}>
+              <span className="mb-1 block text-xs text-muted-foreground">
                 {field.field}
-              </Typography>
-              <Stack direction={{ xs: "column", sm: "row" }} spacing={1}>
+              </span>
+              <div className="flex flex-col gap-2 sm:flex-row">
                 <Side
                   label="Mine"
                   value={field.ours}
@@ -170,12 +141,12 @@ function ConflictCard({ conflict, choice, onChoose, theirName }) {
                   value={field.theirs}
                   chosen={choice === "theirs" || choice === "both"}
                 />
-              </Stack>
-            </Box>
+              </div>
+            </div>
           ))}
-        </Stack>
+        </div>
       )}
-    </Paper>
+    </div>
   );
 }
 
@@ -225,101 +196,118 @@ export default function MergeDialog({
   return (
     <Dialog
       open={open}
-      onClose={busy ? undefined : onClose}
-      maxWidth="md"
-      fullWidth
+      onOpenChange={(next) => {
+        if (!next && !busy) onClose?.();
+      }}
     >
-      <DialogTitle>
-        <Stack direction="row" alignItems="center" spacing={1}>
-          <CallMergeIcon fontSize="small" />
-          <span>
-            {contributing
-              ? `Merge your changes back into ${theirName}`
-              : `Merge changes from ${theirName}`}
-          </span>
-        </Stack>
-      </DialogTitle>
+      <DialogContent className="flex max-h-[85vh] flex-col sm:max-w-2xl">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <GitMergeIcon className="size-4" />
+            <span>
+              {contributing
+                ? `Merge your changes back into ${theirName}`
+                : `Merge changes from ${theirName}`}
+            </span>
+          </DialogTitle>
+        </DialogHeader>
 
-      <DialogContent dividers>
-        {contributing && (
-          <Alert severity="warning" sx={{ mb: 2 }}>
-            This updates <strong>{theirName}</strong> itself, for everyone — you
-            are a trusted collaborator on it. Its latest changes are merged in
-            first, so nothing its author has done since you forked is lost, and
-            they&apos;ll be notified.
-          </Alert>
-        )}
-        {autoCount > 0 && (
-          <Alert severity="success" sx={{ mb: 2 }}>
-            <Typography variant="body2" component="div">
-              Merged automatically:
-              <Box component="ul" sx={{ m: 0, mt: 0.5, pl: 2.5 }}>
-                {auto.added.length > 0 && (
-                  <li>
-                    {auto.added.length} new block(s) from {theirName}
-                  </li>
-                )}
-                {auto.tookTheirs.length > 0 && (
-                  <li>
-                    {auto.tookTheirs.length} block(s) they updated (you
-                    hadn&apos;t touched)
-                  </li>
-                )}
-                {auto.merged.length > 0 && (
-                  <li>
-                    {auto.merged.length} block(s) you both edited — in different
-                    fields, so <strong>both sets of edits were kept</strong>
-                  </li>
-                )}
-                {auto.removed.length > 0 && (
-                  <li>{auto.removed.length} block(s) removed</li>
-                )}
-              </Box>
-            </Typography>
-          </Alert>
-        )}
+        <div className="flex flex-col gap-4 overflow-y-auto border-t border-border pt-4">
+          {contributing && (
+            <Alert className="border-focus/40 bg-focus/10 text-focus">
+              <TriangleAlertIcon />
+              <AlertDescription className="text-focus">
+                This updates{" "}
+                <strong className="font-medium">{theirName}</strong> itself, for
+                everyone — you are a trusted collaborator on it. Its latest
+                changes are merged in first, so nothing its author has done
+                since you forked is lost, and they&apos;ll be notified.
+              </AlertDescription>
+            </Alert>
+          )}
+          {autoCount > 0 && (
+            <Alert className="border-success/40 bg-success/10 text-success">
+              <CircleCheckIcon />
+              <AlertDescription className="text-success">
+                <p className="mb-1">Merged automatically:</p>
+                <ul className="ml-4 list-disc">
+                  {auto.added.length > 0 && (
+                    <li>
+                      {auto.added.length} new block(s) from {theirName}
+                    </li>
+                  )}
+                  {auto.tookTheirs.length > 0 && (
+                    <li>
+                      {auto.tookTheirs.length} block(s) they updated (you
+                      hadn&apos;t touched)
+                    </li>
+                  )}
+                  {auto.merged.length > 0 && (
+                    <li>
+                      {auto.merged.length} block(s) you both edited — in
+                      different fields, so{" "}
+                      <strong className="font-medium">
+                        both sets of edits were kept
+                      </strong>
+                    </li>
+                  )}
+                  {auto.removed.length > 0 && (
+                    <li>{auto.removed.length} block(s) removed</li>
+                  )}
+                </ul>
+              </AlertDescription>
+            </Alert>
+          )}
 
-        {conflicts.length === 0 ? (
-          <Alert severity="info">
-            Nothing is in conflict — the whole merge resolved on its own.
-            Confirm to apply it.
-          </Alert>
-        ) : (
-          <>
-            <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-              {conflicts.length === 1
-                ? "One block was edited on both sides in the same place. Choose which to keep."
-                : `${conflicts.length} blocks were edited on both sides in the same place. Choose which to keep.`}
-            </Typography>
-            <Stack spacing={2}>
-              {conflicts.map((conflict) => (
-                <ConflictCard
-                  key={conflict.blockId}
-                  conflict={conflict}
-                  choice={choiceFor(conflict.blockId)}
-                  onChoose={(value) => choose(conflict.blockId, value)}
-                  theirName={theirName}
-                />
-              ))}
-            </Stack>
-          </>
-        )}
+          {conflicts.length === 0 ? (
+            <Alert>
+              <InfoIcon />
+              <AlertDescription>
+                Nothing is in conflict — the whole merge resolved on its own.
+                Confirm to apply it.
+              </AlertDescription>
+            </Alert>
+          ) : (
+            <>
+              <p className="text-sm text-muted-foreground">
+                {conflicts.length === 1
+                  ? "One block was edited on both sides in the same place. Choose which to keep."
+                  : `${conflicts.length} blocks were edited on both sides in the same place. Choose which to keep.`}
+              </p>
+              <div className="flex flex-col gap-4">
+                {conflicts.map((conflict) => (
+                  <ConflictCard
+                    key={conflict.blockId}
+                    conflict={conflict}
+                    choice={choiceFor(conflict.blockId)}
+                    onChoose={(value) => choose(conflict.blockId, value)}
+                    theirName={theirName}
+                  />
+                ))}
+              </div>
+            </>
+          )}
+        </div>
+
+        <DialogFooter>
+          <Button
+            type="button"
+            variant="ghost"
+            onClick={onClose}
+            disabled={busy}
+          >
+            Cancel
+          </Button>
+          <Button
+            type="button"
+            onClick={() => onConfirm(choices)}
+            disabled={busy}
+          >
+            <GitMergeIcon data-icon="inline-start" />
+            {confirmLabel}
+          </Button>
+        </DialogFooter>
       </DialogContent>
-
-      <DialogActions>
-        <Button onClick={onClose} disabled={busy}>
-          Cancel
-        </Button>
-        <Button
-          variant="contained"
-          color={contributing ? "secondary" : "primary"}
-          startIcon={<CallMergeIcon />}
-          onClick={() => onConfirm(choices)}
-          disabled={busy}
-        >
-          {confirmLabel}
-        </Button>
-      </DialogActions>
     </Dialog>
   );
 }

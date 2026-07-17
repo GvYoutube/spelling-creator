@@ -50,6 +50,12 @@
 }
 
 :root {
+  /* Tells the browser to render native chrome (scrollbars, form controls) in
+     the light palette — without this, native scrollbars stay light-themed
+     even when our own data-theme switches to dark, since that's a custom
+     attribute the browser doesn't otherwise know maps to a color scheme. */
+  color-scheme: light;
+
   --radius: 0.875rem; /* 14px, --radius-card from the mockup */
   --radius-panel: 1.25rem; /* 20px */
   --radius-tile: 0.5rem; /* 8px */
@@ -92,6 +98,8 @@
 
 @media (prefers-color-scheme: dark) {
   :root {
+    color-scheme: dark;
+
     --background: #12131f;
     --foreground: #eef0fb;
     --card: rgba(35, 38, 61, 0.58);
@@ -128,6 +136,8 @@
 }
 
 :root[data-theme="dark"] {
+  color-scheme: dark;
+
   --background: #12131f;
   --foreground: #eef0fb;
   --card: rgba(35, 38, 61, 0.58);
@@ -163,6 +173,8 @@
 }
 
 :root[data-theme="light"] {
+  color-scheme: light;
+
   --background: #dee3f3;
   --foreground: #1e2138;
   --card: rgba(255, 255, 255, 0.72);
