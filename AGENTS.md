@@ -2,7 +2,7 @@
 
 ## Overview
 
-This is a React + MUI project for making Spelling lessons.
+This is a React + `shadcn` project for making Spelling lessons.
 
 ## Code Quality
 
@@ -12,7 +12,7 @@ Always lint and format:
 pnpm run fmt && pnpm run lint
 ```
 
-Don't skip this or use plain `npx`.
+Don't skip this. If you must, use `pnpm exec` or `pnpm dlx`, not `npx`.
 
 ## Docs (IMPORTANT!!!)
 
@@ -20,4 +20,4 @@ Always update the docs if necessary when changing or adding code. If the docs al
 
 ## Try to avoid spinners
 
-When applicable, try to use MUI skeletons instead of spinners.
+When applicable, try to use `shadcn` skeletons instead of spinners.
