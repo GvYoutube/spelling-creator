@@ -82,12 +82,17 @@ function buildQuestionBlock(block, where) {
   const base = { id: newId(), type: "question", questionType, prompt };
 
   switch (questionType) {
-    case "number":
+    case "number": {
       // Stored as a string (the editor's number field), but accept a number too.
       if (block.answer == null || block.answer === "") {
         throw new Error(`${where}: a number question needs an "answer".`);
       }
-      return { ...base, answer: String(block.answer) };
+      const rawSteps = Array.isArray(block.steps) ? block.steps : [];
+      const steps = rawSteps
+        .filter((t) => typeof t === "string" && t.trim())
+        .map((text) => ({ id: newId(), text: text.trim() }));
+      return { ...base, answer: String(block.answer), steps };
+    }
 
     case "single":
       if (typeof block.answer !== "string" || !block.answer.trim()) {

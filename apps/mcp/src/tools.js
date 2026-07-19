@@ -62,6 +62,12 @@ const blockSchema = z
       .array(z.string())
       .optional()
       .describe('Accepted answers for a "multiple" question.'),
+    steps: z
+      .array(z.string())
+      .optional()
+      .describe(
+        'Optional worked-solution steps for a "number" question, in order.',
+      ),
     background: z
       .string()
       .optional()

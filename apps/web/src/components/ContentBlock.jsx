@@ -394,6 +394,7 @@ function SpellingBlock({
 function QuestionBlock({ block, onChange, controls }) {
   const meta = questionMeta(block.questionType);
   const answers = block.answers || [];
+  const steps = block.steps || [];
 
   const setAnswer = (id, text) =>
     onChange({
@@ -406,6 +407,18 @@ function QuestionBlock({ block, onChange, controls }) {
 
   const removeAnswer = (id) =>
     onChange({ ...block, answers: answers.filter((a) => a.id !== id) });
+
+  const setStep = (id, text) =>
+    onChange({
+      ...block,
+      steps: steps.map((s) => (s.id === id ? { ...s, text } : s)),
+    });
+
+  const addStep = () =>
+    onChange({ ...block, steps: [...steps, { id: newId(), text: "" }] });
+
+  const removeStep = (id) =>
+    onChange({ ...block, steps: steps.filter((s) => s.id !== id) });
 
   return (
     <div
@@ -433,16 +446,52 @@ function QuestionBlock({ block, onChange, controls }) {
           </Field>
 
           {block.questionType === "number" && (
-            <Field className="mt-3 max-w-[200px]">
-              <FieldLabel htmlFor={`${block.id}-answer`}>Answer</FieldLabel>
-              <LiveInput
-                id={`${block.id}-answer`}
-                type="number"
-                value={block.answer ?? ""}
-                onCommit={(answer) => onChange({ ...block, answer })}
-                data-collab-field={`block:${block.id}:answer`}
-              />
-            </Field>
+            <>
+              <Field className="mt-3 max-w-[200px]">
+                <FieldLabel htmlFor={`${block.id}-answer`}>Answer</FieldLabel>
+                <LiveInput
+                  id={`${block.id}-answer`}
+                  type="number"
+                  value={block.answer ?? ""}
+                  onCommit={(answer) => onChange({ ...block, answer })}
+                  data-collab-field={`block:${block.id}:answer`}
+                />
+              </Field>
+
+              <div className="mt-3 flex flex-col gap-2">
+                {steps.map((step, i) => (
+                  <div key={step.id} className="flex items-center gap-1">
+                    <LiveInput
+                      placeholder={`Step ${i + 1}`}
+                      value={step.text}
+                      onCommit={(text) => setStep(step.id, text)}
+                      data-collab-field={`block:${block.id}:step:${step.id}`}
+                    />
+                    <IconActionButton
+                      tooltip="Remove step"
+                      onClick={() => removeStep(step.id)}
+                    >
+                      <Trash2Icon />
+                    </IconActionButton>
+                  </div>
+                ))}
+                <div>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    onClick={addStep}
+                  >
+                    <PlusIcon data-icon="inline-start" />
+                    Add step
+                  </Button>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Optional: break the solution into steps students can work
+                  through.
+                </p>
+              </div>
+            </>
           )}
 
           {block.questionType === "single" && (

@@ -111,9 +111,12 @@ function questionBlockParagraphs(block) {
   );
 
   if (block.questionType === "number") {
+    const steps = (block.steps || [])
+      .map((s) => (s.text || "").trim())
+      .filter(Boolean);
     paragraphs.push(
       new Paragraph({
-        spacing: { after: 120 },
+        spacing: { after: steps.length ? 40 : 120 },
         children: [
           new TextRun({ text: "Answer: ", italics: true, size: 24 }),
           new TextRun({
@@ -123,6 +126,23 @@ function questionBlockParagraphs(block) {
         ],
       }),
     );
+    if (steps.length) {
+      paragraphs.push(
+        new Paragraph({
+          spacing: { after: 40 },
+          children: [new TextRun({ text: "Steps:", italics: true, size: 24 })],
+        }),
+      );
+      steps.forEach((text, i) => {
+        paragraphs.push(
+          new Paragraph({
+            spacing: { after: 40 },
+            indent: { left: 360 },
+            children: [new TextRun({ text: `${i + 1}. ${text}`, size: 24 })],
+          }),
+        );
+      });
+    }
   } else if (block.questionType === "single") {
     paragraphs.push(
       new Paragraph({

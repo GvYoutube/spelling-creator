@@ -96,6 +96,7 @@ function QuestionBlock({ block }) {
   const answers = (block.answers || [])
     .map((a) => (a.text || "").trim())
     .filter(Boolean);
+  const steps = (block.steps || []).filter((s) => (s.text || "").trim());
 
   return (
     <>
@@ -113,6 +114,19 @@ function QuestionBlock({ block }) {
           <em>Answer: </em>
           {block.answer ? String(block.answer) : BLANK}
         </p>
+      )}
+
+      {block.questionType === "number" && steps.length > 0 && (
+        <>
+          <p>
+            <em>Steps:</em>
+          </p>
+          {steps.map((step, i) => (
+            <p key={step.id} style={{ marginLeft: "24px" }}>
+              {i + 1}. {step.text}
+            </p>
+          ))}
+        </>
       )}
 
       {block.questionType === "open" && <p>{BLANK}</p>}

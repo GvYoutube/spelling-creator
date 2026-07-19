@@ -238,7 +238,29 @@ function readQuestion(nodes, i, { type, prompt }) {
   };
   let last = i;
 
-  if (type === "number" || type === "single") {
+  if (type === "number") {
+    block.answer = "";
+    block.steps = [];
+    const n = peek(i + 1);
+    if (n && n.tag === "p" && /^answer\s*:/i.test(n.text)) {
+      block.answer = stripLabel(n.text);
+      last = i + 1;
+    }
+    let k = last + 1;
+    const head = peek(k);
+    if (head && head.tag === "p" && /^steps\s*:/i.test(head.text)) {
+      last = k;
+      k += 1;
+      let item = peek(k);
+      while (item && item.tag === "p" && /^\d+\.\s*/.test(item.text)) {
+        const t = item.text.replace(/^\d+\.\s*/, "").trim();
+        if (t) block.steps.push({ id: newId(), text: t });
+        last = k;
+        k += 1;
+        item = peek(k);
+      }
+    }
+  } else if (type === "single") {
     block.answer = "";
     const n = peek(i + 1);
     if (n && n.tag === "p" && /^answer\s*:/i.test(n.text)) {

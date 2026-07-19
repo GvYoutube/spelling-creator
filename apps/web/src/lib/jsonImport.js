@@ -157,11 +157,16 @@ function normalizeQuestion(block) {
     prompt,
   };
   switch (block.questionType) {
-    case "number":
+    case "number": {
+      const steps = (Array.isArray(block.steps) ? block.steps : [])
+        .map(normalizeTextItem)
+        .filter(Boolean);
       return {
         ...base,
         answer: block.answer != null ? String(block.answer) : "",
+        steps,
       };
+    }
     case "single":
       return {
         ...base,

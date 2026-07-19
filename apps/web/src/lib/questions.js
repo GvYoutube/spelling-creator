@@ -52,7 +52,7 @@ export function createQuestionBlock(newId, questionType) {
   const base = { id: newId(), type: "question", questionType, prompt: "" };
   switch (questionType) {
     case "number":
-      return { ...base, answer: "" };
+      return { ...base, answer: "", steps: [] };
     case "single":
       return { ...base, answer: "" };
     case "multiple":
@@ -79,6 +79,7 @@ export function buildQuestionBlock(newId, questionType, data = {}) {
       return {
         ...base,
         answer: data.answer != null ? String(data.answer) : "",
+        steps: toSteps(newId, data.steps),
       };
     case "single":
       return {
@@ -108,4 +109,14 @@ function toAnswers(newId, raw) {
   const answers = list.map((text) => ({ id: newId(), text }));
   if (answers.length === 0) answers.push({ id: newId(), text: "" });
   return answers;
+}
+
+// Turn an array of step strings into step rows. Unlike answers, steps are
+// optional working-out lines, so an empty list is left empty rather than
+// padded with a blank row.
+function toSteps(newId, raw) {
+  const list = Array.isArray(raw)
+    ? raw.filter((t) => typeof t === "string")
+    : [];
+  return list.map((text) => ({ id: newId(), text }));
 }

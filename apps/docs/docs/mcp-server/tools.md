@@ -62,7 +62,7 @@ A lesson is **sections** of **blocks**. Block types:
   CAPS**; the app highlights them as spelling words.
 - **`spelling`** — an explicit word list: `{ "type": "spelling", "words": ["BECAUSE", "FRIEND"] }`.
 - **`question`** — a quiz question with a `questionType`:
-  - `number` → `answer` (numeric)
+  - `number` → `answer` (numeric), plus optional `steps` (array of worked-solution steps, in order)
   - `single` → `answer` (one text answer)
   - `multiple` → `answers` (array of accepted answers)
   - `open` → free response (no answer field; just the `prompt`)

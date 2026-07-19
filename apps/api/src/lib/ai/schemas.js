@@ -6,7 +6,11 @@
 export const QUESTION_SCHEMAS = {
 	number: {
 		type: 'object',
-		properties: { prompt: { type: 'string' }, answer: { type: 'number' } },
+		properties: {
+			prompt: { type: 'string' },
+			answer: { type: 'number' },
+			steps: { type: 'array', items: { type: 'string' } },
+		},
 		required: ['prompt', 'answer'],
 		additionalProperties: false,
 	},
@@ -50,7 +54,8 @@ export const QUESTION_LABELS = {
 };
 
 export const QUESTION_INSTRUCTIONS = {
-	number: 'The question must have a single numeric answer. Put that number in the "answer" field.',
+	number:
+		'The question must have a single numeric answer. Put that number in the "answer" field. Break the working-out into short steps a student could follow and put them, in order, in the "steps" array (use an empty array if the problem is too simple to need steps).',
 	single:
 		'The question must have a single short typed answer (a word or brief phrase). Do not make the answer a number under any circumstances. Do not provide answer options. Put the correct answer in "answer".',
 	multiple:
