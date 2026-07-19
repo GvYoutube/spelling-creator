@@ -3,13 +3,7 @@
 // "imageSearch"/"imageFetch" proxy Pixabay. All share the Turnstile check and the
 // per-IP token-bucket rate limiter below; text suggestions are additionally cached.
 
-import {
-	generateContentWithFallback,
-	QUESTION_SCHEMAS,
-	QUESTION_LABELS,
-	QUESTION_INSTRUCTIONS,
-	LESSON_IDEA_SCHEMA,
-} from '../lib/gemini.js';
+import { generateWithFallback, QUESTION_SCHEMAS, QUESTION_LABELS, QUESTION_INSTRUCTIONS, LESSON_IDEA_SCHEMA } from '../lib/ai/index.js';
 import { cacheKey } from '../lib/cache.js';
 import { verifyTurnstile } from '../lib/turnstile.js';
 import { textResponse } from '../lib/http.js';
@@ -257,13 +251,7 @@ export async function handleAi(request, env, cors, allowedHostnames) {
 		const prompt = `Suggest 6 varied, engaging lesson topic ideas${audienceBlock} Each lesson will become a spelling/vocabulary lesson, so favour topics rich in interesting words. For each idea, give a short, catchy "title" suitable to use directly as the lesson title, and a one-sentence "description" of what the lesson would cover. Make the ideas span a range of subjects (science, history, nature, everyday life, etc.) rather than clustering around one theme.`;
 
 		try {
-			const aiResponse = await generateContentWithFallback({
-				contents: prompt,
-				config: {
-					responseMimeType: 'application/json',
-					responseSchema: LESSON_IDEA_SCHEMA,
-				},
-			});
+			const aiResponse = await generateWithFallback({ prompt, schema: LESSON_IDEA_SCHEMA, env });
 
 			const parsed = JSON.parse(aiResponse.text);
 			const ideas = Array.isArray(parsed.ideas) ? parsed.ideas.slice(0, 12) : [];
@@ -297,13 +285,7 @@ export async function handleAi(request, env, cors, allowedHostnames) {
 		const prompt = `Suggest one ${QUESTION_LABELS[questionType]} quiz question for a school lesson about the subject "${subject}".${contextBlock}${sourceBlock}${previousBlock}\n\n${QUESTION_INSTRUCTIONS[questionType]}`;
 
 		try {
-			const aiResponse = await generateContentWithFallback({
-				contents: prompt,
-				config: {
-					responseMimeType: 'application/json',
-					responseSchema: QUESTION_SCHEMAS[questionType],
-				},
-			});
+			const aiResponse = await generateWithFallback({ prompt, schema: QUESTION_SCHEMAS[questionType], env });
 
 			const question = JSON.parse(aiResponse.text);
 			question.questionType = questionType;
@@ -327,9 +309,7 @@ export async function handleAi(request, env, cors, allowedHostnames) {
 	const prompt = `Suggest a block of text about the following subject: "${subject}".${documentBlock}\n\nWrite any unusual or important words, BUT NOT THE LESSON TITLE — THAT IS UNACCEPTABLE, including proper nouns, in ALL CAPITALS so they stand out as spelling words. You may also include numbers to be used as number answers.\n\nRespond with only the block of text, no preamble or explanation.`;
 
 	try {
-		const aiResponse = await generateContentWithFallback({
-			contents: prompt,
-		});
+		const aiResponse = await generateWithFallback({ prompt, env });
 
 		const text = aiResponse.text;
 

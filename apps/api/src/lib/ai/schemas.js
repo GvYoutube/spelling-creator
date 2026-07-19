@@ -1,65 +1,41 @@
-import { env } from 'cloudflare:workers';
-import { GoogleGenAI, Type } from '@google/genai';
-
-const GEMINI_API_KEY = env.GEMINI_API_KEY;
-const ai = new GoogleGenAI({ apiKey: GEMINI_API_KEY });
-
-// Models to try, newest first. If a model is unavailable or errors (e.g. not yet
-// rolled out to this key), we fall back to the next one in order.
-const GEMINI_MODELS = ['gemini-3.5-flash', 'gemini-3-flash', 'gemini-2.5-flash'];
-
-// Run generateContent against GEMINI_MODELS in order, returning the first success.
-// Throws the last error only if every model fails.
-export async function generateContentWithFallback(request) {
-	let lastErr;
-	for (const model of GEMINI_MODELS) {
-		try {
-			return await ai.models.generateContent({ ...request, model });
-		} catch (err) {
-			lastErr = err;
-		}
-	}
-	throw lastErr;
-}
-
 // Structured-output schemas for the question suggester, one per question type.
 // They mirror the block shapes the editor builds in src/lib/questions.js:
 // buildQuestionBlock maps this JSON onto the editable block (e.g. wrapping each
-// "multiple" answer string in an { id, text } row).
+// "multiple" answer string in an { id, text } row). Plain JSON Schema — each
+// provider adapter converts it to whatever shape its own API expects.
 export const QUESTION_SCHEMAS = {
 	number: {
-		type: Type.OBJECT,
-		properties: { prompt: { type: Type.STRING }, answer: { type: Type.NUMBER } },
+		type: 'object',
+		properties: { prompt: { type: 'string' }, answer: { type: 'number' } },
 		required: ['prompt', 'answer'],
+		additionalProperties: false,
 	},
 	single: {
-		type: Type.OBJECT,
-		properties: {
-			prompt: { type: Type.STRING },
-			answer: { type: Type.STRING },
-		},
+		type: 'object',
+		properties: { prompt: { type: 'string' }, answer: { type: 'string' } },
 		required: ['prompt', 'answer'],
+		additionalProperties: false,
 	},
 	multiple: {
-		type: Type.OBJECT,
+		type: 'object',
 		properties: {
-			prompt: { type: Type.STRING },
-			answers: { type: Type.ARRAY, items: { type: Type.STRING } },
+			prompt: { type: 'string' },
+			answers: { type: 'array', items: { type: 'string' } },
 		},
 		required: ['prompt', 'answers'],
+		additionalProperties: false,
 	},
 	open: {
-		type: Type.OBJECT,
-		properties: { prompt: { type: Type.STRING } },
+		type: 'object',
+		properties: { prompt: { type: 'string' } },
 		required: ['prompt'],
+		additionalProperties: false,
 	},
 	background: {
-		type: Type.OBJECT,
-		properties: {
-			prompt: { type: Type.STRING },
-			answer: { type: Type.STRING },
-		},
+		type: 'object',
+		properties: { prompt: { type: 'string' }, answer: { type: 'string' } },
 		required: ['prompt', 'answer'],
+		additionalProperties: false,
 	},
 };
 
@@ -88,19 +64,21 @@ export const QUESTION_INSTRUCTIONS = {
 // topic ideas pitched at an age range, each with a title the user can adopt as
 // their lesson title and a one-line description of what it would cover.
 export const LESSON_IDEA_SCHEMA = {
-	type: Type.OBJECT,
+	type: 'object',
 	properties: {
 		ideas: {
-			type: Type.ARRAY,
+			type: 'array',
 			items: {
-				type: Type.OBJECT,
+				type: 'object',
 				properties: {
-					title: { type: Type.STRING },
-					description: { type: Type.STRING },
+					title: { type: 'string' },
+					description: { type: 'string' },
 				},
 				required: ['title', 'description'],
+				additionalProperties: false,
 			},
 		},
 	},
 	required: ['ideas'],
+	additionalProperties: false,
 };
