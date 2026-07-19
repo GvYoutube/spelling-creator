@@ -14,6 +14,13 @@
 
 const COMMONS_API = "https://commons.wikimedia.org/w/api.php";
 
+// Wikimedia's User-Agent policy (https://meta.wikimedia.org/wiki/User-Agent_policy)
+// throttles or 403s requests with a generic/missing UA — Node's fetch defaults to
+// just "node", which trips this, especially from shared/datacenter egress (e.g.
+// the Cloudflare Worker this server also runs on for remote MCP connections).
+const USER_AGENT =
+  "SpellingCreatorMCP/0.1.3 (https://spellingcreator.org; MCP server for the Spelling Creator hub)";
+
 // Flatten Commons' HTML metadata (e.g. an <a>-wrapped Artist) to collapsed plain
 // text. No DOMParser here (this runs in Node / the Worker, not a browser), so a
 // straight tag strip — these fields are small and link-only, never scripts.
@@ -51,7 +58,9 @@ async function commons(params) {
   }).toString()}`;
   let res;
   try {
-    res = await fetch(url, { headers: { Accept: "application/json" } });
+    res = await fetch(url, {
+      headers: { Accept: "application/json", "User-Agent": USER_AGENT },
+    });
   } catch (e) {
     throw new Error("Could not reach Wikimedia Commons.", { cause: e });
   }
@@ -149,7 +158,7 @@ export async function resolveWikimediaImage(ref) {
 
   let imgRes;
   try {
-    imgRes = await fetch(src);
+    imgRes = await fetch(src, { headers: { "User-Agent": USER_AGENT } });
   } catch (e) {
     throw new Error("Could not download the selected image.", { cause: e });
   }
