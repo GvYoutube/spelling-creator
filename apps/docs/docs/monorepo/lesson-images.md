@@ -21,6 +21,16 @@ Worker endpoints (`apps/api/src/index.js`):
   original bytes for formats it can't decode or when the WEBP isn't smaller. The
   key is still the original content hash, so dedup and references are unaffected.
 
+The browser also tries to do this conversion itself before an image ever reaches
+the Worker: `readImageFile` (`apps/web/src/lib/image.js`) re-encodes PNG/JPEG
+picks to WEBP on a canvas (same quality target, same keep-whichever-is-smaller
+rule) while it's already decoding the file to measure its dimensions. This is
+purely an optimization — it saves upload bandwidth and R2 conversion work for
+the common case — not a correctness requirement: browsers without WEBP canvas
+encoding, GIF/SVG (skipped client-side on purpose, same as server-side), and any
+client that skips or fails the step all still land on the Worker as their
+original raster type, which converts them exactly as described above.
+
 Setup:
 
 ```bash
@@ -79,7 +89,8 @@ class-B (read) ops/month. The design keeps usage well inside these:
   forever). Repeat views of a popular lesson — and the og-image/prerender
   browser — are served from cache and don't hit R2.
 - **Storage** is bounded by global content-hash dedup plus an 8 MB-per-image cap
-  (enforced both client- and server-side). This is the one limit without a hard
+  (`MAX_IMAGE_BYTES` in `apps/api/src/lib/images.js`, enforced server-side only —
+  there is no client-side size check). This is the one limit without a hard
   code guard, so set an R2 storage alert in the Cloudflare dashboard
   (Notifications) if you want a heads-up as the bucket grows. Cloudflare does not
   offer a hard spend cap, so monitoring is the safety net here.
