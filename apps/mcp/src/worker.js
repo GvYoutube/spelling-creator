@@ -28,6 +28,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 
 import { createApi } from "./api.js";
 import { registerTools, SERVER_INFO } from "./tools.js";
+import { LESSON_STANDARDS } from "./standards.js";
 import {
   EXPIRY_SKEW_SECONDS,
   jwtExpiry,
@@ -90,7 +91,9 @@ export function grantAuth(config, props) {
  */
 export function buildMcpServer(config, auth) {
   const api = createApi(config, auth);
-  const server = new McpServer(SERVER_INFO);
+  const server = new McpServer(SERVER_INFO, {
+    instructions: LESSON_STANDARDS,
+  });
   registerTools(server, { api, config });
   return server;
 }

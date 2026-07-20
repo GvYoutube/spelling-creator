@@ -56,6 +56,14 @@ when you're rewriting the whole lesson anyway.
 
 ## Lesson shape the assistant fills
 
+By default (unless you ask for something different), the assistant builds **6 sections**, each
+one an optional image, 2 text paragraphs, 4 spelling words, and 13 questions in a fixed order —
+covering verbatim-in-text, fill-in-the-blank, word-problem, synonym/evidence, background-knowledge,
+and open-ended question types. This default (and the rest of the authoring conventions — spelling-
+word rules, math `steps`, image placement, tone) is sent to the connecting assistant as the
+server's MCP `instructions`, so most clients apply it automatically; the tool descriptions below
+carry a summary too, for clients that don't surface server instructions to the model.
+
 A lesson is **sections** of **blocks**. Block types:
 
 - **`text`** — a paragraph. Put words you're teaching the spelling of in **ALL

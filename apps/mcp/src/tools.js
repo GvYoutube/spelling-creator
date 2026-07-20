@@ -99,7 +99,7 @@ const blockSchema = z
       .string()
       .optional()
       .describe(
-        'For type "image": display size key (e.g. "small", "medium", "full").',
+        'For type "image": display size key ("small", "medium", "large", or "full"; default full).',
       ),
   })
   .describe("A lesson content block.");
@@ -109,11 +109,15 @@ const sectionSchema = z.object({
   blocks: z
     .array(blockSchema)
     .describe(
-      "The blocks in this section, in order. By default a section has about TWO " +
-        "text paragraphs (~2 ALL-CAPS spelling words each), then ends with one or " +
-        "more question blocks about THIS section's content. Every section should " +
-        "end with its own question(s) — do not collect them into a separate quiz " +
-        "section at the end.",
+      "The blocks in this section, in order. By default a section is: an optional image " +
+        "block first (see the image tool note above), then TWO text paragraphs (ALL-CAPS " +
+        "words = the harder learning vocabulary, kept separate from the spelling list), " +
+        "then a spelling block of 4 words (6-9 letters, thematically related but NOT drawn " +
+        "from the passage's ALL-CAPS vocabulary), then 13 question blocks about THIS " +
+        "section's content, in this fixed order: 3 single, 1 number (fill-in-the-blank), " +
+        "1 number (word problem, with steps), 2 multiple, 1 background, 3 open (tight — " +
+        "one-word answers), 2 open (extended — full-sentence answers). Every section ends " +
+        "with its own questions — do not collect them into a separate quiz section at the end.",
     ),
 });
 
@@ -121,9 +125,9 @@ const sectionsSchema = z
   .array(sectionSchema)
   .min(1)
   .describe(
-    "The lesson's sections, in order. Default to about THREE sections unless the " +
-      "user asks for more or fewer. Each section is self-contained: ~2 paragraphs " +
-      "of prose followed by question(s) on that section.",
+    "The lesson's sections, in order. Default to SIX sections unless the user asks for " +
+      "more or fewer. Each section is self-contained: ~2 paragraphs of prose, 4 spelling " +
+      "words, and 13 questions on that section's own content (see blocks below).",
   );
 
 // One patch operation (for patch_lesson). Kept lenient — applyPatch (patch.js)
@@ -255,11 +259,13 @@ export function registerTools(server, ctx) {
         "(generating all ids) and saves it. Defaults to a private DRAFT — set published: true to share it on the " +
         "public hub. Returns the new lesson id and its hub URL.\n\n" +
         "A lesson is sections of blocks. Block types: text (prose — put words being taught in ALL CAPS), " +
-        "spelling (an explicit word list), and question (number/single/multiple/open/background).\n\n" +
-        "DEFAULT STRUCTURE (unless the user asks otherwise): about 3 sections; each section has roughly 2 text " +
-        "paragraphs and then ENDS with one or more question blocks about that section. Put questions after EVERY " +
-        "section — do NOT gather them into a single quiz section at the end. Honour the user when they request a " +
-        "different length, more/fewer questions, or a specific shape.",
+        "spelling (an explicit word list), question (number/single/multiple/open/background), and image.\n\n" +
+        "DEFAULT STRUCTURE (unless the user asks otherwise): 6 sections; each section is [image?] + 2 text " +
+        "paragraphs + 4 spelling words + 13 questions, and ENDS with those question blocks about that section. " +
+        "Put questions after EVERY section — do NOT gather them into a single quiz section at the end. See the " +
+        "server's instructions (and the sections/blocks field descriptions) for the full authoring standard — " +
+        "question order and counts, spelling-word rules, math/steps conventions, image placement. Honour the " +
+        "user when they request a different length, more/fewer questions, or a specific shape.",
       inputSchema: {
         title: z.string().describe("The lesson title / topic."),
         sections: sectionsSchema,
@@ -305,9 +311,10 @@ export function registerTools(server, ctx) {
         "document”). Use this when you can't (or don't want to) publish to the hub; use create_lesson when you " +
         "want it saved to the cloud directly.\n\n" +
         "A lesson is sections of blocks. Block types: text (prose — put words being taught in ALL CAPS), spelling (an " +
-        "explicit word list), and question (number/single/multiple/open/background). DEFAULT STRUCTURE (unless asked " +
-        "otherwise): about 3 sections; each has roughly 2 text paragraphs and ENDS with one or more question blocks " +
-        "about that section.",
+        "explicit word list), question (number/single/multiple/open/background), and image. DEFAULT STRUCTURE " +
+        "(unless asked otherwise): 6 sections; each is [image?] + 2 text paragraphs + 4 spelling words + 13 " +
+        "questions, and ENDS with those question blocks about that section. See the server's instructions (and the " +
+        "sections/blocks field descriptions) for the full authoring standard.",
       inputSchema: {
         title: z.string().describe("The lesson title / topic."),
         sections: sectionsSchema,
@@ -604,7 +611,7 @@ export function registerTools(server, ctx) {
           .string()
           .optional()
           .describe(
-            'Display size key, e.g. "small", "medium", "full" (default full).',
+            'Display size key: "small", "medium", "large", or "full" (default full).',
           ),
       },
     },

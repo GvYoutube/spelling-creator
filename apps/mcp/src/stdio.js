@@ -15,6 +15,7 @@ import { applyDotenv, loadConfig } from "./config.js";
 import { createAuth } from "./auth.js";
 import { createApi } from "./api.js";
 import { registerTools, SERVER_INFO } from "./tools.js";
+import { LESSON_STANDARDS } from "./standards.js";
 
 const here = dirname(fileURLToPath(import.meta.url));
 // Pick up apps/mcp/.env for `pnpm start`; client-supplied env still wins.
@@ -25,7 +26,9 @@ async function main() {
   const auth = createAuth(config);
   const api = createApi(config, auth);
 
-  const server = new McpServer(SERVER_INFO);
+  const server = new McpServer(SERVER_INFO, {
+    instructions: LESSON_STANDARDS,
+  });
   registerTools(server, { api, config });
 
   const transport = new StdioServerTransport();
