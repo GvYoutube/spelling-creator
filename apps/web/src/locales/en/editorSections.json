@@ -1,0 +1,84 @@
+{
+  "sectionCard": {
+    "sectionNamePlaceholder": "Section name",
+    "moveUp": "Move section up",
+    "moveDown": "Move section down",
+    "delete": "Delete section",
+    "emptyDropHint": "Drop the block here to move it into this section.",
+    "emptyState": "No content yet. Add a text block or an image below.",
+    "dragHandle": {
+      "ariaLabel": "Drag to reorder block",
+      "tooltip": "Drag to reorder"
+    },
+    "toolbar": {
+      "addText": "Add text",
+      "addImage": "Add image",
+      "searchImages": "Search images",
+      "addQuestion": "Add question",
+      "spellingWords": "Spelling words",
+      "generateWithAi": "Generate with AI",
+      "aiText": {
+        "label": "Text",
+        "description": "Generate a text block with AI"
+      },
+      "aiQuestion": {
+        "label": "Question",
+        "description": "Generate a question with AI"
+      }
+    },
+    "errors": {
+      "addImageFailed": "Failed to add image.",
+      "replaceImageFailed": "Failed to replace image."
+    }
+  },
+  "contentBlock": {
+    "controls": {
+      "moveUp": "Move up",
+      "moveDown": "Move down",
+      "delete": "Delete block"
+    },
+    "text": {
+      "placeholder": "Type lesson text here…"
+    },
+    "image": {
+      "altFallback": "lesson image",
+      "alignmentAriaLabel": "image alignment",
+      "alignLeft": "align left",
+      "alignCenter": "align center",
+      "alignRight": "align right",
+      "sizeAriaLabel": "image size",
+      "replace": "Replace",
+      "uploadFile": {
+        "label": "Upload file",
+        "description": "Swap in an image from your device"
+      },
+      "searchOnline": {
+        "label": "Search online",
+        "description": "Find a replacement from Pixabay or Wikimedia"
+      },
+      "captionLabel": "Caption (optional)"
+    },
+    "spelling": {
+      "badge": "Spelling words",
+      "wordPlaceholder": "Word {{number}}",
+      "removeWord": "Remove word",
+      "addWord": "Add word",
+      "fillCapitalizedAvailable": "Fill in every ALL-CAPS word from the lesson text",
+      "fillCapitalizedEmpty": "No ALL-CAPS words in the lesson text yet"
+    },
+    "question": {
+      "label": "Question",
+      "promptPlaceholder": "Type the question…",
+      "answerLabel": "Answer",
+      "answerPlaceholder": "The correct answer…",
+      "stepPlaceholder": "Step {{number}}",
+      "removeStep": "Remove step",
+      "addStep": "Add step",
+      "stepsHelp": "Optional: break the solution into steps students can work through.",
+      "answerPlaceholderMultiple": "Answer {{number}}",
+      "removeAnswer": "Remove answer",
+      "addAnswer": "Add answer",
+      "answersHelp": "Type every accepted answer. The student only needs to give one of them to be correct."
+    }
+  }
+}

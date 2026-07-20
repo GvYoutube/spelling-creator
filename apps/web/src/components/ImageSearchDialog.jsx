@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { Trans, useTranslation } from "react-i18next";
 import { SearchIcon } from "lucide-react";
 import {
   Dialog,
@@ -37,8 +38,7 @@ import { TURNSTILE_SITE_KEY, whenTurnstileReady } from "../lib/turnstile.js";
 const PROVIDERS = [
   {
     id: "pixabay",
-    label: "Pixabay",
-    sourceName: "Pixabay",
+    labelKey: "imageSearch.providers.pixabay.label",
     sourceUrl: "https://pixabay.com",
     needsToken: true,
     async search(query, token) {
@@ -55,20 +55,21 @@ const PROVIDERS = [
         height: hit.webformatHeight,
       };
     },
-    caption(hit) {
+    caption(hit, t) {
       // Attribution (appreciated by Pixabay).
       return hit.user
-        ? `Image by ${hit.user} from Pixabay`
-        : "Image from Pixabay";
+        ? t("imageSearch.providers.pixabay.captionWithUser", {
+            user: hit.user,
+          })
+        : t("imageSearch.providers.pixabay.captionNoUser");
     },
-    alt(hit) {
-      return hit.tags || "Pixabay image";
+    alt(hit, t) {
+      return hit.tags || t("imageSearch.providers.pixabay.altFallback");
     },
   },
   {
     id: "wikimedia",
-    label: "Wikimedia Commons",
-    sourceName: "Wikimedia Commons",
+    labelKey: "imageSearch.providers.wikimedia.label",
     sourceUrl: "https://commons.wikimedia.org",
     needsToken: false,
     async search(query) {
@@ -83,8 +84,8 @@ const PROVIDERS = [
       // attribution string (author + licence + source).
       return hit.caption;
     },
-    alt(hit) {
-      return hit.tags || "Wikimedia Commons image";
+    alt(hit, t) {
+      return hit.tags || t("imageSearch.providers.wikimedia.altFallback");
     },
   },
 ];
@@ -114,6 +115,7 @@ export default function ImageSearchDialog({
   const [insertingId, setInsertingId] = useState(null);
   const [error, setError] = useState("");
   const widgetRef = useRef(null);
+  const { t } = useTranslation("editorTools");
 
   const provider = PROVIDERS.find((p) => p.id === providerId) || PROVIDERS[0];
   const busy = searching || insertingId !== null;
@@ -137,7 +139,7 @@ export default function ImageSearchDialog({
   useEffect(() => {
     if (!open || !provider.needsToken) return;
     if (!TURNSTILE_SITE_KEY) {
-      setError("VITE_TURNSTILE_SITE_KEY is not configured.");
+      setError(t("imageSearch.turnstileNotConfigured"));
       return;
     }
 
@@ -149,11 +151,11 @@ export default function ImageSearchDialog({
         if (cancelled || !widgetRef.current) return;
         widgetId = turnstile.render(widgetRef.current, {
           sitekey: TURNSTILE_SITE_KEY,
-          callback: (t) => setToken(t),
+          callback: (tok) => setToken(tok),
           "expired-callback": () => setToken(""),
           "error-callback": () => {
             setToken("");
-            setError("Verification failed. Please try again.");
+            setError(t("imageSearch.verificationFailed"));
           },
         });
       })
@@ -165,7 +167,7 @@ export default function ImageSearchDialog({
         window.turnstile.remove(widgetId);
       }
     };
-  }, [open, provider.needsToken]);
+  }, [open, provider.needsToken, t]);
 
   // A used token can't be reused; mint a fresh one for the next action.
   const refreshToken = () => {
@@ -185,11 +187,11 @@ export default function ImageSearchDialog({
 
   const handleSearch = async () => {
     if (!query.trim()) {
-      setError("Type something to search for first.");
+      setError(t("imageSearch.errors.emptyQuery"));
       return;
     }
     if (provider.needsToken && !token) {
-      setError("Please complete the verification challenge first.");
+      setError(t("imageSearch.errors.verificationRequired"));
       return;
     }
     setSearching(true);
@@ -198,7 +200,7 @@ export default function ImageSearchDialog({
       const found = await provider.search(query, token);
       setHits(found);
     } catch (e) {
-      setError(e.message || "Something went wrong.");
+      setError(e.message || t("imageSearch.errors.searchFailed"));
     } finally {
       // Pixabay's token is single-use whether the search succeeded or failed.
       if (provider.needsToken) refreshToken();
@@ -209,7 +211,7 @@ export default function ImageSearchDialog({
   const handlePick = async (hit) => {
     if (busy) return;
     if (provider.needsToken && !token) {
-      setError("Verification expired — wait a moment and try again.");
+      setError(t("imageSearch.errors.verificationExpired"));
       return;
     }
     setInsertingId(hit.id);
@@ -217,10 +219,10 @@ export default function ImageSearchDialog({
     try {
       const { bytes, mime, width, height } = await provider.resolve(hit, token);
       const image = await storeImageBytes(bytes, mime);
-      onInsert({ image, width, height, caption: provider.caption(hit) });
+      onInsert({ image, width, height, caption: provider.caption(hit, t) });
       onClose();
     } catch (e) {
-      setError(e.message || "Could not add that image.");
+      setError(e.message || t("imageSearch.errors.insertFailed"));
       if (provider.needsToken) refreshToken();
       setInsertingId(null);
     }
@@ -243,7 +245,9 @@ export default function ImageSearchDialog({
       >
         <DialogHeader>
           <DialogTitle>
-            {replacing ? "Replace image" : "Search images"}
+            {replacing
+              ? t("imageSearch.title.replace")
+              : t("imageSearch.title.search")}
           </DialogTitle>
         </DialogHeader>
 
@@ -256,36 +260,41 @@ export default function ImageSearchDialog({
           >
             {PROVIDERS.map((p) => (
               <ToggleGroupItem key={p.id} value={p.id}>
-                {p.label}
+                {t(p.labelKey)}
               </ToggleGroupItem>
             ))}
           </ToggleGroup>
 
           <DialogDescription>
-            Search free images from{" "}
-            <a
-              href={provider.sourceUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-primary underline-offset-4 hover:underline"
-            >
-              {provider.sourceName}
-            </a>{" "}
-            and{" "}
-            {replacing
-              ? "swap it in for the current one"
-              : "add one to this section"}
-            .
+            <Trans
+              i18nKey={
+                replacing
+                  ? "imageSearch.description.replace"
+                  : "imageSearch.description.add"
+              }
+              ns="editorTools"
+              values={{ source: t(provider.labelKey) }}
+              components={{
+                link: (
+                  <a
+                    href={provider.sourceUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-primary underline-offset-4 hover:underline"
+                  />
+                ),
+              }}
+            />
           </DialogDescription>
 
           <div className="flex items-start gap-2">
             <Field className="flex-1">
               <FieldLabel htmlFor="image-search-query">
-                Search images
+                {t("imageSearch.queryLabel")}
               </FieldLabel>
               <Input
                 id="image-search-query"
-                placeholder="e.g. solar system, tiger, castle"
+                placeholder={t("imageSearch.queryPlaceholder")}
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
                 onKeyDown={(e) => {
@@ -304,7 +313,7 @@ export default function ImageSearchDialog({
               ) : (
                 <SearchIcon data-icon="inline-start" />
               )}
-              Search
+              {t("imageSearch.searchButton")}
             </Button>
           </div>
 
@@ -321,7 +330,7 @@ export default function ImageSearchDialog({
 
           {hits && hits.length === 0 && !searching && (
             <p className="text-sm text-muted-foreground">
-              No images found. Try different words.
+              {t("imageSearch.noResults")}
             </p>
           )}
 
@@ -338,7 +347,7 @@ export default function ImageSearchDialog({
                 >
                   <img
                     src={hit.previewURL}
-                    alt={provider.alt(hit)}
+                    alt={provider.alt(hit, t)}
                     loading="lazy"
                     className={cn(
                       "size-full object-contain transition-opacity",
@@ -358,7 +367,7 @@ export default function ImageSearchDialog({
 
         <DialogFooter>
           <Button variant="outline" onClick={onClose} disabled={busy}>
-            Close
+            {t("imageSearch.close")}
           </Button>
         </DialogFooter>
       </DialogContent>

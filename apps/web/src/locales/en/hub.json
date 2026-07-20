@@ -1,0 +1,68 @@
+{
+  "meta": {
+    "title": "Lesson hub",
+    "description": "Browse and copy community-made spelling lessons, then print or export them."
+  },
+  "header": {
+    "title": "Lesson hub",
+    "editorLabel": "Editor",
+    "editorAria": "editor"
+  },
+  "card": {
+    "editDraftTooltip": "Edit this draft",
+    "editLessonTooltip": "Edit this lesson",
+    "editDraftAria": "edit draft",
+    "editLessonAria": "edit lesson",
+    "deleteDraftTooltip": "Delete this draft",
+    "deleteLessonTooltip": "Delete this lesson",
+    "deleteDraftAria": "delete draft",
+    "deleteLessonAria": "delete lesson",
+    "draftBadge": "Draft",
+    "untitledLesson": "Untitled Lesson",
+    "anonymousAuthor": "Anonymous",
+    "sectionCount_one": "{{count}} section",
+    "sectionCount_other": "{{count}} sections"
+  },
+  "toolbar": {
+    "description": "Browse lessons shared by the community. Open one to preview it.",
+    "feedTooltip": "Subscribe to the latest lessons (RSS)",
+    "feedAria": "latest lessons RSS feed",
+    "refreshTooltip": "Refresh",
+    "refreshAria": "refresh"
+  },
+  "drafts": {
+    "heading": "Your drafts",
+    "description": "Backed up to the cloud, visible only to you. Open one to edit and publish it."
+  },
+  "search": {
+    "label": "Search lessons",
+    "placeholder": "Search lessons by title or author…",
+    "clearAria": "clear search"
+  },
+  "alerts": {
+    "hubDisabled": "The lesson hub is not configured (VITE_API_URL is missing).",
+    "retry": "Retry"
+  },
+  "emptyState": {
+    "noLessonsTitle": "No lessons yet",
+    "noLessonsHintPrefix": "Be the first to publish — build a lesson in the editor and press",
+    "publishToHub": "Publish to hub",
+    "noMatchesTitle": "No matches",
+    "noMatchesHint": "No lessons match “{{query}}”. Try a different search."
+  },
+  "toast": {
+    "deleted": "Deleted “{{title}}”."
+  },
+  "errors": {
+    "loadFailed": "Could not load lessons.",
+    "deleteFailed": "Could not delete this lesson."
+  },
+  "deleteDialog": {
+    "title": "Delete this lesson?",
+    "confirmPrefix": "This permanently deletes",
+    "confirmSuffix": "This can’t be undone. To confirm, type the lesson’s name below.",
+    "nameLabel": "Lesson name",
+    "cancel": "Cancel",
+    "delete": "Delete"
+  }
+}

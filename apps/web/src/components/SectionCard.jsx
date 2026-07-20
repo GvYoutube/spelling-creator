@@ -1,4 +1,5 @@
 import { memo, useCallback, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 import {
   TypeIcon,
   ImageIcon,
@@ -64,6 +65,7 @@ function SectionCard({
   onBlockDrop,
   onBlockDragEnd,
 }) {
+  const { t } = useTranslation("editorSections");
   const fileInputRef = useRef(null);
   // The element wrapping this section's block rows; drop targeting measures the
   // rows inside it against the pointer.
@@ -165,7 +167,7 @@ function SectionCard({
           caption: "",
         });
       } catch (err) {
-        onError?.(err.message || "Failed to add image.");
+        onError?.(err.message || t("sectionCard.errors.addImageFailed"));
       }
     }
     insertBlocks(newBlocks);
@@ -211,10 +213,10 @@ function SectionCard({
           ),
         );
       } catch (err) {
-        onError?.(err.message || "Failed to replace image.");
+        onError?.(err.message || t("sectionCard.errors.replaceImageFailed"));
       }
     },
-    [updateBlocks, onError],
+    [updateBlocks, onError, t],
   );
 
   // Open the image search dialog aimed at replacing an existing block.
@@ -330,7 +332,7 @@ function SectionCard({
     <div className="flex flex-wrap gap-2">
       <Button variant="outline" size="sm" onClick={addTextBlock}>
         <TypeIcon data-icon="inline-start" />
-        Add text
+        {t("sectionCard.toolbar.addText")}
       </Button>
       <Button
         variant="outline"
@@ -338,7 +340,7 @@ function SectionCard({
         onClick={() => fileInputRef.current?.click()}
       >
         <ImageIcon data-icon="inline-start" />
-        Add image
+        {t("sectionCard.toolbar.addImage")}
       </Button>
       <Button
         variant="outline"
@@ -346,13 +348,13 @@ function SectionCard({
         onClick={() => setImageSearchOpen(true)}
       >
         <SearchIcon data-icon="inline-start" />
-        Search images
+        {t("sectionCard.toolbar.searchImages")}
       </Button>
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
           <Button variant="outline" size="sm">
             <CircleHelpIcon data-icon="inline-start" />
-            Add question
+            {t("sectionCard.toolbar.addQuestion")}
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="start">
@@ -377,29 +379,29 @@ function SectionCard({
       </DropdownMenu>
       <Button variant="outline" size="sm" onClick={addSpellingBlock}>
         <SpellCheckIcon data-icon="inline-start" />
-        Spelling words
+        {t("sectionCard.toolbar.spellingWords")}
       </Button>
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
           <Button variant="outline" size="sm">
             <SparklesIcon data-icon="inline-start" />
-            Generate with AI
+            {t("sectionCard.toolbar.generateWithAi")}
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="start">
           <DropdownMenuItem onSelect={() => setAiOpen(true)}>
             <div className="flex flex-col gap-0.5">
-              <span>Text</span>
+              <span>{t("sectionCard.toolbar.aiText.label")}</span>
               <span className="text-xs text-muted-foreground">
-                Generate a text block with AI
+                {t("sectionCard.toolbar.aiText.description")}
               </span>
             </div>
           </DropdownMenuItem>
           <DropdownMenuItem onSelect={() => setAiQuestionOpen(true)}>
             <div className="flex flex-col gap-0.5">
-              <span>Question</span>
+              <span>{t("sectionCard.toolbar.aiQuestion.label")}</span>
               <span className="text-xs text-muted-foreground">
-                Generate a question with AI
+                {t("sectionCard.toolbar.aiQuestion.description")}
               </span>
             </div>
           </DropdownMenuItem>
@@ -429,28 +431,28 @@ function SectionCard({
             {index + 1}
           </div>
           <LiveInput
-            placeholder="Section name"
+            placeholder={t("sectionCard.sectionNamePlaceholder")}
             value={section.name}
             onCommit={(name) => onChange(section.id, { ...section, name })}
             data-collab-field={`section:${section.id}:name`}
             className="border-0 border-b border-transparent bg-transparent px-0 text-xl font-semibold shadow-none focus-visible:border-b-ring focus-visible:ring-0"
           />
           <IconActionButton
-            tooltip="Move section up"
+            tooltip={t("sectionCard.moveUp")}
             onClick={() => onMove(section.id, -1)}
             disabled={isFirst}
           >
             <ArrowUpIcon />
           </IconActionButton>
           <IconActionButton
-            tooltip="Move section down"
+            tooltip={t("sectionCard.moveDown")}
             onClick={() => onMove(section.id, 1)}
             disabled={isLast}
           >
             <ArrowDownIcon />
           </IconActionButton>
           <IconActionButton
-            tooltip="Delete section"
+            tooltip={t("sectionCard.delete")}
             onClick={() => onDelete(section.id)}
             destructive
           >
@@ -484,8 +486,8 @@ function SectionCard({
               )}
             >
               {dragBlockId
-                ? "Drop the block here to move it into this section."
-                : "No content yet. Add a text block or an image below."}
+                ? t("sectionCard.emptyDropHint")
+                : t("sectionCard.emptyState")}
             </p>
           </div>
         ) : (
@@ -604,6 +606,7 @@ const BlockRow = memo(function BlockRow({
   onDragStart,
   onDragEnd,
 }) {
+  const { t } = useTranslation("editorSections");
   return (
     // Focusing any field inside a block makes it the active block, so the
     // toolbar follows the user's edit point. onFocus bubbles from the inner
@@ -649,13 +652,15 @@ const BlockRow = memo(function BlockRow({
                 onDragStart={(e) => onDragStart(e, block.id)}
                 onDragEnd={onDragEnd}
                 role="button"
-                aria-label="Drag to reorder block"
+                aria-label={t("sectionCard.dragHandle.ariaLabel")}
                 className="inline-flex cursor-grab touch-none items-center justify-center rounded-md p-0.5 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground active:cursor-grabbing active:bg-accent"
               >
                 <GripVerticalIcon className="size-4" />
               </span>
             </TooltipTrigger>
-            <TooltipContent>Drag to reorder</TooltipContent>
+            <TooltipContent>
+              {t("sectionCard.dragHandle.tooltip")}
+            </TooltipContent>
           </Tooltip>
         }
       />

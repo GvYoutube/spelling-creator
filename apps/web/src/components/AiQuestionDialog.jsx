@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { Trans, useTranslation } from "react-i18next";
 import { SparklesIcon } from "lucide-react";
 import {
   Dialog,
@@ -47,6 +48,7 @@ export default function AiQuestionDialog({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const widgetRef = useRef(null);
+  const { t } = useTranslation("aiDialogs");
 
   const subject = (sectionTitle || "").trim();
 
@@ -64,7 +66,7 @@ export default function AiQuestionDialog({
   useEffect(() => {
     if (!open) return;
     if (!TURNSTILE_SITE_KEY) {
-      setError("VITE_TURNSTILE_SITE_KEY is not configured.");
+      setError(t("aiQuestion.turnstileNotConfigured"));
       return;
     }
 
@@ -76,11 +78,11 @@ export default function AiQuestionDialog({
         if (cancelled || !widgetRef.current) return;
         widgetId = turnstile.render(widgetRef.current, {
           sitekey: TURNSTILE_SITE_KEY,
-          callback: (t) => setToken(t),
+          callback: (tok) => setToken(tok),
           "expired-callback": () => setToken(""),
           "error-callback": () => {
             setToken("");
-            setError("Verification failed. Please try again.");
+            setError(t("aiQuestion.verificationFailed"));
           },
         });
       })
@@ -92,11 +94,11 @@ export default function AiQuestionDialog({
         window.turnstile.remove(widgetId);
       }
     };
-  }, [open]);
+  }, [open, t]);
 
   const handleGenerate = async () => {
     if (!subject) {
-      setError("Give this section a name first, then try again.");
+      setError(t("aiQuestion.nameSectionFirst"));
       return;
     }
     setBusy(true);
@@ -111,7 +113,7 @@ export default function AiQuestionDialog({
       onInsert(questionType, data);
       onClose();
     } catch (e) {
-      setError(e.message || "Something went wrong.");
+      setError(e.message || t("aiQuestion.genericError"));
       // Token is single-use; force a fresh challenge before retrying.
       setToken("");
       if (widgetRef.current && window.turnstile) {
@@ -131,25 +133,28 @@ export default function AiQuestionDialog({
     >
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>Suggest a question with AI</DialogTitle>
+          <DialogTitle>{t("aiQuestion.title")}</DialogTitle>
           <DialogDescription>
             {subject ? (
-              <>
-                Generate a question for the section{" "}
-                <strong className="font-medium text-foreground">
-                  “{subject}”
-                </strong>
-                .
-              </>
+              <Trans
+                i18nKey="aiQuestion.descriptionWithSubject"
+                ns="aiDialogs"
+                values={{ subject }}
+                components={{
+                  strong: <strong className="font-medium text-foreground" />,
+                }}
+              />
             ) : (
-              "Give this section a name first, that's what the question will be about."
+              t("aiQuestion.descriptionNoSubject")
             )}
           </DialogDescription>
         </DialogHeader>
 
         <div className="flex flex-col gap-3">
           <Field>
-            <FieldLabel htmlFor="question-type">Question type</FieldLabel>
+            <FieldLabel htmlFor="question-type">
+              {t("aiQuestion.questionTypeLabel")}
+            </FieldLabel>
             <Select
               value={questionType}
               onValueChange={setQuestionType}
@@ -191,7 +196,7 @@ export default function AiQuestionDialog({
             onClick={onClose}
             disabled={busy}
           >
-            Cancel
+            {t("aiQuestion.cancel")}
           </Button>
           <Button
             type="button"
@@ -203,7 +208,7 @@ export default function AiQuestionDialog({
             ) : (
               <SparklesIcon data-icon="inline-start" />
             )}
-            {busy ? "Generating…" : "Generate"}
+            {busy ? t("aiQuestion.generating") : t("aiQuestion.generate")}
           </Button>
         </DialogFooter>
       </DialogContent>

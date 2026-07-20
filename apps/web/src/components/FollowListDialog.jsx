@@ -6,6 +6,7 @@
 // an error alert on failure, and a friendly empty state otherwise.
 
 import { useEffect, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
 import {
   Dialog,
@@ -50,11 +51,13 @@ function RowsSkeleton({ count = 5 }) {
 export default function FollowListDialog({
   open,
   userId,
-  displayName = "This user",
+  displayName,
   initialTab = "followers",
   onClose,
 }) {
+  const { t } = useTranslation("profile");
   const navigate = useNavigate();
+  const name = displayName || t("followList.defaultUserLabel");
   const [tab, setTab] = useState(initialTab);
   // Per-tab load state: { loading, error, users }. null means "not requested yet".
   const [state, setState] = useState({ followers: null, following: null });
@@ -91,7 +94,7 @@ export default function FollowListDialog({
             ...s,
             [tab]: {
               loading: false,
-              error: err.message || "Could not load these.",
+              error: err.message || t("followList.loadError"),
               users: [],
             },
           }));
@@ -99,7 +102,7 @@ export default function FollowListDialog({
     return () => {
       active = false;
     };
-  }, [open, userId, tab]);
+  }, [open, userId, tab, t]);
 
   const openProfile = (id) => {
     onClose?.();
@@ -109,19 +112,23 @@ export default function FollowListDialog({
   const current = state[tab];
   const emptyText =
     tab === "followers"
-      ? `${displayName} has no followers yet.`
-      : `${displayName} isn’t following anyone yet.`;
+      ? t("followList.noFollowers", { name })
+      : t("followList.noFollowing", { name });
 
   return (
     <Dialog open={open} onOpenChange={(next) => !next && onClose?.()}>
       <DialogContent className="sm:max-w-sm p-0 gap-0">
         <DialogHeader className="p-4 pb-0">
-          <DialogTitle>Connections</DialogTitle>
+          <DialogTitle>{t("followList.title")}</DialogTitle>
         </DialogHeader>
         <Tabs value={tab} onValueChange={setTab} className="gap-0">
           <TabsList className="mx-4 mt-3 grid w-auto grid-cols-2">
-            <TabsTrigger value="followers">Followers</TabsTrigger>
-            <TabsTrigger value="following">Following</TabsTrigger>
+            <TabsTrigger value="followers">
+              {t("followList.followersTab")}
+            </TabsTrigger>
+            <TabsTrigger value="following">
+              {t("followList.followingTab")}
+            </TabsTrigger>
           </TabsList>
         </Tabs>
         <div className="min-h-[240px] border-t border-border py-2">
@@ -151,7 +158,7 @@ export default function FollowListDialog({
                   </Avatar>
                   <div className="min-w-0 flex-1">
                     <p className="truncate text-sm font-medium">
-                      {u.displayName || "Anonymous"}
+                      {u.displayName || t("followList.anonymousName")}
                     </p>
                     {/* Bios are rich-text HTML; this is a one-line subtitle, so
                         show the words and drop the markup. */}

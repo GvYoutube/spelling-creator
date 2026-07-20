@@ -1,0 +1,78 @@
+{
+  "firstLessonWizard": {
+    "panelAriaLabel": "How to create a lesson",
+    "closeAriaLabel": "close",
+    "title": "Create your first lesson",
+    "stepCounter": "Step {{current}} of {{total}}",
+    "back": "Back",
+    "next": "Next",
+    "done": "Done",
+    "steps": {
+      "nameLesson": {
+        "label": "Name your lesson",
+        "body": "Start at the top of the page and type a title for your lesson — for example <em>\"The Life of Albert Einstein\"</em>. You can change it any time."
+      },
+      "addSection": {
+        "label": "Add a section",
+        "body": "Press the round <strong>+</strong> button (bottom-right) or <strong2>Add section</strong2> to create your first section, such as a word list or a practice exercise. Lessons are built from one or more sections."
+      },
+      "fillContent": {
+        "label": "Fill in content",
+        "body": "Inside a section, add content blocks: spelling words, instructions, images, and questions. Reorder or remove blocks until the section reads the way you want."
+      },
+      "previewShare": {
+        "label": "Preview & share",
+        "body": "When you're happy, use <strong>Preview</strong> to see the printable result, <strong2>Export</strong2> to download a Word doc or PDF, or <strong3>Publish to hub</strong3> to share it with others."
+      }
+    }
+  },
+  "aiLessonIdea": {
+    "turnstileNotConfigured": "VITE_TURNSTILE_SITE_KEY is not configured.",
+    "verificationFailed": "Verification failed. Please try again.",
+    "noIdeas": "No ideas came back — try generating again.",
+    "genericError": "Something went wrong.",
+    "title": "Suggest lesson ideas with AI",
+    "descriptionWithAgeRange": "Ideas for lessons aimed at <badge>{{ageRange}}</badge>.",
+    "descriptionNoAgeRange": "Set an age range above to tailor the ideas, or generate general ideas now.",
+    "descriptionSuffix": "Pick one to use it as your lesson title.",
+    "cancel": "Cancel",
+    "generating": "Generating…",
+    "generate": "Generate",
+    "generateMore": "Generate more"
+  },
+  "aiQuestion": {
+    "turnstileNotConfigured": "VITE_TURNSTILE_SITE_KEY is not configured.",
+    "verificationFailed": "Verification failed. Please try again.",
+    "nameSectionFirst": "Give this section a name first, then try again.",
+    "genericError": "Something went wrong.",
+    "title": "Suggest a question with AI",
+    "descriptionWithSubject": "Generate a question for the section <strong>\"{{subject}}\"</strong>.",
+    "descriptionNoSubject": "Give this section a name first, that's what the question will be about.",
+    "questionTypeLabel": "Question type",
+    "cancel": "Cancel",
+    "generating": "Generating…",
+    "generate": "Generate"
+  },
+  "aiText": {
+    "turnstileNotConfigured": "VITE_TURNSTILE_SITE_KEY is not configured.",
+    "verificationFailed": "Verification failed. Please try again.",
+    "nameSectionFirst": "Give this section a name first, then try again.",
+    "genericError": "Something went wrong.",
+    "dislikeFailed": "Could not remove that suggestion.",
+    "dislikeReasonSignedOut": "Sign in to remove this suggestion from the cache",
+    "dislikeReasonDisliked": "Removed from the cache",
+    "dislikeReasonDefault": "Not a good suggestion? Remove it from the cache",
+    "dislikeAriaLabel": "Remove this suggestion from the cache",
+    "helperDisliked": "Removed from the cache — generate a fresh one below.",
+    "helperDefault": "Don't like it? Remove it so the next try is freshly written.",
+    "title": "Suggest text with AI",
+    "descriptionWithSubject": "Generate a block of text for the section <strong>\"{{subject}}\"</strong>.",
+    "descriptionNoSubject": "Give this section a name first, that's what the text will be about.",
+    "cancel": "Cancel",
+    "insert": "Insert",
+    "insertAnyway": "Insert anyway",
+    "generating": "Generating…",
+    "generate": "Generate",
+    "generateFresh": "Generate fresh"
+  }
+}

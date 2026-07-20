@@ -1,0 +1,163 @@
+{
+  "header": {
+    "title": "Spelling Lesson Maker",
+    "menuAriaLabel": "menu",
+    "menuTooltip": "Menu",
+    "importWord": "Import Word document",
+    "importJson": "Import JSON",
+    "github": "GitHub",
+    "helpAriaLabel": "how to create a lesson",
+    "helpTooltip": "How to create a lesson",
+    "actionsAriaLabel": "lesson actions",
+    "actionsTooltip": "Lesson actions",
+    "preview": "Preview",
+    "exportDocx": "Export DOCX",
+    "exportJson": "Export JSON",
+    "exportJsonHint": "Re-importable lesson file",
+    "printPdf": "Print PDF",
+    "saveToGoogleDocs": "Save to Google Docs",
+    "export": "Export",
+    "saveToCloud": "Save to cloud",
+    "publishHint": "Shared on the public hub",
+    "draftHint": "Private backup — not published",
+    "collaborate": "Collaborate",
+    "collaborating": "Collaborating ({{count}})",
+    "collaborateTooltip": "Collaborate live on this lesson"
+  },
+  "documentPanel": {
+    "titleLabel": "Document title",
+    "titlePlaceholder": "Untitled Lesson",
+    "ageRangeAriaLabel": "Age range",
+    "anyAge": "Any age",
+    "suggestIdeas": "Suggest ideas",
+    "suggestIdeasTooltip": "Get AI lesson ideas tailored to this age range",
+    "editingPublished": "Editing a published lesson",
+    "editingDraft": "Editing a cloud draft",
+    "editingPublishedTooltip": "You're editing a lesson you published. Saving to the cloud overwrites it in the hub. This status is saved until you update it or fork into a new lesson.",
+    "editingDraftTooltip": "You're editing a draft backed up to the cloud. Only you can see it; saving updates the backup, or you can publish it to the hub. This status is saved until you change it or fork into a new lesson.",
+    "forkButton": "Fork into a new lesson",
+    "forkTooltip": "Detach from this saved lesson and start a new one. The new lesson keeps this one’s history, so you can merge them later. Saving to the cloud will create a separate copy instead of overwriting the original.",
+    "syncChecking": "Checking...",
+    "syncWith": "Sync with {{name}}",
+    "syncTooltip": "Bring in the changes made to {{name}} since you forked it. Edits to different blocks — or to different parts of the same block — merge automatically; anything genuinely clashing is put to you.",
+    "contributeMerging": "Merging...",
+    "contributeButton": "Merge back into {{name}}",
+    "contributeTooltip": "You’re a trusted collaborator on {{name}}, so you can merge your changes back into it. Its latest changes are pulled in first, block by block, and only genuine clashes are put to you. Its author is notified."
+  },
+  "stats": {
+    "sections_one": "{{count}} section",
+    "sections_other": "{{count}} sections",
+    "blocks_one": "{{count}} content block",
+    "blocks_other": "{{count}} content blocks",
+    "summary": "{{sections}} · {{blocks}}"
+  },
+  "history": {
+    "unsavedChanges_one": "{{count}} unsaved change",
+    "unsavedChanges_other": "{{count}} unsaved changes",
+    "versionSaved": "Version saved {{time}}",
+    "label": "Version history",
+    "tooltip": "Every version of this lesson is saved automatically as you work. Click to browse them and go back to any one."
+  },
+  "emptyState": {
+    "heading": "No sections yet",
+    "instruction": "Tap the <strong>+</strong> button to create your first lesson section.",
+    "addSection": "Add section"
+  },
+  "addSectionFab": {
+    "ariaLabel": "add section",
+    "tooltip": "Add section"
+  },
+  "newSectionDialog": {
+    "title": "New section",
+    "nameLabel": "Section name",
+    "defaultName": "Section {{n}}",
+    "cancel": "Cancel",
+    "add": "Add"
+  },
+  "previewDialog": {
+    "title": "Preview",
+    "close": "Close"
+  },
+  "overwriteDialog": {
+    "title": "Replace your current work?",
+    "thisLesson": "this lesson",
+    "forkBody": "Forking <strong>{{title}}</strong> will replace the lesson you’re working on now. Your in-progress work is auto-saved in this browser, and replacing it can’t be undone.",
+    "importBody": "Importing <strong>{{title}}</strong> will replace the lesson you’re working on now. Your in-progress work is auto-saved in this browser, and replacing it can’t be undone.",
+    "editBody": "Opening <strong>{{title}}</strong> for editing will replace the lesson you’re working on now. Your in-progress work is auto-saved in this browser, and replacing it can’t be undone.",
+    "keepMyWork": "Keep my work",
+    "replaceAndFork": "Replace and fork",
+    "replaceAndImport": "Replace and import",
+    "replaceAndEdit": "Replace and edit"
+  },
+  "wordImportWarning": {
+    "title": "Import a Word document",
+    "body1": "Importing a <0>.docx</0> file is <1>best-effort and lossy</1>. It works best with documents exported from this app; files written elsewhere may import poorly or not at all.",
+    "body2": "For the import to work, the document must use <0>Heading 2</0> styles for its section headings. Images, colours, and exact formatting may be lost.",
+    "body3": "If the document isn’t structured as a lesson, it won’t be opened. Your current work is replaced only after you confirm.",
+    "cancel": "Cancel",
+    "chooseFile": "Choose file"
+  },
+  "importErrorDialog": {
+    "title": "Couldn’t import this document",
+    "close": "Close",
+    "tryAnotherFile": "Try another file"
+  },
+  "messages": {
+    "addSectionBeforeExporting": "Add at least one section before exporting.",
+    "wordDownloaded": "Word document downloaded.",
+    "jsonDownloaded": "Lesson JSON downloaded.",
+    "pdfGenerated": "PDF generated for printing.",
+    "exportFailed": "Export failed: {{error}}",
+    "addSectionBeforeSaving": "Add at least one section before saving.",
+    "savedToGoogleDrive": "Saved to Google Drive as a Google Doc.",
+    "couldNotSaveToGoogle": "Could not save to Google: {{error}}",
+    "addSectionBeforePreviewing": "Add at least one section before previewing.",
+    "previewFailed": "Preview failed: {{error}}",
+    "pleaseSignIn": "Please sign in to save your lesson to the cloud.",
+    "needsMergeBeforeSave": "Someone else has changed this lesson since you last synced. Merge their changes, then save again — nothing has been overwritten.",
+    "historyNotSaved": "the version history couldn't be saved",
+    "savedWithHistoryWarning": "Lesson saved, but {{warning}}. Your history is safe on this device and will upload next time you save.",
+    "publishedToHub": "Lesson published to the hub.",
+    "draftSaved": "Draft saved to the cloud — only you can see it.",
+    "couldNotSave": "Could not save: {{error}}",
+    "forkedNoUpstream": "Forked into a new lesson — saving to the cloud will create a separate copy.",
+    "noSharedHistoryToMerge": "The original lesson has no shared history to merge — it may have been published before version history, or deleted.",
+    "alreadyUpToDate": "Already up to date with the original.",
+    "couldNotMerge": "Could not merge: {{error}}",
+    "noSharedHistoryToContribute": "The original lesson has no shared history, so there's nothing to merge back into.",
+    "identicalCopy": "Your copy is identical to {{name}} — there's nothing to merge back.",
+    "couldNotMergeBack": "Could not merge back: {{error}}",
+    "mergedIntoUpstream": "Merged your changes into {{name}}. Its author has been notified.",
+    "mergedFromHubPublish": "Merged the changes from the hub. Save to the cloud again to publish the merged lesson.",
+    "mergedFrom": "Merged the changes from {{name}}.",
+    "couldNotCompleteMerge": "Could not complete the merge: {{error}}",
+    "wordImportFailed": "This Word document couldn't be imported. Please check it and try again.",
+    "jsonImportFailed": "This JSON file couldn't be imported. Please check it and try again.",
+    "importedJson": "Imported from JSON. Review the lesson, then save it to the cloud when you're ready.",
+    "importedWord": "Imported from Word. Word import is best-effort — review the lesson, as some formatting or content may have been lost.",
+    "forkedWithHistory": "Forked into a new lesson — its full history came with it. Edit freely, then save it as your own copy.",
+    "forkedWithoutHistory": "Forked into a new lesson — edit freely, then save it to the cloud as your own copy.",
+    "loadedPublished": "Loaded your published lesson — edit and save to the cloud to update it.",
+    "loadedDraft": "Loaded your draft — edit and save to the cloud, or publish it to the hub.",
+    "couldNotOpenLesson": "Could not open that lesson for {{action}}."
+  },
+  "labels": {
+    "theOriginal": "the original",
+    "theOriginalLesson": "the original lesson",
+    "theSavedLesson": "the saved lesson",
+    "untitledLesson": "Untitled Lesson",
+    "open": "Open",
+    "viewHub": "View hub",
+    "viewLesson": "View lesson",
+    "forkingAction": "forking",
+    "editingAction": "editing",
+    "copyOf": "{{title}} (copy)",
+    "publishToHub": "Publish to hub",
+    "updatePublishedLesson": "Update published lesson",
+    "saveAsDraft": "Save as draft",
+    "updateDraft": "Update draft"
+  },
+  "defaultDoc": {
+    "title": "Put your topic here..."
+  }
+}

@@ -5,6 +5,7 @@
 // glued to the text as the page scrolls or the document changes underneath.
 
 import { useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { Avatar, AvatarImage, AvatarFallback } from "./ui/avatar.jsx";
 import { getCaretCoordinates } from "../lib/presence.js";
 
@@ -26,6 +27,7 @@ function escapeField(value) {
 }
 
 export default function CollabCursors({ selections }) {
+  const { t } = useTranslation("collab");
   // A ticking counter that forces a re-measure each frame while cursors exist.
   const [, setTick] = useState(0);
 
@@ -67,7 +69,7 @@ export default function CollabCursors({ selections }) {
     markers.push({
       key: c.uid,
       color: c.color || "#1e88e5",
-      name: c.name || c.email || "Collaborator",
+      name: c.name || c.email || t("cursors.collaboratorFallback"),
       avatarUrl: c.avatarUrl || undefined,
       label: initials(c),
       x: rect.left + coords.left - el.scrollLeft,

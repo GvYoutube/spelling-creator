@@ -7,6 +7,7 @@
 // the user's Atom activity feed (lessons + comments) served by the Worker.
 
 import { useCallback, useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { Link as RouterLink, useParams } from "react-router-dom";
 import {
   HistoryIcon,
@@ -64,6 +65,7 @@ function initial(name) {
 }
 
 export default function ProfilePage() {
+  const { t } = useTranslation("profile");
   const { id } = useParams();
   const { user: me, accessToken, enabled } = useAuth();
   const isOwner = Boolean(me && me.id === id);
@@ -100,7 +102,7 @@ export default function ProfilePage() {
     fetchUserActivity(id)
       .then(setActivity)
       .catch((err) =>
-        setActivityError(err.message || "Could not load activity."),
+        setActivityError(err.message || t("profilePage.activityLoadError")),
       )
       .finally(() => setActivityLoading(false));
   };
@@ -115,9 +117,11 @@ export default function ProfilePage() {
         setProfile(user);
         setLessons(lessons);
       })
-      .catch((err) => setError(err.message || "Could not load this profile."))
+      .catch((err) =>
+        setError(err.message || t("profilePage.profileLoadError")),
+      )
       .finally(() => setLoading(false));
-  }, [id, accessToken]);
+  }, [id, accessToken, t]);
 
   useEffect(() => {
     load();
@@ -140,7 +144,7 @@ export default function ProfilePage() {
         p ? { ...p, isFollowing: following, followerCount } : p,
       );
     } catch (err) {
-      setFollowError(err.message || "Could not update follow.");
+      setFollowError(err.message || t("profilePage.followUpdateError"));
     } finally {
       setFollowBusy(false);
     }
@@ -149,18 +153,19 @@ export default function ProfilePage() {
   // The Follow control shows only to a signed-in user viewing someone else.
   const canFollow = Boolean(enabled && me && !isOwner);
 
-  const displayName = profile?.displayName || "Anonymous";
+  const displayName = profile?.displayName || t("profilePage.anonymousName");
   const bio = profile?.bio || "";
   const followerCount = profile?.followerCount ?? 0;
   const followingCount = profile?.followingCount ?? 0;
 
   useDocumentMeta({
-    title: profile ? `${displayName}` : "Profile",
+    title: profile ? `${displayName}` : t("profilePage.documentTitle"),
     // The bio is rich-text HTML, but a meta/OG description is plain text — raw markup
     // would show up verbatim in search snippets and link previews. Flatten it to one
     // truncated line.
     description: profile
-      ? richTextToLine(bio) || `Spelling lessons published by ${displayName}.`
+      ? richTextToLine(bio) ||
+        t("profilePage.metaDescriptionFallback", { name: displayName })
       : undefined,
   });
 
@@ -169,13 +174,13 @@ export default function ProfilePage() {
   return (
     <div className="min-h-screen bg-background pb-16 text-foreground">
       <AppHeader
-        title="Profile"
+        title={t("profilePage.headerTitle")}
         left={
           <RouterLink
             to="/hub"
             className="mr-1 inline-flex shrink-0 items-center gap-2 rounded-md border-0 bg-transparent px-4 py-2 text-sm font-medium text-primary-foreground no-underline transition-colors hover:bg-primary-foreground/10"
           >
-            Lesson hub
+            {t("profilePage.lessonHubLink")}
           </RouterLink>
         }
       >
@@ -215,8 +220,9 @@ export default function ProfilePage() {
                 </h1>
                 <div className="mt-0.5 flex flex-wrap items-baseline gap-x-3 gap-y-1">
                   <p className="text-sm text-muted-foreground">
-                    {lessons.length} published lesson
-                    {lessons.length === 1 ? "" : "s"}
+                    {t("profilePage.publishedLessonCount", {
+                      count: lessons.length,
+                    })}
                   </p>
                   {/* Counts open the connections dialog on the matching tab. */}
                   <button
@@ -224,14 +230,16 @@ export default function ProfilePage() {
                     onClick={() => setFollowListTab("followers")}
                     className="cursor-pointer border-0 bg-transparent p-0 text-sm text-muted-foreground underline-offset-2 hover:underline"
                   >
-                    {followerCount} follower{followerCount === 1 ? "" : "s"}
+                    {t("profilePage.followerCount", { count: followerCount })}
                   </button>
                   <button
                     type="button"
                     onClick={() => setFollowListTab("following")}
                     className="cursor-pointer border-0 bg-transparent p-0 text-sm text-muted-foreground underline-offset-2 hover:underline"
                   >
-                    {followingCount} following
+                    {t("profilePage.followingCount", {
+                      count: followingCount,
+                    })}
                   </button>
                 </div>
               </div>
@@ -250,7 +258,9 @@ export default function ProfilePage() {
                     ) : (
                       <UserPlusIcon data-icon="inline-start" />
                     )}
-                    {profile?.isFollowing ? "Following" : "Follow"}
+                    {profile?.isFollowing
+                      ? t("profilePage.followingButton")
+                      : t("profilePage.followButton")}
                   </Button>
                 )}
                 {feedUrl && (
@@ -265,12 +275,12 @@ export default function ProfilePage() {
                               onClick={openActivity}
                             >
                               <HistoryIcon data-icon="inline-start" />
-                              Activity
+                              {t("profilePage.activityButton")}
                             </Button>
                           </PopoverTrigger>
                         </TooltipTrigger>
                         <TooltipContent>
-                          Recent activity (lessons &amp; comments)
+                          {t("profilePage.activityTooltip")}
                         </TooltipContent>
                       </Tooltip>
                       <PopoverContent
@@ -292,7 +302,7 @@ export default function ProfilePage() {
                           </p>
                         ) : activity.length === 0 ? (
                           <p className="px-2 py-1.5 text-sm text-muted-foreground">
-                            No recent activity.
+                            {t("profilePage.noRecentActivity")}
                           </p>
                         ) : (
                           <div className="flex flex-col">
@@ -329,12 +339,12 @@ export default function ProfilePage() {
                             className="no-underline"
                           >
                             <RssIcon data-icon="inline-start" />
-                            RSS
+                            {t("profilePage.rssButton")}
                           </a>
                         </Button>
                       </TooltipTrigger>
                       <TooltipContent>
-                        Subscribe to this user&rsquo;s activity (RSS)
+                        {t("profilePage.rssTooltip")}
                       </TooltipContent>
                     </Tooltip>
                   </>
@@ -347,7 +357,7 @@ export default function ProfilePage() {
                 <button
                   type="button"
                   onClick={() => setFollowError("")}
-                  aria-label="Dismiss"
+                  aria-label={t("profilePage.dismiss")}
                   className="absolute top-3 right-3 cursor-pointer rounded-sm border-0 bg-transparent p-0.5 text-current opacity-70 transition-opacity hover:opacity-100"
                 >
                   <XIcon className="size-3.5" />
@@ -366,13 +376,15 @@ export default function ProfilePage() {
                         <Button
                           variant="ghost"
                           size="icon-sm"
-                          aria-label="edit bio"
+                          aria-label={t("profilePage.editBioAriaLabel")}
                           onClick={() => setBioOpen(true)}
                         >
                           <PencilIcon />
                         </Button>
                       </TooltipTrigger>
-                      <TooltipContent>Edit bio</TooltipContent>
+                      <TooltipContent>
+                        {t("profilePage.editBioTooltip")}
+                      </TooltipContent>
                     </Tooltip>
                   )}
                 </div>
@@ -383,15 +395,17 @@ export default function ProfilePage() {
                   onClick={() => setBioOpen(true)}
                 >
                   <PencilIcon data-icon="inline-start" />
-                  Add a bio
+                  {t("profilePage.addBioButton")}
                 </Button>
               ) : null}
             </div>
 
-            <h2 className="mb-3 text-lg font-semibold">Published lessons</h2>
+            <h2 className="mb-3 text-lg font-semibold">
+              {t("profilePage.publishedLessonsHeading")}
+            </h2>
             {lessons.length === 0 ? (
               <p className="text-sm text-muted-foreground">
-                {displayName} hasn&rsquo;t published any lessons yet.
+                {t("profilePage.noLessonsYet", { name: displayName })}
               </p>
             ) : (
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 md:grid-cols-3">
@@ -402,11 +416,13 @@ export default function ProfilePage() {
                     className="rounded-md border border-border p-4 no-underline transition-colors hover:bg-accent"
                   >
                     <h3 className="truncate text-base font-semibold text-foreground">
-                      {lesson.title || "Untitled Lesson"}
+                      {lesson.title || t("profilePage.untitledLesson")}
                     </h3>
                     <p className="mt-1 text-xs text-muted-foreground">
                       {typeof lesson.sectionCount === "number"
-                        ? `${lesson.sectionCount} section${lesson.sectionCount === 1 ? "" : "s"}`
+                        ? t("profilePage.sectionCount", {
+                            count: lesson.sectionCount,
+                          })
                         : ""}
                       {lesson.createdAt
                         ? ` · ${formatDate(lesson.createdAt)}`

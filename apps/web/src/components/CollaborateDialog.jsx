@@ -6,6 +6,7 @@
 // signed-in account.
 
 import { useEffect, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 import {
   UserPlusIcon,
   XIcon,
@@ -125,10 +126,13 @@ function PersonRow({
 }
 
 function OrDivider() {
+  const { t } = useTranslation("collab");
   return (
     <div className="relative py-1 text-center text-sm text-muted-foreground">
       <hr className="absolute inset-x-0 top-1/2 border-border" />
-      <span className="relative bg-card px-2">or</span>
+      <span className="relative bg-card px-2">
+        {t("collaborateDialog.orDivider")}
+      </span>
     </div>
   );
 }
@@ -156,6 +160,7 @@ export default function CollaborateDialog({
     clearError,
   } = collab;
 
+  const { t } = useTranslation("collab");
   const { accessToken, user } = useAuth();
   const [joinCode, setJoinCode] = useState(initialJoinCode);
   const [copied, setCopied] = useState(null); // 'code' | 'link' | null
@@ -188,7 +193,7 @@ export default function CollaborateDialog({
     const link = inviteLink(myCode);
     const myEmail = (user?.email || "").trim().toLowerCase();
     const targets = trusted
-      .map((t) => (t?.email || "").trim().toLowerCase())
+      .map((entry) => (entry?.email || "").trim().toLowerCase())
       .filter((email) => EMAIL_RE.test(email) && email !== myEmail)
       .filter((email) => !sentRef.current.has(`${myCode}|${email}`));
     if (targets.length === 0) return;
@@ -209,8 +214,7 @@ export default function CollaborateDialog({
             {
               email,
               link,
-              message:
-                "You're a trusted collaborator on this lesson — join the live session with this link.",
+              message: t("collaborateDialog.trusted.inviteMessage"),
             },
             accessToken,
           );
@@ -232,7 +236,7 @@ export default function CollaborateDialog({
     return () => {
       cancelled = true;
     };
-  }, [status, myCode, trusted, accessToken, user]);
+  }, [status, myCode, trusted, accessToken, user, t]);
 
   // Clear the auto-send banner when a session ends so it doesn't linger.
   useEffect(() => {
@@ -256,11 +260,15 @@ export default function CollaborateDialog({
   const addTrusted = () => {
     const email = trustedEmail.trim().toLowerCase();
     if (!EMAIL_RE.test(email)) {
-      setTrustedError("Enter a valid email address.");
+      setTrustedError(t("collaborateDialog.trusted.invalidEmail"));
       return;
     }
-    if (trusted.some((t) => (t.email || "").trim().toLowerCase() === email)) {
-      setTrustedError("That collaborator is already on the list.");
+    if (
+      trusted.some(
+        (entry) => (entry.email || "").trim().toLowerCase() === email,
+      )
+    ) {
+      setTrustedError(t("collaborateDialog.trusted.alreadyOnList"));
       return;
     }
     onTrustedChange?.([...trusted, { email }]);
@@ -271,7 +279,9 @@ export default function CollaborateDialog({
   const removeTrusted = (email) => {
     const key = (email || "").trim().toLowerCase();
     onTrustedChange?.(
-      trusted.filter((t) => (t.email || "").trim().toLowerCase() !== key),
+      trusted.filter(
+        (entry) => (entry.email || "").trim().toLowerCase() !== key,
+      ),
     );
   };
 
@@ -282,34 +292,36 @@ export default function CollaborateDialog({
     <div className="flex flex-col gap-4 pt-1">
       {!accessToken && (
         <ToneAlert severity="info">
-          Sign in to start or join a live collaboration session.
+          {t("collaborateDialog.landing.signInPrompt")}
         </ToneAlert>
       )}
       <div>
-        <p className="mb-1 text-sm font-medium">Invite people to this lesson</p>
+        <p className="mb-1 text-sm font-medium">
+          {t("collaborateDialog.landing.inviteHeading")}
+        </p>
         <p className="mb-2 text-sm text-muted-foreground">
-          Start a live session, then share the code. People who join wait until
-          you add them to the lesson — after that, your edits sync both ways in
-          real time.
+          {t("collaborateDialog.landing.inviteDescription")}
         </p>
         <Button onClick={startHosting} disabled={!accessToken}>
           <UsersRoundIcon data-icon="inline-start" />
-          Start a collaboration session
+          {t("collaborateDialog.landing.startSession")}
         </Button>
       </div>
 
       <OrDivider />
 
       <div>
-        <p className="mb-1 text-sm font-medium">Join someone&apos;s lesson</p>
+        <p className="mb-1 text-sm font-medium">
+          {t("collaborateDialog.landing.joinHeading")}
+        </p>
         <div className="flex items-start gap-2">
           <Field className="flex-1">
             <FieldLabel htmlFor="join-code" className="sr-only">
-              Session code
+              {t("collaborateDialog.landing.joinCodeLabel")}
             </FieldLabel>
             <Input
               id="join-code"
-              placeholder="Paste the code you were given"
+              placeholder={t("collaborateDialog.landing.joinCodePlaceholder")}
               value={joinCode}
               disabled={!accessToken}
               onChange={(e) => setJoinCode(e.target.value)}
@@ -325,11 +337,11 @@ export default function CollaborateDialog({
             className="shrink-0"
           >
             <LogInIcon data-icon="inline-start" />
-            Join
+            {t("collaborateDialog.landing.join")}
           </Button>
         </div>
         <p className="mt-1 text-xs text-muted-foreground">
-          Joining replaces your current draft with the host&apos;s lesson.
+          {t("collaborateDialog.landing.joinHint")}
         </p>
       </div>
 
@@ -343,7 +355,9 @@ export default function CollaborateDialog({
     <div className="flex flex-col items-center gap-3 py-8">
       <Spinner className="size-8" />
       <p className="text-sm text-muted-foreground">
-        {role === "host" ? "Starting session…" : "Connecting to the host…"}
+        {role === "host"
+          ? t("collaborateDialog.connecting.host")
+          : t("collaborateDialog.connecting.guest")}
       </p>
     </div>
   );
@@ -351,13 +365,15 @@ export default function CollaborateDialog({
   const renderHost = () => (
     <div className="flex flex-col gap-4 pt-1">
       <ToneAlert severity="success">
-        Your session is live. Share the code or link below to invite people.
+        {t("collaborateDialog.host.sessionLive")}
       </ToneAlert>
 
       {renderAutoSend()}
 
       <div>
-        <p className="mb-1 text-xs text-muted-foreground">Session code</p>
+        <p className="mb-1 text-xs text-muted-foreground">
+          {t("collaborateDialog.host.sessionCodeLabel")}
+        </p>
         <div className="flex items-center gap-2">
           <Input readOnly value={myCode || ""} />
           <Tooltip>
@@ -371,7 +387,9 @@ export default function CollaborateDialog({
               </Button>
             </TooltipTrigger>
             <TooltipContent>
-              {copied === "code" ? "Copied!" : "Copy code"}
+              {copied === "code"
+                ? t("collaborateDialog.host.copiedCode")
+                : t("collaborateDialog.host.copyCode")}
             </TooltipContent>
           </Tooltip>
         </div>
@@ -382,11 +400,13 @@ export default function CollaborateDialog({
             onClick={() => copy(inviteLink(myCode), "link")}
           >
             <CopyIcon data-icon="inline-start" />
-            {copied === "link" ? "Invite link copied!" : "Copy invite link"}
+            {copied === "link"
+              ? t("collaborateDialog.host.inviteLinkCopied")
+              : t("collaborateDialog.host.copyInviteLink")}
           </Button>
           <Button variant="ghost" size="sm" onClick={() => setSendOpen(true)}>
             <SendIcon data-icon="inline-start" />
-            Send link
+            {t("collaborateDialog.host.sendLink")}
           </Button>
         </div>
       </div>
@@ -394,7 +414,9 @@ export default function CollaborateDialog({
       {requests.length > 0 && (
         <div>
           <p className="mb-1 text-sm font-medium">
-            Waiting to join ({requests.length})
+            {t("collaborateDialog.host.waitingToJoin", {
+              count: requests.length,
+            })}
           </p>
           <div className="flex flex-col">
             {requests.map((r) => (
@@ -403,19 +425,21 @@ export default function CollaborateDialog({
                 avatarSrc={r.avatarUrl}
                 avatarColor="var(--focus)"
                 label={initials(r)}
-                primary={r.name || "Someone"}
-                secondary={r.email || "wants to collaborate"}
+                primary={r.name || t("collaborateDialog.host.someone")}
+                secondary={
+                  r.email || t("collaborateDialog.host.wantsToCollaborate")
+                }
               >
                 <div className="flex shrink-0 gap-0.5">
                   <IconActionButton
-                    tooltip="Add to lesson"
+                    tooltip={t("collaborateDialog.host.addToLesson")}
                     onClick={() => admit(r.id)}
                     className="text-primary"
                   >
                     <UserPlusIcon />
                   </IconActionButton>
                   <IconActionButton
-                    tooltip="Decline"
+                    tooltip={t("collaborateDialog.host.decline")}
                     onClick={() => removeParticipant(r.id)}
                   >
                     <XIcon />
@@ -469,7 +493,9 @@ export default function CollaborateDialog({
               avatarSrc={p.avatarUrl}
               avatarColor={p.host ? "var(--primary)" : colorForId(p.id)}
               label={initials(p)}
-              primary={p.name || "Collaborator"}
+              primary={
+                p.name || t("collaborateDialog.roster.collaboratorFallback")
+              }
               secondary={p.email}
             >
               {p.host ? (
@@ -477,11 +503,11 @@ export default function CollaborateDialog({
                   variant="outline"
                   className="shrink-0 border-primary/40 text-primary"
                 >
-                  Host
+                  {t("collaborateDialog.roster.host")}
                 </Badge>
               ) : role === "host" ? (
                 <IconActionButton
-                  tooltip="Remove from lesson"
+                  tooltip={t("collaborateDialog.roster.removeFromLesson")}
                   onClick={() => removeParticipant(p.id)}
                 >
                   <XIcon />
@@ -500,26 +526,25 @@ export default function CollaborateDialog({
     <div>
       <div className="mb-1 flex items-center gap-1.5">
         <StarIcon className="size-4 text-focus" />
-        <p className="text-sm font-medium">Trusted collaborators</p>
+        <p className="text-sm font-medium">
+          {t("collaborateDialog.trusted.heading")}
+        </p>
       </div>
       {!compact && (
         <p className="mb-2 text-sm text-muted-foreground">
-          People on this list are emailed this lesson&apos;s invite link
-          automatically whenever you start a session, and they join straight
-          away without waiting for your approval. This list is saved with the
-          lesson.
+          {t("collaborateDialog.trusted.description")}
         </p>
       )}
 
       <div className="flex items-start gap-2">
         <Field className="flex-1">
           <FieldLabel htmlFor="trusted-email" className="sr-only">
-            Add by email
+            {t("collaborateDialog.trusted.addByEmailLabel")}
           </FieldLabel>
           <Input
             id="trusted-email"
             type="email"
-            placeholder="name@example.com"
+            placeholder={t("collaborateDialog.emailPlaceholder")}
             value={trustedEmail}
             aria-invalid={Boolean(trustedError)}
             onChange={(e) => {
@@ -544,23 +569,23 @@ export default function CollaborateDialog({
           className="shrink-0"
         >
           <UserPlusIcon data-icon="inline-start" />
-          Add
+          {t("collaborateDialog.trusted.add")}
         </Button>
       </div>
 
       {trusted.length > 0 && (
         <div className="mt-2 flex flex-col">
-          {trusted.map((t) => (
+          {trusted.map((entry) => (
             <PersonRow
-              key={t.email}
+              key={entry.email}
               avatarColor="var(--focus)"
-              label={initials(t)}
-              primary={t.name || t.email}
-              secondary={t.name ? t.email : undefined}
+              label={initials(entry)}
+              primary={entry.name || entry.email}
+              secondary={entry.name ? entry.email : undefined}
             >
               <IconActionButton
-                tooltip="Remove"
-                onClick={() => removeTrusted(t.email)}
+                tooltip={t("collaborateDialog.trusted.remove")}
+                onClick={() => removeTrusted(entry.email)}
                 destructive
               >
                 <Trash2Icon />
@@ -610,7 +635,7 @@ export default function CollaborateDialog({
       <Dialog open={open} onOpenChange={(next) => !next && onClose()}>
         <DialogContent className="flex max-h-[85vh] flex-col sm:max-w-md">
           <DialogHeader>
-            <DialogTitle>Collaborate on this lesson</DialogTitle>
+            <DialogTitle>{t("collaborateDialog.title")}</DialogTitle>
           </DialogHeader>
 
           <div className="overflow-y-auto border-t border-border pt-3">
@@ -620,7 +645,7 @@ export default function CollaborateDialog({
                 <button
                   type="button"
                   onClick={clearError}
-                  aria-label="Dismiss"
+                  aria-label={t("collaborateDialog.dismiss")}
                   className="absolute top-3 right-3 cursor-pointer rounded-sm border-0 bg-transparent p-0.5 text-current opacity-70 transition-opacity hover:opacity-100"
                 >
                   <XIcon className="size-3.5" />
@@ -643,11 +668,13 @@ export default function CollaborateDialog({
                 onClick={leave}
                 className="sm:mr-auto"
               >
-                {role === "host" ? "End session" : "Leave"}
+                {role === "host"
+                  ? t("collaborateDialog.endSession")
+                  : t("collaborateDialog.leave")}
               </Button>
             ) : null}
             <Button variant="outline" onClick={onClose}>
-              Close
+              {t("collaborateDialog.close")}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -666,6 +693,7 @@ export default function CollaborateDialog({
 // in that user's notifications. The link itself is fixed to the live session's
 // invite link — the sender only chooses the recipient and an optional message.
 function SendLinkDialog({ open, onClose, accessToken, link }) {
+  const { t } = useTranslation("collab");
   const [email, setEmail] = useState("");
   const [message, setMessage] = useState("");
   const [sending, setSending] = useState(false);
@@ -695,7 +723,9 @@ function SendLinkDialog({ open, onClose, accessToken, link }) {
       );
       setSent(true);
     } catch (err) {
-      setError(err.message || "Could not send the link.");
+      setError(
+        err.message || t("collaborateDialog.sendLinkDialog.sendFailedDefault"),
+      );
     } finally {
       setSending(false);
     }
@@ -705,26 +735,27 @@ function SendLinkDialog({ open, onClose, accessToken, link }) {
     <Dialog open={open} onOpenChange={(next) => !next && onClose()}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>Send the invite link</DialogTitle>
+          <DialogTitle>
+            {t("collaborateDialog.sendLinkDialog.title")}
+          </DialogTitle>
         </DialogHeader>
         {sent ? (
           <>
             <Alert className="border-success/40 bg-success/10 text-success">
               <AlertDescription className="text-success">
-                The invite link was sent. It will pop up in that user&apos;s
-                notifications.
+                {t("collaborateDialog.sendLinkDialog.sentMessage")}
               </AlertDescription>
             </Alert>
             <DialogFooter>
-              <Button onClick={onClose}>Done</Button>
+              <Button onClick={onClose}>
+                {t("collaborateDialog.sendLinkDialog.done")}
+              </Button>
             </DialogFooter>
           </>
         ) : (
           <form onSubmit={submit} className="flex flex-col gap-4">
             <DialogDescription>
-              Enter the email of the person you want to invite. They&apos;ll see
-              this session&apos;s invite link in their notifications the next
-              time they&apos;re signed in.
+              {t("collaborateDialog.sendLinkDialog.description")}
             </DialogDescription>
             {error && (
               <Alert variant="destructive">
@@ -732,13 +763,15 @@ function SendLinkDialog({ open, onClose, accessToken, link }) {
               </Alert>
             )}
             <Field>
-              <FieldLabel htmlFor="send-link-email">Recipient email</FieldLabel>
+              <FieldLabel htmlFor="send-link-email">
+                {t("collaborateDialog.sendLinkDialog.recipientEmailLabel")}
+              </FieldLabel>
               <Input
                 id="send-link-email"
                 autoFocus
                 required
                 type="email"
-                placeholder="name@example.com"
+                placeholder={t("collaborateDialog.emailPlaceholder")}
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 disabled={sending}
@@ -746,7 +779,7 @@ function SendLinkDialog({ open, onClose, accessToken, link }) {
             </Field>
             <Field>
               <FieldLabel htmlFor="send-link-message">
-                Message (optional)
+                {t("collaborateDialog.sendLinkDialog.messageLabel")}
               </FieldLabel>
               <Textarea
                 id="send-link-message"
@@ -764,7 +797,7 @@ function SendLinkDialog({ open, onClose, accessToken, link }) {
                 onClick={onClose}
                 disabled={sending}
               >
-                Cancel
+                {t("collaborateDialog.sendLinkDialog.cancel")}
               </Button>
               <Button
                 type="submit"
@@ -772,7 +805,9 @@ function SendLinkDialog({ open, onClose, accessToken, link }) {
               >
                 {sending && <Spinner data-icon="inline-start" />}
                 {!sending && <SendIcon data-icon="inline-start" />}
-                {sending ? "Sending…" : "Send link"}
+                {sending
+                  ? t("collaborateDialog.sendLinkDialog.sending")
+                  : t("collaborateDialog.sendLinkDialog.send")}
               </Button>
             </DialogFooter>
           </form>

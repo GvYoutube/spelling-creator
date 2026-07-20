@@ -20,6 +20,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import { EllipsisVerticalIcon, Trash2Icon, BanIcon, XIcon } from "lucide-react";
 import { Button } from "./ui/button.jsx";
@@ -81,6 +82,7 @@ function isSubmittable(html) {
 // user-correctable outcome (a profanity block) shown with a title; "error" is
 // a genuine failure shown plainly, matching Alert's destructive variant.
 function Notice({ notice, blockedTitle, onDismiss }) {
+  const { t } = useTranslation("lesson");
   if (!notice) return null;
   const warning = notice.severity === "warning";
   return (
@@ -100,7 +102,7 @@ function Notice({ notice, blockedTitle, onDismiss }) {
       <button
         type="button"
         onClick={onDismiss}
-        aria-label="Dismiss"
+        aria-label={t("comments.dismiss")}
         className="absolute top-3 right-3 cursor-pointer rounded-sm border-0 bg-transparent p-0.5 text-current opacity-70 transition-opacity hover:opacity-100"
       >
         <XIcon className="size-3.5" />
@@ -110,6 +112,7 @@ function Notice({ notice, blockedTitle, onDismiss }) {
 }
 
 export default function CommentsSection({ lessonId, onRated }) {
+  const { t } = useTranslation("lesson");
   const navigate = useNavigate();
   const { enabled: authEnabled, user, accessToken, isModerator } = useAuth();
 
@@ -167,7 +170,7 @@ export default function CommentsSection({ lessonId, onRated }) {
     try {
       setComments(await fetchComments(lessonId, accessToken));
     } catch (err) {
-      setError(err.message || "Could not load comments.");
+      setError(err.message || t("comments.couldNotLoad"));
     } finally {
       setLoading(false);
     }
@@ -220,7 +223,7 @@ export default function CommentsSection({ lessonId, onRated }) {
       const blocked = err.status === COMMENT_BLOCKED_STATUS;
       setPostNotice({
         severity: blocked ? "warning" : "error",
-        message: err.message || "Could not post your comment.",
+        message: err.message || t("comments.couldNotPost"),
       });
     } finally {
       setPosting(false);
@@ -259,7 +262,7 @@ export default function CommentsSection({ lessonId, onRated }) {
       const blocked = err.status === COMMENT_BLOCKED_STATUS;
       setReplyNotice({
         severity: blocked ? "warning" : "error",
-        message: err.message || "Could not post your reply.",
+        message: err.message || t("comments.couldNotPostReply"),
       });
     } finally {
       setReplyPosting(false);
@@ -302,7 +305,7 @@ export default function CommentsSection({ lessonId, onRated }) {
       const blocked = err.status === COMMENT_BLOCKED_STATUS;
       setEditNotice({
         severity: blocked ? "warning" : "error",
-        message: err.message || "Could not save your edit.",
+        message: err.message || t("comments.couldNotSaveEdit"),
       });
     } finally {
       setEditSaving(false);
@@ -323,9 +326,9 @@ export default function CommentsSection({ lessonId, onRated }) {
         }
         return prev.filter((item) => !removed.has(item.id));
       });
-      toast("Comment deleted.");
+      toast(t("comments.commentDeleted"));
     } catch (err) {
-      toast(err.message || "Could not delete the comment.");
+      toast(err.message || t("comments.couldNotDeleteComment"));
     }
   };
 
@@ -334,14 +337,14 @@ export default function CommentsSection({ lessonId, onRated }) {
   const handleBanAuthor = async (c) => {
     const name = c.author || "";
     if (!name) {
-      toast("This comment has no author name to ban.");
+      toast(t("comments.noAuthorNameToBan"));
       return;
     }
     try {
       await banName(name, accessToken);
-      toast(`Banned "${name}" from posting.`);
+      toast(t("comments.bannedName", { name }));
     } catch (err) {
-      toast(err.message || "Could not ban the author.");
+      toast(err.message || t("comments.couldNotBanAuthor"));
     }
   };
 
@@ -365,17 +368,17 @@ export default function CommentsSection({ lessonId, onRated }) {
                     onClick={() => navigate(`/users/${c.authorId}`)}
                     className="cursor-pointer border-0 bg-transparent p-0 font-semibold text-foreground hover:underline"
                   >
-                    {c.author || "Anonymous"}
+                    {c.author || t("comments.anonymous")}
                   </button>
                 ) : (
-                  c.author || "Anonymous"
+                  c.author || t("comments.anonymous")
                 )}
               </span>
               <span className="text-xs text-muted-foreground">
                 {formatDateTime(c.createdAt)}
                 {/* An edit is never silent: say so, so a reader can tell the comment
                     they're looking at isn't necessarily the one that was replied to. */}
-                {c.editedAt ? " · edited" : ""}
+                {c.editedAt ? ` · ${t("comments.edited")}` : ""}
               </span>
               {/* Moderator-only actions on this comment. */}
               {isModerator && (
@@ -384,7 +387,7 @@ export default function CommentsSection({ lessonId, onRated }) {
                     <Button
                       variant="ghost"
                       size="icon-xs"
-                      aria-label="moderate comment"
+                      aria-label={t("comments.moderateCommentAriaLabel")}
                       className="ml-auto"
                     >
                       <EllipsisVerticalIcon />
@@ -393,11 +396,11 @@ export default function CommentsSection({ lessonId, onRated }) {
                   <DropdownMenuContent align="end">
                     <DropdownMenuItem onSelect={() => handleDeleteComment(c)}>
                       <Trash2Icon />
-                      Delete comment
+                      {t("comments.deleteComment")}
                     </DropdownMenuItem>
                     <DropdownMenuItem onSelect={() => handleBanAuthor(c)}>
                       <BanIcon />
-                      Ban author by name
+                      {t("comments.banAuthorByName")}
                     </DropdownMenuItem>
                   </DropdownMenuContent>
                 </DropdownMenu>
@@ -411,13 +414,13 @@ export default function CommentsSection({ lessonId, onRated }) {
                   value={editDraft}
                   onChange={setEditDraft}
                   maxLength={COMMENT_MAX}
-                  label="Edit your comment"
+                  label={t("comments.editYourComment")}
                   disabled={editSaving}
                   autoFocus
                 />
                 <Notice
                   notice={editNotice}
-                  blockedTitle="Edit blocked"
+                  blockedTitle={t("comments.editBlocked")}
                   onDismiss={() => setEditNotice(null)}
                 />
                 <div className="mt-2 flex justify-end gap-2">
@@ -427,7 +430,7 @@ export default function CommentsSection({ lessonId, onRated }) {
                     onClick={cancelEdit}
                     disabled={editSaving}
                   >
-                    Cancel
+                    {t("comments.cancel")}
                   </Button>
                   <Button
                     type="submit"
@@ -435,7 +438,9 @@ export default function CommentsSection({ lessonId, onRated }) {
                     disabled={editSaving || !isSubmittable(editDraft)}
                   >
                     {editSaving && <Spinner data-icon="inline-start" />}
-                    {editSaving ? "Saving…" : "Save changes"}
+                    {editSaving
+                      ? t("comments.saving")
+                      : t("comments.saveChanges")}
                   </Button>
                 </div>
               </form>
@@ -454,7 +459,7 @@ export default function CommentsSection({ lessonId, onRated }) {
                     className="h-auto min-w-0 px-1 py-0.5"
                     onClick={() => openReply(c.id)}
                   >
-                    Reply
+                    {t("comments.reply")}
                   </Button>
                 )}
                 {c.authorId === user.id && (
@@ -464,7 +469,7 @@ export default function CommentsSection({ lessonId, onRated }) {
                     className="h-auto min-w-0 px-1 py-0.5"
                     onClick={() => openEdit(c)}
                   >
-                    Edit
+                    {t("comments.edit")}
                   </Button>
                 )}
               </div>
@@ -476,14 +481,18 @@ export default function CommentsSection({ lessonId, onRated }) {
                   value={replyDraft}
                   onChange={setReplyDraft}
                   maxLength={COMMENT_MAX}
-                  label={`Reply to ${c.author || "Anonymous"}`}
-                  placeholder={`Reply to ${c.author || "Anonymous"}…`}
+                  label={t("comments.replyToAuthor", {
+                    author: c.author || t("comments.anonymous"),
+                  })}
+                  placeholder={t("comments.replyToAuthorPlaceholder", {
+                    author: c.author || t("comments.anonymous"),
+                  })}
                   disabled={replyPosting}
                   autoFocus
                 />
                 <Notice
                   notice={replyNotice}
-                  blockedTitle="Reply blocked"
+                  blockedTitle={t("comments.replyBlocked")}
                   onDismiss={() => setReplyNotice(null)}
                 />
                 <div className="mt-2 flex justify-end gap-2">
@@ -493,7 +502,7 @@ export default function CommentsSection({ lessonId, onRated }) {
                     onClick={cancelReply}
                     disabled={replyPosting}
                   >
-                    Cancel
+                    {t("comments.cancel")}
                   </Button>
                   <Button
                     type="submit"
@@ -501,7 +510,9 @@ export default function CommentsSection({ lessonId, onRated }) {
                     disabled={replyPosting || !isSubmittable(replyDraft)}
                   >
                     {replyPosting && <Spinner data-icon="inline-start" />}
-                    {replyPosting ? "Posting…" : "Post reply"}
+                    {replyPosting
+                      ? t("comments.posting")
+                      : t("comments.postReply")}
                   </Button>
                 </div>
               </form>
@@ -529,8 +540,10 @@ export default function CommentsSection({ lessonId, onRated }) {
     <div className="mt-2">
       <hr className="mb-3 border-border" />
       <h2 className="mb-2 text-base font-semibold">
-        Comments
-        {!loading && !error ? ` (${comments.length})` : ""}
+        {t("comments.heading")}
+        {!loading && !error
+          ? t("comments.commentCountSuffix", { count: comments.length })
+          : ""}
       </h2>
 
       {loading && <CommentsSkeleton />}
@@ -540,7 +553,7 @@ export default function CommentsSection({ lessonId, onRated }) {
           <AlertDescription className="flex items-center justify-between gap-2">
             {error}
             <Button variant="ghost" size="sm" onClick={load}>
-              Retry
+              {t("comments.retry")}
             </Button>
           </AlertDescription>
         </Alert>
@@ -550,7 +563,7 @@ export default function CommentsSection({ lessonId, onRated }) {
         <div className="flex flex-col gap-3">
           {topLevel.length === 0 && (
             <p className="text-sm text-muted-foreground">
-              No comments yet. Be the first to share your thoughts.
+              {t("comments.noCommentsYet")}
             </p>
           )}
 
@@ -561,7 +574,7 @@ export default function CommentsSection({ lessonId, onRated }) {
           {/* Posting needs a signed-in session, mirroring how publishing works. */}
           {!authEnabled ? (
             <p className="text-sm text-muted-foreground">
-              Sign-in is not configured, so commenting is unavailable.
+              {t("comments.signInNotConfigured")}
             </p>
           ) : user ? (
             <form onSubmit={submit}>
@@ -570,26 +583,26 @@ export default function CommentsSection({ lessonId, onRated }) {
                 value={draft}
                 onChange={setDraft}
                 maxLength={COMMENT_MAX}
-                label="Add a comment"
-                placeholder="Add a comment…"
+                label={t("comments.addComment")}
+                placeholder={t("comments.addCommentPlaceholder")}
                 disabled={posting}
               />
               <Notice
                 notice={postNotice}
-                blockedTitle="Comment blocked"
+                blockedTitle={t("comments.commentBlocked")}
                 onDismiss={() => setPostNotice(null)}
               />
               <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
                 {/* Optional star rating for the lesson, posted with the comment. */}
                 <div className="flex items-center gap-2">
                   <span className="text-sm text-muted-foreground">
-                    Rate this lesson
+                    {t("comments.rateThisLesson")}
                   </span>
                   <StarRating
                     value={ratingValue}
                     onChange={setRatingValue}
                     disabled={posting}
-                    aria-label="lesson rating"
+                    aria-label={t("comments.lessonRatingAriaLabel")}
                   />
                 </div>
                 <Button
@@ -597,21 +610,21 @@ export default function CommentsSection({ lessonId, onRated }) {
                   disabled={posting || !isSubmittable(draft)}
                 >
                   {posting && <Spinner data-icon="inline-start" />}
-                  {posting ? "Posting…" : "Post comment"}
+                  {posting ? t("comments.posting") : t("comments.postComment")}
                 </Button>
               </div>
             </form>
           ) : (
             <div className="flex items-center justify-between gap-2">
               <p className="text-sm text-muted-foreground">
-                Sign in to join the conversation.
+                {t("comments.signInToJoin")}
               </p>
               <Button
                 variant="outline"
                 size="sm"
                 onClick={() => navigate("/login")}
               >
-                Sign in
+                {t("comments.signIn")}
               </Button>
             </div>
           )}

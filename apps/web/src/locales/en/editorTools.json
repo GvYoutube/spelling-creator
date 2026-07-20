@@ -1,0 +1,116 @@
+{
+  "timeAgo": {
+    "justNow": "just now",
+    "minutes_one": "{{count}} minute ago",
+    "minutes_other": "{{count}} minutes ago",
+    "hours_one": "{{count}} hour ago",
+    "hours_other": "{{count}} hours ago",
+    "days_one": "{{count}} day ago",
+    "days_other": "{{count}} days ago"
+  },
+  "historyDialog": {
+    "chips": {
+      "added": "added",
+      "changed": "changed",
+      "removed": "removed",
+      "moved": "moved"
+    },
+    "title": "Version history",
+    "dismiss": "Dismiss",
+    "restoreError": "Could not restore that version.",
+    "pendingChanges_one": "You have {{count}} change since the last saved version. They'll be saved automatically in a moment.",
+    "pendingChanges_other": "You have {{count}} changes since the last saved version. They'll be saved automatically in a moment.",
+    "noVersions": "No versions saved yet. Edit the lesson and a version is saved automatically whenever you pause.",
+    "mergeTooltip": "A merge — two histories joined here",
+    "currentPrefix": "Current · ",
+    "origin": "This is where the lesson began.",
+    "whatChanged": "What changed",
+    "close": "Close",
+    "restoreCurrent": "This is the current version",
+    "restore": "Restore this version"
+  },
+  "mergeDialog": {
+    "emptyValue": "(empty)",
+    "blockLabel": {
+      "question": "{{type}} question",
+      "spelling": "spelling list",
+      "image": "image",
+      "text": "text block",
+      "default": "block"
+    },
+    "defaultTheirName": "the original",
+    "deletedIn": "deleted in {{name}}",
+    "youDeletedThis": "you deleted this",
+    "choice": {
+      "keepIt": "Keep it",
+      "mine": "Mine",
+      "deleteIt": "Delete it",
+      "theirs": "Theirs",
+      "keepBoth": "Keep both"
+    },
+    "deletedByThem": "You edited this block; {{name}} deleted it. Keeping it preserves your edit.",
+    "deletedByYou": "You deleted this block; {{name}} edited it. Keeping it restores their version.",
+    "confirm": {
+      "mergingBack": "Merging back...",
+      "merging": "Merging...",
+      "mergeBackInto": "Merge back into {{name}}",
+      "merge": "Merge"
+    },
+    "title": {
+      "contribute": "Merge your changes back into {{name}}",
+      "pull": "Merge changes from {{name}}"
+    },
+    "contributingNotice": "This updates <strong>{{name}}</strong> itself, for everyone — you are a trusted collaborator on it. Its latest changes are merged in first, so nothing its author has done since you forked is lost, and they'll be notified.",
+    "auto": {
+      "heading": "Merged automatically:",
+      "newBlocks_one": "{{count}} new block from {{name}}",
+      "newBlocks_other": "{{count}} new blocks from {{name}}",
+      "theirEdits_one": "{{count}} block they updated (you hadn't touched)",
+      "theirEdits_other": "{{count}} blocks they updated (you hadn't touched)",
+      "merged_one": "{{count}} block you both edited — in different fields, so <strong>both sets of edits were kept</strong>",
+      "merged_other": "{{count}} blocks you both edited — in different fields, so <strong>both sets of edits were kept</strong>",
+      "removed_one": "{{count}} block removed",
+      "removed_other": "{{count}} blocks removed"
+    },
+    "noConflicts": "Nothing is in conflict — the whole merge resolved on its own. Confirm to apply it.",
+    "conflictsIntro_one": "{{count}} block was edited on both sides in the same place. Choose which to keep.",
+    "conflictsIntro_other": "{{count}} blocks were edited on both sides in the same place. Choose which to keep.",
+    "cancel": "Cancel"
+  },
+  "imageSearch": {
+    "providers": {
+      "pixabay": {
+        "label": "Pixabay",
+        "captionWithUser": "Image by {{user}} from Pixabay",
+        "captionNoUser": "Image from Pixabay",
+        "altFallback": "Pixabay image"
+      },
+      "wikimedia": {
+        "label": "Wikimedia Commons",
+        "altFallback": "Wikimedia Commons image"
+      }
+    },
+    "turnstileNotConfigured": "VITE_TURNSTILE_SITE_KEY is not configured.",
+    "verificationFailed": "Verification failed. Please try again.",
+    "title": {
+      "replace": "Replace image",
+      "search": "Search images"
+    },
+    "description": {
+      "add": "Search free images from <link>{{source}}</link> and add one to this section.",
+      "replace": "Search free images from <link>{{source}}</link> and swap it in for the current one."
+    },
+    "queryLabel": "Search images",
+    "queryPlaceholder": "e.g. solar system, tiger, castle",
+    "searchButton": "Search",
+    "errors": {
+      "emptyQuery": "Type something to search for first.",
+      "verificationRequired": "Please complete the verification challenge first.",
+      "searchFailed": "Something went wrong.",
+      "verificationExpired": "Verification expired — wait a moment and try again.",
+      "insertFailed": "Could not add that image."
+    },
+    "noResults": "No images found. Try different words.",
+    "close": "Close"
+  }
+}

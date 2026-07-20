@@ -1,0 +1,46 @@
+{
+  "buttons": {
+    "save": "Save",
+    "cancel": "Cancel",
+    "close": "Close"
+  },
+  "status": {
+    "loading": "Loading"
+  },
+  "nav": {
+    "lessonHubAriaLabel": "lesson hub",
+    "lessonHub": "Lesson hub",
+    "switchToLightMode": "Switch to light mode",
+    "switchToDarkMode": "Switch to dark mode",
+    "accountMenuAriaLabel": "account menu",
+    "account": "Account",
+    "signedIn": "Signed in",
+    "myProfile": "My profile",
+    "editDisplayName": "Edit display name",
+    "moderation": "Moderation",
+    "signOut": "Sign out",
+    "signedOut": "Signed out",
+    "signIn": "Sign in"
+  },
+  "notificationBell": {
+    "tooltip": "Notifications",
+    "menuLabel": "Notifications",
+    "ariaLabel": "notifications",
+    "ariaLabelUnread": "notifications ({{count}} unread)",
+    "empty": "No notifications yet."
+  },
+  "displayNameDialog": {
+    "titleRequired": "Choose a display name",
+    "titleEdit": "Edit display name",
+    "description": "This is the name other people see on your lessons and comments. Your email address is never shown.",
+    "label": "Display name",
+    "charCountHint": "{{min}}–{{max}} characters.",
+    "saveError": "Could not save your display name."
+  },
+  "starRating": {
+    "defaultAriaLabel": "rating",
+    "ratingSummary": "{{label}}: {{display}} out of {{max}}",
+    "starLabel_one": "{{count}} star",
+    "starLabel_other": "{{count}} stars"
+  }
+}

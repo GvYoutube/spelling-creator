@@ -8,6 +8,7 @@
 
 import { useState } from "react";
 import { Link as RouterLink, useNavigate } from "react-router-dom";
+import { Trans, useTranslation } from "react-i18next";
 import { PencilIcon, MailCheckIcon } from "lucide-react";
 import AppHeader from "../components/AppHeader.jsx";
 import NavActions from "../components/NavActions.jsx";
@@ -27,7 +28,8 @@ import { useDocumentMeta } from "../lib/seo.js";
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 export default function LoginPage() {
-  useDocumentMeta({ title: "Sign in" });
+  const { t } = useTranslation("login");
+  useDocumentMeta({ title: t("meta.title") });
   const { enabled, user, displayName, loading, signInWithMagicLink, signOut } =
     useAuth();
   const navigate = useNavigate();
@@ -41,7 +43,7 @@ export default function LoginPage() {
     e.preventDefault();
     setError("");
     if (!EMAIL_RE.test(email.trim())) {
-      setError("Please enter a valid email address.");
+      setError(t("errors.invalidEmail"));
       return;
     }
     setSending(true);
@@ -49,7 +51,7 @@ export default function LoginPage() {
       await signInWithMagicLink(email.trim());
       setSent(true);
     } catch (err) {
-      setError(err.message || "Could not send the sign-in link.");
+      setError(err.message || t("errors.sendFailed"));
     } finally {
       setSending(false);
     }
@@ -58,27 +60,27 @@ export default function LoginPage() {
   return (
     <div className="min-h-screen bg-background">
       <AppHeader
-        title="Sign in"
+        title={t("meta.title")}
         left={
           <>
             <Tooltip>
               <TooltipTrigger asChild>
                 <RouterLink
                   to="/editor"
-                  aria-label="editor"
+                  aria-label={t("nav.editorAriaLabel")}
                   className="mr-0.5 inline-flex size-10 shrink-0 cursor-pointer items-center justify-center rounded-full border-0 bg-transparent text-primary-foreground no-underline transition-colors hover:bg-primary-foreground/10 md:hidden"
                 >
                   <PencilIcon />
                 </RouterLink>
               </TooltipTrigger>
-              <TooltipContent>Editor</TooltipContent>
+              <TooltipContent>{t("nav.editor")}</TooltipContent>
             </Tooltip>
             <RouterLink
               to="/editor"
               className="mr-1 hidden shrink-0 items-center gap-2 rounded-md border-0 bg-transparent px-4 py-2 text-sm font-medium text-primary-foreground no-underline transition-colors hover:bg-primary-foreground/10 md:inline-flex"
             >
               <PencilIcon data-icon="inline-start" />
-              Editor
+              {t("nav.editor")}
             </RouterLink>
           </>
         }
@@ -90,10 +92,7 @@ export default function LoginPage() {
         <div className="rounded-panel border border-border bg-card p-8 text-card-foreground shadow-(--shadow-panel)">
           {!enabled ? (
             <Alert>
-              <AlertDescription>
-                Sign-in is not configured. Set VITE_SUPABASE_URL and
-                VITE_SUPABASE_ANON_KEY to enable accounts.
-              </AlertDescription>
+              <AlertDescription>{t("notConfigured.message")}</AlertDescription>
             </Alert>
           ) : loading ? (
             <div className="flex justify-center py-4">
@@ -102,26 +101,30 @@ export default function LoginPage() {
           ) : user ? (
             <div className="flex flex-col items-center gap-2 text-center">
               <MailCheckIcon className="size-12 text-primary" />
-              <h1 className="text-lg font-semibold">You&apos;re signed in</h1>
+              <h1 className="text-lg font-semibold">{t("signedIn.heading")}</h1>
               <p className="text-sm break-all text-muted-foreground">
                 {displayName || user.email}
               </p>
               <div className="flex gap-2 pt-1">
                 <Button onClick={() => navigate("/editor")}>
-                  Go to editor
+                  {t("signedIn.goToEditor")}
                 </Button>
                 <Button variant="outline" onClick={() => signOut()}>
-                  Sign out
+                  {t("signedIn.signOut")}
                 </Button>
               </div>
             </div>
           ) : sent ? (
             <div className="flex flex-col items-center gap-2 text-center">
               <MailCheckIcon className="size-12 text-primary" />
-              <h1 className="text-lg font-semibold">Check your email</h1>
+              <h1 className="text-lg font-semibold">{t("sent.heading")}</h1>
               <p className="text-sm text-muted-foreground">
-                We sent a sign-in link to <strong>{email.trim()}</strong>. Open
-                it on this device to finish signing in.
+                <Trans
+                  i18nKey="sent.description"
+                  ns="login"
+                  values={{ email: email.trim() }}
+                  components={{ strong: <strong /> }}
+                />
               </p>
               <Button
                 variant="ghost"
@@ -131,15 +134,13 @@ export default function LoginPage() {
                   setError("");
                 }}
               >
-                Use a different email
+                {t("sent.useDifferentEmail")}
               </Button>
             </div>
           ) : (
             <form onSubmit={submit} className="flex flex-col gap-4">
               <p className="text-sm text-muted-foreground">
-                Enter your email and we&apos;ll send you a one-time sign-in link
-                — no password needed. You only need an account to publish
-                lessons to the hub.
+                {t("form.description")}
               </p>
               {error && (
                 <Alert variant="destructive">
@@ -147,7 +148,9 @@ export default function LoginPage() {
                 </Alert>
               )}
               <Field>
-                <FieldLabel htmlFor="login-email">Email address</FieldLabel>
+                <FieldLabel htmlFor="login-email">
+                  {t("form.emailLabel")}
+                </FieldLabel>
                 <Input
                   id="login-email"
                   autoFocus
@@ -159,7 +162,7 @@ export default function LoginPage() {
               </Field>
               <Button type="submit" disabled={sending}>
                 {sending && <Spinner data-icon="inline-start" />}
-                Send magic link
+                {t("form.submit")}
               </Button>
             </form>
           )}

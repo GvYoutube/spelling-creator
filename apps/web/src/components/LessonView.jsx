@@ -11,6 +11,7 @@
 // published view is visually identical to the Word/PDF export. The export/PDF
 // buttons still use the docx pipeline (docxExport.js / pdfExport.js) unchanged.
 
+import { useTranslation } from "react-i18next";
 import { Skeleton } from "./ui/skeleton.jsx";
 import { PREVIEW_STYLES } from "../lib/htmlPreview.js";
 import { fitWithin, imageSizeScale } from "../lib/image.js";
@@ -37,6 +38,7 @@ function figureMargin(align) {
 }
 
 function ImageBlock({ block }) {
+  const { t } = useTranslation("lesson");
   const src = useImageSrc(block);
   const align = block.align || "center";
   const { width, height } = fitWithin(
@@ -60,7 +62,7 @@ function ImageBlock({ block }) {
         // `img` rule (width:100%;height:auto) makes it fill the figure.
         <img
           src={src}
-          alt={block.caption || "lesson image"}
+          alt={block.caption || t("lessonView.imageAlt")}
           width={Math.round(width)}
           height={Math.round(height)}
           loading="lazy"
@@ -92,6 +94,7 @@ function ImageBlock({ block }) {
 }
 
 function QuestionBlock({ block }) {
+  const { t } = useTranslation("lesson");
   const meta = questionMeta(block.questionType);
   const answers = (block.answers || [])
     .map((a) => (a.text || "").trim())
@@ -103,7 +106,7 @@ function QuestionBlock({ block }) {
       <p>
         <strong>
           <span style={{ color: meta.color }}>[{meta.label}]</span>{" "}
-          {block.prompt || "(no question text)"}
+          {block.prompt || t("lessonView.noQuestionText")}
         </strong>
       </p>
 
@@ -111,7 +114,7 @@ function QuestionBlock({ block }) {
         block.questionType === "single" ||
         block.questionType === "background") && (
         <p>
-          <em>Answer: </em>
+          <em>{t("lessonView.answerLabel")} </em>
           {block.answer ? String(block.answer) : BLANK}
         </p>
       )}
@@ -119,7 +122,7 @@ function QuestionBlock({ block }) {
       {block.questionType === "number" && steps.length > 0 && (
         <>
           <p>
-            <em>Steps:</em>
+            <em>{t("lessonView.stepsLabel")}</em>
           </p>
           {steps.map((step, i) => (
             <p key={step.id} style={{ marginLeft: "24px" }}>
@@ -134,7 +137,7 @@ function QuestionBlock({ block }) {
       {block.questionType === "multiple" && (
         <>
           <p>
-            <em>Answers:</em>
+            <em>{t("lessonView.answersLabel")}</em>
             {answers.length ? "" : ` ${BLANK}`}
           </p>
           {answers.map((text, i) => (
@@ -149,6 +152,7 @@ function QuestionBlock({ block }) {
 }
 
 function SpellingBlock({ block }) {
+  const { t } = useTranslation("lesson");
   const words = (block.words || [])
     .map((w) => (w.text || "").trim())
     .filter(Boolean);
@@ -156,7 +160,9 @@ function SpellingBlock({ block }) {
   return (
     <>
       <p>
-        <strong style={{ color: SPELLING_COLOR }}>Spelling words</strong>
+        <strong style={{ color: SPELLING_COLOR }}>
+          {t("lessonView.spellingWordsLabel")}
+        </strong>
       </p>
       {words.length ? (
         words.map((word, i) => (
@@ -166,7 +172,7 @@ function SpellingBlock({ block }) {
         ))
       ) : (
         <p>
-          <em>(no spelling words yet)</em>
+          <em>{t("lessonView.noSpellingWords")}</em>
         </p>
       )}
     </>
@@ -185,14 +191,15 @@ function Block({ block }) {
 // Render a whole lesson document read-only. `doc` is the lesson body:
 // { title, sections: [{ name, blocks: [...] }] }.
 export default function LessonView({ doc }) {
+  const { t } = useTranslation("lesson");
   const sections = doc?.sections || [];
   return (
     <div className="s2c-preview-root bg-white p-4 text-[#1a1a1a] sm:p-6">
       <style>{PREVIEW_STYLES}</style>
-      <h1>{doc?.title || "Untitled Lesson"}</h1>
+      <h1>{doc?.title || t("lessonView.untitledLesson")}</h1>
       {sections.map((section, si) => (
         <section key={section.id || si}>
-          <h2>{section.name || "Untitled section"}</h2>
+          <h2>{section.name || t("lessonView.untitledSection")}</h2>
           {(section.blocks || []).map((block, bi) => (
             <Block key={block.id || bi} block={block} />
           ))}

@@ -1,0 +1,31 @@
+{
+  "meta": {
+    "title": "Sign in"
+  },
+  "nav": {
+    "editorAriaLabel": "editor",
+    "editor": "Editor"
+  },
+  "notConfigured": {
+    "message": "Sign-in is not configured. Set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY to enable accounts."
+  },
+  "signedIn": {
+    "heading": "You're signed in",
+    "goToEditor": "Go to editor",
+    "signOut": "Sign out"
+  },
+  "sent": {
+    "heading": "Check your email",
+    "description": "We sent a sign-in link to <strong>{{email}}</strong>. Open it on this device to finish signing in.",
+    "useDifferentEmail": "Use a different email"
+  },
+  "form": {
+    "description": "Enter your email and we'll send you a one-time sign-in link — no password needed. You only need an account to publish lessons to the hub.",
+    "emailLabel": "Email address",
+    "submit": "Send magic link"
+  },
+  "errors": {
+    "invalidEmail": "Please enter a valid email address.",
+    "sendFailed": "Could not send the sign-in link."
+  }
+}

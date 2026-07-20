@@ -11,6 +11,7 @@
 // still false — so editing always goes through this one button.
 
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
 import { useEditorState } from "@tiptap/react";
 import {
   Bold,
@@ -62,6 +63,7 @@ function MarkButton({ pressed, onPressedChange, label, icon: Icon }) {
 }
 
 function LinkButton({ editor, active, href }) {
+  const { t } = useTranslation("richText");
   const [open, setOpen] = useState(false);
   const [url, setUrl] = useState(href);
 
@@ -74,7 +76,7 @@ function LinkButton({ editor, active, href }) {
       }}
     >
       <PopoverTrigger asChild>
-        <Toggle size="sm" pressed={active} aria-label="Link">
+        <Toggle size="sm" pressed={active} aria-label={t("toolbar.link")}>
           <Link2 />
         </Toggle>
       </PopoverTrigger>
@@ -97,12 +99,12 @@ function LinkButton({ editor, active, href }) {
           <Input
             autoFocus
             type="url"
-            placeholder="https://example.com"
+            placeholder={t("toolbar.linkUrlPlaceholder")}
             value={url}
             onChange={(e) => setUrl(e.target.value)}
           />
           <Button type="submit" size="sm">
-            {active ? "Update" : "Add"}
+            {active ? t("toolbar.updateLink") : t("toolbar.addLink")}
           </Button>
         </form>
         {active && (
@@ -116,7 +118,7 @@ function LinkButton({ editor, active, href }) {
               setOpen(false);
             }}
           >
-            Remove link
+            {t("toolbar.removeLink")}
           </Button>
         )}
       </PopoverContent>
@@ -125,6 +127,7 @@ function LinkButton({ editor, active, href }) {
 }
 
 export default function RichTextToolbar({ editor }) {
+  const { t } = useTranslation("richText");
   const state = useToolbarState(editor);
 
   return (
@@ -132,31 +135,31 @@ export default function RichTextToolbar({ editor }) {
       <MarkButton
         pressed={state.bold}
         onPressedChange={() => editor.chain().focus().toggleBold().run()}
-        label="Bold"
+        label={t("toolbar.bold")}
         icon={Bold}
       />
       <MarkButton
         pressed={state.italic}
         onPressedChange={() => editor.chain().focus().toggleItalic().run()}
-        label="Italic"
+        label={t("toolbar.italic")}
         icon={Italic}
       />
       <MarkButton
         pressed={state.underline}
         onPressedChange={() => editor.chain().focus().toggleUnderline().run()}
-        label="Underline"
+        label={t("toolbar.underline")}
         icon={UnderlineIcon}
       />
       <MarkButton
         pressed={state.strike}
         onPressedChange={() => editor.chain().focus().toggleStrike().run()}
-        label="Strikethrough"
+        label={t("toolbar.strikethrough")}
         icon={Strikethrough}
       />
       <MarkButton
         pressed={state.code}
         onPressedChange={() => editor.chain().focus().toggleCode().run()}
-        label="Code"
+        label={t("toolbar.code")}
         icon={Code}
       />
 
@@ -165,19 +168,19 @@ export default function RichTextToolbar({ editor }) {
       <MarkButton
         pressed={state.bulletList}
         onPressedChange={() => editor.chain().focus().toggleBulletList().run()}
-        label="Bulleted list"
+        label={t("toolbar.bulletList")}
         icon={List}
       />
       <MarkButton
         pressed={state.orderedList}
         onPressedChange={() => editor.chain().focus().toggleOrderedList().run()}
-        label="Numbered list"
+        label={t("toolbar.orderedList")}
         icon={ListOrdered}
       />
       <MarkButton
         pressed={state.blockquote}
         onPressedChange={() => editor.chain().focus().toggleBlockquote().run()}
-        label="Quote"
+        label={t("toolbar.quote")}
         icon={Quote}
       />
 
@@ -193,7 +196,7 @@ export default function RichTextToolbar({ editor }) {
         type="button"
         variant="ghost"
         size="icon-sm"
-        aria-label="Remove formatting"
+        aria-label={t("toolbar.removeFormatting")}
         onClick={() =>
           editor.chain().focus().unsetAllMarks().clearNodes().run()
         }

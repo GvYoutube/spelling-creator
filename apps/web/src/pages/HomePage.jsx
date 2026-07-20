@@ -11,6 +11,7 @@
 // The editor itself now lives at /editor; this page is what greets visitors.
 
 import { useCallback, useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { Link as RouterLink, useNavigate } from "react-router-dom";
 import {
   BellIcon,
@@ -46,43 +47,31 @@ const FEATURES = [
   {
     key: "editor",
     icon: PencilIcon,
-    title: "A focused lesson editor",
-    body: "Build lessons from named sections, each holding text, images, spelling-word lists and question blocks. Everything autosaves as you go.",
     image: "/home/feature-editor.jpg",
   },
   {
     key: "ai",
     icon: SparklesIcon,
-    title: "AI that helps you write",
-    body: "Draft passage text, generate question ideas, or spin up a whole lesson concept with built-in AI suggestions — then edit anything to taste.",
     image: "/home/feature-ai.jpg",
   },
   {
     key: "images",
     icon: ImagePlusIcon,
-    title: "Find the perfect picture",
-    body: "Search free image libraries without leaving the editor and drop an illustration straight into any section.",
     image: "/home/feature-images.jpg",
   },
   {
     key: "hub",
     icon: BookMarkedIcon,
-    title: "Share to the community hub",
-    body: "Publish a lesson for everyone, browse what others have made, and copy any lesson to remix it into your own.",
     image: "/home/feature-hub.jpg",
   },
   {
     key: "collab",
     icon: UsersIcon,
-    title: "Collaborate live",
-    body: "Invite a colleague to edit the same lesson in real time, with live cursors and a built-in chat.",
     image: "/home/feature-collab.jpg",
   },
   {
     key: "export",
     icon: FileTextIcon,
-    title: "Export anywhere",
-    body: "Download a finished lesson as a Word document or PDF, or save it straight to Google Docs for printing and sharing.",
     image: "/home/feature-export.jpg",
   },
 ];
@@ -160,6 +149,7 @@ function FeatureRow({ feature, flip }) {
 
 // ── Signed-out splash ───────────────────────────────────────────────────────
 function LandingView() {
+  const { t } = useTranslation("home");
   return (
     <>
       {/* Hero: floating spelling words behind a headline + calls to action.
@@ -190,14 +180,13 @@ function LandingView() {
             className="mb-4 font-serif text-4xl font-semibold md:text-6xl"
             style={{ textShadow: "0 2px 18px rgba(0,0,0,0.4)" }}
           >
-            Spelling lessons that stick
+            {t("marketing.hero.title")}
           </h1>
           <p
             className="mx-auto mb-8 max-w-xl text-lg opacity-95 md:text-xl"
             style={{ textShadow: "0 1px 10px rgba(0,0,0,0.4)" }}
           >
-            Build, share and print Spelling (S2C) lessons — with a focused
-            editor, AI help, images and live collaboration.
+            {t("marketing.hero.subtitle")}
           </p>
           {/* Hand-styled rather than the shadcn Button variants — this hero
               is a fixed-color surface regardless of app theme (see the note
@@ -209,14 +198,14 @@ function LandingView() {
               className="inline-flex items-center justify-center gap-2 rounded-md bg-white px-8 py-3 text-base font-medium text-[#1e2138] no-underline transition-colors hover:bg-white/90"
             >
               <PencilIcon data-icon="inline-start" />
-              Open the editor
+              {t("marketing.hero.openEditor")}
             </RouterLink>
             <RouterLink
               to="/hub"
               className="inline-flex items-center justify-center gap-2 rounded-md border border-white/70 bg-transparent px-8 py-3 text-base font-medium text-white no-underline transition-colors hover:border-white hover:bg-white/10"
             >
               <BookMarkedIcon data-icon="inline-start" />
-              Browse the hub
+              {t("marketing.hero.browseHub")}
             </RouterLink>
           </div>
         </div>
@@ -226,17 +215,21 @@ function LandingView() {
       <div className="mx-auto max-w-6xl px-4 py-12 md:py-20">
         <div className="mb-10 text-center md:mb-16">
           <p className="text-sm font-semibold tracking-wide text-primary uppercase">
-            Everything you need
+            {t("marketing.features.eyebrow")}
           </p>
           <h2 className="font-serif text-3xl font-semibold md:text-4xl">
-            From blank page to printed lesson
+            {t("marketing.features.heading")}
           </h2>
         </div>
         <div className="flex flex-col gap-14 md:gap-24">
           {FEATURES.map((feature, i) => (
             <FeatureRow
               key={feature.key}
-              feature={feature}
+              feature={{
+                ...feature,
+                title: t(`marketing.features.${feature.key}.title`),
+                body: t(`marketing.features.${feature.key}.body`),
+              }}
               flip={i % 2 === 1}
             />
           ))}
@@ -244,16 +237,15 @@ function LandingView() {
 
         <div className="mt-16 rounded-panel border border-border bg-card p-8 text-center text-card-foreground shadow-(--shadow-panel) md:mt-24 md:p-12">
           <h2 className="mb-1.5 font-serif text-2xl font-semibold md:text-3xl">
-            Ready to make your first lesson?
+            {t("marketing.cta.title")}
           </h2>
           <p className="mb-6 text-muted-foreground">
-            No account needed to start building — sign in only when you want to
-            publish or collaborate.
+            {t("marketing.cta.body")}
           </p>
           <Button size="lg" className="px-8" asChild>
             <RouterLink to="/editor" className="no-underline">
               <PencilIcon data-icon="inline-start" />
-              Open the editor
+              {t("marketing.cta.openEditor")}
             </RouterLink>
           </Button>
         </div>
@@ -265,6 +257,7 @@ function LandingView() {
 // A compact feed list shared by the dashboard's "latest lessons" and "your
 // activity" columns. Each entry routes to its lesson/profile page on click.
 function FeedList({ entries, emptyText }) {
+  const { t } = useTranslation("home");
   const navigate = useNavigate();
   if (entries.length === 0) {
     return <p className="py-2 text-sm text-muted-foreground">{emptyText}</p>;
@@ -281,7 +274,7 @@ function FeedList({ entries, emptyText }) {
             className="cursor-pointer rounded-md border-0 bg-transparent px-2 py-2.5 text-left transition-colors hover:bg-accent"
           >
             <p className="truncate text-sm font-medium">
-              {e.title || "Untitled"}
+              {e.title || t("dashboard.untitled")}
             </p>
             {e.summary && (
               <p className="line-clamp-2 text-sm text-muted-foreground">
@@ -313,6 +306,7 @@ function DashboardPanel({ icon: Icon, title, children }) {
 
 // ── Signed-in dashboard ─────────────────────────────────────────────────────
 function DashboardView() {
+  const { t } = useTranslation("home");
   const { user, accessToken, displayName } = useAuth();
   const navigate = useNavigate();
 
@@ -348,23 +342,23 @@ function DashboardView() {
       <div className="mb-6 flex flex-col items-start justify-between gap-4 sm:flex-row sm:items-center">
         <div>
           <h1 className="text-2xl font-bold md:text-3xl">
-            Welcome back{displayName ? `, ${displayName}` : ""}
+            {displayName
+              ? t("dashboard.welcome.withName", { name: displayName })
+              : t("dashboard.welcome.default")}
           </h1>
-          <p className="text-muted-foreground">
-            Pick up where you left off, or start something new.
-          </p>
+          <p className="text-muted-foreground">{t("dashboard.subtitle")}</p>
         </div>
         <div className="flex shrink-0 gap-2">
           <Button asChild>
             <RouterLink to="/editor" className="no-underline">
               <PencilIcon data-icon="inline-start" />
-              New lesson
+              {t("dashboard.newLesson")}
             </RouterLink>
           </Button>
           <Button variant="outline" asChild>
             <RouterLink to="/hub" className="no-underline">
               <BookMarkedIcon data-icon="inline-start" />
-              Hub
+              {t("dashboard.hub")}
             </RouterLink>
           </Button>
         </div>
@@ -379,28 +373,32 @@ function DashboardView() {
             <div>
               <div className="mb-2 flex items-center gap-2">
                 <RssIcon className="size-4 text-primary" />
-                <h2 className="text-lg font-semibold">Latest from the hub</h2>
+                <h2 className="text-lg font-semibold">
+                  {t("dashboard.latestFromHub.title")}
+                </h2>
               </div>
               {loading ? (
                 <FeedListSkeleton count={5} />
               ) : (
                 <FeedList
                   entries={latest.slice(0, 8)}
-                  emptyText="No published lessons yet — be the first to share one."
+                  emptyText={t("dashboard.latestFromHub.empty")}
                 />
               )}
             </div>
             <div>
               <div className="mb-2 flex items-center gap-2">
                 <HistoryIcon className="size-4 text-primary" />
-                <h2 className="text-lg font-semibold">Your recent activity</h2>
+                <h2 className="text-lg font-semibold">
+                  {t("dashboard.recentActivity.title")}
+                </h2>
               </div>
               {loading ? (
                 <FeedListSkeleton count={5} />
               ) : (
                 <FeedList
                   entries={activity.slice(0, 8)}
-                  emptyText="You haven't published or commented yet. Your activity will show up here."
+                  emptyText={t("dashboard.recentActivity.empty")}
                 />
               )}
             </div>
@@ -408,24 +406,30 @@ function DashboardView() {
         </div>
 
         {/* Activity from the people this user follows (lessons + comments). */}
-        <DashboardPanel icon={Users2Icon} title="From people you follow">
+        <DashboardPanel
+          icon={Users2Icon}
+          title={t("dashboard.following.title")}
+        >
           {loading ? (
             <FeedListSkeleton count={4} />
           ) : (
             <FeedList
               entries={following.slice(0, 10)}
-              emptyText="Follow people from their profile to see their latest lessons and comments here."
+              emptyText={t("dashboard.following.empty")}
             />
           )}
         </DashboardPanel>
 
         {/* Notifications, in a roomier view than the header bell. */}
-        <DashboardPanel icon={BellIcon} title="Notifications">
+        <DashboardPanel
+          icon={BellIcon}
+          title={t("dashboard.notifications.title")}
+        >
           {loading ? (
             <FeedListSkeleton count={4} />
           ) : notifications.length === 0 ? (
             <p className="py-2 text-sm text-muted-foreground">
-              You&apos;re all caught up — no notifications.
+              {t("dashboard.notifications.empty")}
             </p>
           ) : (
             <div className="flex flex-col divide-y divide-border">
@@ -484,10 +488,10 @@ function DashboardView() {
 }
 
 export default function HomePage() {
+  const { t } = useTranslation("home");
   useDocumentMeta({
-    title: "Home",
-    description:
-      "Create, share and print Spelling (S2C) lessons with a focused editor, AI help, images and live collaboration.",
+    title: t("meta.title"),
+    description: t("meta.description"),
   });
   const { enabled, loading, user } = useAuth();
 
@@ -502,7 +506,7 @@ export default function HomePage() {
         title={
           <span className="inline-flex items-center gap-2">
             <SpellCheckIcon className="size-5 shrink-0" />
-            Spelling Creator
+            {t("header.title")}
           </span>
         }
         titleHref="/"
@@ -512,7 +516,7 @@ export default function HomePage() {
           className="mr-1 hidden shrink-0 items-center gap-2 rounded-md border border-primary-foreground/60 bg-transparent px-4 py-2 text-sm font-medium text-primary-foreground no-underline transition-colors hover:bg-primary-foreground/10 md:inline-flex"
         >
           <PencilIcon data-icon="inline-start" />
-          Editor
+          {t("header.editor")}
         </RouterLink>
         <NavActions current="home" />
       </AppHeader>
@@ -529,8 +533,7 @@ export default function HomePage() {
             <div className="mx-auto max-w-6xl px-4 pt-4">
               <Alert className="border-primary/40 bg-primary/10 text-primary">
                 <AlertDescription className="text-primary">
-                  Accounts aren&apos;t configured, so sign-in and the dashboard
-                  are unavailable — the editor and hub still work.
+                  {t("marketing.accountsDisabled")}
                 </AlertDescription>
               </Alert>
             </div>

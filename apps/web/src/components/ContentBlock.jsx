@@ -1,4 +1,5 @@
 import { memo, useRef } from "react";
+import { useTranslation } from "react-i18next";
 import {
   Trash2Icon,
   ArrowUpIcon,
@@ -47,20 +48,29 @@ function ContentBlock({
   onReplaceImageFile = null,
   onReplaceImageSearch = null,
 }) {
+  const { t } = useTranslation("editorSections");
   const controls = (
     <div className="flex shrink-0 items-center gap-1">
       {dragHandle}
-      <IconActionButton tooltip="Move up" onClick={onMoveUp} disabled={isFirst}>
+      <IconActionButton
+        tooltip={t("contentBlock.controls.moveUp")}
+        onClick={onMoveUp}
+        disabled={isFirst}
+      >
         <ArrowUpIcon />
       </IconActionButton>
       <IconActionButton
-        tooltip="Move down"
+        tooltip={t("contentBlock.controls.moveDown")}
         onClick={onMoveDown}
         disabled={isLast}
       >
         <ArrowDownIcon />
       </IconActionButton>
-      <IconActionButton tooltip="Delete block" onClick={onDelete} destructive>
+      <IconActionButton
+        tooltip={t("contentBlock.controls.delete")}
+        onClick={onDelete}
+        destructive
+      >
         <Trash2Icon />
       </IconActionButton>
     </div>
@@ -105,7 +115,7 @@ function ContentBlock({
     <div className="rounded-md border border-border bg-card p-4 text-card-foreground">
       <div className="flex items-start gap-2">
         <LiveTextarea
-          placeholder="Type lesson text here…"
+          placeholder={t("contentBlock.text.placeholder")}
           value={block.text || ""}
           onCommit={(text) => onChange({ ...block, text })}
           data-collab-field={`block:${block.id}:text`}
@@ -128,6 +138,7 @@ function ImageBlock({
   onReplaceFile = null,
   onReplaceSearch = null,
 }) {
+  const { t } = useTranslation("editorSections");
   const src = useImageSrc(block);
   const fileRef = useRef(null);
   const canReplace = Boolean(onReplaceFile || onReplaceSearch);
@@ -159,7 +170,7 @@ function ImageBlock({
           {src ? (
             <img
               src={src}
-              alt={block.caption || "lesson image"}
+              alt={block.caption || t("contentBlock.image.altFallback")}
               className="mb-3 block max-w-full rounded-md border border-border"
               style={{
                 width: preview.width,
@@ -186,15 +197,24 @@ function ImageBlock({
               onValueChange={(next) =>
                 next && onChange({ ...block, align: next })
               }
-              aria-label="image alignment"
+              aria-label={t("contentBlock.image.alignmentAriaLabel")}
             >
-              <ToggleGroupItem value="left" aria-label="align left">
+              <ToggleGroupItem
+                value="left"
+                aria-label={t("contentBlock.image.alignLeft")}
+              >
                 <AlignLeftIcon />
               </ToggleGroupItem>
-              <ToggleGroupItem value="center" aria-label="align center">
+              <ToggleGroupItem
+                value="center"
+                aria-label={t("contentBlock.image.alignCenter")}
+              >
                 <AlignCenterIcon />
               </ToggleGroupItem>
-              <ToggleGroupItem value="right" aria-label="align right">
+              <ToggleGroupItem
+                value="right"
+                aria-label={t("contentBlock.image.alignRight")}
+              >
                 <AlignRightIcon />
               </ToggleGroupItem>
             </ToggleGroup>
@@ -205,7 +225,7 @@ function ImageBlock({
               onValueChange={(next) =>
                 next && onChange({ ...block, size: next })
               }
-              aria-label="image size"
+              aria-label={t("contentBlock.image.sizeAriaLabel")}
             >
               {IMAGE_SIZES.map((s) => (
                 <ToggleGroupItem key={s.key} value={s.key}>
@@ -219,7 +239,7 @@ function ImageBlock({
                   <DropdownMenuTrigger asChild>
                     <Button type="button" variant="outline" size="sm">
                       <ArrowLeftRightIcon data-icon="inline-start" />
-                      Replace
+                      {t("contentBlock.image.replace")}
                     </Button>
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align="start">
@@ -228,9 +248,11 @@ function ImageBlock({
                         onSelect={() => fileRef.current?.click()}
                       >
                         <div className="flex flex-col gap-0.5">
-                          <span>Upload file</span>
+                          <span>
+                            {t("contentBlock.image.uploadFile.label")}
+                          </span>
                           <span className="text-xs text-muted-foreground">
-                            Swap in an image from your device
+                            {t("contentBlock.image.uploadFile.description")}
                           </span>
                         </div>
                       </DropdownMenuItem>
@@ -238,9 +260,11 @@ function ImageBlock({
                     {onReplaceSearch && (
                       <DropdownMenuItem onSelect={() => onReplaceSearch()}>
                         <div className="flex flex-col gap-0.5">
-                          <span>Search online</span>
+                          <span>
+                            {t("contentBlock.image.searchOnline.label")}
+                          </span>
                           <span className="text-xs text-muted-foreground">
-                            Find a replacement from Pixabay or Wikimedia
+                            {t("contentBlock.image.searchOnline.description")}
                           </span>
                         </div>
                       </DropdownMenuItem>
@@ -259,7 +283,7 @@ function ImageBlock({
           </div>
           <Field>
             <FieldLabel htmlFor={`${block.id}-caption`}>
-              Caption (optional)
+              {t("contentBlock.image.captionLabel")}
             </FieldLabel>
             <LiveInput
               id={`${block.id}-caption`}
@@ -286,6 +310,7 @@ function SpellingBlock({
   capitalizedWords = [],
   dragHandle = null,
 }) {
+  const { t } = useTranslation("editorSections");
   const words = block.words || [];
 
   const setWord = (id, text) =>
@@ -322,19 +347,21 @@ function SpellingBlock({
             style={{ backgroundColor: SPELLING_COLOR, color: "#fff" }}
             className="mb-3"
           >
-            Spelling words
+            {t("contentBlock.spelling.badge")}
           </Badge>
           <div className="flex flex-col gap-2">
             {words.map((w, i) => (
               <div key={w.id} className="flex items-center gap-1">
                 <LiveInput
-                  placeholder={`Word ${i + 1}`}
+                  placeholder={t("contentBlock.spelling.wordPlaceholder", {
+                    number: i + 1,
+                  })}
                   value={w.text}
                   onCommit={(text) => setWord(w.id, text)}
                   data-collab-field={`block:${block.id}:word:${w.id}`}
                 />
                 <IconActionButton
-                  tooltip="Remove word"
+                  tooltip={t("contentBlock.spelling.removeWord")}
                   onClick={() => removeWord(w.id)}
                   disabled={words.length <= 1}
                 >
@@ -345,7 +372,7 @@ function SpellingBlock({
             <div>
               <Button type="button" variant="ghost" size="sm" onClick={addWord}>
                 <PlusIcon data-icon="inline-start" />
-                Add word
+                {t("contentBlock.spelling.addWord")}
               </Button>
             </div>
           </div>
@@ -353,14 +380,14 @@ function SpellingBlock({
         <div className="flex shrink-0 items-center gap-1">
           {dragHandle}
           <IconActionButton
-            tooltip="Move up"
+            tooltip={t("contentBlock.controls.moveUp")}
             onClick={onMoveUp}
             disabled={isFirst}
           >
             <ArrowUpIcon />
           </IconActionButton>
           <IconActionButton
-            tooltip="Move down"
+            tooltip={t("contentBlock.controls.moveDown")}
             onClick={onMoveDown}
             disabled={isLast}
           >
@@ -369,8 +396,8 @@ function SpellingBlock({
           <IconActionButton
             tooltip={
               capitalizedWords.length
-                ? "Fill in every ALL-CAPS word from the lesson text"
-                : "No ALL-CAPS words in the lesson text yet"
+                ? t("contentBlock.spelling.fillCapitalizedAvailable")
+                : t("contentBlock.spelling.fillCapitalizedEmpty")
             }
             onClick={fillCapitalized}
             disabled={!capitalizedWords.length}
@@ -379,7 +406,7 @@ function SpellingBlock({
             <WandSparklesIcon />
           </IconActionButton>
           <IconActionButton
-            tooltip="Delete block"
+            tooltip={t("contentBlock.controls.delete")}
             onClick={onDelete}
             destructive
           >
@@ -392,6 +419,7 @@ function SpellingBlock({
 }
 
 function QuestionBlock({ block, onChange, controls }) {
+  const { t } = useTranslation("editorSections");
   const meta = questionMeta(block.questionType);
   const answers = block.answers || [];
   const steps = block.steps || [];
@@ -434,10 +462,12 @@ function QuestionBlock({ block, onChange, controls }) {
             {meta.label}
           </Badge>
           <Field>
-            <FieldLabel htmlFor={`${block.id}-prompt`}>Question</FieldLabel>
+            <FieldLabel htmlFor={`${block.id}-prompt`}>
+              {t("contentBlock.question.label")}
+            </FieldLabel>
             <LiveTextarea
               id={`${block.id}-prompt`}
-              placeholder="Type the question…"
+              placeholder={t("contentBlock.question.promptPlaceholder")}
               value={block.prompt || ""}
               onCommit={(prompt) => onChange({ ...block, prompt })}
               data-collab-field={`block:${block.id}:prompt`}
@@ -448,7 +478,9 @@ function QuestionBlock({ block, onChange, controls }) {
           {block.questionType === "number" && (
             <>
               <Field className="mt-3 max-w-[200px]">
-                <FieldLabel htmlFor={`${block.id}-answer`}>Answer</FieldLabel>
+                <FieldLabel htmlFor={`${block.id}-answer`}>
+                  {t("contentBlock.question.answerLabel")}
+                </FieldLabel>
                 <LiveInput
                   id={`${block.id}-answer`}
                   type="number"
@@ -462,13 +494,15 @@ function QuestionBlock({ block, onChange, controls }) {
                 {steps.map((step, i) => (
                   <div key={step.id} className="flex items-center gap-1">
                     <LiveInput
-                      placeholder={`Step ${i + 1}`}
+                      placeholder={t("contentBlock.question.stepPlaceholder", {
+                        number: i + 1,
+                      })}
                       value={step.text}
                       onCommit={(text) => setStep(step.id, text)}
                       data-collab-field={`block:${block.id}:step:${step.id}`}
                     />
                     <IconActionButton
-                      tooltip="Remove step"
+                      tooltip={t("contentBlock.question.removeStep")}
                       onClick={() => removeStep(step.id)}
                     >
                       <Trash2Icon />
@@ -483,12 +517,11 @@ function QuestionBlock({ block, onChange, controls }) {
                     onClick={addStep}
                   >
                     <PlusIcon data-icon="inline-start" />
-                    Add step
+                    {t("contentBlock.question.addStep")}
                   </Button>
                 </div>
                 <p className="text-xs text-muted-foreground">
-                  Optional: break the solution into steps students can work
-                  through.
+                  {t("contentBlock.question.stepsHelp")}
                 </p>
               </div>
             </>
@@ -496,10 +529,12 @@ function QuestionBlock({ block, onChange, controls }) {
 
           {block.questionType === "single" && (
             <Field className="mt-3">
-              <FieldLabel htmlFor={`${block.id}-answer`}>Answer</FieldLabel>
+              <FieldLabel htmlFor={`${block.id}-answer`}>
+                {t("contentBlock.question.answerLabel")}
+              </FieldLabel>
               <LiveInput
                 id={`${block.id}-answer`}
-                placeholder="The correct answer…"
+                placeholder={t("contentBlock.question.answerPlaceholder")}
                 value={block.answer ?? ""}
                 onCommit={(answer) => onChange({ ...block, answer })}
                 data-collab-field={`block:${block.id}:answer`}
@@ -512,13 +547,16 @@ function QuestionBlock({ block, onChange, controls }) {
               {answers.map((ans, i) => (
                 <div key={ans.id} className="flex items-center gap-1">
                   <LiveInput
-                    placeholder={`Answer ${i + 1}`}
+                    placeholder={t(
+                      "contentBlock.question.answerPlaceholderMultiple",
+                      { number: i + 1 },
+                    )}
                     value={ans.text}
                     onCommit={(text) => setAnswer(ans.id, text)}
                     data-collab-field={`block:${block.id}:answer:${ans.id}`}
                   />
                   <IconActionButton
-                    tooltip="Remove answer"
+                    tooltip={t("contentBlock.question.removeAnswer")}
                     onClick={() => removeAnswer(ans.id)}
                     disabled={answers.length <= 1}
                   >
@@ -534,22 +572,23 @@ function QuestionBlock({ block, onChange, controls }) {
                   onClick={addAnswer}
                 >
                   <PlusIcon data-icon="inline-start" />
-                  Add answer
+                  {t("contentBlock.question.addAnswer")}
                 </Button>
               </div>
               <p className="text-xs text-muted-foreground">
-                Type every accepted answer. The student only needs to give one
-                of them to be correct.
+                {t("contentBlock.question.answersHelp")}
               </p>
             </div>
           )}
 
           {block.questionType === "background" && (
             <Field className="mt-3">
-              <FieldLabel htmlFor={`${block.id}-answer`}>Answer</FieldLabel>
+              <FieldLabel htmlFor={`${block.id}-answer`}>
+                {t("contentBlock.question.answerLabel")}
+              </FieldLabel>
               <LiveInput
                 id={`${block.id}-answer`}
-                placeholder="The correct answer…"
+                placeholder={t("contentBlock.question.answerPlaceholder")}
                 value={block.answer ?? ""}
                 onCommit={(answer) => onChange({ ...block, answer })}
                 data-collab-field={`block:${block.id}:answer`}

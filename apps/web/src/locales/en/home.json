@@ -1,0 +1,78 @@
+{
+  "meta": {
+    "title": "Home",
+    "description": "Create, share and print Spelling (S2C) lessons with a focused editor, AI help, images and live collaboration."
+  },
+  "header": {
+    "title": "Spelling Creator",
+    "editor": "Editor"
+  },
+  "marketing": {
+    "hero": {
+      "title": "Spelling lessons that stick",
+      "subtitle": "Build, share and print Spelling (S2C) lessons — with a focused editor, AI help, images and live collaboration.",
+      "openEditor": "Open the editor",
+      "browseHub": "Browse the hub"
+    },
+    "accountsDisabled": "Accounts aren't configured, so sign-in and the dashboard are unavailable — the editor and hub still work.",
+    "features": {
+      "eyebrow": "Everything you need",
+      "heading": "From blank page to printed lesson",
+      "editor": {
+        "title": "A focused lesson editor",
+        "body": "Build lessons from named sections, each holding text, images, spelling-word lists and question blocks. Everything autosaves as you go."
+      },
+      "ai": {
+        "title": "AI that helps you write",
+        "body": "Draft passage text, generate question ideas, or spin up a whole lesson concept with built-in AI suggestions — then edit anything to taste."
+      },
+      "images": {
+        "title": "Find the perfect picture",
+        "body": "Search free image libraries without leaving the editor and drop an illustration straight into any section."
+      },
+      "hub": {
+        "title": "Share to the community hub",
+        "body": "Publish a lesson for everyone, browse what others have made, and copy any lesson to remix it into your own."
+      },
+      "collab": {
+        "title": "Collaborate live",
+        "body": "Invite a colleague to edit the same lesson in real time, with live cursors and a built-in chat."
+      },
+      "export": {
+        "title": "Export anywhere",
+        "body": "Download a finished lesson as a Word document or PDF, or save it straight to Google Docs for printing and sharing."
+      }
+    },
+    "cta": {
+      "title": "Ready to make your first lesson?",
+      "body": "No account needed to start building — sign in only when you want to publish or collaborate.",
+      "openEditor": "Open the editor"
+    }
+  },
+  "dashboard": {
+    "welcome": {
+      "withName": "Welcome back, {{name}}",
+      "default": "Welcome back"
+    },
+    "subtitle": "Pick up where you left off, or start something new.",
+    "newLesson": "New lesson",
+    "hub": "Hub",
+    "untitled": "Untitled",
+    "latestFromHub": {
+      "title": "Latest from the hub",
+      "empty": "No published lessons yet — be the first to share one."
+    },
+    "recentActivity": {
+      "title": "Your recent activity",
+      "empty": "You haven't published or commented yet. Your activity will show up here."
+    },
+    "following": {
+      "title": "From people you follow",
+      "empty": "Follow people from their profile to see their latest lessons and comments here."
+    },
+    "notifications": {
+      "title": "Notifications",
+      "empty": "You're all caught up — no notifications."
+    }
+  }
+}

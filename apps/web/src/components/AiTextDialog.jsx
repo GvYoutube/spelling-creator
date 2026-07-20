@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { Trans, useTranslation } from "react-i18next";
 import { SparklesIcon, ThumbsDownIcon } from "lucide-react";
 import {
   Dialog,
@@ -48,6 +49,7 @@ export default function AiTextDialog({
   const [dislikeBusy, setDislikeBusy] = useState(false);
   const widgetRef = useRef(null);
   const widgetIdRef = useRef(null);
+  const { t } = useTranslation("aiDialogs");
 
   const subject = (sectionTitle || "").trim();
   const working = busy || dislikeBusy;
@@ -68,7 +70,7 @@ export default function AiTextDialog({
   useEffect(() => {
     if (!open) return;
     if (!TURNSTILE_SITE_KEY) {
-      setError("VITE_TURNSTILE_SITE_KEY is not configured.");
+      setError(t("aiText.turnstileNotConfigured"));
       return;
     }
 
@@ -79,11 +81,11 @@ export default function AiTextDialog({
         if (cancelled || !widgetRef.current) return;
         widgetIdRef.current = turnstile.render(widgetRef.current, {
           sitekey: TURNSTILE_SITE_KEY,
-          callback: (t) => setToken(t),
+          callback: (tok) => setToken(tok),
           "expired-callback": () => setToken(""),
           "error-callback": () => {
             setToken("");
-            setError("Verification failed. Please try again.");
+            setError(t("aiText.verificationFailed"));
           },
         });
       })
@@ -96,7 +98,7 @@ export default function AiTextDialog({
         widgetIdRef.current = null;
       }
     };
-  }, [open]);
+  }, [open, t]);
 
   // The Turnstile token is single-use, so refresh the widget after each AI call
   // to have a fresh one ready for a possible regenerate.
@@ -109,7 +111,7 @@ export default function AiTextDialog({
 
   const handleGenerate = async () => {
     if (!subject) {
-      setError("Give this section a name first, then try again.");
+      setError(t("aiText.nameSectionFirst"));
       return;
     }
     setBusy(true);
@@ -119,7 +121,7 @@ export default function AiTextDialog({
       setResult(text);
       setDisliked(false);
     } catch (e) {
-      setError(e.message || "Something went wrong.");
+      setError(e.message || t("aiText.genericError"));
     } finally {
       // Spend the token either way: it is consumed once submitted.
       refreshChallenge();
@@ -134,7 +136,7 @@ export default function AiTextDialog({
       await dislikeText(subject, accessToken, { documentName });
       setDisliked(true);
     } catch (e) {
-      setError(e.message || "Could not remove that suggestion.");
+      setError(e.message || t("aiText.dislikeFailed"));
     } finally {
       setDislikeBusy(false);
     }
@@ -149,10 +151,10 @@ export default function AiTextDialog({
   // disabled state. Signing in is required because the action mutates the
   // shared server cache on behalf of an account.
   const dislikeReason = !user
-    ? "Sign in to remove this suggestion from the cache"
+    ? t("aiText.dislikeReasonSignedOut")
     : disliked
-      ? "Removed from the cache"
-      : "Not a good suggestion? Remove it from the cache";
+      ? t("aiText.dislikeReasonDisliked")
+      : t("aiText.dislikeReasonDefault");
 
   return (
     <Dialog
@@ -163,18 +165,19 @@ export default function AiTextDialog({
     >
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>Suggest text with AI</DialogTitle>
+          <DialogTitle>{t("aiText.title")}</DialogTitle>
           <DialogDescription>
             {subject ? (
-              <>
-                Generate a block of text for the section{" "}
-                <strong className="font-medium text-foreground">
-                  “{subject}”
-                </strong>
-                .
-              </>
+              <Trans
+                i18nKey="aiText.descriptionWithSubject"
+                ns="aiDialogs"
+                values={{ subject }}
+                components={{
+                  strong: <strong className="font-medium text-foreground" />,
+                }}
+              />
             ) : (
-              "Give this section a name first, that's what the text will be about."
+              t("aiText.descriptionNoSubject")
             )}
           </DialogDescription>
         </DialogHeader>
@@ -197,7 +200,7 @@ export default function AiTextDialog({
                         className={cn(disliked && "text-destructive")}
                         onClick={handleDislike}
                         disabled={!user || disliked || working}
-                        aria-label="Remove this suggestion from the cache"
+                        aria-label={t("aiText.dislikeAriaLabel")}
                       >
                         {dislikeBusy ? <Spinner /> : <ThumbsDownIcon />}
                       </Button>
@@ -207,8 +210,8 @@ export default function AiTextDialog({
                 </Tooltip>
                 <span className="text-xs text-muted-foreground">
                   {disliked
-                    ? "Removed from the cache — generate a fresh one below."
-                    : "Don’t like it? Remove it so the next try is freshly written."}
+                    ? t("aiText.helperDisliked")
+                    : t("aiText.helperDefault")}
                 </span>
               </div>
             </div>
@@ -230,7 +233,7 @@ export default function AiTextDialog({
             onClick={onClose}
             disabled={working}
           >
-            Cancel
+            {t("aiText.cancel")}
           </Button>
           {/* Insert is available once there is a reviewed suggestion. After a
               dislike it is demoted to "Insert anyway" in favour of regenerating. */}
@@ -241,7 +244,7 @@ export default function AiTextDialog({
               onClick={handleInsert}
               disabled={working}
             >
-              {disliked ? "Insert anyway" : "Insert"}
+              {disliked ? t("aiText.insertAnyway") : t("aiText.insert")}
             </Button>
           )}
           {/* Generate the first suggestion, or a fresh one after a dislike. */}
@@ -256,7 +259,11 @@ export default function AiTextDialog({
               ) : (
                 <SparklesIcon data-icon="inline-start" />
               )}
-              {busy ? "Generating…" : result ? "Generate fresh" : "Generate"}
+              {busy
+                ? t("aiText.generating")
+                : result
+                  ? t("aiText.generateFresh")
+                  : t("aiText.generate")}
             </Button>
           )}
         </DialogFooter>

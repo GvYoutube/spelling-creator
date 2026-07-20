@@ -6,6 +6,7 @@
 
 import { useEffect, useState } from "react";
 import { Link as RouterLink, useNavigate, useParams } from "react-router-dom";
+import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import {
   ArrowLeftIcon,
@@ -89,6 +90,7 @@ function formatDate(value) {
 }
 
 export default function LessonPage() {
+  const { t } = useTranslation("lesson");
   const { id } = useParams();
   const {
     user,
@@ -149,7 +151,7 @@ export default function LessonPage() {
         // on here — the page shows as soon as the lesson JSON arrives.
         setLesson(full);
       } catch (err) {
-        if (!cancelled) setError(err.message || "Could not open this lesson.");
+        if (!cancelled) setError(err.message || t("lessonPage.couldNotOpen"));
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -157,7 +159,7 @@ export default function LessonPage() {
     return () => {
       cancelled = true;
     };
-  }, [id, accessToken, authLoading]);
+  }, [id, accessToken, authLoading, t]);
 
   // Send the user to the editor to edit their own lesson. The editor fetches the
   // full lesson and warns before replacing any in-progress work, so we only hand
@@ -204,13 +206,13 @@ export default function LessonPage() {
     try {
       if (kind === "docx") {
         await exportDocx(lesson.doc);
-        toast("Word document downloaded.");
+        toast(t("lessonPage.wordDownloaded"));
       } else {
         await exportPdf(lesson.doc);
-        toast("PDF generated for printing.");
+        toast(t("lessonPage.pdfGenerated"));
       }
     } catch (err) {
-      toast(`Export failed: ${err.message || err}`);
+      toast(t("lessonPage.exportFailed", { error: err.message || err }));
     } finally {
       setBusy(null);
     }
@@ -218,7 +220,9 @@ export default function LessonPage() {
 
   // The title the user must type to confirm. Mirrors the fallback the hub and
   // backend use for an untitled lesson.
-  const deleteTarget = lesson ? lesson.title || "Untitled Lesson" : "";
+  const deleteTarget = lesson
+    ? lesson.title || t("lessonPage.untitledLesson")
+    : "";
   const deleteConfirmed = deleteText.trim() === deleteTarget;
 
   const closeDelete = () => {
@@ -240,7 +244,7 @@ export default function LessonPage() {
       // Hand the hub a one-shot toast so the user gets feedback after we leave.
       navigate("/hub", { state: { deletedTitle: deleteTarget } });
     } catch (err) {
-      setDeleteError(err.message || "Could not delete this lesson.");
+      setDeleteError(err.message || t("lessonPage.couldNotDelete"));
       setDeleteBusy(false);
     }
   };
@@ -265,9 +269,9 @@ export default function LessonPage() {
       const next = !lesson.shadowbanned;
       await setShadowban(id, next, accessToken);
       setLesson((prev) => (prev ? { ...prev, shadowbanned: next } : prev));
-      toast(next ? "Lesson shadowbanned." : "Lesson restored.");
+      toast(next ? t("lessonPage.shadowbanned") : t("lessonPage.restored"));
     } catch (err) {
-      toast(err.message || "Could not update the lesson.");
+      toast(err.message || t("lessonPage.couldNotUpdate"));
     } finally {
       setShadowBusy(false);
     }
@@ -277,14 +281,14 @@ export default function LessonPage() {
   const banAuthorName = async () => {
     const name = lesson?.author || "";
     if (!name) {
-      toast("This lesson has no author name to ban.");
+      toast(t("lessonPage.noAuthorNameToBan"));
       return;
     }
     try {
       await banName(name, accessToken);
-      toast(`Banned “${name}” from posting.`);
+      toast(t("lessonPage.bannedName", { name }));
     } catch (err) {
-      toast(err.message || "Could not ban the author.");
+      toast(err.message || t("lessonPage.couldNotBanAuthor"));
     }
   };
 
@@ -296,9 +300,9 @@ export default function LessonPage() {
       await requestLessonDeletion(id, reqReason.trim(), accessToken);
       setReqOpen(false);
       setReqReason("");
-      toast("Deletion request sent to admins.");
+      toast(t("lessonPage.deletionRequestSent"));
     } catch (err) {
-      setReqError(err.message || "Could not send the request.");
+      setReqError(err.message || t("lessonPage.couldNotSendRequest"));
     } finally {
       setReqBusy(false);
     }
@@ -311,9 +315,9 @@ export default function LessonPage() {
     try {
       await banIp(lesson.authorIp, "", accessToken);
       setIpBanOpen(false);
-      toast(`Banned IP ${lesson.authorIp}.`);
+      toast(t("lessonPage.bannedIp", { ip: lesson.authorIp }));
     } catch (err) {
-      setIpBanError(err.message || "Could not ban the IP.");
+      setIpBanError(err.message || t("lessonPage.couldNotBanIp"));
     } finally {
       setIpBanBusy(false);
     }
@@ -324,7 +328,9 @@ export default function LessonPage() {
   const description =
     (lesson && htmlToDescription(lessonPlainText(lesson.doc))) ||
     (lesson
-      ? `A spelling lesson${lesson.author ? ` by ${lesson.author}` : ""}.`
+      ? lesson.author
+        ? t("lessonPage.metaDescriptionByAuthor", { author: lesson.author })
+        : t("lessonPage.metaDescription")
       : undefined);
 
   // Per-page title + social/SEO tags. Crawlers receive these in the Worker's
@@ -333,7 +339,11 @@ export default function LessonPage() {
     type: "article",
     title:
       lesson?.title ||
-      (loading ? "Lesson" : error ? "Lesson not found" : "Lesson"),
+      (loading
+        ? t("lessonPage.lessonFallback")
+        : error
+          ? t("lessonPage.lessonNotFound")
+          : t("lessonPage.lessonFallback")),
     description,
   });
 
@@ -355,20 +365,24 @@ export default function LessonPage() {
   return (
     <div className="min-h-screen bg-background pb-16 text-foreground">
       <AppHeader
-        title={lesson?.title || "Lesson"}
+        title={lesson?.title || t("lessonPage.lessonFallback")}
         left={
           <Tooltip>
             <TooltipTrigger asChild>
               <RouterLink
                 to="/hub"
-                aria-label="lesson hub"
+                aria-label={t("lessonPage.lessonHubAriaLabel")}
                 className="mr-1 inline-flex shrink-0 items-center gap-2 rounded-md border-0 bg-transparent px-2.5 py-2 text-sm font-medium text-primary-foreground no-underline transition-colors hover:bg-primary-foreground/10 md:px-4"
               >
                 <ArrowLeftIcon data-icon="inline-start" />
-                <span className="hidden md:inline">Lesson hub</span>
+                <span className="hidden md:inline">
+                  {t("lessonPage.lessonHub")}
+                </span>
               </RouterLink>
             </TooltipTrigger>
-            <TooltipContent className="md:hidden">Lesson hub</TooltipContent>
+            <TooltipContent className="md:hidden">
+              {t("lessonPage.lessonHub")}
+            </TooltipContent>
           </Tooltip>
         }
       >
@@ -387,7 +401,7 @@ export default function LessonPage() {
                 ) : (
                   <PrinterIcon data-icon="inline-start" />
                 )}
-                Print PDF
+                {t("lessonPage.printPdf")}
               </Button>
               <Button
                 variant="ghost"
@@ -400,7 +414,7 @@ export default function LessonPage() {
                 ) : (
                   <FileDownIcon data-icon="inline-start" />
                 )}
-                Download Word
+                {t("lessonPage.downloadWord")}
               </Button>
               <Button
                 variant="ghost"
@@ -409,7 +423,7 @@ export default function LessonPage() {
                 className="text-primary-foreground hover:bg-primary-foreground/10 hover:text-primary-foreground"
               >
                 <GitForkIcon data-icon="inline-start" />
-                Fork
+                {t("lessonPage.fork")}
               </Button>
               {isAuthor && (
                 <>
@@ -419,7 +433,7 @@ export default function LessonPage() {
                     className="text-primary-foreground hover:bg-primary-foreground/10 hover:text-primary-foreground"
                   >
                     <PencilIcon data-icon="inline-start" />
-                    Edit
+                    {t("lessonPage.edit")}
                   </Button>
                   <Button
                     variant="ghost"
@@ -427,7 +441,7 @@ export default function LessonPage() {
                     className="text-primary-foreground hover:bg-primary-foreground/10 hover:text-primary-foreground"
                   >
                     <Trash2Icon data-icon="inline-start" />
-                    Delete
+                    {t("lessonPage.delete")}
                   </Button>
                 </>
               )}
@@ -440,14 +454,14 @@ export default function LessonPage() {
                   <DropdownMenuTrigger asChild>
                     <button
                       type="button"
-                      aria-label="lesson actions"
+                      aria-label={t("lessonPage.lessonActionsAriaLabel")}
                       className="inline-flex size-10 shrink-0 cursor-pointer items-center justify-center rounded-full border-0 bg-transparent text-primary-foreground no-underline transition-colors hover:bg-primary-foreground/10 md:hidden"
                     >
                       <EllipsisVerticalIcon />
                     </button>
                   </DropdownMenuTrigger>
                 </TooltipTrigger>
-                <TooltipContent>Lesson actions</TooltipContent>
+                <TooltipContent>{t("lessonPage.lessonActions")}</TooltipContent>
               </Tooltip>
               <DropdownMenuContent align="end">
                 <DropdownMenuItem
@@ -455,32 +469,32 @@ export default function LessonPage() {
                   disabled={Boolean(busy)}
                 >
                   <PrinterIcon />
-                  Print PDF
+                  {t("lessonPage.printPdf")}
                 </DropdownMenuItem>
                 <DropdownMenuItem
                   onClick={() => handleExport("docx")}
                   disabled={Boolean(busy)}
                 >
                   <FileDownIcon />
-                  Download Word
+                  {t("lessonPage.downloadWord")}
                 </DropdownMenuItem>
                 <DropdownMenuItem onClick={forkLesson} disabled={Boolean(busy)}>
                   <GitForkIcon />
-                  Fork
+                  {t("lessonPage.fork")}
                 </DropdownMenuItem>
                 {isAuthor && (
                   <>
                     <DropdownMenuSeparator />
                     <DropdownMenuItem onClick={editLesson}>
                       <PencilIcon />
-                      Edit
+                      {t("lessonPage.edit")}
                     </DropdownMenuItem>
                     <DropdownMenuItem
                       variant="destructive"
                       onClick={() => openDelete("author")}
                     >
                       <Trash2Icon />
-                      Delete
+                      {t("lessonPage.delete")}
                     </DropdownMenuItem>
                   </>
                 )}
@@ -495,14 +509,14 @@ export default function LessonPage() {
                     <DropdownMenuTrigger asChild>
                       <button
                         type="button"
-                        aria-label="moderation actions"
+                        aria-label={t("lessonPage.moderationActionsAriaLabel")}
                         className="inline-flex size-10 shrink-0 cursor-pointer items-center justify-center rounded-full border-0 bg-transparent text-primary-foreground no-underline transition-colors hover:bg-primary-foreground/10"
                       >
                         <ShieldIcon />
                       </button>
                     </DropdownMenuTrigger>
                   </TooltipTrigger>
-                  <TooltipContent>Moderation</TooltipContent>
+                  <TooltipContent>{t("lessonPage.moderation")}</TooltipContent>
                 </Tooltip>
                 <DropdownMenuContent align="end">
                   <DropdownMenuItem
@@ -511,12 +525,12 @@ export default function LessonPage() {
                   >
                     {lesson.shadowbanned ? <EyeIcon /> : <EyeOffIcon />}
                     {lesson.shadowbanned
-                      ? "Un-shadowban lesson"
-                      : "Shadowban lesson"}
+                      ? t("lessonPage.unshadowbanLesson")
+                      : t("lessonPage.shadowbanLesson")}
                   </DropdownMenuItem>
                   <DropdownMenuItem onClick={banAuthorName}>
                     <BanIcon />
-                    Ban author by name
+                    {t("lessonPage.banAuthorByName")}
                   </DropdownMenuItem>
                   {/* Mods request deletion; admins delete outright. */}
                   {!isAdmin && (
@@ -528,7 +542,7 @@ export default function LessonPage() {
                       }}
                     >
                       <Trash2Icon />
-                      Request deletion…
+                      {t("lessonPage.requestDeletion")}
                     </DropdownMenuItem>
                   )}
                   {isAdmin && (
@@ -537,7 +551,7 @@ export default function LessonPage() {
                       onClick={() => openDelete("admin")}
                     >
                       <Trash2Icon />
-                      Delete lesson fully…
+                      {t("lessonPage.deleteLessonFully")}
                     </DropdownMenuItem>
                   )}
                   {isAdmin && (
@@ -550,8 +564,8 @@ export default function LessonPage() {
                     >
                       <WifiOffIcon />
                       {lesson.authorIp
-                        ? "Ban author by IP"
-                        : "Ban by IP (no IP on record)"}
+                        ? t("lessonPage.banAuthorByIp")
+                        : t("lessonPage.banByIpNoRecord")}
                     </DropdownMenuItem>
                   )}
                 </DropdownMenuContent>
@@ -566,7 +580,7 @@ export default function LessonPage() {
         {!lessonHubEnabled && (
           <Alert className="border-primary/40 bg-primary/10 text-primary">
             <AlertDescription className="text-primary">
-              The lesson hub is not configured (VITE_API_URL is missing).
+              {t("lessonPage.hubDisabled")}
             </AlertDescription>
           </Alert>
         )}
@@ -579,7 +593,7 @@ export default function LessonPage() {
               {error}
               <Button variant="ghost" size="sm" asChild>
                 <RouterLink to="/hub" className="no-underline">
-                  Back to hub
+                  {t("lessonPage.backToHub")}
                 </RouterLink>
               </Button>
             </AlertDescription>
@@ -591,7 +605,7 @@ export default function LessonPage() {
             <div className="mb-4 flex flex-col">
               <div className="flex items-center gap-2">
                 <h1 className="text-3xl font-semibold">
-                  {lesson.title || "Untitled Lesson"}
+                  {lesson.title || t("lessonPage.untitledLesson")}
                 </h1>
                 {/* Only the author and mods/admins can load a shadowbanned
                     lesson, so this badge is never seen by the public. */}
@@ -601,7 +615,7 @@ export default function LessonPage() {
                     className="border-focus/40 bg-focus/10 text-focus"
                   >
                     <EyeOffIcon />
-                    Shadowbanned
+                    {t("lessonPage.shadowbannedBadge")}
                   </Badge>
                 )}
               </div>
@@ -611,13 +625,13 @@ export default function LessonPage() {
                     to={`/users/${lesson.authorId}`}
                     className="text-inherit no-underline hover:underline"
                   >
-                    {lesson.author || "Anonymous"}
+                    {lesson.author || t("lessonPage.anonymous")}
                   </RouterLink>
                 ) : (
-                  lesson.author || "Anonymous"
+                  lesson.author || t("lessonPage.anonymous")
                 )}
                 {typeof lesson.sectionCount === "number"
-                  ? ` · ${lesson.sectionCount} section${lesson.sectionCount === 1 ? "" : "s"}`
+                  ? ` · ${t("lessonPage.sectionCount", { count: lesson.sectionCount })}`
                   : ""}
                 {lesson.createdAt ? ` · ${formatDate(lesson.createdAt)}` : ""}
               </p>
@@ -629,11 +643,11 @@ export default function LessonPage() {
                     value={lesson.avgRating || 0}
                     readOnly
                     size="sm"
-                    aria-label="average rating"
+                    aria-label={t("lessonPage.averageRatingAriaLabel")}
                   />
                   <p className="text-sm text-muted-foreground">
-                    {(lesson.avgRating || 0).toFixed(1)} · {lesson.ratingCount}{" "}
-                    rating{lesson.ratingCount === 1 ? "" : "s"}
+                    {(lesson.avgRating || 0).toFixed(1)} ·{" "}
+                    {t("lessonPage.ratingCount", { count: lesson.ratingCount })}
                   </p>
                 </div>
               )}
@@ -663,15 +677,16 @@ export default function LessonPage() {
       <Dialog open={deleteOpen} onOpenChange={(next) => !next && closeDelete()}>
         <DialogContent className="sm:max-w-sm">
           <DialogHeader>
-            <DialogTitle>Delete this lesson?</DialogTitle>
+            <DialogTitle>{t("lessonPage.deleteDialog.title")}</DialogTitle>
           </DialogHeader>
           <p className="text-sm text-muted-foreground">
-            This permanently deletes <strong>{deleteTarget}</strong> from the
-            hub. This can’t be undone. To confirm, type the lesson’s name below.
+            {t("lessonPage.deleteDialog.descriptionBefore")}{" "}
+            <strong>{deleteTarget}</strong>{" "}
+            {t("lessonPage.deleteDialog.descriptionAfter")}
           </p>
           <Field>
             <FieldLabel htmlFor="delete-lesson-name" className="sr-only">
-              Lesson name
+              {t("lessonPage.deleteDialog.lessonNameLabel")}
             </FieldLabel>
             <Input
               id="delete-lesson-name"
@@ -698,7 +713,7 @@ export default function LessonPage() {
               onClick={closeDelete}
               disabled={deleteBusy}
             >
-              Cancel
+              {t("lessonPage.cancel")}
             </Button>
             <Button
               variant="destructive"
@@ -710,7 +725,7 @@ export default function LessonPage() {
               ) : (
                 <Trash2Icon data-icon="inline-start" />
               )}
-              Delete
+              {t("lessonPage.delete")}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -723,20 +738,21 @@ export default function LessonPage() {
       >
         <DialogContent className="sm:max-w-sm">
           <DialogHeader>
-            <DialogTitle>Request deletion</DialogTitle>
+            <DialogTitle>{t("lessonPage.requestDialog.title")}</DialogTitle>
           </DialogHeader>
           <p className="text-sm text-muted-foreground">
-            Ask an admin to permanently delete <strong>{deleteTarget}</strong>.
-            Add a reason to help them decide.
+            {t("lessonPage.requestDialog.descriptionBefore")}{" "}
+            <strong>{deleteTarget}</strong>
+            {t("lessonPage.requestDialog.descriptionAfter")}
           </p>
           <Field>
             <FieldLabel htmlFor="delete-request-reason" className="sr-only">
-              Reason (optional)
+              {t("lessonPage.requestDialog.reasonLabel")}
             </FieldLabel>
             <Input
               id="delete-request-reason"
               autoFocus
-              placeholder="Reason (optional)"
+              placeholder={t("lessonPage.requestDialog.reasonPlaceholder")}
               value={reqReason}
               onChange={(e) => setReqReason(e.target.value)}
               disabled={reqBusy}
@@ -754,11 +770,11 @@ export default function LessonPage() {
               onClick={() => setReqOpen(false)}
               disabled={reqBusy}
             >
-              Cancel
+              {t("lessonPage.cancel")}
             </Button>
             <Button onClick={submitDeleteRequest} disabled={reqBusy}>
               {reqBusy && <Spinner data-icon="inline-start" />}
-              Send request
+              {t("lessonPage.requestDialog.sendRequest")}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -771,13 +787,18 @@ export default function LessonPage() {
       >
         <DialogContent className="sm:max-w-sm">
           <DialogHeader>
-            <DialogTitle>Ban this IP address?</DialogTitle>
+            <DialogTitle>{t("lessonPage.ipBanDialog.title")}</DialogTitle>
           </DialogHeader>
           <p className="text-sm text-muted-foreground">
-            This blocks all posting from{" "}
-            <strong>{lesson?.authorIp || "this address"}</strong> (the address{" "}
-            <strong>{lesson?.author || "the author"}</strong> published this
-            lesson from). Existing content stays in place.
+            {t("lessonPage.ipBanDialog.descriptionPart1")}{" "}
+            <strong>
+              {lesson?.authorIp || t("lessonPage.ipBanDialog.thisAddress")}
+            </strong>{" "}
+            {t("lessonPage.ipBanDialog.descriptionPart2")}{" "}
+            <strong>
+              {lesson?.author || t("lessonPage.ipBanDialog.theAuthor")}
+            </strong>{" "}
+            {t("lessonPage.ipBanDialog.descriptionPart3")}
           </p>
           {ipBanError && (
             <Alert variant="destructive">
@@ -790,7 +811,7 @@ export default function LessonPage() {
               onClick={() => setIpBanOpen(false)}
               disabled={ipBanBusy}
             >
-              Cancel
+              {t("lessonPage.cancel")}
             </Button>
             <Button
               variant="destructive"
@@ -802,7 +823,7 @@ export default function LessonPage() {
               ) : (
                 <WifiOffIcon data-icon="inline-start" />
               )}
-              Ban IP
+              {t("lessonPage.ipBanDialog.banIp")}
             </Button>
           </DialogFooter>
         </DialogContent>

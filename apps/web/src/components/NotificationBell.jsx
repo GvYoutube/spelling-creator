@@ -6,6 +6,7 @@
 // comment at the top of that file for why.
 
 import { useCallback, useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
 import { BellIcon } from "lucide-react";
 import { cn } from "../lib/utils.js";
@@ -40,6 +41,7 @@ function formatDateTime(value) {
 }
 
 export default function NotificationBell() {
+  const { t } = useTranslation("common");
   const { enabled, user, accessToken } = useAuth();
   const navigate = useNavigate();
 
@@ -107,7 +109,11 @@ export default function NotificationBell() {
           <DropdownMenuTrigger asChild>
             <button
               type="button"
-              aria-label={`notifications${unread ? ` (${unread} unread)` : ""}`}
+              aria-label={
+                unread
+                  ? t("notificationBell.ariaLabelUnread", { count: unread })
+                  : t("notificationBell.ariaLabel")
+              }
               // Interim AppBar-inherit styling, matching NavActions.jsx —
               // bg-transparent is explicit since Tailwind preflight is off
               // for now (see the memory note on this).
@@ -122,18 +128,18 @@ export default function NotificationBell() {
             </button>
           </DropdownMenuTrigger>
         </TooltipTrigger>
-        <TooltipContent>Notifications</TooltipContent>
+        <TooltipContent>{t("notificationBell.tooltip")}</TooltipContent>
       </Tooltip>
 
       <DropdownMenuContent align="end" className="w-[340px] max-w-[90vw] p-0">
         <DropdownMenuLabel className="px-4 py-2 text-base font-normal">
-          Notifications
+          {t("notificationBell.menuLabel")}
         </DropdownMenuLabel>
         <DropdownMenuSeparator className="mx-0" />
 
         {notifications.length === 0 ? (
           <p className="px-4 py-4 text-sm text-muted-foreground">
-            No notifications yet.
+            {t("notificationBell.empty")}
           </p>
         ) : (
           <div className="max-h-[360px] overflow-y-auto">

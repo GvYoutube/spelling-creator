@@ -1,0 +1,27 @@
+{
+  "pageTitle": "Connect an app",
+  "errors": {
+    "missingRequest": "Missing request. Reconnect from your MCP client.",
+    "invalidEmail": "Please enter a valid email address.",
+    "magicLinkFailed": "Could not send the sign-in link.",
+    "approveFailed": "Could not complete the connection.",
+    "signInNotConfigured": "Sign-in is not configured on this deployment."
+  },
+  "signIn": {
+    "heading": "Sign in to connect",
+    "description": "wants to publish and manage spelling lessons on your behalf. Sign in to continue.",
+    "checkEmail": "Check your email for a sign-in link — opening it on this device brings you right back here.",
+    "emailLabel": "Email address",
+    "sendButton": "Send magic link"
+  },
+  "consent": {
+    "heading": "Connect {{clientName}}",
+    "signedInAs": "Signed in as",
+    "willLet": ". This will let",
+    "behalfText": "publish, update, and delete spelling lessons on your behalf — the same as you can do yourself in the editor."
+  },
+  "buttons": {
+    "deny": "Deny",
+    "approve": "Approve"
+  }
+}

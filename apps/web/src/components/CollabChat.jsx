@@ -10,6 +10,7 @@
 // scroll-to-newest anchor, and an unread count for while it's collapsed.
 
 import { useEffect, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { MessageCircleIcon, XIcon, SendIcon } from "lucide-react";
 import { Button } from "./ui/button.jsx";
 import { Input } from "./ui/input.jsx";
@@ -37,6 +38,7 @@ function formatTime(ts) {
 }
 
 export default function CollabChat({ collab }) {
+  const { t } = useTranslation("collab");
   const { status, role, participants, messages, myId, sendChat } = collab;
 
   const [open, setOpen] = useState(false);
@@ -96,17 +98,17 @@ export default function CollabChat({ collab }) {
               size="icon-lg"
               className="relative rounded-full shadow-[var(--shadow-panel)]"
               onClick={() => setOpen(true)}
-              aria-label="Open chat"
+              aria-label={t("chat.openChat")}
             >
               <MessageCircleIcon />
               {unread > 0 && (
                 <span className="absolute -top-1 -right-1 flex size-5 items-center justify-center rounded-full bg-destructive text-[10px] font-medium text-destructive-foreground ring-2 ring-background">
-                  {unread > 99 ? "99+" : unread}
+                  {unread > 99 ? t("chat.unreadOverflow") : unread}
                 </span>
               )}
             </Button>
           </TooltipTrigger>
-          <TooltipContent side="right">Open chat</TooltipContent>
+          <TooltipContent side="right">{t("chat.openChat")}</TooltipContent>
         </Tooltip>
       </div>
     );
@@ -117,7 +119,7 @@ export default function CollabChat({ collab }) {
       {/* Header */}
       <div className="flex items-center gap-2 bg-primary px-3 py-2 text-primary-foreground">
         <MessageCircleIcon className="size-4" />
-        <p className="flex-1 text-sm font-medium">Chat</p>
+        <p className="flex-1 text-sm font-medium">{t("chat.title")}</p>
         <Tooltip>
           <TooltipTrigger asChild>
             <Button
@@ -130,7 +132,7 @@ export default function CollabChat({ collab }) {
               <XIcon className="size-4" />
             </Button>
           </TooltipTrigger>
-          <TooltipContent>Close chat</TooltipContent>
+          <TooltipContent>{t("chat.closeChat")}</TooltipContent>
         </Tooltip>
       </div>
 
@@ -138,7 +140,7 @@ export default function CollabChat({ collab }) {
       <div className="flex-1 overflow-y-auto bg-muted p-3">
         {messages.length === 0 ? (
           <p className="py-6 text-center text-sm text-muted-foreground">
-            No messages yet — say hello!
+            {t("chat.noMessages")}
           </p>
         ) : (
           <div className="flex flex-col gap-2">
@@ -158,7 +160,7 @@ export default function CollabChat({ collab }) {
                   >
                     <AvatarImage
                       src={m.avatarUrl}
-                      alt={m.name || "Collaborator"}
+                      alt={m.name || t("chat.collaboratorFallback")}
                     />
                     <AvatarFallback
                       className={cn("text-xs text-white", mine && "bg-primary")}
@@ -178,8 +180,10 @@ export default function CollabChat({ collab }) {
                         mine ? "text-right" : "text-left",
                       )}
                     >
-                      {mine ? "You" : m.name || "Collaborator"} ·{" "}
-                      {formatTime(m.ts)}
+                      {mine
+                        ? t("chat.you")
+                        : m.name || t("chat.collaboratorFallback")}{" "}
+                      · {formatTime(m.ts)}
                     </p>
                     <div
                       className={cn(
@@ -204,7 +208,7 @@ export default function CollabChat({ collab }) {
       <div className="flex items-start gap-2 border-t border-border p-2">
         <Input
           autoFocus
-          placeholder="Type a message"
+          placeholder={t("chat.messagePlaceholder")}
           value={draft}
           onChange={(e) => setDraft(e.target.value)}
           onKeyDown={(e) => {
@@ -230,7 +234,7 @@ export default function CollabChat({ collab }) {
               </Button>
             </span>
           </TooltipTrigger>
-          <TooltipContent>Send</TooltipContent>
+          <TooltipContent>{t("chat.send")}</TooltipContent>
         </Tooltip>
       </div>
     </div>

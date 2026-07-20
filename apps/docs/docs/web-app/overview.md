@@ -76,3 +76,6 @@ PDF printing.
   [Version history](/monorepo/version-history)).
 - **Auto-save** - your work is kept in IndexedDB between reloads (images as binary
   blobs, so large drafts aren't capped by `localStorage`'s ~5 MB quota).
+- **Internationalization** - every user-facing string is routed through
+  react-i18next; only English ships today, but adding a language needs no component
+  changes (see [Internationalization](./internationalization.md)).

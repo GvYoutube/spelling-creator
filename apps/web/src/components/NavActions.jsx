@@ -13,6 +13,7 @@
 // throughout.
 
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
 import { Link as RouterLink, useNavigate } from "react-router-dom";
 import {
   BookMarkedIcon,
@@ -49,6 +50,7 @@ const outlineTrigger =
   "inline-flex items-center gap-2 rounded-md border border-primary-foreground/60 bg-transparent px-4 py-2 text-sm font-medium text-primary-foreground no-underline transition-colors hover:bg-primary-foreground/10";
 
 export default function NavActions({ current }) {
+  const { t } = useTranslation("common");
   const { enabled, user, displayName, signOut, isModerator } = useAuth();
   const { resolved, setScheme } = useColorScheme();
   const navigate = useNavigate();
@@ -64,20 +66,20 @@ export default function NavActions({ current }) {
             <TooltipTrigger asChild>
               <RouterLink
                 to="/hub"
-                aria-label="lesson hub"
+                aria-label={t("nav.lessonHubAriaLabel")}
                 className={cn(iconTrigger, "md:hidden")}
               >
                 <BookMarkedIcon />
               </RouterLink>
             </TooltipTrigger>
-            <TooltipContent>Lesson hub</TooltipContent>
+            <TooltipContent>{t("nav.lessonHub")}</TooltipContent>
           </Tooltip>
           <RouterLink
             to="/hub"
             className={cn(outlineTrigger, "hidden md:inline-flex")}
           >
             <BookMarkedIcon data-icon="inline-start" />
-            Lesson hub
+            {t("nav.lessonHub")}
           </RouterLink>
         </>
       )}
@@ -88,8 +90,8 @@ export default function NavActions({ current }) {
             type="button"
             aria-label={
               resolved === "dark"
-                ? "Switch to light mode"
-                : "Switch to dark mode"
+                ? t("nav.switchToLightMode")
+                : t("nav.switchToDarkMode")
             }
             onClick={() => setScheme(resolved === "dark" ? "light" : "dark")}
             className={iconTrigger}
@@ -98,7 +100,9 @@ export default function NavActions({ current }) {
           </button>
         </TooltipTrigger>
         <TooltipContent>
-          {resolved === "dark" ? "Switch to light mode" : "Switch to dark mode"}
+          {resolved === "dark"
+            ? t("nav.switchToLightMode")
+            : t("nav.switchToDarkMode")}
         </TooltipContent>
       </Tooltip>
 
@@ -111,18 +115,18 @@ export default function NavActions({ current }) {
                 <DropdownMenuTrigger asChild>
                   <button
                     type="button"
-                    aria-label="account menu"
+                    aria-label={t("nav.accountMenuAriaLabel")}
                     className={iconTrigger}
                   >
                     <CircleUserIcon />
                   </button>
                 </DropdownMenuTrigger>
               </TooltipTrigger>
-              <TooltipContent>{user.email || "Account"}</TooltipContent>
+              <TooltipContent>{user.email || t("nav.account")}</TooltipContent>
             </Tooltip>
             <DropdownMenuContent align="end">
               <DropdownMenuLabel className="flex flex-col">
-                <span>{displayName || "Signed in"}</span>
+                <span>{displayName || t("nav.signedIn")}</span>
                 <span className="break-all text-xs font-normal text-muted-foreground">
                   {user.email}
                 </span>
@@ -130,19 +134,21 @@ export default function NavActions({ current }) {
               <DropdownMenuSeparator />
               <DropdownMenuItem onClick={() => navigate(`/users/${user.id}`)}>
                 <UserIcon />
-                My profile
+                {t("nav.myProfile")}
               </DropdownMenuItem>
               <DropdownMenuItem onClick={() => setNameDialogOpen(true)}>
                 <IdCardIcon />
-                Edit display name
+                {t("nav.editDisplayName")}
               </DropdownMenuItem>
               {isModerator && (
                 <DropdownMenuItem onClick={() => navigate("/moderation")}>
                   <ShieldIcon />
-                  Moderation
+                  {t("nav.moderation")}
                 </DropdownMenuItem>
               )}
-              <DropdownMenuItem onClick={signOut}>Sign out</DropdownMenuItem>
+              <DropdownMenuItem onClick={signOut}>
+                {t("nav.signOut")}
+              </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
         </>
@@ -153,20 +159,20 @@ export default function NavActions({ current }) {
               <DropdownMenuTrigger asChild>
                 <button
                   type="button"
-                  aria-label="account menu"
+                  aria-label={t("nav.accountMenuAriaLabel")}
                   className={iconTrigger}
                 >
                   <CircleUserIcon />
                 </button>
               </DropdownMenuTrigger>
             </TooltipTrigger>
-            <TooltipContent>Account</TooltipContent>
+            <TooltipContent>{t("nav.account")}</TooltipContent>
           </Tooltip>
           <DropdownMenuContent align="end">
-            <DropdownMenuLabel>Signed out</DropdownMenuLabel>
+            <DropdownMenuLabel>{t("nav.signedOut")}</DropdownMenuLabel>
             <DropdownMenuSeparator />
             <DropdownMenuItem onClick={() => navigate("/login")}>
-              Sign in
+              {t("nav.signIn")}
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>

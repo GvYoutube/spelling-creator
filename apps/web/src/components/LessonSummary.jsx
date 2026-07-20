@@ -13,6 +13,7 @@
 // by the button click, never by an effect.
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { SparklesIcon, CheckIcon, CopyIcon } from "lucide-react";
 import { Button } from "./ui/button.jsx";
 import { Badge } from "./ui/badge.jsx";
@@ -118,6 +119,7 @@ function SummaryMarkdown({ text }) {
 }
 
 export default function LessonSummary({ doc }) {
+  const { t } = useTranslation("lesson");
   const [type, setType] = useState(DEFAULT_SUMMARY_TYPE);
   const [length, setLength] = useState(DEFAULT_SUMMARY_LENGTH);
 
@@ -268,8 +270,10 @@ export default function LessonSummary({ doc }) {
       >
         <div className="flex min-w-0 flex-1 items-center gap-2">
           <SparklesIcon className="size-4 shrink-0 text-primary" />
-          <p className="text-base font-semibold">Summary</p>
-          <Badge variant="outline">On-device AI</Badge>
+          <p className="text-base font-semibold">
+            {t("lessonSummary.heading")}
+          </p>
+          <Badge variant="outline">{t("lessonSummary.onDeviceAiBadge")}</Badge>
         </div>
 
         <Select
@@ -277,7 +281,11 @@ export default function LessonSummary({ doc }) {
           onValueChange={changeOption(setType)}
           disabled={running}
         >
-          <SelectTrigger size="sm" className="w-[130px]" aria-label="Style">
+          <SelectTrigger
+            size="sm"
+            className="w-[130px]"
+            aria-label={t("lessonSummary.styleAriaLabel")}
+          >
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
@@ -294,7 +302,11 @@ export default function LessonSummary({ doc }) {
           onValueChange={changeOption(setLength)}
           disabled={running}
         >
-          <SelectTrigger size="sm" className="w-[110px]" aria-label="Length">
+          <SelectTrigger
+            size="sm"
+            className="w-[110px]"
+            aria-label={t("lessonSummary.lengthAriaLabel")}
+          >
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
@@ -308,12 +320,14 @@ export default function LessonSummary({ doc }) {
 
         {running ? (
           <Button variant="ghost" onClick={cancel}>
-            Cancel
+            {t("lessonSummary.cancel")}
           </Button>
         ) : (
           <Button onClick={summarize}>
             <SparklesIcon data-icon="inline-start" />
-            {summary ? "Regenerate" : "Summarise"}
+            {summary
+              ? t("lessonSummary.regenerate")
+              : t("lessonSummary.summarise")}
           </Button>
         )}
       </div>
@@ -323,8 +337,9 @@ export default function LessonSummary({ doc }) {
       {phase === "downloading" && (
         <div className="mb-3">
           <p className="text-xs text-muted-foreground">
-            Downloading the on-device model (one time)…{" "}
-            {Math.round(progress * 100)}%
+            {t("lessonSummary.downloadingModel", {
+              percent: Math.round(progress * 100),
+            })}
           </p>
           <Progress
             value={progress > 0 ? progress * 100 : 100}
@@ -349,8 +364,8 @@ export default function LessonSummary({ doc }) {
         <div className="mt-2 flex items-center gap-2 border-t border-border pt-2">
           <p className="flex-1 text-xs text-muted-foreground">
             {truncated
-              ? "Summarised the first part of this lesson (it's too long for the on-device model) — AI summaries can be wrong."
-              : "Generated on your device by your browser's built-in AI — it can be wrong. Read the lesson before using it."}
+              ? t("lessonSummary.truncatedNotice")
+              : t("lessonSummary.generatedNotice")}
           </p>
           {summary && (
             <Tooltip>
@@ -359,7 +374,7 @@ export default function LessonSummary({ doc }) {
                   variant="ghost"
                   size="icon-sm"
                   onClick={copy}
-                  aria-label="copy summary"
+                  aria-label={t("lessonSummary.copySummaryAriaLabel")}
                 >
                   {copied ? (
                     <CheckIcon className="text-success" />
@@ -369,7 +384,9 @@ export default function LessonSummary({ doc }) {
                 </Button>
               </TooltipTrigger>
               <TooltipContent>
-                {copied ? "Copied" : "Copy summary"}
+                {copied
+                  ? t("lessonSummary.copied")
+                  : t("lessonSummary.copySummary")}
               </TooltipContent>
             </Tooltip>
           )}
@@ -383,8 +400,7 @@ export default function LessonSummary({ doc }) {
         !error &&
         availability !== "available" && (
           <p className="mt-2 text-xs text-muted-foreground">
-            The first summary downloads your browser&rsquo;s on-device model,
-            which can take a while. Nothing is sent to a server.
+            {t("lessonSummary.idleNotice")}
           </p>
         )}
     </div>

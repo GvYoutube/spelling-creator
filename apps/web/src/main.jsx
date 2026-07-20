@@ -1,6 +1,8 @@
 import React from "react";
 import ReactDOM from "react-dom/client";
 import { BrowserRouter } from "react-router-dom";
+// Registers all translation namespaces with i18next before anything renders.
+import "./lib/i18n.js";
 // Tailwind + shadcn/ui tokens (full preflight now that MUI's CssBaseline is
 // gone — see the comment at the top of globals.css). Imported once here so
 // every component can use the utility classes and CSS variables.

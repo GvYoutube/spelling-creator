@@ -9,6 +9,7 @@
 
 import { useEffect, useState } from "react";
 import { useSearchParams } from "react-router-dom";
+import { useTranslation } from "react-i18next";
 import { LockOpenIcon, MailCheckIcon } from "lucide-react";
 import { Button } from "../components/ui/button.jsx";
 import { Input } from "../components/ui/input.jsx";
@@ -24,7 +25,8 @@ import { useDocumentMeta } from "../lib/seo.js";
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 export default function OAuthAuthorizePage() {
-  useDocumentMeta({ title: "Connect an app" });
+  const { t } = useTranslation("oauth");
+  useDocumentMeta({ title: t("pageTitle") });
   const [searchParams] = useSearchParams();
   const state = searchParams.get("state") || "";
   const { enabled, loading, user, session, displayName, signInWithMagicLink } =
@@ -37,7 +39,7 @@ export default function OAuthAuthorizePage() {
   useEffect(() => {
     let active = true;
     if (!state) {
-      setReqError("Missing request. Reconnect from your MCP client.");
+      setReqError(t("errors.missingRequest"));
       setReqLoading(false);
       return;
     }
@@ -54,7 +56,7 @@ export default function OAuthAuthorizePage() {
     return () => {
       active = false;
     };
-  }, [state]);
+  }, [state, t]);
 
   const [email, setEmail] = useState("");
   const [sending, setSending] = useState(false);
@@ -68,7 +70,7 @@ export default function OAuthAuthorizePage() {
     e.preventDefault();
     setSignInError("");
     if (!EMAIL_RE.test(email.trim())) {
-      setSignInError("Please enter a valid email address.");
+      setSignInError(t("errors.invalidEmail"));
       return;
     }
     setSending(true);
@@ -79,7 +81,7 @@ export default function OAuthAuthorizePage() {
       await signInWithMagicLink(email.trim(), redirectTo);
       setSent(true);
     } catch (err) {
-      setSignInError(err.message || "Could not send the sign-in link.");
+      setSignInError(err.message || t("errors.magicLinkFailed"));
     } finally {
       setSending(false);
     }
@@ -96,7 +98,7 @@ export default function OAuthAuthorizePage() {
       );
       window.location.href = redirectTo;
     } catch (err) {
-      setDecideError(err.message || "Could not complete the connection.");
+      setDecideError(err.message || t("errors.approveFailed"));
       setDeciding(false);
     }
   };
@@ -115,7 +117,7 @@ export default function OAuthAuthorizePage() {
         {!enabled ? (
           <Alert>
             <AlertDescription>
-              Sign-in is not configured on this deployment.
+              {t("errors.signInNotConfigured")}
             </AlertDescription>
           </Alert>
         ) : reqLoading || loading ? (
@@ -133,22 +135,18 @@ export default function OAuthAuthorizePage() {
           <form onSubmit={sendMagicLink} className="flex flex-col gap-4">
             <div className="flex flex-col items-center gap-2 text-center">
               <LockOpenIcon className="size-10 text-primary" />
-              <h1 className="text-lg font-semibold">Sign in to connect</h1>
+              <h1 className="text-lg font-semibold">{t("signIn.heading")}</h1>
               <p className="text-sm text-muted-foreground">
                 <strong className="font-medium text-foreground">
                   {reqInfo.clientName}
                 </strong>{" "}
-                wants to publish and manage spelling lessons on your behalf.
-                Sign in to continue.
+                {t("signIn.description")}
               </p>
             </div>
             {sent ? (
               <Alert>
                 <MailCheckIcon />
-                <AlertDescription>
-                  Check your email for a sign-in link — opening it on this
-                  device brings you right back here.
-                </AlertDescription>
+                <AlertDescription>{t("signIn.checkEmail")}</AlertDescription>
               </Alert>
             ) : (
               <>
@@ -158,7 +156,9 @@ export default function OAuthAuthorizePage() {
                   </Alert>
                 )}
                 <Field>
-                  <FieldLabel htmlFor="oauth-email">Email address</FieldLabel>
+                  <FieldLabel htmlFor="oauth-email">
+                    {t("signIn.emailLabel")}
+                  </FieldLabel>
                   <Input
                     id="oauth-email"
                     autoFocus
@@ -170,7 +170,7 @@ export default function OAuthAuthorizePage() {
                 </Field>
                 <Button type="submit" disabled={sending}>
                   {sending && <Spinner data-icon="inline-start" />}
-                  Send magic link
+                  {t("signIn.sendButton")}
                 </Button>
               </>
             )}
@@ -180,20 +180,19 @@ export default function OAuthAuthorizePage() {
             <div className="flex flex-col items-center gap-2 text-center">
               <LockOpenIcon className="size-10 text-primary" />
               <h1 className="text-lg font-semibold">
-                Connect {reqInfo.clientName}
+                {t("consent.heading", { clientName: reqInfo.clientName })}
               </h1>
             </div>
             <p className="text-sm text-muted-foreground">
-              Signed in as{" "}
+              {t("consent.signedInAs")}{" "}
               <strong className="font-medium text-foreground">
                 {displayName || user.email}
               </strong>
-              . This will let{" "}
+              {t("consent.willLet")}{" "}
               <strong className="font-medium text-foreground">
                 {reqInfo.clientName}
               </strong>{" "}
-              publish, update, and delete spelling lessons on your behalf — the
-              same as you can do yourself in the editor.
+              {t("consent.behalfText")}
             </p>
             <Separator />
             {decideError && (
@@ -208,11 +207,11 @@ export default function OAuthAuthorizePage() {
                 onClick={deny}
                 disabled={deciding}
               >
-                Deny
+                {t("buttons.deny")}
               </Button>
               <Button type="button" onClick={approve} disabled={deciding}>
                 {deciding && <Spinner data-icon="inline-start" />}
-                Approve
+                {t("buttons.approve")}
               </Button>
             </div>
           </div>

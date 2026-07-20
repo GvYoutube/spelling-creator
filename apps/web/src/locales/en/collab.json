@@ -1,0 +1,93 @@
+{
+  "collaborateDialog": {
+    "title": "Collaborate on this lesson",
+    "close": "Close",
+    "endSession": "End session",
+    "leave": "Leave",
+    "dismiss": "Dismiss",
+    "orDivider": "or",
+    "emailPlaceholder": "name@example.com",
+    "landing": {
+      "signInPrompt": "Sign in to start or join a live collaboration session.",
+      "inviteHeading": "Invite people to this lesson",
+      "inviteDescription": "Start a live session, then share the code. People who join wait until you add them to the lesson — after that, your edits sync both ways in real time.",
+      "startSession": "Start a collaboration session",
+      "joinHeading": "Join someone's lesson",
+      "joinCodeLabel": "Session code",
+      "joinCodePlaceholder": "Paste the code you were given",
+      "join": "Join",
+      "joinHint": "Joining replaces your current draft with the host's lesson."
+    },
+    "connecting": {
+      "host": "Starting session…",
+      "guest": "Connecting to the host…"
+    },
+    "host": {
+      "sessionLive": "Your session is live. Share the code or link below to invite people.",
+      "sessionCodeLabel": "Session code",
+      "copyCode": "Copy code",
+      "copiedCode": "Copied!",
+      "copyInviteLink": "Copy invite link",
+      "inviteLinkCopied": "Invite link copied!",
+      "sendLink": "Send link",
+      "waitingToJoin": "Waiting to join ({{count}})",
+      "addToLesson": "Add to lesson",
+      "decline": "Decline",
+      "someone": "Someone",
+      "wantsToCollaborate": "wants to collaborate"
+    },
+    "roster": {
+      "inThisLesson": "In this lesson ({{count}})",
+      "collaboratorFallback": "Collaborator",
+      "host": "Host",
+      "removeFromLesson": "Remove from lesson"
+    },
+    "guest": {
+      "admittedMessage": "You're collaborating live. Your changes sync with everyone here.",
+      "waitingForHost": "Connected — waiting for the host to add you to the lesson."
+    },
+    "trusted": {
+      "heading": "Trusted collaborators",
+      "description": "People on this list are emailed this lesson's invite link automatically whenever you start a session, and they join straight away without waiting for your approval. This list is saved with the lesson.",
+      "addByEmailLabel": "Add by email",
+      "add": "Add",
+      "remove": "Remove",
+      "signInToAutoInvite": "Sign in to automatically email the invite link to trusted collaborators.",
+      "invalidEmail": "Enter a valid email address.",
+      "alreadyOnList": "That collaborator is already on the list.",
+      "inviteMessage": "You're a trusted collaborator on this lesson — join the live session with this link."
+    },
+    "autoSend": {
+      "sending": "Sending the invite link to your trusted collaborators…",
+      "partialFailure": "Invited {{count}}; couldn't reach {{emails}}.",
+      "sent_one": "Invite link sent to {{count}} trusted collaborator.",
+      "sent_other": "Invite link sent to {{count}} trusted collaborators."
+    },
+    "sendLinkDialog": {
+      "title": "Send the invite link",
+      "sentMessage": "The invite link was sent. It will pop up in that user's notifications.",
+      "done": "Done",
+      "description": "Enter the email of the person you want to invite. They'll see this session's invite link in their notifications the next time they're signed in.",
+      "recipientEmailLabel": "Recipient email",
+      "messageLabel": "Message (optional)",
+      "cancel": "Cancel",
+      "sending": "Sending…",
+      "send": "Send link",
+      "sendFailedDefault": "Could not send the link."
+    }
+  },
+  "chat": {
+    "openChat": "Open chat",
+    "closeChat": "Close chat",
+    "title": "Chat",
+    "noMessages": "No messages yet — say hello!",
+    "you": "You",
+    "collaboratorFallback": "Collaborator",
+    "messagePlaceholder": "Type a message",
+    "send": "Send",
+    "unreadOverflow": "99+"
+  },
+  "cursors": {
+    "collaboratorFallback": "Collaborator"
+  }
+}

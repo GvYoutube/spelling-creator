@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { Trans, useTranslation } from "react-i18next";
 import { SparklesIcon } from "lucide-react";
 import {
   Dialog,
@@ -38,6 +39,7 @@ export default function AiLessonIdeaDialog({
   const [ideas, setIdeas] = useState([]);
   const widgetRef = useRef(null);
   const widgetIdRef = useRef(null);
+  const { t } = useTranslation("aiDialogs");
 
   // Reset the form each time the dialog opens.
   useEffect(() => {
@@ -53,7 +55,7 @@ export default function AiLessonIdeaDialog({
   useEffect(() => {
     if (!open) return;
     if (!TURNSTILE_SITE_KEY) {
-      setError("VITE_TURNSTILE_SITE_KEY is not configured.");
+      setError(t("aiLessonIdea.turnstileNotConfigured"));
       return;
     }
 
@@ -64,11 +66,11 @@ export default function AiLessonIdeaDialog({
         if (cancelled || !widgetRef.current) return;
         widgetIdRef.current = turnstile.render(widgetRef.current, {
           sitekey: TURNSTILE_SITE_KEY,
-          callback: (t) => setToken(t),
+          callback: (tok) => setToken(tok),
           "expired-callback": () => setToken(""),
           "error-callback": () => {
             setToken("");
-            setError("Verification failed. Please try again.");
+            setError(t("aiLessonIdea.verificationFailed"));
           },
         });
       })
@@ -81,7 +83,7 @@ export default function AiLessonIdeaDialog({
         widgetIdRef.current = null;
       }
     };
-  }, [open]);
+  }, [open, t]);
 
   // The Turnstile token is single-use, so refresh the widget after each AI call
   // to have a fresh one ready for a possible regenerate.
@@ -99,10 +101,10 @@ export default function AiLessonIdeaDialog({
       const next = await suggestLessonIdeas(ageRange, token);
       setIdeas(next);
       if (!next.length) {
-        setError("No ideas came back — try generating again.");
+        setError(t("aiLessonIdea.noIdeas"));
       }
     } catch (e) {
-      setError(e.message || "Something went wrong.");
+      setError(e.message || t("aiLessonIdea.genericError"));
     } finally {
       // Spend the token either way: it is consumed once submitted.
       refreshChallenge();
@@ -124,20 +126,21 @@ export default function AiLessonIdeaDialog({
     >
       <DialogContent className="sm:max-w-lg">
         <DialogHeader>
-          <DialogTitle>Suggest lesson ideas with AI</DialogTitle>
+          <DialogTitle>{t("aiLessonIdea.title")}</DialogTitle>
           <DialogDescription>
             {ageRange ? (
-              <>
-                Ideas for lessons aimed at{" "}
-                <Badge variant="secondary" className="align-middle">
-                  {ageRange}
-                </Badge>
-                .
-              </>
+              <Trans
+                i18nKey="aiLessonIdea.descriptionWithAgeRange"
+                ns="aiDialogs"
+                values={{ ageRange }}
+                components={{
+                  badge: <Badge variant="secondary" className="align-middle" />,
+                }}
+              />
             ) : (
-              "Set an age range above to tailor the ideas, or generate general ideas now."
+              t("aiLessonIdea.descriptionNoAgeRange")
             )}{" "}
-            Pick one to use it as your lesson title.
+            {t("aiLessonIdea.descriptionSuffix")}
           </DialogDescription>
         </DialogHeader>
 
@@ -178,7 +181,7 @@ export default function AiLessonIdeaDialog({
             onClick={onClose}
             disabled={busy}
           >
-            Cancel
+            {t("aiLessonIdea.cancel")}
           </Button>
           <Button
             type="button"
@@ -190,7 +193,11 @@ export default function AiLessonIdeaDialog({
             ) : (
               <SparklesIcon data-icon="inline-start" />
             )}
-            {busy ? "Generating…" : ideas.length ? "Generate more" : "Generate"}
+            {busy
+              ? t("aiLessonIdea.generating")
+              : ideas.length
+                ? t("aiLessonIdea.generateMore")
+                : t("aiLessonIdea.generate")}
           </Button>
         </DialogFooter>
       </DialogContent>

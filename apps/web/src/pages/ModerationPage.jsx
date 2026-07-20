@@ -12,6 +12,7 @@
 import { useEffect, useState } from "react";
 import { Link as RouterLink } from "react-router-dom";
 import { toast } from "sonner";
+import { useTranslation } from "react-i18next";
 import {
   ArrowLeftIcon,
   Trash2Icon,
@@ -79,6 +80,7 @@ function RemovableBadge({ label, onRemove, removeLabel }) {
 
 // --- Bans (names for all mods; IPs for admins) ---------------------------
 function BansSection({ accessToken, isAdmin, onToast }) {
+  const { t } = useTranslation("moderation");
   const [names, setNames] = useState([]);
   const [ips, setIps] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -94,7 +96,7 @@ function BansSection({ accessToken, isAdmin, onToast }) {
       setNames(n);
       setIps(i);
     } catch (err) {
-      setError(err.message || "Could not load bans.");
+      setError(err.message || t("bans.errors.loadFailed"));
     } finally {
       setLoading(false);
     }
@@ -111,20 +113,20 @@ function BansSection({ accessToken, isAdmin, onToast }) {
     try {
       await banName(name, accessToken);
       setNameDraft("");
-      onToast(`Banned "${name}".`);
+      onToast(t("bans.toasts.nameBanned", { name }));
       load();
     } catch (err) {
-      onToast(err.message || "Could not ban the name.");
+      onToast(err.message || t("bans.toasts.nameBanFailed"));
     }
   };
 
   const liftName = async (nameLower) => {
     try {
       await unbanName(nameLower, accessToken);
-      onToast("Name ban lifted.");
+      onToast(t("bans.toasts.nameBanLifted"));
       load();
     } catch (err) {
-      onToast(err.message || "Could not lift the ban.");
+      onToast(err.message || t("bans.toasts.liftBanFailed"));
     }
   };
 
@@ -134,25 +136,25 @@ function BansSection({ accessToken, isAdmin, onToast }) {
     try {
       await banIp(ip, "", accessToken);
       setIpDraft("");
-      onToast(`Banned IP ${ip}.`);
+      onToast(t("bans.toasts.ipBanned", { ip }));
       load();
     } catch (err) {
-      onToast(err.message || "Could not ban the IP.");
+      onToast(err.message || t("bans.toasts.ipBanFailed"));
     }
   };
 
   const liftIp = async (ip) => {
     try {
       await unbanIp(ip, accessToken);
-      onToast("IP ban lifted.");
+      onToast(t("bans.toasts.ipBanLifted"));
       load();
     } catch (err) {
-      onToast(err.message || "Could not lift the ban.");
+      onToast(err.message || t("bans.toasts.liftBanFailed"));
     }
   };
 
   return (
-    <Section title="Bans">
+    <Section title={t("bans.title")}>
       {loading ? (
         <ListRowsSkeleton />
       ) : error ? (
@@ -162,26 +164,30 @@ function BansSection({ accessToken, isAdmin, onToast }) {
       ) : (
         <div className="flex flex-col gap-4">
           <div>
-            <h3 className="mb-2 text-sm font-medium">Banned names</h3>
+            <h3 className="mb-2 text-sm font-medium">
+              {t("bans.names.heading")}
+            </h3>
             <div className="mb-2 flex items-end gap-2">
               <Field>
                 <FieldLabel htmlFor="ban-name" className="sr-only">
-                  Display name
+                  {t("bans.names.label")}
                 </FieldLabel>
                 <Input
                   id="ban-name"
-                  placeholder="Display name"
+                  placeholder={t("bans.names.label")}
                   value={nameDraft}
                   onChange={(e) => setNameDraft(e.target.value)}
                   onKeyDown={(e) => e.key === "Enter" && addName()}
                 />
               </Field>
               <Button onClick={addName} disabled={!nameDraft.trim()}>
-                Ban
+                {t("bans.names.ban")}
               </Button>
             </div>
             {names.length === 0 ? (
-              <p className="text-sm text-muted-foreground">No name bans.</p>
+              <p className="text-sm text-muted-foreground">
+                {t("bans.names.empty")}
+              </p>
             ) : (
               <div className="flex flex-wrap gap-1.5">
                 {names.map((n) => (
@@ -189,7 +195,9 @@ function BansSection({ accessToken, isAdmin, onToast }) {
                     key={n.name_lower}
                     label={n.display_name || n.name_lower}
                     onRemove={() => liftName(n.name_lower)}
-                    removeLabel={`Lift ban on ${n.display_name || n.name_lower}`}
+                    removeLabel={t("bans.names.liftLabel", {
+                      name: n.display_name || n.name_lower,
+                    })}
                   />
                 ))}
               </div>
@@ -200,26 +208,30 @@ function BansSection({ accessToken, isAdmin, onToast }) {
             <>
               <hr className="border-border" />
               <div>
-                <h3 className="mb-2 text-sm font-medium">Banned IPs</h3>
+                <h3 className="mb-2 text-sm font-medium">
+                  {t("bans.ips.heading")}
+                </h3>
                 <div className="mb-2 flex items-end gap-2">
                   <Field>
                     <FieldLabel htmlFor="ban-ip" className="sr-only">
-                      IP address
+                      {t("bans.ips.label")}
                     </FieldLabel>
                     <Input
                       id="ban-ip"
-                      placeholder="IP address"
+                      placeholder={t("bans.ips.label")}
                       value={ipDraft}
                       onChange={(e) => setIpDraft(e.target.value)}
                       onKeyDown={(e) => e.key === "Enter" && addIp()}
                     />
                   </Field>
                   <Button onClick={addIp} disabled={!ipDraft.trim()}>
-                    Ban
+                    {t("bans.ips.ban")}
                   </Button>
                 </div>
                 {ips.length === 0 ? (
-                  <p className="text-sm text-muted-foreground">No IP bans.</p>
+                  <p className="text-sm text-muted-foreground">
+                    {t("bans.ips.empty")}
+                  </p>
                 ) : (
                   <div className="flex flex-wrap gap-1.5">
                     {ips.map((i) => (
@@ -227,7 +239,7 @@ function BansSection({ accessToken, isAdmin, onToast }) {
                         key={i.ip}
                         label={i.ip}
                         onRemove={() => liftIp(i.ip)}
-                        removeLabel={`Lift ban on ${i.ip}`}
+                        removeLabel={t("bans.ips.liftLabel", { ip: i.ip })}
                       />
                     ))}
                   </div>
@@ -243,6 +255,7 @@ function BansSection({ accessToken, isAdmin, onToast }) {
 
 // --- Shadowbanned lessons (mod+) -----------------------------------------
 function ShadowbannedSection({ accessToken, onToast }) {
+  const { t } = useTranslation("moderation");
   const [lessons, setLessons] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -253,7 +266,7 @@ function ShadowbannedSection({ accessToken, onToast }) {
     try {
       setLessons(await listShadowbannedLessons(accessToken));
     } catch (err) {
-      setError(err.message || "Could not load lessons.");
+      setError(err.message || t("shadowbanned.errors.loadFailed"));
     } finally {
       setLoading(false);
     }
@@ -267,15 +280,15 @@ function ShadowbannedSection({ accessToken, onToast }) {
   const restore = async (lessonId) => {
     try {
       await setShadowban(lessonId, false, accessToken);
-      onToast("Lesson restored.");
+      onToast(t("shadowbanned.toasts.restored"));
       setLessons((prev) => prev.filter((l) => l.id !== lessonId));
     } catch (err) {
-      onToast(err.message || "Could not restore the lesson.");
+      onToast(err.message || t("shadowbanned.toasts.restoreFailed"));
     }
   };
 
   return (
-    <Section title="Shadowbanned lessons">
+    <Section title={t("shadowbanned.title")}>
       {loading ? (
         <ListRowsSkeleton />
       ) : error ? (
@@ -284,7 +297,7 @@ function ShadowbannedSection({ accessToken, onToast }) {
         </Alert>
       ) : lessons.length === 0 ? (
         <p className="text-sm text-muted-foreground">
-          No shadowbanned lessons.
+          {t("shadowbanned.empty")}
         </p>
       ) : (
         <div className="flex flex-col divide-y divide-border">
@@ -298,14 +311,14 @@ function ShadowbannedSection({ accessToken, onToast }) {
                   to={`/hub/${l.id}`}
                   className="block truncate text-sm font-medium text-primary hover:underline"
                 >
-                  {l.title || "Untitled Lesson"}
+                  {l.title || t("shadowbanned.untitledLesson")}
                 </RouterLink>
                 <p className="text-xs text-muted-foreground">
-                  {l.author || "Anonymous"}
+                  {l.author || t("common.anonymous")}
                 </p>
               </div>
               <Button variant="ghost" size="sm" onClick={() => restore(l.id)}>
-                Un-shadowban
+                {t("shadowbanned.restore")}
               </Button>
             </div>
           ))}
@@ -317,6 +330,7 @@ function ShadowbannedSection({ accessToken, onToast }) {
 
 // --- Pending lesson-deletion requests (admin) ----------------------------
 function DeleteRequestsSection({ accessToken, onToast }) {
+  const { t } = useTranslation("moderation");
   const [requests, setRequests] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -327,7 +341,7 @@ function DeleteRequestsSection({ accessToken, onToast }) {
     try {
       setRequests(await listDeleteRequests(accessToken));
     } catch (err) {
-      setError(err.message || "Could not load requests.");
+      setError(err.message || t("deleteRequests.errors.loadFailed"));
     } finally {
       setLoading(false);
     }
@@ -341,15 +355,19 @@ function DeleteRequestsSection({ accessToken, onToast }) {
   const resolve = async (requestId, approve) => {
     try {
       await resolveDeleteRequest(requestId, approve, accessToken);
-      onToast(approve ? "Lesson deleted." : "Request denied.");
+      onToast(
+        approve
+          ? t("deleteRequests.toasts.approved")
+          : t("deleteRequests.toasts.denied"),
+      );
       setRequests((prev) => prev.filter((r) => r.id !== requestId));
     } catch (err) {
-      onToast(err.message || "Could not resolve the request.");
+      onToast(err.message || t("deleteRequests.toasts.resolveFailed"));
     }
   };
 
   return (
-    <Section title="Pending deletion requests">
+    <Section title={t("deleteRequests.title")}>
       {loading ? (
         <ListRowsSkeleton />
       ) : error ? (
@@ -357,7 +375,9 @@ function DeleteRequestsSection({ accessToken, onToast }) {
           <AlertDescription>{error}</AlertDescription>
         </Alert>
       ) : requests.length === 0 ? (
-        <p className="text-sm text-muted-foreground">No pending requests.</p>
+        <p className="text-sm text-muted-foreground">
+          {t("deleteRequests.empty")}
+        </p>
       ) : (
         <div className="flex flex-col divide-y divide-border">
           {requests.map((r) => (
@@ -368,10 +388,11 @@ function DeleteRequestsSection({ accessToken, onToast }) {
                     to={`/hub/${r.lessonId}`}
                     className="block truncate text-sm font-medium text-primary hover:underline"
                   >
-                    {r.lessonTitle || "(deleted lesson)"}
+                    {r.lessonTitle || t("deleteRequests.deletedLesson")}
                   </RouterLink>
                   <p className="text-xs text-muted-foreground">
-                    {r.lessonAuthor || "Anonymous"} · {formatDate(r.createdAt)}
+                    {r.lessonAuthor || t("common.anonymous")} ·{" "}
+                    {formatDate(r.createdAt)}
                   </p>
                 </div>
                 <div className="flex shrink-0 gap-2">
@@ -381,14 +402,14 @@ function DeleteRequestsSection({ accessToken, onToast }) {
                     onClick={() => resolve(r.id, true)}
                   >
                     <Trash2Icon data-icon="inline-start" />
-                    Approve
+                    {t("deleteRequests.approve")}
                   </Button>
                   <Button
                     variant="ghost"
                     size="sm"
                     onClick={() => resolve(r.id, false)}
                   >
-                    Deny
+                    {t("deleteRequests.deny")}
                   </Button>
                 </div>
               </div>
@@ -405,6 +426,7 @@ function DeleteRequestsSection({ accessToken, onToast }) {
 
 // --- Moderators (admin) ---------------------------------------------------
 function ModeratorsSection({ accessToken, onToast }) {
+  const { t } = useTranslation("moderation");
   const [moderators, setModerators] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -417,7 +439,7 @@ function ModeratorsSection({ accessToken, onToast }) {
     try {
       setModerators(await listModerators(accessToken));
     } catch (err) {
-      setError(err.message || "Could not load moderators.");
+      setError(err.message || t("moderators.errors.loadFailed"));
     } finally {
       setLoading(false);
     }
@@ -435,10 +457,10 @@ function ModeratorsSection({ accessToken, onToast }) {
     try {
       await addModerator(email, accessToken);
       setEmailDraft("");
-      onToast(`Added ${email} as a moderator.`);
+      onToast(t("moderators.toasts.added", { email }));
       load();
     } catch (err) {
-      onToast(err.message || "Could not add the moderator.");
+      onToast(err.message || t("moderators.toasts.addFailed"));
     } finally {
       setAdding(false);
     }
@@ -447,23 +469,23 @@ function ModeratorsSection({ accessToken, onToast }) {
   const remove = async (userId) => {
     try {
       await removeModerator(userId, accessToken);
-      onToast("Moderator removed.");
+      onToast(t("moderators.toasts.removed"));
       setModerators((prev) => prev.filter((m) => m.userId !== userId));
     } catch (err) {
-      onToast(err.message || "Could not remove the moderator.");
+      onToast(err.message || t("moderators.toasts.removeFailed"));
     }
   };
 
   return (
-    <Section title="Moderators">
+    <Section title={t("moderators.title")}>
       <div className="mb-3 flex items-end gap-2">
         <Field className="min-w-[240px]">
           <FieldLabel htmlFor="moderator-email" className="sr-only">
-            User email
+            {t("moderators.emailLabel")}
           </FieldLabel>
           <Input
             id="moderator-email"
-            placeholder="User email"
+            placeholder={t("moderators.emailLabel")}
             value={emailDraft}
             onChange={(e) => setEmailDraft(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && !adding && add()}
@@ -471,7 +493,7 @@ function ModeratorsSection({ accessToken, onToast }) {
         </Field>
         <Button onClick={add} disabled={adding || !emailDraft.trim()}>
           {adding && <Spinner data-icon="inline-start" />}
-          Add moderator
+          {t("moderators.addButton")}
         </Button>
       </div>
       {loading ? (
@@ -481,7 +503,7 @@ function ModeratorsSection({ accessToken, onToast }) {
           <AlertDescription>{error}</AlertDescription>
         </Alert>
       ) : moderators.length === 0 ? (
-        <p className="text-sm text-muted-foreground">No moderators yet.</p>
+        <p className="text-sm text-muted-foreground">{t("moderators.empty")}</p>
       ) : (
         <div className="flex flex-col divide-y divide-border">
           {moderators.map((m) => (
@@ -491,7 +513,7 @@ function ModeratorsSection({ accessToken, onToast }) {
             >
               <p className="text-sm break-all">{m.email || m.userId}</p>
               <IconActionButton
-                tooltip="Remove moderator"
+                tooltip={t("moderators.removeTooltip")}
                 onClick={() => remove(m.userId)}
                 destructive
               >
@@ -506,6 +528,7 @@ function ModeratorsSection({ accessToken, onToast }) {
 }
 
 export default function ModerationPage() {
+  const { t } = useTranslation("moderation");
   const { loading, user, accessToken, roleLoading, isModerator, isAdmin } =
     useAuth();
 
@@ -523,14 +546,14 @@ export default function ModerationPage() {
   return (
     <div className="min-h-screen bg-background pb-16">
       <AppHeader
-        title="Moderation"
+        title={t("page.title")}
         left={
           <RouterLink
             to="/hub"
             className="mr-1 inline-flex shrink-0 items-center gap-2 rounded-md border-0 bg-transparent px-4 py-2 text-sm font-medium text-primary-foreground no-underline transition-colors hover:bg-primary-foreground/10"
           >
             <ArrowLeftIcon data-icon="inline-start" />
-            Lesson hub
+            {t("page.lessonHub")}
           </RouterLink>
         }
       >
@@ -545,10 +568,10 @@ export default function ModerationPage() {
         ) : showSignIn ? (
           <Alert>
             <AlertDescription className="flex items-center justify-between gap-2">
-              Please sign in to access moderation tools.
+              {t("page.signInPrompt")}
               <Button variant="ghost" size="sm" asChild>
                 <RouterLink to="/login" className="no-underline">
-                  Sign in
+                  {t("page.signIn")}
                 </RouterLink>
               </Button>
             </AlertDescription>
@@ -557,10 +580,10 @@ export default function ModerationPage() {
           <Alert className="border-focus/40 bg-focus/10 text-focus">
             <TriangleAlertIcon />
             <AlertDescription className="flex items-center justify-between gap-2 text-focus">
-              You don&rsquo;t have moderation access.
+              {t("page.noAccess")}
               <Button variant="ghost" size="sm" asChild>
                 <RouterLink to="/hub" className="text-focus no-underline">
-                  Back to hub
+                  {t("page.backToHub")}
                 </RouterLink>
               </Button>
             </AlertDescription>

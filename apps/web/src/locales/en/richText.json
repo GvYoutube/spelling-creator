@@ -1,0 +1,21 @@
+{
+  "input": {
+    "characterCount": "{{length}}/{{maxLength}} characters"
+  },
+  "toolbar": {
+    "bold": "Bold",
+    "italic": "Italic",
+    "underline": "Underline",
+    "strikethrough": "Strikethrough",
+    "code": "Code",
+    "bulletList": "Bulleted list",
+    "orderedList": "Numbered list",
+    "quote": "Quote",
+    "link": "Link",
+    "linkUrlPlaceholder": "https://example.com",
+    "updateLink": "Update",
+    "addLink": "Add",
+    "removeLink": "Remove link",
+    "removeFormatting": "Remove formatting"
+  }
+}

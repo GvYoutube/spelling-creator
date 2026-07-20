@@ -10,6 +10,7 @@ src/
   App.jsx                 route table (editor / hub / lesson / profile / login / moderation)
   main.jsx                React entry: ColorSchemeProvider + BrowserRouter + AuthProvider + DisplayNameGate + Toaster
   styles/globals.css      Tailwind v4 + shadcn/ui design tokens (light/dark palettes, glass-surface shadows/blur)
+  locales/en/*.json      one JSON file per i18next namespace (see internationalization.md)
   pages/
     EditorPage.jsx        the lesson builder (toolbar, section list, + button, publish, collaborate)
     HubPage.jsx           public gallery of published lessons + client-side search
@@ -45,6 +46,8 @@ src/
     MergeDialog.jsx        settle a merge with the lesson this one was forked from (mine / theirs / keep both)
     ui/                    shadcn/ui primitives (Button, Dialog, DropdownMenu, Select, Tooltip, Sonner Toaster, etc.) — Radix underneath, styled from the tokens in styles/globals.css
   lib/
+    i18n.js                react-i18next setup: registers every namespace's resources, fallback/supported languages
+    languages.js           LANGUAGES registry for a future language switcher (English only today)
     colorScheme.jsx        ColorSchemeProvider + useColorScheme (light/dark/system, persisted, applied as data-theme on <html>)
     useLiveField.js        shared debounce/commit buffering behind LiveField.jsx
     docxExport.js         build + download the .docx (text, images, questions)

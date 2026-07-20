@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
 import { StarIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -38,8 +39,10 @@ export function StarRating({
   max = 5,
   size = "default",
   className,
-  "aria-label": ariaLabel = "rating",
+  "aria-label": ariaLabelProp,
 }) {
+  const { t } = useTranslation("common");
+  const ariaLabel = ariaLabelProp ?? t("starRating.defaultAriaLabel");
   const [hover, setHover] = useState(null);
   const interactive = !readOnly && !disabled;
   const display = interactive ? (hover ?? value ?? 0) : (value ?? 0);
@@ -49,7 +52,11 @@ export function StarRating({
     return (
       <div
         role="img"
-        aria-label={`${ariaLabel}: ${display} out of ${max}`}
+        aria-label={t("starRating.ratingSummary", {
+          label: ariaLabel,
+          display,
+          max,
+        })}
         className={cn("inline-flex items-center gap-0.5", className)}
       >
         {Array.from({ length: max }, (_, i) => (
@@ -78,7 +85,7 @@ export function StarRating({
             type="button"
             role="radio"
             aria-checked={value === starValue}
-            aria-label={`${starValue} star${starValue === 1 ? "" : "s"}`}
+            aria-label={t("starRating.starLabel", { count: starValue })}
             onClick={() => onChange?.(starValue)}
             onMouseEnter={() => setHover(starValue)}
             className="cursor-pointer rounded-sm border-0 bg-transparent p-0.5 text-muted-foreground transition-colors hover:text-focus"

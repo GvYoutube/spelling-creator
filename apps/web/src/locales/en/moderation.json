@@ -1,0 +1,86 @@
+{
+  "page": {
+    "title": "Moderation",
+    "lessonHub": "Lesson hub",
+    "signInPrompt": "Please sign in to access moderation tools.",
+    "signIn": "Sign in",
+    "noAccess": "You don't have moderation access.",
+    "backToHub": "Back to hub"
+  },
+  "common": {
+    "anonymous": "Anonymous"
+  },
+  "bans": {
+    "title": "Bans",
+    "errors": {
+      "loadFailed": "Could not load bans."
+    },
+    "names": {
+      "heading": "Banned names",
+      "label": "Display name",
+      "ban": "Ban",
+      "empty": "No name bans.",
+      "liftLabel": "Lift ban on {{name}}"
+    },
+    "ips": {
+      "heading": "Banned IPs",
+      "label": "IP address",
+      "ban": "Ban",
+      "empty": "No IP bans.",
+      "liftLabel": "Lift ban on {{ip}}"
+    },
+    "toasts": {
+      "nameBanned": "Banned \"{{name}}\".",
+      "nameBanFailed": "Could not ban the name.",
+      "nameBanLifted": "Name ban lifted.",
+      "liftBanFailed": "Could not lift the ban.",
+      "ipBanned": "Banned IP {{ip}}.",
+      "ipBanFailed": "Could not ban the IP.",
+      "ipBanLifted": "IP ban lifted."
+    }
+  },
+  "shadowbanned": {
+    "title": "Shadowbanned lessons",
+    "empty": "No shadowbanned lessons.",
+    "untitledLesson": "Untitled Lesson",
+    "restore": "Un-shadowban",
+    "errors": {
+      "loadFailed": "Could not load lessons."
+    },
+    "toasts": {
+      "restored": "Lesson restored.",
+      "restoreFailed": "Could not restore the lesson."
+    }
+  },
+  "deleteRequests": {
+    "title": "Pending deletion requests",
+    "empty": "No pending requests.",
+    "deletedLesson": "(deleted lesson)",
+    "approve": "Approve",
+    "deny": "Deny",
+    "errors": {
+      "loadFailed": "Could not load requests."
+    },
+    "toasts": {
+      "approved": "Lesson deleted.",
+      "denied": "Request denied.",
+      "resolveFailed": "Could not resolve the request."
+    }
+  },
+  "moderators": {
+    "title": "Moderators",
+    "emailLabel": "User email",
+    "addButton": "Add moderator",
+    "empty": "No moderators yet.",
+    "removeTooltip": "Remove moderator",
+    "errors": {
+      "loadFailed": "Could not load moderators."
+    },
+    "toasts": {
+      "added": "Added {{email}} as a moderator.",
+      "addFailed": "Could not add the moderator.",
+      "removed": "Moderator removed.",
+      "removeFailed": "Could not remove the moderator."
+    }
+  }
+}

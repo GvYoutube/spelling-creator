@@ -7,6 +7,7 @@
 // between two commits is recoverable exactly, per block, without guessing.
 
 import { useCallback, useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { GitMergeIcon, HistoryIcon, RotateCcwIcon, XIcon } from "lucide-react";
 import {
   Dialog,
@@ -22,11 +23,12 @@ import { Tooltip, TooltipTrigger, TooltipContent } from "./ui/tooltip.jsx";
 import { HistorySkeleton } from "./Skeletons.jsx";
 import { cn } from "../lib/utils.js";
 import { describeOp } from "../lib/git/ops.js";
+import i18n from "../lib/i18n.js";
 
 /** "just now" / "12 minutes ago" / "3 days ago" — then fall back to a date. */
 export function timeAgo(ts) {
   const seconds = Math.floor((Date.now() - ts) / 1000);
-  if (seconds < 45) return "just now";
+  if (seconds < 45) return i18n.t("editorTools:timeAgo.justNow");
 
   const units = [
     ["minute", 60],
@@ -49,7 +51,9 @@ export function timeAgo(ts) {
       month: "short",
     });
   }
-  return `${rounded} ${unit}${rounded === 1 ? "" : "s"} ago`;
+  const unitKey =
+    unit === "minute" ? "minutes" : unit === "hour" ? "hours" : "days";
+  return i18n.t(`editorTools:timeAgo.${unitKey}`, { count: rounded });
 }
 
 // The counts badged against a commit, derived from its ops.
@@ -75,6 +79,7 @@ const CHIP_STYLES = {
 };
 
 function ChangeChips({ ops }) {
+  const { t } = useTranslation("editorTools");
   const counts = tally(ops);
   const chips = [
     ["added", counts.added, "success"],
@@ -88,7 +93,7 @@ function ChangeChips({ ops }) {
     <div className="mt-1.5 flex flex-wrap gap-1.5">
       {chips.map(([label, n, color]) => (
         <Badge key={label} variant="outline" className={CHIP_STYLES[color]}>
-          {n} {label}
+          {n} {t(`historyDialog.chips.${label}`)}
         </Badge>
       ))}
     </div>
@@ -100,6 +105,7 @@ function ChangeChips({ ops }) {
  * @param {Function} props.onRestore Called with the restored doc; the editor adopts it.
  */
 export default function HistoryDialog({ open, onClose, git, onRestore }) {
+  const { t } = useTranslation("editorTools");
   const [commits, setCommits] = useState(null); // null = still loading
   const [selected, setSelected] = useState(null); // oid
   const [detail, setDetail] = useState(null); // ops of the selected commit
@@ -154,11 +160,11 @@ export default function HistoryDialog({ open, onClose, git, onRestore }) {
       onRestore(doc);
       onClose();
     } catch (err) {
-      setError(err.message || "Could not restore that version.");
+      setError(err.message || t("historyDialog.restoreError"));
     } finally {
       setRestoring(false);
     }
-  }, [selected, restore, onRestore, onClose]);
+  }, [selected, restore, onRestore, onClose, t]);
 
   const isCurrent = commits && selected === commits[0]?.oid;
 
@@ -168,7 +174,7 @@ export default function HistoryDialog({ open, onClose, git, onRestore }) {
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <HistoryIcon className="size-4" />
-            Version history
+            {t("historyDialog.title")}
           </DialogTitle>
         </DialogHeader>
 
@@ -179,7 +185,7 @@ export default function HistoryDialog({ open, onClose, git, onRestore }) {
               <button
                 type="button"
                 onClick={() => setError(null)}
-                aria-label="Dismiss"
+                aria-label={t("historyDialog.dismiss")}
                 className="absolute top-3 right-3 cursor-pointer rounded-sm border-0 bg-transparent p-0.5 text-current opacity-70 transition-opacity hover:opacity-100"
               >
                 <XIcon className="size-3.5" />
@@ -189,9 +195,7 @@ export default function HistoryDialog({ open, onClose, git, onRestore }) {
           {pending > 0 && (
             <Alert className="border-primary/40 bg-primary/10 text-primary">
               <AlertDescription className="text-primary">
-                You have {pending} change{pending === 1 ? "" : "s"} since the
-                last saved version. They&apos;ll be saved automatically in a
-                moment.
+                {t("historyDialog.pendingChanges", { count: pending })}
               </AlertDescription>
             </Alert>
           )}
@@ -200,8 +204,7 @@ export default function HistoryDialog({ open, onClose, git, onRestore }) {
             <HistorySkeleton />
           ) : commits.length === 0 ? (
             <p className="text-sm text-muted-foreground">
-              No versions saved yet. Edit the lesson and a version is saved
-              automatically whenever you pause.
+              {t("historyDialog.noVersions")}
             </p>
           ) : (
             <div className="grid grid-cols-1 gap-4 md:grid-cols-12">
@@ -226,7 +229,7 @@ export default function HistoryDialog({ open, onClose, git, onRestore }) {
                             <GitMergeIcon className="size-3.5 shrink-0 text-secondary-foreground" />
                           </TooltipTrigger>
                           <TooltipContent>
-                            A merge — two histories joined here
+                            {t("historyDialog.mergeTooltip")}
                           </TooltipContent>
                         </Tooltip>
                       )}
@@ -240,7 +243,7 @@ export default function HistoryDialog({ open, onClose, git, onRestore }) {
                       </p>
                     </div>
                     <p className="text-xs text-muted-foreground">
-                      {i === 0 ? "Current · " : ""}
+                      {i === 0 ? t("historyDialog.currentPrefix") : ""}
                       {timeAgo(commit.timestamp)} · {commit.author}
                     </p>
                   </button>
@@ -253,11 +256,13 @@ export default function HistoryDialog({ open, onClose, git, onRestore }) {
                   <HistorySkeleton count={3} />
                 ) : detail.length === 0 ? (
                   <p className="text-sm text-muted-foreground">
-                    This is where the lesson began.
+                    {t("historyDialog.origin")}
                   </p>
                 ) : (
                   <>
-                    <p className="text-sm font-medium">What changed</p>
+                    <p className="text-sm font-medium">
+                      {t("historyDialog.whatChanged")}
+                    </p>
                     <ChangeChips ops={detail} />
                     <hr className="my-3 border-border" />
                     <ul className="m-0 flex max-h-[260px] flex-col gap-1 overflow-y-auto pl-4">
@@ -281,7 +286,7 @@ export default function HistoryDialog({ open, onClose, git, onRestore }) {
 
         <DialogFooter>
           <Button variant="outline" onClick={onClose}>
-            Close
+            {t("historyDialog.close")}
           </Button>
           <Button
             disabled={
@@ -290,7 +295,9 @@ export default function HistoryDialog({ open, onClose, git, onRestore }) {
             onClick={handleRestore}
           >
             <RotateCcwIcon data-icon="inline-start" />
-            {isCurrent ? "This is the current version" : "Restore this version"}
+            {isCurrent
+              ? t("historyDialog.restoreCurrent")
+              : t("historyDialog.restore")}
           </Button>
         </DialogFooter>
       </DialogContent>

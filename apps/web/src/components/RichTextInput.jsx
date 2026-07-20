@@ -16,6 +16,7 @@
 // exists so the UI never offers something the server would only strip back out.
 
 import { useMemo } from "react";
+import { useTranslation } from "react-i18next";
 import { useEditor, EditorContent } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 import Underline from "@tiptap/extension-underline";
@@ -82,6 +83,8 @@ export default function RichTextInput({
   disabled = false,
   autoFocus = false,
 }) {
+  const { t } = useTranslation("richText");
+
   // Count what the server counts, so the number the user sees is the number that
   // decides whether their comment is accepted.
   const length = richTextLength(value);
@@ -131,7 +134,7 @@ export default function RichTextInput({
           overLimit ? "text-destructive" : "text-muted-foreground",
         )}
       >
-        {length}/{maxLength} characters
+        {t("input.characterCount", { length, maxLength })}
       </p>
     </div>
   );

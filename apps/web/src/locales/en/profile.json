@@ -1,0 +1,52 @@
+{
+  "profilePage": {
+    "documentTitle": "Profile",
+    "lessonHubLink": "Lesson hub",
+    "headerTitle": "Profile",
+    "anonymousName": "Anonymous",
+    "metaDescriptionFallback": "Spelling lessons published by {{name}}.",
+    "publishedLessonCount_one": "{{count}} published lesson",
+    "publishedLessonCount_other": "{{count}} published lessons",
+    "followerCount_one": "{{count}} follower",
+    "followerCount_other": "{{count}} followers",
+    "followingCount": "{{count}} following",
+    "followButton": "Follow",
+    "followingButton": "Following",
+    "activityButton": "Activity",
+    "activityTooltip": "Recent activity (lessons & comments)",
+    "noRecentActivity": "No recent activity.",
+    "activityLoadError": "Could not load activity.",
+    "rssButton": "RSS",
+    "rssTooltip": "Subscribe to this user’s activity (RSS)",
+    "dismiss": "Dismiss",
+    "profileLoadError": "Could not load this profile.",
+    "followUpdateError": "Could not update follow.",
+    "editBioAriaLabel": "edit bio",
+    "editBioTooltip": "Edit bio",
+    "addBioButton": "Add a bio",
+    "publishedLessonsHeading": "Published lessons",
+    "noLessonsYet": "{{name}} hasn’t published any lessons yet.",
+    "untitledLesson": "Untitled Lesson",
+    "sectionCount_one": "{{count}} section",
+    "sectionCount_other": "{{count}} sections"
+  },
+  "bioDialog": {
+    "title": "Edit bio",
+    "description": "A short description shown on your public profile. Leave it empty to remove your bio.",
+    "fieldLabel": "Bio",
+    "placeholder": "Tell people a little about yourself…",
+    "cancel": "Cancel",
+    "save": "Save",
+    "saveError": "Could not save your bio."
+  },
+  "followList": {
+    "defaultUserLabel": "This user",
+    "anonymousName": "Anonymous",
+    "title": "Connections",
+    "followersTab": "Followers",
+    "followingTab": "Following",
+    "noFollowers": "{{name}} has no followers yet.",
+    "noFollowing": "{{name}} isn’t following anyone yet.",
+    "loadError": "Could not load these."
+  }
+}

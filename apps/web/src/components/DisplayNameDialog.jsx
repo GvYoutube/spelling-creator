@@ -7,6 +7,7 @@
 // name and stores it; on success we refresh the session so `user` reflects it.
 
 import { useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { CircleAlertIcon } from "lucide-react";
 import {
   Dialog,
@@ -41,6 +42,7 @@ import {
  * @param {() => void} [props.onClose] Dismiss handler; omitted/ignored when required.
  */
 export default function DisplayNameDialog({ open, required = false, onClose }) {
+  const { t } = useTranslation("common");
   const { accessToken, displayName, refreshSession } = useAuth();
   const [name, setName] = useState("");
   const [saving, setSaving] = useState(false);
@@ -69,7 +71,7 @@ export default function DisplayNameDialog({ open, required = false, onClose }) {
       await refreshSession();
       if (!required && onClose) onClose();
     } catch (err) {
-      setError(err.message || "Could not save your display name.");
+      setError(err.message || t("displayNameDialog.saveError"));
     } finally {
       setSaving(false);
     }
@@ -90,11 +92,12 @@ export default function DisplayNameDialog({ open, required = false, onClose }) {
       >
         <DialogHeader>
           <DialogTitle>
-            {required ? "Choose a display name" : "Edit display name"}
+            {required
+              ? t("displayNameDialog.titleRequired")
+              : t("displayNameDialog.titleEdit")}
           </DialogTitle>
           <DialogDescription>
-            This is the name other people see on your lessons and comments. Your
-            email address is never shown.
+            {t("displayNameDialog.description")}
           </DialogDescription>
         </DialogHeader>
         <form onSubmit={save}>
@@ -106,7 +109,9 @@ export default function DisplayNameDialog({ open, required = false, onClose }) {
               </Alert>
             )}
             <Field>
-              <FieldLabel htmlFor="display-name">Display name</FieldLabel>
+              <FieldLabel htmlFor="display-name">
+                {t("displayNameDialog.label")}
+              </FieldLabel>
               <Input
                 id="display-name"
                 autoFocus
@@ -116,7 +121,10 @@ export default function DisplayNameDialog({ open, required = false, onClose }) {
                 maxLength={DISPLAY_NAME_MAX}
               />
               <FieldDescription>
-                {DISPLAY_NAME_MIN}–{DISPLAY_NAME_MAX} characters.
+                {t("displayNameDialog.charCountHint", {
+                  min: DISPLAY_NAME_MIN,
+                  max: DISPLAY_NAME_MAX,
+                })}
               </FieldDescription>
             </Field>
           </FieldGroup>
@@ -128,12 +136,12 @@ export default function DisplayNameDialog({ open, required = false, onClose }) {
                 onClick={onClose}
                 disabled={saving}
               >
-                Cancel
+                {t("buttons.cancel")}
               </Button>
             )}
             <Button type="submit" disabled={saving || tooShort || tooLong}>
               {saving && <Spinner data-icon="inline-start" />}
-              Save
+              {t("buttons.save")}
             </Button>
           </DialogFooter>
         </form>

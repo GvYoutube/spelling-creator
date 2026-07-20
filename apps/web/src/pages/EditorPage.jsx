@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { useDocumentMeta } from "../lib/seo.js";
 import { toast } from "sonner";
+import { Trans, useTranslation } from "react-i18next";
 import {
   BracesIcon,
   ChevronDownIcon,
@@ -118,8 +119,8 @@ import { useDragAutoScroll } from "../lib/useDragAutoScroll.js";
 // The starter document a fresh editor opens with. Any persisted draft is loaded
 // asynchronously from IndexedDB on mount (see the hydration effect) and replaces
 // this once available.
-function createInitialDoc() {
-  return { title: "Put your topic here...", sections: [] };
+function createInitialDoc(t) {
+  return { title: t("defaultDoc.title"), sections: [] };
 }
 
 // Whether a document holds work worth protecting from being clobbered. The
@@ -175,7 +176,8 @@ function applyBlockDrag(
 
 export default function EditorPage() {
   useDocumentMeta();
-  const [doc, setDoc] = useState(createInitialDoc);
+  const { t } = useTranslation("editor");
+  const [doc, setDoc] = useState(() => createInitialDoc(t));
   const [dialogOpen, setDialogOpen] = useState(false);
   const [ideaDialogOpen, setIdeaDialogOpen] = useState(false);
   const [newSectionName, setNewSectionName] = useState("");
@@ -485,8 +487,8 @@ export default function EditorPage() {
         severity: "info",
         message:
           source === "json"
-            ? "Imported from JSON. Review the lesson, then save it to the cloud when you're ready."
-            : "Imported from Word. Word import is best-effort — review the lesson, as some formatting or content may have been lost.",
+            ? t("messages.importedJson")
+            : t("messages.importedWord"),
       });
       return;
     }
@@ -509,7 +511,9 @@ export default function EditorPage() {
 
       setDoc({
         ...nextDoc,
-        title: `${nextDoc.title || "Untitled Lesson"} (copy)`,
+        title: t("labels.copyOf", {
+          title: nextDoc.title || t("labels.untitledLesson"),
+        }),
       });
       setEditingId(null);
       setForkedFrom(id);
@@ -519,8 +523,8 @@ export default function EditorPage() {
       notify({
         severity: "info",
         message: cloned
-          ? "Forked into a new lesson — its full history came with it. Edit freely, then save it as your own copy."
-          : "Forked into a new lesson — edit freely, then save it to the cloud as your own copy.",
+          ? t("messages.forkedWithHistory")
+          : t("messages.forkedWithoutHistory"),
       });
       return;
     }
@@ -532,8 +536,8 @@ export default function EditorPage() {
     notify({
       severity: "info",
       message: published
-        ? "Loaded your published lesson — edit and save to the cloud to update it."
-        : "Loaded your draft — edit and save to the cloud, or publish it to the hub.",
+        ? t("messages.loadedPublished")
+        : t("messages.loadedDraft"),
     });
   };
 
@@ -611,11 +615,16 @@ export default function EditorPage() {
           severity: "error",
           message:
             err.message ||
-            `Could not open that lesson for ${mode === "fork" ? "forking" : "editing"}.`,
+            t("messages.couldNotOpenLesson", {
+              action:
+                mode === "fork"
+                  ? t("labels.forkingAction")
+                  : t("labels.editingAction"),
+            }),
         });
       })
       .finally(() => setEditLoading(false));
-  }, [hydrated, authLoading, accessToken, notify]);
+  }, [hydrated, authLoading, accessToken, notify, t]);
 
   const setTitle = (title) => setDoc((d) => ({ ...d, title }));
 
@@ -738,7 +747,9 @@ export default function EditorPage() {
   };
 
   const confirmAddSection = () => {
-    const name = newSectionName.trim() || `Section ${doc.sections.length + 1}`;
+    const name =
+      newSectionName.trim() ||
+      t("newSectionDialog.defaultName", { n: doc.sections.length + 1 });
     setDoc((d) => ({
       ...d,
       sections: [...d.sections, { id: newId(), name, blocks: [] }],
@@ -750,7 +761,7 @@ export default function EditorPage() {
     if (doc.sections.length === 0) {
       notify({
         severity: "warning",
-        message: "Add at least one section before exporting.",
+        message: t("messages.addSectionBeforeExporting"),
       });
       return;
     }
@@ -758,22 +769,22 @@ export default function EditorPage() {
     try {
       if (kind === "docx") {
         await exportDocx(doc);
-        notify({ severity: "success", message: "Word document downloaded." });
+        notify({ severity: "success", message: t("messages.wordDownloaded") });
       } else if (kind === "json") {
         exportJson(doc);
-        notify({ severity: "success", message: "Lesson JSON downloaded." });
+        notify({ severity: "success", message: t("messages.jsonDownloaded") });
       } else {
         await exportPdf(doc);
         notify({
           severity: "success",
-          message: "PDF generated for printing.",
+          message: t("messages.pdfGenerated"),
         });
       }
     } catch (err) {
       console.error(err);
       notify({
         severity: "error",
-        message: `Export failed: ${err.message || err}`,
+        message: t("messages.exportFailed", { error: err.message || err }),
       });
     } finally {
       setBusy(null);
@@ -784,7 +795,7 @@ export default function EditorPage() {
     if (doc.sections.length === 0) {
       notify({
         severity: "warning",
-        message: "Add at least one section before saving.",
+        message: t("messages.addSectionBeforeSaving"),
       });
       return;
     }
@@ -793,16 +804,18 @@ export default function EditorPage() {
       const file = await saveToGoogleDrive(doc);
       notify({
         severity: "success",
-        message: "Saved to Google Drive as a Google Doc.",
+        message: t("messages.savedToGoogleDrive"),
         link: file.webViewLink
-          ? { href: file.webViewLink, label: "Open" }
+          ? { href: file.webViewLink, label: t("labels.open") }
           : null,
       });
     } catch (err) {
       console.error(err);
       notify({
         severity: "error",
-        message: `Could not save to Google: ${err.message || err}`,
+        message: t("messages.couldNotSaveToGoogle", {
+          error: err.message || err,
+        }),
       });
     } finally {
       setBusy(null);
@@ -813,7 +826,7 @@ export default function EditorPage() {
     if (doc.sections.length === 0) {
       notify({
         severity: "warning",
-        message: "Add at least one section before previewing.",
+        message: t("messages.addSectionBeforePreviewing"),
       });
       return;
     }
@@ -825,7 +838,7 @@ export default function EditorPage() {
       console.error(err);
       notify({
         severity: "error",
-        message: `Preview failed: ${err.message || err}`,
+        message: t("messages.previewFailed", { error: err.message || err }),
       });
     } finally {
       setBusy(null);
@@ -842,7 +855,7 @@ export default function EditorPage() {
     if (doc.sections.length === 0) {
       notify({
         severity: "warning",
-        message: "Add at least one section before saving.",
+        message: t("messages.addSectionBeforeSaving"),
       });
       return;
     }
@@ -851,7 +864,7 @@ export default function EditorPage() {
     if (!accessToken) {
       notify({
         severity: "info",
-        message: "Please sign in to save your lesson to the cloud.",
+        message: t("messages.pleaseSignIn"),
       });
       navigate("/login");
       return;
@@ -889,8 +902,7 @@ export default function EditorPage() {
           setMerge(result.prepared);
           notify({
             severity: "info",
-            message:
-              "Someone else has changed this lesson since you last synced. Merge their changes, then save again — nothing has been overwritten.",
+            message: t("messages.needsMergeBeforeSave"),
           });
           return;
         }
@@ -935,28 +947,27 @@ export default function EditorPage() {
           });
         } catch (err) {
           console.error(err);
-          historyWarning =
-            err.message || "the version history couldn't be saved";
+          historyWarning = err.message || t("messages.historyNotSaved");
         }
       }
 
       notify({
         severity: historyWarning ? "warning" : "success",
         message: historyWarning
-          ? `Lesson saved, but ${historyWarning}. Your history is safe on this device and will upload next time you save.`
+          ? t("messages.savedWithHistoryWarning", { warning: historyWarning })
           : publish
-            ? "Lesson published to the hub."
-            : "Draft saved to the cloud — only you can see it.",
+            ? t("messages.publishedToHub")
+            : t("messages.draftSaved"),
         route:
           publish && !historyWarning
-            ? { to: "/hub", label: "View hub" }
+            ? { to: "/hub", label: t("labels.viewHub") }
             : undefined,
       });
     } catch (err) {
       console.error(err);
       notify({
         severity: "error",
-        message: `Could not save: ${err.message || err}`,
+        message: t("messages.couldNotSave", { error: err.message || err }),
       });
     } finally {
       setBusy(null);
@@ -988,8 +999,7 @@ export default function EditorPage() {
     git.reload();
     notify({
       severity: "info",
-      message:
-        "Forked into a new lesson — saving to the cloud will create a separate copy.",
+      message: t("messages.forkedNoUpstream"),
     });
   };
 
@@ -1020,15 +1030,14 @@ export default function EditorPage() {
       if (!prepared) {
         notify({
           severity: "info",
-          message:
-            "The original lesson has no shared history to merge — it may have been published before version history, or deleted.",
+          message: t("messages.noSharedHistoryToMerge"),
         });
         return;
       }
       if (prepared.upToDate) {
         notify({
           severity: "success",
-          message: "Already up to date with the original.",
+          message: t("messages.alreadyUpToDate"),
         });
         return;
       }
@@ -1039,7 +1048,7 @@ export default function EditorPage() {
       console.error(err);
       notify({
         severity: "error",
-        message: `Could not merge: ${err.message || err}`,
+        message: t("messages.couldNotMerge", { error: err.message || err }),
       });
     } finally {
       setBusy(null);
@@ -1074,15 +1083,16 @@ export default function EditorPage() {
       if (!prepared) {
         notify({
           severity: "info",
-          message:
-            "The original lesson has no shared history, so there's nothing to merge back into.",
+          message: t("messages.noSharedHistoryToContribute"),
         });
         return;
       }
       if (prepared.identical) {
         notify({
           severity: "info",
-          message: `Your copy is identical to ${forkedFromTitle || "the original"} — there's nothing to merge back.`,
+          message: t("messages.identicalCopy", {
+            name: forkedFromTitle || t("labels.theOriginal"),
+          }),
         });
         return;
       }
@@ -1100,7 +1110,9 @@ export default function EditorPage() {
       console.error(err);
       notify({
         severity: "error",
-        message: `Could not merge back: ${err.message || err}`,
+        message: t("messages.couldNotMergeBack", {
+          error: err.message || err,
+        }),
       });
     } finally {
       setBusy(null);
@@ -1126,8 +1138,10 @@ export default function EditorPage() {
 
     notify({
       severity: "success",
-      message: `Merged your changes into ${forkedFromTitle || "the original lesson"}. Its author has been notified.`,
-      route: { to: `/hub/${forkedFrom}`, label: "View lesson" },
+      message: t("messages.mergedIntoUpstream", {
+        name: forkedFromTitle || t("labels.theOriginalLesson"),
+      }),
+      route: { to: `/hub/${forkedFrom}`, label: t("labels.viewLesson") },
     });
   };
 
@@ -1157,20 +1171,23 @@ export default function EditorPage() {
         // before it could overwrite anything, so the user re-runs it.
         notify({
           severity: "success",
-          message:
-            "Merged the changes from the hub. Save to the cloud again to publish the merged lesson.",
+          message: t("messages.mergedFromHubPublish"),
         });
         return;
       }
       notify({
         severity: "success",
-        message: `Merged the changes from ${forkedFromTitle || "the original"}.`,
+        message: t("messages.mergedFrom", {
+          name: forkedFromTitle || t("labels.theOriginal"),
+        }),
       });
     } catch (err) {
       console.error(err);
       notify({
         severity: "error",
-        message: `Could not complete the merge: ${err.message || err}`,
+        message: t("messages.couldNotCompleteMerge", {
+          error: err.message || err,
+        }),
       });
     } finally {
       setMerging(false);
@@ -1210,10 +1227,7 @@ export default function EditorPage() {
       else applyEdit(incoming);
     } catch (err) {
       setImportErrorSource("word");
-      setImportError(
-        err?.message ||
-          "This Word document couldn't be imported. Please check it and try again.",
-      );
+      setImportError(err?.message || t("messages.wordImportFailed"));
     } finally {
       setBusy(null);
     }
@@ -1244,10 +1258,7 @@ export default function EditorPage() {
       else applyEdit(incoming);
     } catch (err) {
       setImportErrorSource("json");
-      setImportError(
-        err?.message ||
-          "This JSON file couldn't be imported. Please check it and try again.",
-      );
+      setImportError(err?.message || t("messages.jsonImportFailed"));
     } finally {
       setBusy(null);
     }
@@ -1285,10 +1296,12 @@ export default function EditorPage() {
   // action reads as either creating, updating, or switching the lesson's state.
   const publishActionLabel =
     editingId && editingPublished
-      ? "Update published lesson"
-      : "Publish to hub";
+      ? t("labels.updatePublishedLesson")
+      : t("labels.publishToHub");
   const draftActionLabel =
-    editingId && !editingPublished ? "Update draft" : "Save as draft";
+    editingId && !editingPublished
+      ? t("labels.updateDraft")
+      : t("labels.saveAsDraft");
 
   const exportBusy =
     busy === "docx" || busy === "json" || busy === "pdf" || busy === "gdocs";
@@ -1314,7 +1327,7 @@ export default function EditorPage() {
   return (
     <div className="min-h-screen bg-background pb-24 text-foreground">
       <AppHeader
-        title="Spelling Lesson Maker"
+        title={t("header.title")}
         left={
           <DropdownMenu>
             <Tooltip>
@@ -1322,14 +1335,14 @@ export default function EditorPage() {
                 <DropdownMenuTrigger asChild>
                   <button
                     type="button"
-                    aria-label="menu"
+                    aria-label={t("header.menuAriaLabel")}
                     className={cn(headerIconTrigger, "mr-1")}
                   >
                     <SpellCheckIcon />
                   </button>
                 </DropdownMenuTrigger>
               </TooltipTrigger>
-              <TooltipContent>Menu</TooltipContent>
+              <TooltipContent>{t("header.menuTooltip")}</TooltipContent>
             </Tooltip>
             <DropdownMenuContent align="start">
               <DropdownMenuItem
@@ -1337,14 +1350,14 @@ export default function EditorPage() {
                 disabled={busy !== null}
               >
                 <FileUpIcon />
-                Import Word document
+                {t("header.importWord")}
               </DropdownMenuItem>
               <DropdownMenuItem
                 onClick={triggerJsonImportPicker}
                 disabled={busy !== null}
               >
                 <BracesIcon />
-                Import JSON
+                {t("header.importJson")}
               </DropdownMenuItem>
               <DropdownMenuSeparator />
               <DropdownMenuItem
@@ -1356,7 +1369,7 @@ export default function EditorPage() {
                 }
               >
                 <CodeIcon />
-                GitHub
+                {t("header.github")}
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
@@ -1368,13 +1381,13 @@ export default function EditorPage() {
             <button
               type="button"
               onClick={openWizard}
-              aria-label="how to create a lesson"
+              aria-label={t("header.helpAriaLabel")}
               className={cn(headerIconTrigger, "md:hidden")}
             >
               <CircleHelpIcon />
             </button>
           </TooltipTrigger>
-          <TooltipContent>How to create a lesson</TooltipContent>
+          <TooltipContent>{t("header.helpTooltip")}</TooltipContent>
         </Tooltip>
         <DropdownMenu>
           <Tooltip>
@@ -1382,7 +1395,7 @@ export default function EditorPage() {
               <DropdownMenuTrigger asChild>
                 <button
                   type="button"
-                  aria-label="lesson actions"
+                  aria-label={t("header.actionsAriaLabel")}
                   className={cn(headerIconTrigger, "md:hidden")}
                 >
                   <EllipsisVerticalIcon />
@@ -1390,26 +1403,26 @@ export default function EditorPage() {
                 </button>
               </DropdownMenuTrigger>
             </TooltipTrigger>
-            <TooltipContent>Lesson actions</TooltipContent>
+            <TooltipContent>{t("header.actionsTooltip")}</TooltipContent>
           </Tooltip>
           <DropdownMenuContent align="end">
             <DropdownMenuItem onClick={handlePreview} disabled={busy !== null}>
               <EyeIcon />
-              Preview
+              {t("header.preview")}
             </DropdownMenuItem>
             <DropdownMenuItem
               onClick={openImportWarning}
               disabled={busy !== null}
             >
               <FileUpIcon />
-              Import Word document
+              {t("header.importWord")}
             </DropdownMenuItem>
             <DropdownMenuItem
               onClick={triggerJsonImportPicker}
               disabled={busy !== null}
             >
               <BracesIcon />
-              Import JSON
+              {t("header.importJson")}
             </DropdownMenuItem>
             <DropdownMenuSeparator />
             <DropdownMenuItem
@@ -1417,21 +1430,21 @@ export default function EditorPage() {
               disabled={busy !== null}
             >
               <FileTextIcon />
-              Export DOCX
+              {t("header.exportDocx")}
             </DropdownMenuItem>
             <DropdownMenuItem
               onClick={() => handleExport("json")}
               disabled={busy !== null}
             >
               <BracesIcon />
-              Export JSON
+              {t("header.exportJson")}
             </DropdownMenuItem>
             <DropdownMenuItem
               onClick={() => handleExport("pdf")}
               disabled={busy !== null}
             >
               <PrinterIcon />
-              Print PDF
+              {t("header.printPdf")}
             </DropdownMenuItem>
             {googleDriveEnabled && (
               <DropdownMenuItem
@@ -1439,7 +1452,7 @@ export default function EditorPage() {
                 disabled={busy !== null}
               >
                 <SaveIcon />
-                Save to Google Docs
+                {t("header.saveToGoogleDocs")}
               </DropdownMenuItem>
             )}
             {showPublish && <DropdownMenuSeparator />}
@@ -1465,8 +1478,10 @@ export default function EditorPage() {
             <DropdownMenuItem onClick={() => setCollabOpen(true)}>
               <UsersIcon />
               {collab.active
-                ? `Collaborating (${collab.participants.length})`
-                : "Collaborate"}
+                ? t("header.collaborating", {
+                    count: collab.participants.length,
+                  })
+                : t("header.collaborate")}
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
@@ -1478,13 +1493,13 @@ export default function EditorPage() {
               <button
                 type="button"
                 onClick={openWizard}
-                aria-label="how to create a lesson"
+                aria-label={t("header.helpAriaLabel")}
                 className={headerIconTrigger}
               >
                 <CircleHelpIcon />
               </button>
             </TooltipTrigger>
-            <TooltipContent>How to create a lesson</TooltipContent>
+            <TooltipContent>{t("header.helpTooltip")}</TooltipContent>
           </Tooltip>
           <Button
             variant="ghost"
@@ -1497,7 +1512,7 @@ export default function EditorPage() {
             ) : (
               <EyeIcon data-icon="inline-start" />
             )}
-            Preview
+            {t("header.preview")}
           </Button>
 
           <DropdownMenu>
@@ -1512,32 +1527,32 @@ export default function EditorPage() {
                 ) : (
                   <DownloadIcon data-icon="inline-start" />
                 )}
-                Export
+                {t("header.export")}
                 <ChevronDownIcon className="opacity-70" />
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
               <DropdownMenuItem onClick={() => handleExport("docx")}>
                 <FileTextIcon />
-                Export DOCX
+                {t("header.exportDocx")}
               </DropdownMenuItem>
               <DropdownMenuItem onClick={() => handleExport("json")}>
                 <BracesIcon />
                 <div className="flex flex-col">
-                  <span>Export JSON</span>
+                  <span>{t("header.exportJson")}</span>
                   <span className="text-xs text-muted-foreground">
-                    Re-importable lesson file
+                    {t("header.exportJsonHint")}
                   </span>
                 </div>
               </DropdownMenuItem>
               <DropdownMenuItem onClick={() => handleExport("pdf")}>
                 <PrinterIcon />
-                Print PDF
+                {t("header.printPdf")}
               </DropdownMenuItem>
               {googleDriveEnabled && (
                 <DropdownMenuItem onClick={handleSaveToGoogle}>
                   <SaveIcon />
-                  Save to Google Docs
+                  {t("header.saveToGoogleDocs")}
                 </DropdownMenuItem>
               )}
             </DropdownMenuContent>
@@ -1556,7 +1571,7 @@ export default function EditorPage() {
                   ) : (
                     <CloudIcon data-icon="inline-start" />
                   )}
-                  Save to cloud
+                  {t("header.saveToCloud")}
                   <ChevronDownIcon className="opacity-70" />
                 </Button>
               </DropdownMenuTrigger>
@@ -1566,7 +1581,7 @@ export default function EditorPage() {
                   <div className="flex flex-col">
                     <span>{publishActionLabel}</span>
                     <span className="text-xs text-muted-foreground">
-                      Shared on the public hub
+                      {t("header.publishHint")}
                     </span>
                   </div>
                 </DropdownMenuItem>
@@ -1575,7 +1590,7 @@ export default function EditorPage() {
                   <div className="flex flex-col">
                     <span>{draftActionLabel}</span>
                     <span className="text-xs text-muted-foreground">
-                      Private backup — not published
+                      {t("header.draftHint")}
                     </span>
                   </div>
                 </DropdownMenuItem>
@@ -1592,12 +1607,12 @@ export default function EditorPage() {
                   className={collab.active ? undefined : headerGhostButton}
                 >
                   <UsersIcon data-icon="inline-start" />
-                  Collaborate
+                  {t("header.collaborate")}
                 </Button>
                 {CollabDot}
               </span>
             </TooltipTrigger>
-            <TooltipContent>Collaborate live on this lesson</TooltipContent>
+            <TooltipContent>{t("header.collaborateTooltip")}</TooltipContent>
           </Tooltip>
         </div>
 
@@ -1607,12 +1622,12 @@ export default function EditorPage() {
       <div className="mx-auto max-w-3xl px-4 pt-6">
         <div className="rounded-panel border border-border bg-card p-4 text-card-foreground shadow-(--shadow-panel) sm:p-6">
           <p className="text-xs font-semibold tracking-wide text-muted-foreground uppercase">
-            Document title
+            {t("documentPanel.titleLabel")}
           </p>
           <LiveInput
             value={doc.title}
             onCommit={setTitle}
-            placeholder="Untitled Lesson"
+            placeholder={t("documentPanel.titlePlaceholder")}
             data-collab-field="doc:title"
             className="h-auto rounded-none border-0 border-b-2 border-transparent bg-transparent px-0 py-1 text-2xl font-bold shadow-none focus-visible:border-b-primary focus-visible:ring-0"
           />
@@ -1624,12 +1639,12 @@ export default function EditorPage() {
               <SelectTrigger
                 size="sm"
                 className="w-[160px]"
-                aria-label="Age range"
+                aria-label={t("documentPanel.ageRangeAriaLabel")}
               >
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="any">Any age</SelectItem>
+                <SelectItem value="any">{t("documentPanel.anyAge")}</SelectItem>
                 {AGE_RANGES.map((range) => (
                   <SelectItem key={range} value={range}>
                     {range}
@@ -1645,18 +1660,19 @@ export default function EditorPage() {
                   onClick={() => setIdeaDialogOpen(true)}
                 >
                   <SparklesIcon data-icon="inline-start" />
-                  Suggest ideas
+                  {t("documentPanel.suggestIdeas")}
                 </Button>
               </TooltipTrigger>
               <TooltipContent>
-                Get AI lesson ideas tailored to this age range
+                {t("documentPanel.suggestIdeasTooltip")}
               </TooltipContent>
             </Tooltip>
           </div>
           <p className="mt-2 text-sm text-muted-foreground">
-            {sectionCount} section{sectionCount === 1 ? "" : "s"} · {blockCount}{" "}
-            content block
-            {blockCount === 1 ? "" : "s"}
+            {t("stats.summary", {
+              sections: t("stats.sections", { count: sectionCount }),
+              blocks: t("stats.blocks", { count: blockCount }),
+            })}
           </p>
 
           {(editingId || git.ready) && (
@@ -1675,14 +1691,14 @@ export default function EditorPage() {
                     >
                       {editingPublished ? <CloudUploadIcon /> : <CloudIcon />}
                       {editingPublished
-                        ? "Editing a published lesson"
-                        : "Editing a cloud draft"}
+                        ? t("documentPanel.editingPublished")
+                        : t("documentPanel.editingDraft")}
                     </Badge>
                   </TooltipTrigger>
                   <TooltipContent className="max-w-xs">
                     {editingPublished
-                      ? "You're editing a lesson you published. Saving to the cloud overwrites it in the hub. This status is saved until you update it or fork into a new lesson."
-                      : "You're editing a draft backed up to the cloud. Only you can see it; saving updates the backup, or you can publish it to the hub. This status is saved until you change it or fork into a new lesson."}
+                      ? t("documentPanel.editingPublishedTooltip")
+                      : t("documentPanel.editingDraftTooltip")}
                   </TooltipContent>
                 </Tooltip>
               )}
@@ -1708,16 +1724,17 @@ export default function EditorPage() {
                       >
                         <HistoryIcon />
                         {git.pending > 0
-                          ? `${git.pending} unsaved change${git.pending === 1 ? "" : "s"}`
+                          ? t("history.unsavedChanges", { count: git.pending })
                           : git.lastCommit
-                            ? `Version saved ${timeAgo(git.lastCommit.at)}`
-                            : "Version history"}
+                            ? t("history.versionSaved", {
+                                time: timeAgo(git.lastCommit.at),
+                              })
+                            : t("history.label")}
                       </Badge>
                     </button>
                   </TooltipTrigger>
                   <TooltipContent className="max-w-xs">
-                    Every version of this lesson is saved automatically as you
-                    work. Click to browse them and go back to any one.
+                    {t("history.tooltip")}
                   </TooltipContent>
                 </Tooltip>
               )}
@@ -1727,14 +1744,11 @@ export default function EditorPage() {
                   <TooltipTrigger asChild>
                     <Button variant="ghost" size="sm" onClick={handleFork}>
                       <GitForkIcon data-icon="inline-start" />
-                      Fork into a new lesson
+                      {t("documentPanel.forkButton")}
                     </Button>
                   </TooltipTrigger>
                   <TooltipContent className="max-w-xs">
-                    Detach from this saved lesson and start a new one. The new
-                    lesson keeps this one&rsquo;s history, so you can merge them
-                    later. Saving to the cloud will create a separate copy
-                    instead of overwriting the original.
+                    {t("documentPanel.forkTooltip")}
                   </TooltipContent>
                 </Tooltip>
               )}
@@ -1753,16 +1767,16 @@ export default function EditorPage() {
                     >
                       <GitMergeIcon data-icon="inline-start" />
                       {busy === "merge"
-                        ? "Checking..."
-                        : `Sync with ${forkedFromTitle || "the original"}`}
+                        ? t("documentPanel.syncChecking")
+                        : t("documentPanel.syncWith", {
+                            name: forkedFromTitle || t("labels.theOriginal"),
+                          })}
                     </Button>
                   </TooltipTrigger>
                   <TooltipContent className="max-w-xs">
-                    Bring in the changes made to{" "}
-                    {forkedFromTitle || "the original lesson"} since you forked
-                    it. Edits to different blocks — or to different parts of the
-                    same block — merge automatically; anything genuinely
-                    clashing is put to you.
+                    {t("documentPanel.syncTooltip", {
+                      name: forkedFromTitle || t("labels.theOriginalLesson"),
+                    })}
                   </TooltipContent>
                 </Tooltip>
               )}
@@ -1780,16 +1794,16 @@ export default function EditorPage() {
                     >
                       <GitPullRequestIcon data-icon="inline-start" />
                       {busy === "contribute"
-                        ? "Merging..."
-                        : `Merge back into ${forkedFromTitle || "the original"}`}
+                        ? t("documentPanel.contributeMerging")
+                        : t("documentPanel.contributeButton", {
+                            name: forkedFromTitle || t("labels.theOriginal"),
+                          })}
                     </Button>
                   </TooltipTrigger>
                   <TooltipContent className="max-w-xs">
-                    You&rsquo;re a trusted collaborator on{" "}
-                    {forkedFromTitle || "the original lesson"}, so you can merge
-                    your changes back into it. Its latest changes are pulled in
-                    first, block by block, and only genuine clashes are put to
-                    you. Its author is notified.
+                    {t("documentPanel.contributeTooltip", {
+                      name: forkedFromTitle || t("labels.theOriginalLesson"),
+                    })}
                   </TooltipContent>
                 </Tooltip>
               )}
@@ -1849,15 +1863,20 @@ export default function EditorPage() {
                 </div>
               ) : (
                 <div className="mt-4 rounded-md border border-dashed border-border p-12 text-center">
-                  <p className="mb-1 text-lg font-semibold">No sections yet</p>
+                  <p className="mb-1 text-lg font-semibold">
+                    {t("emptyState.heading")}
+                  </p>
                   <p className="mb-4 text-sm text-muted-foreground">
-                    Tap the <strong>+</strong> button to create your first
-                    lesson section.
+                    <Trans
+                      i18nKey="emptyState.instruction"
+                      ns="editor"
+                      components={{ strong: <strong /> }}
+                    />
                   </p>
                   <div className="flex flex-col justify-center gap-3 sm:flex-row">
                     <Button onClick={openAddDialog}>
                       <PlusIcon data-icon="inline-start" />
-                      Add section
+                      {t("emptyState.addSection")}
                     </Button>
                     <Button
                       variant="outline"
@@ -1865,7 +1884,7 @@ export default function EditorPage() {
                       disabled={busy !== null}
                     >
                       <FileUpIcon data-icon="inline-start" />
-                      Import Word document
+                      {t("header.importWord")}
                     </Button>
                     <Button
                       variant="outline"
@@ -1873,7 +1892,7 @@ export default function EditorPage() {
                       disabled={busy !== null}
                     >
                       <BracesIcon data-icon="inline-start" />
-                      Import JSON
+                      {t("header.importJson")}
                     </Button>
                   </div>
                 </div>
@@ -1887,28 +1906,30 @@ export default function EditorPage() {
           <Button
             size="icon-lg"
             onClick={openAddDialog}
-            aria-label="add section"
+            aria-label={t("addSectionFab.ariaLabel")}
             className="fixed right-4 bottom-4 z-40 size-14 rounded-full shadow-[var(--shadow-panel)] sm:right-8 sm:bottom-8"
           >
             <PlusIcon className="size-6" />
           </Button>
         </TooltipTrigger>
-        <TooltipContent>Add section</TooltipContent>
+        <TooltipContent>{t("addSectionFab.tooltip")}</TooltipContent>
       </Tooltip>
 
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
         <DialogContent className="sm:max-w-xs">
           <DialogHeader>
-            <DialogTitle>New section</DialogTitle>
+            <DialogTitle>{t("newSectionDialog.title")}</DialogTitle>
           </DialogHeader>
           <Field>
             <FieldLabel htmlFor="new-section-name" className="sr-only">
-              Section name
+              {t("newSectionDialog.nameLabel")}
             </FieldLabel>
             <Input
               id="new-section-name"
               autoFocus
-              placeholder={`Section ${sectionCount + 1}`}
+              placeholder={t("newSectionDialog.defaultName", {
+                n: sectionCount + 1,
+              })}
               value={newSectionName}
               onChange={(e) => setNewSectionName(e.target.value)}
               onKeyDown={(e) => {
@@ -1918,9 +1939,11 @@ export default function EditorPage() {
           </Field>
           <DialogFooter>
             <Button variant="outline" onClick={() => setDialogOpen(false)}>
-              Cancel
+              {t("newSectionDialog.cancel")}
             </Button>
-            <Button onClick={confirmAddSection}>Add</Button>
+            <Button onClick={confirmAddSection}>
+              {t("newSectionDialog.add")}
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -1931,7 +1954,7 @@ export default function EditorPage() {
       >
         <DialogContent className="flex max-h-[90vh] w-full flex-col sm:max-w-3xl">
           <DialogHeader>
-            <DialogTitle>Preview</DialogTitle>
+            <DialogTitle>{t("previewDialog.title")}</DialogTitle>
           </DialogHeader>
           <div
             className="s2c-preview-root overflow-y-auto rounded-md border border-border bg-white p-4 text-[#1a1a1a]"
@@ -1941,7 +1964,7 @@ export default function EditorPage() {
           />
           <DialogFooter>
             <Button variant="outline" onClick={() => setPreviewContent(null)}>
-              Close
+              {t("previewDialog.close")}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -1955,32 +1978,37 @@ export default function EditorPage() {
       >
         <DialogContent className="sm:max-w-xs">
           <DialogHeader>
-            <DialogTitle>Replace your current work?</DialogTitle>
+            <DialogTitle>{t("overwriteDialog.title")}</DialogTitle>
           </DialogHeader>
           <p className="text-sm text-muted-foreground">
-            {pendingEdit?.mode === "fork"
-              ? "Forking "
-              : pendingEdit?.mode === "import"
-                ? "Importing "
-                : "Opening "}
-            <strong>{pendingEdit?.title || "this lesson"}</strong>
-            {pendingEdit?.mode === "edit" ? " for editing" : ""} will replace
-            the lesson you&rsquo;re working on now. Your in-progress work is
-            auto-saved in this browser, and replacing it can&rsquo;t be undone.
+            <Trans
+              i18nKey={
+                pendingEdit?.mode === "fork"
+                  ? "overwriteDialog.forkBody"
+                  : pendingEdit?.mode === "import"
+                    ? "overwriteDialog.importBody"
+                    : "overwriteDialog.editBody"
+              }
+              ns="editor"
+              values={{
+                title: pendingEdit?.title || t("overwriteDialog.thisLesson"),
+              }}
+              components={{ strong: <strong /> }}
+            />
           </p>
           <DialogFooter>
             <Button variant="outline" onClick={() => setPendingEdit(null)}>
-              Keep my work
+              {t("overwriteDialog.keepMyWork")}
             </Button>
             <Button
               variant="destructive"
               onClick={() => applyEdit(pendingEdit)}
             >
               {pendingEdit?.mode === "fork"
-                ? "Replace and fork"
+                ? t("overwriteDialog.replaceAndFork")
                 : pendingEdit?.mode === "import"
-                  ? "Replace and import"
-                  : "Replace and edit"}
+                  ? t("overwriteDialog.replaceAndImport")
+                  : t("overwriteDialog.replaceAndEdit")}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -2008,34 +2036,35 @@ export default function EditorPage() {
       <Dialog open={importWarnOpen} onOpenChange={setImportWarnOpen}>
         <DialogContent className="sm:max-w-xs">
           <DialogHeader>
-            <DialogTitle>Import a Word document</DialogTitle>
+            <DialogTitle>{t("wordImportWarning.title")}</DialogTitle>
           </DialogHeader>
           <div className="flex flex-col gap-3 text-sm text-muted-foreground">
             <p>
-              Importing a <strong className="text-foreground">.docx</strong>{" "}
-              file is{" "}
-              <strong className="text-foreground">best-effort and lossy</strong>
-              . It works best with documents exported from this app; files
-              written elsewhere may import poorly or not at all.
+              <Trans
+                i18nKey="wordImportWarning.body1"
+                ns="editor"
+                components={[
+                  <strong key="0" className="text-foreground" />,
+                  <strong key="1" className="text-foreground" />,
+                ]}
+              />
             </p>
             <p>
-              For the import to work, the document must use{" "}
-              <strong className="text-foreground">Heading 2</strong> styles for
-              its section headings. Images, colours, and exact formatting may be
-              lost.
+              <Trans
+                i18nKey="wordImportWarning.body2"
+                ns="editor"
+                components={[<strong key="0" className="text-foreground" />]}
+              />
             </p>
-            <p>
-              If the document isn&rsquo;t structured as a lesson, it won&rsquo;t
-              be opened. Your current work is replaced only after you confirm.
-            </p>
+            <p>{t("wordImportWarning.body3")}</p>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setImportWarnOpen(false)}>
-              Cancel
+              {t("wordImportWarning.cancel")}
             </Button>
             <Button onClick={triggerImportPicker}>
               <FileUpIcon data-icon="inline-start" />
-              Choose file
+              {t("wordImportWarning.chooseFile")}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -2051,13 +2080,13 @@ export default function EditorPage() {
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <TriangleAlertIcon className="size-5 text-focus" />
-              Couldn&rsquo;t import this document
+              {t("importErrorDialog.title")}
             </DialogTitle>
           </DialogHeader>
           <p className="text-sm text-muted-foreground">{importError}</p>
           <DialogFooter>
             <Button variant="outline" onClick={() => setImportError(null)}>
-              Close
+              {t("importErrorDialog.close")}
             </Button>
             <Button
               onClick={() => {
@@ -2068,7 +2097,7 @@ export default function EditorPage() {
               }}
             >
               <FileUpIcon data-icon="inline-start" />
-              Try another file
+              {t("importErrorDialog.tryAnotherFile")}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -2113,8 +2142,8 @@ export default function EditorPage() {
         intent={mergeIntent}
         theirName={
           mergeIntent === "publish"
-            ? "the saved lesson"
-            : forkedFromTitle || "the original"
+            ? t("labels.theSavedLesson")
+            : forkedFromTitle || t("labels.theOriginal")
         }
         onConfirm={confirmMerge}
         busy={merging}

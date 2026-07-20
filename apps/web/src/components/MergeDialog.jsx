@@ -16,6 +16,7 @@
 // See lib/git/merge.js for the merge itself; this component only chooses.
 
 import { useState } from "react";
+import { Trans, useTranslation } from "react-i18next";
 import {
   GitMergeIcon,
   CircleCheckIcon,
@@ -38,8 +39,13 @@ import { questionMeta } from "../lib/questions.js";
 
 /** A contested value, rendered readably whatever shape it has. */
 function ValueText({ value }) {
+  const { t } = useTranslation("editorTools");
   if (value === null || value === undefined || value === "") {
-    return <p className="text-sm text-muted-foreground italic">(empty)</p>;
+    return (
+      <p className="text-sm text-muted-foreground italic">
+        {t("mergeDialog.emptyValue")}
+      </p>
+    );
   }
   if (Array.isArray(value)) {
     // Spelling words and multiple-choice answers are [{ id, text }].
@@ -53,14 +59,16 @@ function ValueText({ value }) {
 }
 
 /** A human name for the block a conflict is about. */
-function blockLabel(block) {
-  if (!block) return "block";
+function blockLabel(block, t) {
+  if (!block) return t("mergeDialog.blockLabel.default");
   if (block.type === "question") {
-    return `${questionMeta(block.questionType).short} question`;
+    return t("mergeDialog.blockLabel.question", {
+      type: questionMeta(block.questionType).short,
+    });
   }
-  if (block.type === "spelling") return "spelling list";
-  if (block.type === "image") return "image";
-  return "text block";
+  if (block.type === "spelling") return t("mergeDialog.blockLabel.spelling");
+  if (block.type === "image") return t("mergeDialog.blockLabel.image");
+  return t("mergeDialog.blockLabel.text");
 }
 
 // One side of a contested field, in a tinted panel.
@@ -79,6 +87,7 @@ function Side({ label, value, chosen }) {
 }
 
 function ConflictCard({ conflict, choice, onChoose, theirName }) {
+  const { t } = useTranslation("editorTools");
   const block = conflict.ours || conflict.theirs;
   const deleted = conflict.kind === "delete/edit";
 
@@ -86,15 +95,15 @@ function ConflictCard({ conflict, choice, onChoose, theirName }) {
     <div className="rounded-md border border-border p-4">
       <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
         <div className="flex items-center gap-2">
-          <span className="text-sm font-medium">{blockLabel(block)}</span>
+          <span className="text-sm font-medium">{blockLabel(block, t)}</span>
           <Badge
             variant="outline"
             className={cn(deleted && "border-focus/40 bg-focus/10 text-focus")}
           >
             {deleted
               ? conflict.deletedBy === "theirs"
-                ? `deleted in ${theirName}`
-                : "you deleted this"
+                ? t("mergeDialog.deletedIn", { name: theirName })
+                : t("mergeDialog.youDeletedThis")
               : conflict.fields.map((f) => f.field).join(", ")}
           </Badge>
         </div>
@@ -106,13 +115,19 @@ function ConflictCard({ conflict, choice, onChoose, theirName }) {
           onValueChange={(next) => next && onChoose(next)}
         >
           <ToggleGroupItem value="ours">
-            {deleted ? "Keep it" : "Mine"}
+            {deleted
+              ? t("mergeDialog.choice.keepIt")
+              : t("mergeDialog.choice.mine")}
           </ToggleGroupItem>
           <ToggleGroupItem value="theirs">
-            {deleted ? "Delete it" : "Theirs"}
+            {deleted
+              ? t("mergeDialog.choice.deleteIt")
+              : t("mergeDialog.choice.theirs")}
           </ToggleGroupItem>
           {!deleted && (
-            <ToggleGroupItem value="both">Keep both</ToggleGroupItem>
+            <ToggleGroupItem value="both">
+              {t("mergeDialog.choice.keepBoth")}
+            </ToggleGroupItem>
           )}
         </ToggleGroup>
       </div>
@@ -120,8 +135,8 @@ function ConflictCard({ conflict, choice, onChoose, theirName }) {
       {deleted ? (
         <p className="text-sm text-muted-foreground">
           {conflict.deletedBy === "theirs"
-            ? `You edited this block; ${theirName} deleted it. Keeping it preserves your edit.`
-            : `You deleted this block; ${theirName} edited it. Keeping it restores their version.`}
+            ? t("mergeDialog.deletedByThem", { name: theirName })
+            : t("mergeDialog.deletedByYou", { name: theirName })}
         </p>
       ) : (
         <div className="flex flex-col gap-3">
@@ -132,7 +147,7 @@ function ConflictCard({ conflict, choice, onChoose, theirName }) {
               </span>
               <div className="flex flex-col gap-2 sm:flex-row">
                 <Side
-                  label="Mine"
+                  label={t("mergeDialog.choice.mine")}
                   value={field.ours}
                   chosen={choice === "ours" || choice === "both"}
                 />
@@ -160,11 +175,12 @@ export default function MergeDialog({
   open,
   onClose,
   prepared,
-  theirName = "the original",
+  theirName,
   intent = "pull",
   onConfirm,
   busy,
 }) {
+  const { t } = useTranslation("editorTools");
   // Default every conflict to keeping our own work — the safe assumption is that
   // the user's own edits stand unless they say otherwise.
   const [choices, setChoices] = useState({});
@@ -172,16 +188,18 @@ export default function MergeDialog({
   if (!prepared) return null;
   const { conflicts, auto } = prepared;
 
+  const effectiveTheirName = theirName || t("mergeDialog.defaultTheirName");
+
   // A contribution writes to *someone else's* lesson, so say so plainly rather
   // than letting "Merge" imply it only touches your own copy.
   const contributing = intent === "contribute";
   const confirmLabel = busy
     ? contributing
-      ? "Merging back..."
-      : "Merging..."
+      ? t("mergeDialog.confirm.mergingBack")
+      : t("mergeDialog.confirm.merging")
     : contributing
-      ? `Merge back into ${theirName}`
-      : "Merge";
+      ? t("mergeDialog.confirm.mergeBackInto", { name: effectiveTheirName })
+      : t("mergeDialog.confirm.merge");
 
   const choiceFor = (blockId) => choices[blockId] || "ours";
   const choose = (blockId, value) =>
@@ -206,8 +224,10 @@ export default function MergeDialog({
             <GitMergeIcon className="size-4" />
             <span>
               {contributing
-                ? `Merge your changes back into ${theirName}`
-                : `Merge changes from ${theirName}`}
+                ? t("mergeDialog.title.contribute", {
+                    name: effectiveTheirName,
+                  })
+                : t("mergeDialog.title.pull", { name: effectiveTheirName })}
             </span>
           </DialogTitle>
         </DialogHeader>
@@ -217,11 +237,12 @@ export default function MergeDialog({
             <Alert className="border-focus/40 bg-focus/10 text-focus">
               <TriangleAlertIcon />
               <AlertDescription className="text-focus">
-                This updates{" "}
-                <strong className="font-medium">{theirName}</strong> itself, for
-                everyone — you are a trusted collaborator on it. Its latest
-                changes are merged in first, so nothing its author has done
-                since you forked is lost, and they&apos;ll be notified.
+                <Trans
+                  i18nKey="mergeDialog.contributingNotice"
+                  ns="editorTools"
+                  values={{ name: effectiveTheirName }}
+                  components={{ strong: <strong className="font-medium" /> }}
+                />
               </AlertDescription>
             </Alert>
           )}
@@ -229,30 +250,41 @@ export default function MergeDialog({
             <Alert className="border-success/40 bg-success/10 text-success">
               <CircleCheckIcon />
               <AlertDescription className="text-success">
-                <p className="mb-1">Merged automatically:</p>
+                <p className="mb-1">{t("mergeDialog.auto.heading")}</p>
                 <ul className="ml-4 list-disc">
                   {auto.added.length > 0 && (
                     <li>
-                      {auto.added.length} new block(s) from {theirName}
+                      {t("mergeDialog.auto.newBlocks", {
+                        count: auto.added.length,
+                        name: effectiveTheirName,
+                      })}
                     </li>
                   )}
                   {auto.tookTheirs.length > 0 && (
                     <li>
-                      {auto.tookTheirs.length} block(s) they updated (you
-                      hadn&apos;t touched)
+                      {t("mergeDialog.auto.theirEdits", {
+                        count: auto.tookTheirs.length,
+                      })}
                     </li>
                   )}
                   {auto.merged.length > 0 && (
                     <li>
-                      {auto.merged.length} block(s) you both edited — in
-                      different fields, so{" "}
-                      <strong className="font-medium">
-                        both sets of edits were kept
-                      </strong>
+                      <Trans
+                        i18nKey="mergeDialog.auto.merged"
+                        ns="editorTools"
+                        count={auto.merged.length}
+                        components={{
+                          strong: <strong className="font-medium" />,
+                        }}
+                      />
                     </li>
                   )}
                   {auto.removed.length > 0 && (
-                    <li>{auto.removed.length} block(s) removed</li>
+                    <li>
+                      {t("mergeDialog.auto.removed", {
+                        count: auto.removed.length,
+                      })}
+                    </li>
                   )}
                 </ul>
               </AlertDescription>
@@ -263,16 +295,13 @@ export default function MergeDialog({
             <Alert>
               <InfoIcon />
               <AlertDescription>
-                Nothing is in conflict — the whole merge resolved on its own.
-                Confirm to apply it.
+                {t("mergeDialog.noConflicts")}
               </AlertDescription>
             </Alert>
           ) : (
             <>
               <p className="text-sm text-muted-foreground">
-                {conflicts.length === 1
-                  ? "One block was edited on both sides in the same place. Choose which to keep."
-                  : `${conflicts.length} blocks were edited on both sides in the same place. Choose which to keep.`}
+                {t("mergeDialog.conflictsIntro", { count: conflicts.length })}
               </p>
               <div className="flex flex-col gap-4">
                 {conflicts.map((conflict) => (
@@ -281,7 +310,7 @@ export default function MergeDialog({
                     conflict={conflict}
                     choice={choiceFor(conflict.blockId)}
                     onChoose={(value) => choose(conflict.blockId, value)}
-                    theirName={theirName}
+                    theirName={effectiveTheirName}
                   />
                 ))}
               </div>
@@ -296,7 +325,7 @@ export default function MergeDialog({
             onClick={onClose}
             disabled={busy}
           >
-            Cancel
+            {t("mergeDialog.cancel")}
           </Button>
           <Button
             type="button"

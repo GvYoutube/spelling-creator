@@ -8,6 +8,7 @@
 // arrives, so what it stores is only ever what the allow-list permits.
 
 import { useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { CircleAlertIcon } from "lucide-react";
 import {
   Dialog,
@@ -34,6 +35,7 @@ import { richTextLength } from "../lib/richText.js";
  *                                       profile page can update without a refetch.
  */
 export default function BioDialog({ open, initial = "", onClose, onSaved }) {
+  const { t } = useTranslation("profile");
   const { accessToken, refreshSession } = useAuth();
   // The bio as rich-text HTML. `editorKey` remounts the editor when the dialog
   // reopens — tiptap owns its content after mount, so re-seeding it needs a remount.
@@ -66,7 +68,7 @@ export default function BioDialog({ open, initial = "", onClose, onSaved }) {
       if (onSaved) onSaved(saved);
       if (onClose) onClose();
     } catch (err) {
-      setError(err.message || "Could not save your bio.");
+      setError(err.message || t("bioDialog.saveError"));
     } finally {
       setSaving(false);
     }
@@ -81,11 +83,8 @@ export default function BioDialog({ open, initial = "", onClose, onSaved }) {
     >
       <DialogContent className="sm:max-w-lg">
         <DialogHeader>
-          <DialogTitle>Edit bio</DialogTitle>
-          <DialogDescription>
-            A short description shown on your public profile. Leave it empty to
-            remove your bio.
-          </DialogDescription>
+          <DialogTitle>{t("bioDialog.title")}</DialogTitle>
+          <DialogDescription>{t("bioDialog.description")}</DialogDescription>
         </DialogHeader>
         <form onSubmit={save}>
           <div className="flex flex-col gap-4">
@@ -100,8 +99,8 @@ export default function BioDialog({ open, initial = "", onClose, onSaved }) {
               value={html}
               onChange={setHtml}
               maxLength={BIO_MAX}
-              label="Bio"
-              placeholder="Tell people a little about yourself…"
+              label={t("bioDialog.fieldLabel")}
+              placeholder={t("bioDialog.placeholder")}
               disabled={saving}
               autoFocus
             />
@@ -113,11 +112,11 @@ export default function BioDialog({ open, initial = "", onClose, onSaved }) {
               onClick={onClose}
               disabled={saving}
             >
-              Cancel
+              {t("bioDialog.cancel")}
             </Button>
             <Button type="submit" disabled={saving || tooLong}>
               {saving && <Spinner data-icon="inline-start" />}
-              Save
+              {t("bioDialog.save")}
             </Button>
           </DialogFooter>
         </form>

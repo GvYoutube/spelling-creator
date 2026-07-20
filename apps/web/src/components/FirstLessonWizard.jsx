@@ -9,6 +9,7 @@
 // working document.
 
 import { useState } from "react";
+import { Trans, useTranslation } from "react-i18next";
 import {
   XIcon,
   TypeIcon,
@@ -22,64 +23,24 @@ import { cn } from "../lib/utils.js";
 
 // Each step pairs a short heading with a one-paragraph explanation and the icon
 // the matching control uses elsewhere in the editor, so the guide reads as a
-// map of the real interface.
-const STEPS = [
-  {
-    label: "Name your lesson",
-    icon: TypeIcon,
-    body: (
-      <>
-        Start at the top of the page and type a title for your lesson — for
-        example <em>“The Life of Albert Einstein”</em>. You can change it any
-        time.
-      </>
-    ),
-  },
-  {
-    label: "Add a section",
-    icon: PlusIcon,
-    body: (
-      <>
-        Press the round <strong>+</strong> button (bottom-right) or{" "}
-        <strong>Add section</strong> to create your first section, such as a
-        word list or a practice exercise. Lessons are built from one or more
-        sections.
-      </>
-    ),
-  },
-  {
-    label: "Fill in content",
-    icon: SpellCheckIcon,
-    body: (
-      <>
-        Inside a section, add content blocks: spelling words, instructions,
-        images, and questions. Reorder or remove blocks until the section reads
-        the way you want.
-      </>
-    ),
-  },
-  {
-    label: "Preview & share",
-    icon: Share2Icon,
-    body: (
-      <>
-        When you’re happy, use <strong>Preview</strong> to see the printable
-        result, <strong>Export</strong> to download a Word doc or PDF, or{" "}
-        <strong>Publish to hub</strong> to share it with others.
-      </>
-    ),
-  },
+// map of the real interface. Labels/bodies are translated (see the "steps"
+// key of the aiDialogs namespace); this array only pins the key + icon order.
+const STEP_KEYS_AND_ICONS = [
+  { key: "nameLesson", icon: TypeIcon },
+  { key: "addSection", icon: PlusIcon },
+  { key: "fillContent", icon: SpellCheckIcon },
+  { key: "previewShare", icon: Share2Icon },
 ];
 
 // A compact horizontal step indicator — shadcn has no Stepper component, so
 // this is hand-built: a dot per step (numbered, or checked once passed),
 // connected by a line, with the step's label underneath. Hidden below sm,
 // matching the original's alternativeLabel-on-desktop-only behavior.
-function StepIndicator({ activeStep }) {
+function StepIndicator({ activeStep, steps }) {
   return (
     <ol className="my-4 hidden items-start sm:flex">
-      {STEPS.map((s, i) => (
-        <li key={s.label} className="flex flex-1 flex-col items-center gap-1.5">
+      {steps.map((s, i) => (
+        <li key={s.key} className="flex flex-1 flex-col items-center gap-1.5">
           <div className="flex w-full items-center">
             <div
               className={cn(
@@ -106,7 +67,7 @@ function StepIndicator({ activeStep }) {
             <div
               className={cn(
                 "h-px flex-1",
-                i === STEPS.length - 1
+                i === steps.length - 1
                   ? "invisible"
                   : i < activeStep
                     ? "bg-primary"
@@ -124,9 +85,16 @@ function StepIndicator({ activeStep }) {
 }
 
 export default function FirstLessonWizard({ open, onClose }) {
+  const { t } = useTranslation("aiDialogs");
   const [activeStep, setActiveStep] = useState(0);
 
-  const lastStep = activeStep === STEPS.length - 1;
+  const steps = STEP_KEYS_AND_ICONS.map(({ key, icon }) => ({
+    key,
+    icon,
+    label: t(`firstLessonWizard.steps.${key}.label`),
+  }));
+
+  const lastStep = activeStep === steps.length - 1;
 
   // Always start fresh at step one when the panel closes, so reopening it from
   // the help button doesn't drop the user back at the final step.
@@ -144,7 +112,7 @@ export default function FirstLessonWizard({ open, onClose }) {
 
   if (!open) return null;
 
-  const step = STEPS[activeStep];
+  const step = steps[activeStep];
   const StepIcon = step.icon;
 
   return (
@@ -153,7 +121,7 @@ export default function FirstLessonWizard({ open, onClose }) {
     // the add-section FAB; on small screens it stretches to the side margins.
     <div
       role="complementary"
-      aria-label="How to create a lesson"
+      aria-label={t("firstLessonWizard.panelAriaLabel")}
       className={cn(
         // Glass surface, same recipe as dialog.jsx — see the note there. This
         // one genuinely has something to blur: unlike an isolated one-off
@@ -165,11 +133,11 @@ export default function FirstLessonWizard({ open, onClose }) {
       )}
     >
       <div className="flex items-start justify-between gap-2">
-        <p className="text-sm font-bold">Create your first lesson</p>
+        <p className="text-sm font-bold">{t("firstLessonWizard.title")}</p>
         <Button
           variant="ghost"
           size="icon-sm"
-          aria-label="close"
+          aria-label={t("firstLessonWizard.closeAriaLabel")}
           onClick={handleClose}
           className="-mt-1 -mr-1"
         >
@@ -177,20 +145,34 @@ export default function FirstLessonWizard({ open, onClose }) {
         </Button>
       </div>
 
-      <StepIndicator activeStep={activeStep} />
+      <StepIndicator activeStep={activeStep} steps={steps} />
       <hr className="mt-1 mb-3 border-border sm:hidden" />
 
       <div className="flex items-start gap-3">
         <StepIcon className="mt-0.5 size-5 shrink-0 text-primary" />
         <div>
           <p className="mb-1 text-sm font-medium">{step.label}</p>
-          <p className="text-sm text-muted-foreground">{step.body}</p>
+          <p className="text-sm text-muted-foreground">
+            <Trans
+              i18nKey={`firstLessonWizard.steps.${step.key}.body`}
+              ns="aiDialogs"
+              components={{
+                em: <em />,
+                strong: <strong />,
+                strong2: <strong />,
+                strong3: <strong />,
+              }}
+            />
+          </p>
         </div>
       </div>
 
       <div className="mt-4 flex items-center justify-between">
         <span className="text-xs text-muted-foreground">
-          Step {activeStep + 1} of {STEPS.length}
+          {t("firstLessonWizard.stepCounter", {
+            current: activeStep + 1,
+            total: steps.length,
+          })}
         </span>
         <div className="flex gap-2">
           <Button
@@ -200,10 +182,12 @@ export default function FirstLessonWizard({ open, onClose }) {
             onClick={handleBack}
             disabled={activeStep === 0}
           >
-            Back
+            {t("firstLessonWizard.back")}
           </Button>
           <Button type="button" size="sm" onClick={handleNext}>
-            {lastStep ? "Done" : "Next"}
+            {lastStep
+              ? t("firstLessonWizard.done")
+              : t("firstLessonWizard.next")}
           </Button>
         </div>
       </div>
