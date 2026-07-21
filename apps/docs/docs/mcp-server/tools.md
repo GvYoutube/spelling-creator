@@ -61,8 +61,10 @@ one an optional image, 2 text paragraphs, 4 spelling words, and 13 questions in 
 covering verbatim-in-text, fill-in-the-blank, word-problem, synonym/evidence, background-knowledge,
 and open-ended question types. This default (and the rest of the authoring conventions — spelling-
 word rules, math `steps`, image placement, tone) is sent to the connecting assistant as the
-server's MCP `instructions`, so most clients apply it automatically; the tool descriptions below
-carry a summary too, for clients that don't surface server instructions to the model.
+server's MCP `instructions`, so most clients apply it automatically. Not every client surfaces
+server `instructions` to the model — notably claude.ai's connector UI doesn't — so the full
+standard is also embedded directly in `create_lesson`'s tool description (`create_lesson_file`
+just points to it, rather than repeating it) to make sure it reaches the model either way.
 
 A lesson is **sections** of **blocks**. Block types:
 

@@ -6,10 +6,12 @@
 // unambiguous, and findable in the text.
 //
 // Sent to clients as the server's `instructions` (see worker.js / stdio.js) and
-// echoed in the tool descriptions that matter most (tools.js), since not every
-// MCP client surfaces server-level instructions to the model. Keep this in sync
-// with the source spec doc if the standards change; the full rationale and
-// worked examples live there, not here.
+// also embedded directly in create_lesson's tool description (tools.js), since
+// not every MCP client surfaces server-level instructions to the model (notably
+// claude.ai's connector UI doesn't). Other tools that share the same authoring
+// standard (e.g. create_lesson_file) point to create_lesson's description rather
+// than repeating this text. Keep this in sync with the source spec doc if the
+// standards change; the full rationale and worked examples live there, not here.
 export const LESSON_STANDARDS = `LESSON AUTHORING STANDARDS (defaults — honour the user if they ask for something different)
 
 SHAPE: 6 sections. Each section = [image?] + 2 text paragraphs + 4 spelling words + 13 questions,

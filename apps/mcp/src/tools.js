@@ -19,6 +19,7 @@ import {
 } from "./doc.js";
 import { applyPatch, findBlock } from "./patch.js";
 import { searchWikimediaImages, resolveWikimediaImage } from "./wikimedia.js";
+import { LESSON_STANDARDS } from "./standards.js";
 
 // One content block, described richly so the model fills the right fields per
 // type. buildDoc() does the strict per-type validation and returns clear errors
@@ -262,10 +263,9 @@ export function registerTools(server, ctx) {
         "spelling (an explicit word list), question (number/single/multiple/open/background), and image.\n\n" +
         "DEFAULT STRUCTURE (unless the user asks otherwise): 6 sections; each section is [image?] + 2 text " +
         "paragraphs + 4 spelling words + 13 questions, and ENDS with those question blocks about that section. " +
-        "Put questions after EVERY section — do NOT gather them into a single quiz section at the end. See the " +
-        "server's instructions (and the sections/blocks field descriptions) for the full authoring standard — " +
-        "question order and counts, spelling-word rules, math/steps conventions, image placement. Honour the " +
-        "user when they request a different length, more/fewer questions, or a specific shape.",
+        "Put questions after EVERY section — do NOT gather them into a single quiz section at the end. Honour the " +
+        "user when they request a different length, more/fewer questions, or a specific shape.\n\n" +
+        LESSON_STANDARDS,
       inputSchema: {
         title: z.string().describe("The lesson title / topic."),
         sections: sectionsSchema,
@@ -313,8 +313,9 @@ export function registerTools(server, ctx) {
         "A lesson is sections of blocks. Block types: text (prose — put words being taught in ALL CAPS), spelling (an " +
         "explicit word list), question (number/single/multiple/open/background), and image. DEFAULT STRUCTURE " +
         "(unless asked otherwise): 6 sections; each is [image?] + 2 text paragraphs + 4 spelling words + 13 " +
-        "questions, and ENDS with those question blocks about that section. See the server's instructions (and the " +
-        "sections/blocks field descriptions) for the full authoring standard.",
+        "questions, and ENDS with those question blocks about that section. Same full authoring standard as " +
+        "create_lesson (question order/counts, spelling-word rules, math/steps conventions, image placement) — " +
+        "see that tool's description.",
       inputSchema: {
         title: z.string().describe("The lesson title / topic."),
         sections: sectionsSchema,
