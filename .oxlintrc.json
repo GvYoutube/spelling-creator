@@ -80,15 +80,13 @@
       "env": { "worker": true }
     },
 
-    // ...except these two, which reach for the DOM (a <canvas> to downscale an
-    // image, an <a> to trigger a download). Only the web app imports them today.
-    // They move behind a `@spelling-creator/core/browser` subpath when the rest of
-    // the browser-only tier (imageStore, docx/pdf export) is extracted.
+    // ...except the `browser/` tier, which is framework-agnostic but genuinely
+    // needs a DOM (IndexedDB, <canvas>, FileReader, an <a> to download). It sits
+    // behind the `@spelling-creator/core/browser/*` subpaths so the Worker and the
+    // MCP server can't reach it by accident, and the split above means a module
+    // outside this directory still fails lint the moment it touches the DOM.
     {
-      "files": [
-        "packages/core/src/image.js",
-        "packages/core/src/jsonExport.js"
-      ],
+      "files": ["packages/core/src/browser/**/*.js"],
       "env": { "browser": true }
     }
   ]

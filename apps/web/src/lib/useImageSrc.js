@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { resolveImageSrc } from "./imageRef.js";
+import { resolveImageSrc } from "@spelling-creator/core/browser/imageRef";
 
 // Resolve an image block to a `<img>` src, managing object-URL lifecycle. The
 // URL is re-resolved whenever the underlying image changes (a new hash, or a

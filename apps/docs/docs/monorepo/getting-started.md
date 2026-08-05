@@ -51,8 +51,8 @@ The repo uses the [Oxc](https://oxc.rs) toolchain — `oxfmt` for formatting and
   and `HTMLRewriter`) for `apps/api`, and Node for `apps/mcp`. `packages/core` is
   linted against the `worker` env — the narrowest of the three — so that anything
   reaching for a browser-only global there fails the lint rather than breaking at
-  runtime inside the Worker. The two modules that legitimately need the DOM
-  (`image`, `jsonExport`) are opted back into `browser` by name.
+  runtime inside the Worker. The modules that legitimately need the DOM
+  are grouped under `src/browser/`, which is the only path opted back into `browser`.
 
 `eslint/no-undef` is enabled explicitly: it's part of ESLint's `js/recommended`
 but not of oxlint's `correctness` category, and it's what makes those `globals`

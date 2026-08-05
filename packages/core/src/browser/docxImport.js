@@ -11,12 +11,9 @@
 // section headings at all is rejected (see validateImportedDoc) so we never
 // open an unusable lesson in the editor.
 import mammoth from "mammoth";
-import { newId } from "@spelling-creator/core/id";
-import { QUESTION_TYPES } from "@spelling-creator/core/questions";
-import {
-  DEFAULT_IMAGE_SIZE,
-  DEFAULT_IMAGE_ALIGN,
-} from "@spelling-creator/core/image";
+import { newId } from "../id.js";
+import { QUESTION_TYPES } from "../questions.js";
+import { DEFAULT_IMAGE_SIZE, DEFAULT_IMAGE_ALIGN } from "../image.js";
 import { convertDocImages, resolveImageSrc } from "./imageRef.js";
 
 // Thrown when a document is readable but not structured as a lesson. EditorPage

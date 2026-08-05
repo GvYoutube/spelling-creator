@@ -28,8 +28,8 @@ import AiQuestionDialog from "./AiQuestionDialog.jsx";
 import ImageSearchDialog from "./ImageSearchDialog.jsx";
 import { cn } from "../lib/utils.js";
 import { newId } from "@spelling-creator/core/id";
-import { readImageFile } from "@spelling-creator/core/image";
-import { storeImageBytes } from "../lib/imageRef.js";
+import { readImageFile } from "@spelling-creator/core/browser/imageFile";
+import { storeImageBytes } from "@spelling-creator/core/browser/imageRef";
 import {
   QUESTION_TYPE_LIST,
   createQuestionBlock,

@@ -93,15 +93,18 @@ import {
   loadWizardSeen,
   saveWizardSeen,
   migrateLocalStorage,
-} from "../lib/storage.js";
-import { convertDocImages } from "../lib/imageRef.js";
+} from "@spelling-creator/core/browser/storage";
+import { convertDocImages } from "@spelling-creator/core/browser/imageRef";
 import { ensureImagesUploaded } from "../lib/imagesClient.js";
-import { exportDocx } from "../lib/docxExport.js";
-import { importDocxFile } from "../lib/docxImport.js";
-import { exportJson } from "@spelling-creator/core/jsonExport";
+import { exportDocx } from "@spelling-creator/core/browser/docxExport";
+import { importDocxFile } from "@spelling-creator/core/browser/docxImport";
+import { exportJson } from "@spelling-creator/core/browser/jsonExport";
 import { importJsonFile } from "@spelling-creator/core/jsonImport";
-import { exportPdf } from "../lib/pdfExport.js";
-import { previewHtml, PREVIEW_STYLES } from "../lib/htmlPreview.js";
+import { exportPdf } from "@spelling-creator/core/browser/pdfExport";
+import {
+  previewHtml,
+  PREVIEW_STYLES,
+} from "@spelling-creator/core/browser/htmlPreview";
 import { saveToGoogleDrive, googleDriveEnabled } from "../lib/googleDrive.js";
 import {
   publishLesson,

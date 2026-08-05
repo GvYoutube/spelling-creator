@@ -8,7 +8,7 @@
 import { newId } from "./id.js";
 import { QUESTION_TYPES } from "./questions.js";
 import { DEFAULT_IMAGE_SIZE, DEFAULT_IMAGE_ALIGN } from "./image.js";
-import { LESSON_FILE_FORMAT } from "./jsonExport.js";
+import { LESSON_FILE_FORMAT } from "./lessonFile.js";
 
 // Thrown when a file is readable but not a usable lesson. EditorPage surfaces
 // the message and refuses to load it — same contract as DocxImportError.
