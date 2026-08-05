@@ -26,3 +26,19 @@ Each app keeps its own environment file:
   provider is unset or fails.
 
 Both are gitignored.
+
+## Dependency updates
+
+`.github/dependabot.yml` runs Dependabot every Monday against two ecosystems:
+
+- **npm** — a single root entry covers all workspace packages, since Dependabot
+  resolves pnpm workspaces from the root `pnpm-lock.yaml`.
+- **github-actions** — the actions used by `.github/workflows/`.
+
+Minor and patch bumps are grouped (dev tooling, React, Radix UI, Cloudflare,
+then everything else split by production/development) so a routine week lands as
+a handful of PRs; majors open individually because they need review.
+
+`@cfworker/json-schema` is ignored — it's patched via `patchedDependencies` in
+`pnpm-workspace.yaml`, so bumping it requires regenerating
+`patches/@cfworker__json-schema@<version>.patch` by hand.

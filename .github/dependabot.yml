@@ -1,0 +1,98 @@
+version: 2
+
+updates:
+  # npm/pnpm dependencies. A single entry at the repo root covers every
+  # workspace package (apps/*) because Dependabot resolves pnpm workspaces
+  # from the root pnpm-lock.yaml.
+  - package-ecosystem: "npm"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "07:00"
+      timezone: "Etc/UTC"
+    open-pull-requests-limit: 10
+    versioning-strategy: increase
+    commit-message:
+      prefix: "deps"
+      prefix-development: "deps-dev"
+      include: "scope"
+    # Grouped so a week of routine bumps lands as a couple of PRs instead of a
+    # dozen. Major bumps stay ungrouped (one PR each) since they need review.
+    groups:
+      dev-tooling:
+        applies-to: version-updates
+        patterns:
+          - "eslint"
+          - "eslint-*"
+          - "@eslint/*"
+          - "prettier"
+          - "globals"
+          - "typescript"
+          - "@types/*"
+        update-types:
+          - "minor"
+          - "patch"
+      react:
+        applies-to: version-updates
+        patterns:
+          - "react"
+          - "react-dom"
+          - "react-router"
+          - "react-router-*"
+        update-types:
+          - "minor"
+          - "patch"
+      radix-ui:
+        applies-to: version-updates
+        patterns:
+          - "@radix-ui/*"
+        update-types:
+          - "minor"
+          - "patch"
+      cloudflare:
+        applies-to: version-updates
+        patterns:
+          - "wrangler"
+          - "@cloudflare/*"
+        update-types:
+          - "minor"
+          - "patch"
+      production-minor-patch:
+        applies-to: version-updates
+        dependency-type: "production"
+        update-types:
+          - "minor"
+          - "patch"
+      development-minor-patch:
+        applies-to: version-updates
+        dependency-type: "development"
+        update-types:
+          - "minor"
+          - "patch"
+      security-updates:
+        applies-to: security-updates
+        patterns:
+          - "*"
+    ignore:
+      # Patched locally via pnpm patchedDependencies — a version bump would
+      # break `pnpm install` until patches/@cfworker__json-schema*.patch is
+      # regenerated, so bump this one by hand.
+      - dependency-name: "@cfworker/json-schema"
+
+  # GitHub Actions used by .github/workflows/*.yml
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "07:00"
+      timezone: "Etc/UTC"
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: "ci"
+      include: "scope"
+    groups:
+      actions:
+        patterns:
+          - "*"
