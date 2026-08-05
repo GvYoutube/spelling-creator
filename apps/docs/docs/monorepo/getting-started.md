@@ -63,6 +63,27 @@ oxlint, so there is nothing to disable.
 `react-hooks/exhaustive-deps` is a warning, and `pnpm lint` does not pass
 `--deny-warnings`, matching the previous ESLint behaviour of not failing CI on it.
 
+## Continuous integration
+
+`.github/workflows/ci.yml` runs on every pull request and on `master` after a
+merge: install (with `--frozen-lockfile`), `pnpm lint`, `pnpm test`, then the web
+and docs builds.
+
+`pnpm test` is `pnpm -r test`, which runs each workspace's own suite —
+`packages/core` and `apps/api` under vitest (the Worker's through
+`@cloudflare/vitest-pool-workers`, so its sanitizer tests run against the real
+runtime), and `apps/mcp` under `node --test`. `apps/docs` has no test script and
+is skipped.
+
+The build runs without the `VITE_*` secrets — they are injected only for the real
+deploy, and a pull request from a fork could not read them anyway. It still
+resolves every import and runs the full bundler, which is what catches a bad
+module path or a broken chunk boundary.
+
+`.github/workflows/deploy.yml` is separate and still triggers only on a push to
+`master`. It lints and builds again before deploying, but by then the change has
+already been merged — CI is what gates the merge.
+
 ## Dependency updates
 
 `.github/dependabot.yml` runs Dependabot every Monday against two ecosystems:
