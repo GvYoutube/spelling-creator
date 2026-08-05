@@ -108,7 +108,14 @@ apply the same rules. Each module is its own subpath export:
   jsonImport            parse + validate a .json lesson file back into the lesson model
   image                 file reading, sizing, data-url helpers
   id                    id generation
+  wikimedia             Commons action-API round-trip + attribution metadata
 ```
+
+`wikimedia` holds only the parts of the Commons integration that are genuinely
+common to both clients — the endpoint, the query/unwrap call, and the
+licence/author handling. The web app and the MCP server keep their own search and
+download functions on top of it, because their result shapes, paging and error
+wording are part of their respective contracts and are not interchangeable.
 
 `image` and `jsonExport` still use the DOM (a `<canvas>` to downscale, an `<a>` to
 trigger a download), so only the web app imports them for now — see the

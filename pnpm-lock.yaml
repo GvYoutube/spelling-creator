@@ -325,6 +325,9 @@ importers:
       '@modelcontextprotocol/sdk':
         specifier: ^1.18.0
         version: 1.29.0(@cfworker/json-schema@4.1.1(patch_hash=cf9a463b3ec33853ba498269c510b5438082ffb410975cdb45b2128eafbb69f8))(zod@3.25.76)
+      '@spelling-creator/core':
+        specifier: workspace:*
+        version: link:../../packages/core
       zod:
         specifier: ^3.25.0
         version: 3.25.76

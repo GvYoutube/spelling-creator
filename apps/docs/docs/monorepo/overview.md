@@ -15,7 +15,7 @@ Worker API.
 | `apps/web`      | `@spelling-creator/web`  | Rsbuild + React frontend (shadcn/ui + Tailwind, Supabase, react-router). Built into `apps/web/dist` and served by the Worker as static assets.                                                  |
 | `apps/api`      | `@spelling-creator/api`  | Cloudflare Worker backend (multi-provider AI suggestions — Gemini, OpenAI, Anthropic, Groq, Workers AI — profanity filter, KV rate limiting, R2 for lesson images and packed lesson histories). |
 | `apps/mcp`      | `@spelling-creator/mcp`  | MCP server — lets an AI assistant author and publish lessons to the hub.                                                                                                                        |
-| `packages/core` | `@spelling-creator/core` | Framework-agnostic lesson domain logic (question types, the spelling block, JSON import/export, hub search) shared by the apps above.                                                           |
+| `packages/core` | `@spelling-creator/core` | Framework-agnostic lesson domain logic (question types, the spelling block, JSON import/export, hub search, Wikimedia Commons) shared by the apps above.                                        |
 
 ## Shared code
 
@@ -32,6 +32,12 @@ touches `document`.
 Two modules in there (`image`, `jsonExport`) do still reach for the DOM in some of
 their functions, and are consumed only by the web app today. They move behind a
 `/browser` subpath when the rest of the browser-only tier is extracted.
+
+Sharing a module does not mean collapsing two callers into one function. Where
+the apps genuinely differ — the Commons integration returns a different hit shape
+to the image dialog than to an MCP tool, and pages results only in the browser —
+core holds the common plumbing and each app keeps a thin adapter over it. That
+keeps each app's public contract and error wording its own.
 
 See the [Web App](../web-app/overview.md) docs for full app documentation, and the
 [MCP Server](../mcp-server/overview.md) docs for connecting an AI assistant to the hub.

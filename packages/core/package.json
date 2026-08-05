@@ -14,7 +14,8 @@
     "./jsonImport": "./src/jsonImport.js",
     "./lessonSearch": "./src/lessonSearch.js",
     "./questions": "./src/questions.js",
-    "./spelling": "./src/spelling.js"
+    "./spelling": "./src/spelling.js",
+    "./wikimedia": "./src/wikimedia.js"
   },
   "dependencies": {
     "fuse.js": "^7.4.0"
