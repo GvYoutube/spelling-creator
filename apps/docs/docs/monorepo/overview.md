@@ -10,12 +10,12 @@ Worker API.
 
 ## Packages
 
-| Path            | Package                  | Description                                                                                                                                                                                     |
-| --------------- | ------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `apps/web`      | `@spelling-creator/web`  | Rsbuild + React frontend (shadcn/ui + Tailwind, Supabase, react-router). Built into `apps/web/dist` and served by the Worker as static assets.                                                  |
-| `apps/api`      | `@spelling-creator/api`  | Cloudflare Worker backend (multi-provider AI suggestions — Gemini, OpenAI, Anthropic, Groq, Workers AI — profanity filter, KV rate limiting, R2 for lesson images and packed lesson histories). |
-| `apps/mcp`      | `@spelling-creator/mcp`  | MCP server — lets an AI assistant author and publish lessons to the hub.                                                                                                                        |
-| `packages/core` | `@spelling-creator/core` | Framework-agnostic lesson domain logic (question types, the spelling block, JSON import/export, hub search, Wikimedia Commons) shared by the apps above.                                        |
+| Path            | Package                  | Description                                                                                                                                                                                                      |
+| --------------- | ------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `apps/web`      | `@spelling-creator/web`  | Rsbuild + React frontend (shadcn/ui + Tailwind, Supabase, react-router). Built into `apps/web/dist` and served by the Worker as static assets.                                                                   |
+| `apps/api`      | `@spelling-creator/api`  | Cloudflare Worker backend (multi-provider AI suggestions — Gemini, OpenAI, Anthropic, Groq, Workers AI — profanity filter, KV rate limiting, R2 for lesson images and packed lesson histories).                  |
+| `apps/mcp`      | `@spelling-creator/mcp`  | MCP server — lets an AI assistant author and publish lessons to the hub.                                                                                                                                         |
+| `packages/core` | `@spelling-creator/core` | Framework-agnostic lesson domain logic (question types, the spelling block, JSON import/export, hub search, Wikimedia Commons, the Yjs document, the portable half of version history) shared by the apps above. |
 
 ## Shared code
 

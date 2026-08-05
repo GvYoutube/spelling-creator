@@ -78,10 +78,10 @@ per second** (a single update is capped at 512 KB — a ceiling that only the ho
 opening copy of the lesson ever approaches, since ordinary edits are a few bytes).
 Over-budget traffic is dropped, and a connection that keeps flooding is closed.
 
-**Implementation.** `src/lib/ydoc.js` owns the CRDT: it maps the editor's plain
+**Implementation.** `@spelling-creator/core/ydoc` owns the CRDT: it maps the editor's plain
 lesson document (`{ title, sections: [...] }`) onto a Yjs document and back. The
 editor itself is untouched by any of this — it keeps working on plain objects, and
-`ydoc.js` keeps a Yjs document in step underneath, matching sections, blocks,
+`ydoc` keeps a Yjs document in step underneath, matching sections, blocks,
 spelling words and answers by the stable `id` they already carry. Its `reconcile`
 is **idempotent**, which is what stops a received edit from bouncing straight back
 to the sender.

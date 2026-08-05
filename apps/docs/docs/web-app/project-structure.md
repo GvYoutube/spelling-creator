@@ -71,13 +71,7 @@ src/
     imageStore.js         IndexedDB storage for the working lesson + its images
     imageRef.js           binary image-ref model (a block references its bytes)
     imagesClient.js       uploads a lesson's images to the Worker (R2) on publish
-    git/                  version history — every lesson is a real git repo, one file per content block
-      doc.js              pure doc helpers: canonical JSON, manifest, block map (no git)
-      ops.js              diff two docs into block operations; render commit messages (no git)
-      merge.js            three-way merge by block id, field-level (no git)
-      layout.js           document <-> git tree (lesson.json manifest + blocks/<blockId>.json)
-      repo.js             commit, history, diff two commits, restore (bare repo, pure plumbing)
-      pack.js             pack for upload; clone/fetch from a pack; find the merge base
+    git/                  the browser-bound half of version history (the portable half is in core — see below)
       remote.js           calls the Worker's /git/:lessonId endpoints (pack in R2)
       sync.js             fork (= clone the repo) and merge-with-original flows
       fs.js               LightningFS — the IndexedDB filesystem the repos live on
@@ -109,7 +103,27 @@ apply the same rules. Each module is its own subpath export:
   image                 file reading, sizing, data-url helpers
   id                    id generation
   wikimedia             Commons action-API round-trip + attribution metadata
+  ydoc                  the Yjs lesson document: Y.Doc <-> doc model, remote apply, reconcile
+  git/doc               pure doc helpers: canonical JSON, manifest, block map (no git)
+  git/ops               diff two docs into block operations; render commit messages (no git)
+  git/merge             three-way merge by block id, field-level (no git)
+  git/layout            document <-> git tree (lesson.json manifest + blocks/<blockId>.json)
+  git/repo              commit, history, diff two commits, restore (bare repo, pure plumbing)
+  git/pack              pack for upload; clone/fetch from a pack; find the merge base
 ```
+
+### Why version history splits the way it does
+
+`git/repo` and friends never open a filesystem themselves — they take one through
+`repoCtx`, which is why they port unchanged. What stays in the web app is
+everything that names a concrete runtime: `fs` (LightningFS over IndexedDB),
+`remote` (reads `import.meta.env.VITE_API_URL` at module scope), `engine` and
+`load` (the dynamic-import boundary and the `Buffer` polyfill browsers need), and
+`sync`, which composes the two halves.
+
+That boundary is load-bearing for bundle size: isomorphic-git stays behind
+`load.js`'s dynamic import, in its own ~181 KB async chunk, rather than in the
+bundle every homepage visitor downloads.
 
 `wikimedia` holds only the parts of the Commons integration that are genuinely
 common to both clients — the endpoint, the query/unwrap call, and the

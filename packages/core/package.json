@@ -8,6 +8,12 @@
   "type": "module",
   "exports": {
     "./ageRanges": "./src/ageRanges.js",
+    "./git/doc": "./src/git/doc.js",
+    "./git/layout": "./src/git/layout.js",
+    "./git/merge": "./src/git/merge.js",
+    "./git/ops": "./src/git/ops.js",
+    "./git/pack": "./src/git/pack.js",
+    "./git/repo": "./src/git/repo.js",
     "./id": "./src/id.js",
     "./image": "./src/image.js",
     "./jsonExport": "./src/jsonExport.js",
@@ -15,9 +21,18 @@
     "./lessonSearch": "./src/lessonSearch.js",
     "./questions": "./src/questions.js",
     "./spelling": "./src/spelling.js",
-    "./wikimedia": "./src/wikimedia.js"
+    "./wikimedia": "./src/wikimedia.js",
+    "./ydoc": "./src/ydoc.js"
+  },
+  "scripts": {
+    "test": "vitest run"
   },
   "dependencies": {
-    "fuse.js": "^7.4.0"
+    "fuse.js": "^7.4.0",
+    "isomorphic-git": "^1.38.7",
+    "yjs": "^13.6.31"
+  },
+  "devDependencies": {
+    "vitest": "~3.2.4"
   }
 }

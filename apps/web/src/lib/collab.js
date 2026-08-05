@@ -40,7 +40,12 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import * as Y from "yjs";
 import { newId } from "@spelling-creator/core/id";
 import { colorForId } from "./presence.js";
-import { LOCAL, applyRemote, docFromY, reconcile } from "./ydoc.js";
+import {
+  LOCAL,
+  applyRemote,
+  docFromY,
+  reconcile,
+} from "@spelling-creator/core/ydoc";
 
 // Message type bytes — must match T in apps/api/src/collab-room.js.
 const T = {

@@ -474,6 +474,16 @@ importers:
       fuse.js:
         specifier: ^7.4.0
         version: 7.4.0
+      isomorphic-git:
+        specifier: ^1.38.7
+        version: 1.38.7
+      yjs:
+        specifier: ^13.6.31
+        version: 13.6.31
+    devDependencies:
+      vitest:
+        specifier: ~3.2.4
+        version: 3.2.4(@types/debug@4.1.13)(@types/node@25.9.1)(jiti@2.7.0)(lightningcss@1.32.0)(yaml@2.9.0)
 
 packages:
 
