@@ -10,23 +10,24 @@
 // not every MCP client surfaces server-level instructions to the model (notably
 // claude.ai's connector UI doesn't). Other tools that share the same authoring
 // standard (e.g. create_lesson_file) point to create_lesson's description rather
-// than repeating this text. Keep this in sync with the source spec doc if the
-// standards change; the full rationale and worked examples live there, not here.
+// than repeating this text. This file is the canonical copy of the standard —
+// when it changes, update the question counts echoed in tools.js's descriptions
+// and in apps/docs/docs/mcp-server/tools.md to match.
 export const LESSON_STANDARDS = `LESSON AUTHORING STANDARDS (defaults — honour the user if they ask for something different)
 
-SHAPE: 6 sections. Each section = [image?] + 2 text paragraphs + 4 spelling words + 13 questions,
+SHAPE: 6 sections. Each section = [image?] + 2 text paragraphs + 4 spelling words + 15 questions,
 in that order. Questions belong to their own section; never collect them into a separate quiz
 section at the end.
 
 PASSAGES: 2 short paragraphs per section (~60-110 words each). ALL-CAPS words are the harder,
 less-common learning vocabulary — a SEPARATE set of words from the spelling list (§ below), never
-overlapping. Plant orange-question synonyms as parentheticals right in the prose, e.g.
-"...its landscapes are truly SPECTACULAR (dramatic, breathtaking, stunning)." Any fact a math
-question needs must be stated in the passage first. Describe other cultures with curiosity, never
-as strange ("Fascinating Countries", not "Unusual Countries") — this is a hard rule. Handle mental
-illness, war, death, and disability factually and with dignity, without euphemism or
-tragedy-framing. Verify anything time-sensitive (records, prices, "world's largest X") before
-writing it down.
+overlapping. Make sure each passage contains a few concrete single-word nouns — materials, tools,
+places, parts — that the orange questions can ask the speller to name; there is no need to plant
+parenthetical synonyms in the prose any more. Any fact a math question needs must be stated in the
+passage first. Describe other cultures with curiosity, never as strange ("Fascinating Countries",
+not "Unusual Countries") — this is a hard rule. Handle mental illness, war, death, and disability
+factually and with dignity, without euphemism or tragedy-framing. Verify anything time-sensitive
+(records, prices, "world's largest X") before writing it down.
 
 SPELLING: exactly 4 words per section, each 6-9 letters. Thematically related to the topic but
 NOT drawn from the passage's ALL-CAPS vocabulary (reusing it is redundant and too obvious). A
@@ -34,28 +35,47 @@ spelling word must never appear as, or as a substring inside, any answer anywher
 (e.g. PRISON inside "the prisoner's dilemma" is a conflict). No spelling word repeats across
 sections.
 
-QUESTIONS per section, always in this exact order (13 total):
-  1-3  single      (green)  — 3 questions; each answer appears VERBATIM in this section's passage
-  4    number      (purple) — fill-in-the-blank; the number appears in the passage
-  5    number      (purple) — a word problem (see MATH below)
-  6-7  multiple    (orange) — 2 questions; every accepted answer appears verbatim in this
-                               section's text. Mix kinds: one synonym question ("Give a synonym
-                               for lucrative as used in the text") and one list/evidence question
-                               whose answer is phrased word-for-word as the passage phrases it.
-  8    background  (blue)   — prior knowledge the passage deliberately does NOT contain; always
+QUESTIONS per section, always in this exact order (15 total):
+  1-3   single     (green)  — 3 questions; each answer appears VERBATIM in this section's passage
+  4     number     (purple) — fill-in-the-blank; the number appears in the passage
+  5     number     (purple) — a word problem (see MATH below)
+  6-7   multiple   (orange) — 2 questions, each with 2-4 accepted answers. Every accepted answer is
+                               a SINGLE WORD appearing verbatim in this section's text. These are
+                               simple retrieval, not analysis: ask the speller to name concrete
+                               nouns lifted straight from the prose ("Name a material used to build
+                               the dam" -> CONCRETE, STEEL, ROCK; "Name a machine mentioned in the
+                               passage" -> CRANE, TRUCK, DRILL). NOT synonym questions ("give a
+                               synonym for X"), and NOT evidence/list answers phrased as long
+                               quotations — both ask the speller to hold too much in mind and to
+                               spell long strings on a letterboard.
+  8     background (blue)   — prior knowledge the passage deliberately does NOT contain; always
                                include the "background" field with that context
-  9-11 open        (pink)   — 3 TIGHT OPENS: open-ended but elicit a ONE-WORD answer, drawn from
-                               the speller's own world, not the passage. Rotate stems: "Name a...",
-                               "Name something that...", "What is one word for...", "Think of a
-                               word that means...", "Name a place where...", "Name a person who...".
-                               NEVER use "Give one word that comes to mind when you..." (retired —
-                               overused to the point of becoming a tic).
-  12-13 open       (pink)   — 2 EXTENDED OPENS: full-sentence responses, e.g. "In your own words,
+  9-12  open       (pink)   — 4 TIGHT OPENS: open-ended, with no single correct answer, but they
+                               must elicit an EASY one-word answer from the speller's own world,
+                               never from the passage. Two properties both matter: (a) the prompt
+                               names an everyday category broad enough that almost any speller can
+                               answer instantly, and (b) the load is LIGHT — the answer should come
+                               the moment they read the prompt, with no reasoning, no searching the
+                               lesson, nothing abstract or philosophical. Good: "Name a color of a
+                               crayon", "Name something found in a hospital", "Name something that
+                               uses electricity", "Name a recreational activity to do on a lake".
+                               Too hard, do NOT write these: "What is one word for a puzzle that is
+                               very hard to solve?" (abstract), "Think of a word that means
+                               never-ending" (a vocabulary puzzle), "Name something that sounds
+                               impossible but is real" (philosophical). Relate the CATEGORY to the
+                               section's theme — a dam lesson invites "Name something that floats" —
+                               but keep the ANSWER in everyday life; the link is thematic and light
+                               and must never turn the question into a comprehension check. Vary
+                               the stems: "Name a...", "Name something that...", "Name something
+                               found in...", "Name a kind of...", "Name a place where...", "Name an
+                               animal that...". NEVER use "Give one word that comes to mind when
+                               you..." (retired — overused to the point of becoming a tic).
+  13-15 open       (pink)   — 3 EXTENDED OPENS: full-sentence responses, e.g. "In your own words,
                                explain..." / "...Defend your answer." / "...Explain your
                                thinking." The very last question of the whole lesson should look
                                back across all sections, e.g. "Of the six parts of this lesson,
                                which idea did you find most astonishing? Defend your answer."
-  "open" questions carry no answer field at all — just the "prompt".
+  "open" questions carry no answer or example-answer field at all — just the "prompt".
 
 MATH (number questions): scale difficulty to the audience — for a 14+ speller, "two more than
 five" is not acceptable. Use real mathematics: percentage increase and percentages to 1-2 decimal
@@ -91,6 +111,9 @@ VALIDATE BEFORE SAVING (each has caught a real defect):
 - no ALL-CAPS vocabulary word is also a spelling word
 - no answer word of 6+ letters repeats across sections (a few topic words may legitimately recur)
 - all numeric answers across the whole lesson are distinct
-- each section has exactly 3 single + 2 number + 2 multiple + 1 background + 3 tight-open +
-  2 extended-open = 13 questions, in the order given above
-- no pink question uses the retired "comes to mind" stem`;
+- each section has exactly 3 single + 2 number + 2 multiple + 1 background + 4 tight-open +
+  3 extended-open = 15 questions, in the order given above
+- every orange accepted answer is a single word, with 2-4 answers per orange question
+- no pink question uses the retired "comes to mind" stem
+- tight opens are easy everyday recall — not abstract, not vocabulary puzzles, not
+  lesson-dependent`;
