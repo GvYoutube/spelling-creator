@@ -28,13 +28,23 @@ document.
 
 ## The pieces
 
-| File                                        | Role                                                         |
-| ------------------------------------------- | ------------------------------------------------------------ |
-| `apps/api/src/lib/richtext.js`              | **The boundary.** Sanitizes on write; flattens HTML to text. |
-| `apps/api/src/lib/richtext.test.js`         | Its tests — media, XSS, links, legacy values.                |
-| `apps/web/src/components/RichTextInput.jsx` | The editor (toolbar, limits, no media affordances).          |
-| `apps/web/src/components/RichText.jsx`      | The renderer, for both rich text and legacy plain text.      |
-| `apps/web/src/lib/richText.js`              | Render-time sanitizing (DOMPurify) + text flattening.        |
+| File                                        | Role                                                                      |
+| ------------------------------------------- | ------------------------------------------------------------------------- |
+| `@spelling-creator/core/richText`           | **The policy.** Allow-list, link schemes, link `rel`/`target`, HTML→text. |
+| `packages/core/src/richText.test.js`        | Its tests — link safety, the allow-list, the browser-side helpers.        |
+| `apps/api/src/lib/richtext.js`              | **The boundary.** Sanitizes on write (HTMLRewriter).                      |
+| `apps/api/src/lib/richtext.test.js`         | Its tests — media, XSS, links, legacy values.                             |
+| `apps/web/src/components/RichTextInput.jsx` | The editor (toolbar, limits, no media affordances).                       |
+| `apps/web/src/components/RichText.jsx`      | The renderer, for both rich text and legacy plain text.                   |
+| `apps/web/src/lib/richText.js`              | Render-time sanitizing (DOMPurify).                                       |
+
+The two sanitizers are deliberately separate — HTMLRewriter is the Workers
+runtime's native streaming parser and DOMPurify needs a real DOM, so neither can
+run where the other does. What they **agree** on is shared: which tags survive,
+which link schemes are real links, what a surviving link is rewritten to carry,
+and how markup flattens to text. Those used to be two hand-maintained copies
+under different names (`richTextToPlain` on the Worker, `richTextToPlainText` in
+the browser), each with a comment asking the reader to keep them in sync.
 
 ## Where "no media" is actually enforced
 
@@ -77,14 +87,14 @@ link.
 ## Text, not markup
 
 Everything downstream of storage wants text, not markup, and gets it from
-`richTextToPlain` (Worker) / `richTextToPlainText` (browser):
+`richTextToPlain` in `@spelling-creator/core/richText`:
 
 - **The profanity filter** scans words, not tag names and URLs.
 - **Length limits** (2000 characters for a comment, 500 for a bio) count what the
   user _wrote_, so wrapping a sentence in `<strong>` never costs them their budget.
-  The editor's live counter uses the same flattening, so the number a user sees is
-  the number the server enforces — the two implementations mirror each other
-  deliberately, and must be changed together.
+  The editor's live counter calls the same function the server's limit does, so the
+  number a user sees is the number the server enforces. This used to be two mirrored
+  implementations that had to be changed together; it is now one.
 - **The Atom feed's `<summary>`**, **notification bodies**, the **profile meta/OG
   description**, and the **one-line bio** in the followers list are all plain-text
   contexts. Markup rendered into them would appear as literal escaped tags in feed

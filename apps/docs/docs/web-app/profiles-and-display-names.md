@@ -41,7 +41,7 @@ consequences worth knowing:
   formatting a bio never eats into the budget. The editor's counter measures it the
   same way the Worker does, so the number you see is the number that's enforced.
 - Wherever a bio appears somewhere markup can't go, it is flattened to plain text
-  first (`richTextToLine` in `lib/richText.js`): the profile's meta/OG description,
+  first (`richTextToLine` in `@spelling-creator/core/richText`): the profile's meta/OG description,
   and the one-line subtitle in the followers/following list. A bio rendered as HTML
   into a `<meta content>` would otherwise show up as literal tags in Google snippets
   and link previews.

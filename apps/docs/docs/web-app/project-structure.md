@@ -59,7 +59,7 @@ src/
     pixabay.js            calls the Worker to search + fetch Pixabay images
     lessons.js            calls the Worker to list / fetch / publish hub lessons
     comments.js           calls the Worker to list / post / edit lesson comments
-    richText.js           render-time sanitizing (DOMPurify) + HTML→text for comments and bios
+    richText.js           render-time sanitizing (DOMPurify); policy + HTML→text come from core
     profile.js            calls the Worker for your own profile
     users.js              calls the Worker for other users' public profiles
     notifications.js      calls the Worker for the notification feed
@@ -103,6 +103,7 @@ apply the same rules. Each module is its own subpath export:
   image                 file reading, sizing, data-url helpers
   id                    id generation
   wikimedia             Commons action-API round-trip + attribution metadata
+  richText              rich-text policy: allow-list, link schemes, HTML→text
   ydoc                  the Yjs lesson document: Y.Doc <-> doc model, remote apply, reconcile
   git/doc               pure doc helpers: canonical JSON, manifest, block map (no git)
   git/ops               diff two docs into block operations; render commit messages (no git)

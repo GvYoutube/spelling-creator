@@ -20,6 +20,7 @@
     "./jsonImport": "./src/jsonImport.js",
     "./lessonSearch": "./src/lessonSearch.js",
     "./questions": "./src/questions.js",
+    "./richText": "./src/richText.js",
     "./spelling": "./src/spelling.js",
     "./wikimedia": "./src/wikimedia.js",
     "./ydoc": "./src/ydoc.js"
