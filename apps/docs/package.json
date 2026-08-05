@@ -2,9 +2,8 @@
   "name": "@spelling-creator/docs",
   "version": "0.0.0",
   "private": true,
-  "author": "playforge-coding",
   "license": "AGPL-3.0-only",
-  "packageManager": "pnpm@11.1.3",
+  "author": "playforge-coding",
   "scripts": {
     "dev": "rspress dev",
     "start": "rspress dev",
@@ -16,5 +15,6 @@
   },
   "engines": {
     "node": ">=20.0"
-  }
+  },
+  "packageManager": "pnpm@11.1.3"
 }

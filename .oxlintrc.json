@@ -1,0 +1,75 @@
+{
+  "$schema": "./node_modules/oxlint/configuration_schema.json",
+
+  "ignorePatterns": [
+    "**/dist/**",
+    "**/build/**",
+    "**/node_modules/**",
+    "**/.wrangler/**",
+    "**/doc_build/**"
+  ],
+
+  // `eslint` + `react` mirror the previous ESLint setup (js/recommended,
+  // eslint-plugin-react, eslint-plugin-react-hooks). Oxlint enables `unicorn`,
+  // `oxc` and `typescript` by default; they are left off so the rule set stays
+  // the one this codebase was written against.
+  "plugins": ["eslint", "react"],
+  "categories": {
+    "correctness": "error"
+  },
+
+  "env": {
+    "builtin": true
+  },
+
+  "rules": {
+    // Part of ESLint's `js/recommended`, but not of oxlint's `correctness`
+    // category. It's what makes the `env`/`globals` blocks below do anything.
+    "eslint/no-undef": "error",
+    "eslint/no-unused-vars": [
+      "error",
+      {
+        "caughtErrors": "none",
+        "argsIgnorePattern": "^_",
+        "varsIgnorePattern": "^_"
+      }
+    ]
+  },
+
+  "overrides": [
+    // Web app — React in the browser (modern JSX transform, no PropTypes)
+    {
+      "files": ["apps/web/**/*.js", "apps/web/**/*.jsx"],
+      "env": { "browser": true },
+      "rules": {
+        "react-hooks/rules-of-hooks": "error",
+        "react-hooks/exhaustive-deps": "warn"
+        // The ESLint config also switched off `react/prop-types` and
+        // `react-hooks/set-state-in-effect`. Oxlint implements neither rule, so
+        // there is nothing to disable here. If `set-state-in-effect` ever lands,
+        // turn it off again: resetting local state when a dialog opens / a route
+        // param changes is an intentional, well-contained pattern in this app,
+        // not the cascading-render smell that rule targets.
+      }
+    },
+
+    // API — Cloudflare Worker runtime
+    {
+      "files": ["apps/api/**/*.js"],
+      "env": { "worker": true, "node": true },
+      "globals": {
+        // Cloudflare-specific runtime globals: Durable Object WebSockets, and the
+        // streaming HTML parser the rich-text sanitizer is built on (lib/richtext.js).
+        "WebSocketPair": "readonly",
+        "WebSocketRequestResponsePair": "readonly",
+        "HTMLRewriter": "readonly"
+      }
+    },
+
+    // MCP server — Node runtime (also uses Web-standard fetch/crypto globals)
+    {
+      "files": ["apps/mcp/**/*.js", "apps/mcp/**/*.mjs"],
+      "env": { "node": true }
+    }
+  ]
+}

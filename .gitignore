@@ -25,7 +25,6 @@ logs/
 # Caches
 .cache/
 *.tsbuildinfo
-.eslintcache
 
 # OS
 .DS_Store

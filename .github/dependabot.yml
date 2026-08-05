@@ -23,11 +23,9 @@ updates:
       dev-tooling:
         applies-to: version-updates
         patterns:
-          - "eslint"
-          - "eslint-*"
-          - "@eslint/*"
-          - "prettier"
-          - "globals"
+          - "oxlint"
+          - "oxfmt"
+          - "@oxlint/*"
           - "typescript"
           - "@types/*"
         update-types:

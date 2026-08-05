@@ -12,6 +12,11 @@ Always lint and format:
 pnpm run fmt && pnpm run lint
 ```
 
+Formatting is [oxfmt](https://oxc.rs/docs/guide/usage/formatter) (`.oxfmtrc.json`)
+and linting is [oxlint](https://oxc.rs/docs/guide/usage/linter) (`.oxlintrc.json`).
+Both replaced Prettier and ESLint, so there is no `eslint.config.js`,
+`.prettierrc` or `.prettierignore` any more.
+
 Don't skip this. If you must, use `pnpm exec` or `pnpm dlx`, not `npx`.
 
 ## Docs (IMPORTANT!!!)
