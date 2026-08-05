@@ -15,6 +15,7 @@
     "build:docs": "pnpm --filter @spelling-creator/docs build",
     "preview": "pnpm --filter @spelling-creator/web preview",
     "deploy": "pnpm --filter @spelling-creator/api deploy",
+    "test": "pnpm -r test",
     "lint": "oxfmt --check . && oxlint",
     "fmt": "oxfmt ."
   },
