@@ -14,11 +14,11 @@
 import { useTranslation } from "react-i18next";
 import { Skeleton } from "./ui/skeleton.jsx";
 import { PREVIEW_STYLES } from "../lib/htmlPreview.js";
-import { fitWithin, imageSizeScale } from "../lib/image.js";
+import { fitWithin, imageSizeScale } from "@spelling-creator/core/image";
 import { DOCX_MAX_IMAGE_WIDTH } from "../lib/docxExport.js";
 import { useImageSrc } from "../lib/useImageSrc.js";
-import { questionMeta } from "../lib/questions.js";
-import { SPELLING_COLOR } from "../lib/spelling.js";
+import { questionMeta } from "@spelling-creator/core/questions";
+import { SPELLING_COLOR } from "@spelling-creator/core/spelling";
 
 const BLANK = "____________";
 

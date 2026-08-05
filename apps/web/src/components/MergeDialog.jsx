@@ -35,7 +35,7 @@ import { Badge } from "./ui/badge.jsx";
 import { Alert, AlertDescription } from "./ui/alert.jsx";
 import { ToggleGroup, ToggleGroupItem } from "./ui/toggle-group.jsx";
 import { cn } from "../lib/utils.js";
-import { questionMeta } from "../lib/questions.js";
+import { questionMeta } from "@spelling-creator/core/questions";
 
 /** A contested value, rendered readably whatever shape it has. */
 function ValueText({ value }) {

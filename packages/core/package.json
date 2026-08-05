@@ -1,0 +1,22 @@
+{
+  "name": "@spelling-creator/core",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Framework-agnostic lesson domain logic shared by the web app, the Worker API and the MCP server.",
+  "license": "AGPL-3.0-only",
+  "author": "playforge-coding",
+  "type": "module",
+  "exports": {
+    "./ageRanges": "./src/ageRanges.js",
+    "./id": "./src/id.js",
+    "./image": "./src/image.js",
+    "./jsonExport": "./src/jsonExport.js",
+    "./jsonImport": "./src/jsonImport.js",
+    "./lessonSearch": "./src/lessonSearch.js",
+    "./questions": "./src/questions.js",
+    "./spelling": "./src/spelling.js"
+  },
+  "dependencies": {
+    "fuse.js": "^7.4.0"
+  }
+}

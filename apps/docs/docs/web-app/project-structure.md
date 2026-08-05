@@ -54,14 +54,10 @@ src/
     docxImport.js         best-effort import of a .docx back into the lesson model
     pdfExport.js          docx -> html (mammoth) -> pdf (html2pdf.js)
     htmlPreview.js        docx -> html (mammoth) for the editor's in-app preview dialog + the PDF path (the hub lesson page renders directly via LessonView.jsx)
-    questions.js          question type definitions, colours, block factories
-    spelling.js           helpers for the explicit "spelling words" block
-    ageRanges.js          the age ranges a lesson can be pitched at
     aiSuggest.js          calls the Worker for AI text / questions / lesson ideas
     summarizer.js         browser Summarizer API wrapper (on-device lesson summaries; fails closed)
     pixabay.js            calls the Worker to search + fetch Pixabay images
     lessons.js            calls the Worker to list / fetch / publish hub lessons
-    lessonSearch.js       fully client-side hub search (Fuse.js)
     comments.js           calls the Worker to list / post / edit lesson comments
     richText.js           render-time sanitizing (DOMPurify) + HTML→text for comments and bios
     profile.js            calls the Worker for your own profile
@@ -88,12 +84,32 @@ src/
       engine.js, load.js  the git engine, behind one dynamic import (keeps ~185 KB off the main bundle)
       useLessonGit.js     the editor's controller: setup, periodic commits, history, restore
     useImageSrc.js        resolves an image ref to a displayable src
-    image.js              file reading, sizing, data-url helpers
     supabase.js           Supabase client (auth only) + supabaseEnabled flag
     auth.jsx              AuthProvider + useAuth (session, magic link, sign out)
     googleDrive.js        OAuth2 + upload the docx to Drive as a Google Doc
     turnstile.js          Cloudflare Turnstile loader + site key
     seo.js                per-page document title + Open Graph / Twitter tags
     storage.js            IndexedDB auto-save for the working lesson (migrates any pre-IndexedDB localStorage draft once, idempotently)
-    id.js                 id generation
 ```
+
+## Shared lesson logic
+
+The parts of the lesson model that don't depend on React live in
+`packages/core` (`@spelling-creator/core`), so the Worker and the MCP server can
+apply the same rules. Each module is its own subpath export:
+
+```
+@spelling-creator/core/
+  questions             question type definitions, colours, block factories
+  spelling              helpers for the explicit "spelling words" block
+  ageRanges             the age ranges a lesson can be pitched at
+  lessonSearch          fully client-side hub search (Fuse.js)
+  jsonExport            serialize a lesson to the .json lesson-file format + download it
+  jsonImport            parse + validate a .json lesson file back into the lesson model
+  image                 file reading, sizing, data-url helpers
+  id                    id generation
+```
+
+`image` and `jsonExport` still use the DOM (a `<canvas>` to downscale, an `<a>` to
+trigger a download), so only the web app imports them for now — see the
+[monorepo overview](../monorepo/overview.md) for how that tier is being split out.

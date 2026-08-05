@@ -344,6 +344,9 @@ importers:
       '@isomorphic-git/lightning-fs':
         specifier: ^4.6.2
         version: 4.6.2
+      '@spelling-creator/core':
+        specifier: workspace:*
+        version: link:../../packages/core
       '@supabase/supabase-js':
         specifier: ^2.106.2
         version: 2.106.2
@@ -398,9 +401,6 @@ importers:
       dompurify:
         specifier: ^3.4.12
         version: 3.4.12
-      fuse.js:
-        specifier: ^7.4.0
-        version: 7.4.0
       html2pdf.js:
         specifier: ^0.14.0
         version: 0.14.0
@@ -465,6 +465,12 @@ importers:
       vitest:
         specifier: ~3.2.4
         version: 3.2.4(@types/debug@4.1.13)(@types/node@25.9.1)(jiti@2.7.0)(lightningcss@1.32.0)(yaml@2.9.0)
+
+  packages/core:
+    dependencies:
+      fuse.js:
+        specifier: ^7.4.0
+        version: 7.4.0
 
 packages:
 
