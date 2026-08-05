@@ -14,7 +14,12 @@ const { publicVars } = loadEnv({ prefixes: ["VITE_"] });
 export default defineConfig({
   plugins: [
     pluginReact({
-      reactCompiler: true,
+      // `target: "18"` makes the React Compiler emit imports from
+      // `react-compiler-runtime` instead of React 19's `react/compiler-runtime`,
+      // which React 18 does not export.
+      reactCompiler: {
+        target: "18",
+      },
     }),
     pluginTailwindcss(),
   ],
@@ -43,9 +48,10 @@ export default defineConfig({
     favicon: "./src/favicon.svg",
   },
   output: {
-    // Mirror the old @vitejs/plugin-legacy targets. Rsbuild down-compiles and
-    // injects core-js polyfills based on this browserslist, so a separate
-    // legacy plugin is no longer needed.
+    // Mirror the old @vitejs/plugin-legacy targets. Rsbuild down-compiles JS and
+    // CSS syntax to this browserslist, so a separate legacy plugin is no longer
+    // needed. (No core-js polyfills are injected — `output.polyfill` defaults to
+    // "off"; enabling it would mean adding core-js v3 as a dependency.)
     overrideBrowserslist: ["defaults", "not IE 11"],
   },
 });
