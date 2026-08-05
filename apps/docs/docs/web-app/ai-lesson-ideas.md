@@ -27,7 +27,7 @@ Turnstile-verified Worker (`apps/api`):
 3. The Worker re-checks the token server-side, asks the model for a batch of
    ideas, and returns them as `{ "ideas": [{ "title", "description" }] }`.
 
-The frontend wrapper is `suggestLessonIdeas()` in `src/lib/aiSuggest.js`. This
+The frontend wrapper is `suggestLessonIdeas()` in `@spelling-creator/core/aiSuggest`. This
 feature needs the same `VITE_API_URL` / `VITE_TURNSTILE_SITE_KEY` as the other AI
 helpers (see [Getting started](./getting-started.md)).
 

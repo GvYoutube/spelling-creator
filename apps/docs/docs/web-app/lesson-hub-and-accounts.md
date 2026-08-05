@@ -89,7 +89,8 @@ verifies it (and derives the author) before inserting the row.
 ## Worker endpoints (contract)
 
 These live in the Worker (`apps/api`). The frontend
-(`src/lib/lessons.js`) expects them at paths under `VITE_API_URL`. (The Worker
+(`@spelling-creator/core/lessons`) expects them at paths under the configured
+API base URL. (The Worker
 also exposes the profile, notification, and moderation endpoints documented on
 their own pages.)
 
@@ -109,8 +110,8 @@ their own pages.)
 no auth. A **draft** (`published: false`) is private — having the id/URL is not
 enough — so those two reads 404 unless the request carries a `Bearer <Supabase
 JWT>` for the lesson's author, a trusted collaborator (`doc.trustedCollaborators`),
-or a moderator/admin. The frontend (`src/lib/lessons.js`'s `fetchLesson`,
-`src/lib/comments.js`'s `fetchComments`) always sends the signed-in user's token
+or a moderator/admin. The frontend (`@spelling-creator/core/lessons`'s `fetchLesson`,
+`@spelling-creator/core/comments`'s `fetchComments`) always sends the signed-in user's token
 when one is available, so this is transparent to an author viewing or editing
 their own draft.
 

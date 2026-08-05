@@ -50,23 +50,13 @@ src/
     languages.js           LANGUAGES registry for a future language switcher (English only today)
     colorScheme.jsx        ColorSchemeProvider + useColorScheme (light/dark/system, persisted, applied as data-theme on <html>)
     useLiveField.js        shared debounce/commit buffering behind LiveField.jsx
-    aiSuggest.js          calls the Worker for AI text / questions / lesson ideas
     summarizer.js         browser Summarizer API wrapper (on-device lesson summaries; fails closed)
-    pixabay.js            calls the Worker to search + fetch Pixabay images
-    lessons.js            calls the Worker to list / fetch / publish hub lessons
-    comments.js           calls the Worker to list / post / edit lesson comments
     richText.js           render-time sanitizing (DOMPurify); policy + HTML→text come from core
-    profile.js            calls the Worker for your own profile
-    users.js              calls the Worker for other users' public profiles
-    notifications.js      calls the Worker for the notification feed
-    moderation.js         calls the Worker for the moderation queue
     collab.js             useCollaboration hook (one WebSocket to the CollabRoom Durable Object; doc sync, cursors, chat)
     presence.js           per-collaborator colour + selection presence helpers
     useSelectionBroadcast.js broadcasts the local editor selection to peers
     useDragAutoScroll.js  scrolls the page while a block drag hovers near a window edge (the browser only auto-scrolls a native drag while the pointer keeps moving)
-    imagesClient.js       uploads a lesson's images to the Worker (R2) on publish
     git/                  the browser-bound half of version history (the portable half is in core — see below)
-      remote.js           calls the Worker's /git/:lessonId endpoints (pack in R2)
       sync.js             fork (= clone the repo) and merge-with-original flows
       fs.js               LightningFS — the IndexedDB filesystem the repos live on
       engine.js, load.js  the git engine, behind one dynamic import (keeps ~185 KB off the main bundle)
@@ -99,6 +89,18 @@ apply the same rules. Each module is its own subpath export.
   image                 image sizing: selectable sizes, scale, fit-within
   id                    id generation
   wikimedia             Commons action-API round-trip + attribution metadata
+  lessons               list / fetch / publish hub lessons (+ the feed URL)
+  comments              list / post / edit lesson comments
+  users                 other users' public profiles, follows, activity
+  profile               your own profile (display name, bio)
+  notifications         the notification feed
+  moderation            the moderation queue
+  pixabay               search + fetch Pixabay images via the Worker
+  aiSuggest             AI text / questions / lesson ideas via the Worker
+  spellingWords         the aggregated published-lesson word list
+  mcpOAuth              the MCP OAuth approval handshake
+  imagesClient          upload a lesson's images to the Worker (R2) on publish
+  git/remote            the /git/:lessonId endpoints (pack in R2)
   richText              rich-text policy: allow-list, link schemes, HTML→text
   ydoc                  the Yjs lesson document: Y.Doc <-> doc model, remote apply, reconcile
   git/doc               pure doc helpers: canonical JSON, manifest, block map (no git)
@@ -124,6 +126,7 @@ the MCP server cannot reach it by accident:
   htmlPreview           docx -> html (mammoth) for the preview dialog and the PDF path
   pdfExport             docx -> html -> pdf (html2pdf.js)
   jsonExport            download a lesson as .json (the envelope itself is in lessonFile)
+  feeds                 read the hub / user Atom feeds (DOMParser)
 ```
 
 `.oxlintrc.json` enforces the split: `packages/core` is linted against the

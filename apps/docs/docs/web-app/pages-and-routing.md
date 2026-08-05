@@ -39,7 +39,7 @@ The home page (`src/pages/HomePage.jsx`) has two faces, chosen from the auth sta
   once every two days and cached in KV (`apps/api/src/routes/spelling-words.js`).
   A spelling row can hold a phrase rather than a single word ("ice cream"), and
   those animate badly — the shape scales text by character count, so a phrase
-  renders tiny and stretched — so `src/lib/spellingWords.js` drops any entry
+  renders tiny and stretched — so `@spelling-creator/core/spellingWords` drops any entry
   containing whitespace and only single words reach the animation.
   If that fetch fails, a small built-in word list is used instead. Feature
   illustrations live under `apps/web/public/home/` (a missing file degrades to a
