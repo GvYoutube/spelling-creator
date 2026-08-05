@@ -288,6 +288,9 @@ importers:
       '@jsquash/webp':
         specifier: ^1.5.0
         version: 1.5.0
+      '@spelling-creator/core':
+        specifier: workspace:*
+        version: link:../../packages/core
       '@spelling-creator/mcp':
         specifier: workspace:*
         version: link:../mcp
@@ -325,6 +328,9 @@ importers:
       '@modelcontextprotocol/sdk':
         specifier: ^1.18.0
         version: 1.29.0(@cfworker/json-schema@4.1.1(patch_hash=cf9a463b3ec33853ba498269c510b5438082ffb410975cdb45b2128eafbb69f8))(zod@3.25.76)
+      '@spelling-creator/core':
+        specifier: workspace:*
+        version: link:../../packages/core
       zod:
         specifier: ^3.25.0
         version: 3.25.76
@@ -344,6 +350,9 @@ importers:
       '@isomorphic-git/lightning-fs':
         specifier: ^4.6.2
         version: 4.6.2
+      '@spelling-creator/core':
+        specifier: workspace:*
+        version: link:../../packages/core
       '@supabase/supabase-js':
         specifier: ^2.106.2
         version: 2.106.2
@@ -398,12 +407,6 @@ importers:
       dompurify:
         specifier: ^3.4.12
         version: 3.4.12
-      fuse.js:
-        specifier: ^7.4.0
-        version: 7.4.0
-      html2pdf.js:
-        specifier: ^0.14.0
-        version: 0.14.0
       i18next:
         specifier: ^26.3.6
         version: 26.3.6
@@ -416,9 +419,6 @@ importers:
       lucide-react:
         specifier: ^1.24.0
         version: 1.24.0(react@18.3.1)
-      mammoth:
-        specifier: ^1.8.0
-        version: 1.12.0
       radix-ui:
         specifier: ^1.6.2
         version: 1.6.2(@types/react@19.2.15)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
@@ -462,6 +462,31 @@ importers:
       tailwindcss:
         specifier: ^4.3.2
         version: 4.3.2
+      vitest:
+        specifier: ~3.2.4
+        version: 3.2.4(@types/debug@4.1.13)(@types/node@25.9.1)(jiti@2.7.0)(lightningcss@1.32.0)(yaml@2.9.0)
+
+  packages/core:
+    dependencies:
+      docx:
+        specifier: ^9.0.3
+        version: 9.7.1
+      fuse.js:
+        specifier: ^7.4.0
+        version: 7.4.0
+      html2pdf.js:
+        specifier: ^0.14.0
+        version: 0.14.0
+      isomorphic-git:
+        specifier: ^1.38.7
+        version: 1.38.7
+      mammoth:
+        specifier: ^1.8.0
+        version: 1.12.0
+      yjs:
+        specifier: ^13.6.31
+        version: 13.6.31
+    devDependencies:
       vitest:
         specifier: ~3.2.4
         version: 3.2.4(@types/debug@4.1.13)(@types/node@25.9.1)(jiti@2.7.0)(lightningcss@1.32.0)(yaml@2.9.0)

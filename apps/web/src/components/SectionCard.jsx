@@ -27,15 +27,15 @@ import AiTextDialog from "./AiTextDialog.jsx";
 import AiQuestionDialog from "./AiQuestionDialog.jsx";
 import ImageSearchDialog from "./ImageSearchDialog.jsx";
 import { cn } from "../lib/utils.js";
-import { newId } from "../lib/id.js";
-import { readImageFile } from "../lib/image.js";
-import { storeImageBytes } from "../lib/imageRef.js";
+import { newId } from "@spelling-creator/core/id";
+import { readImageFile } from "@spelling-creator/core/browser/imageFile";
+import { storeImageBytes } from "@spelling-creator/core/browser/imageRef";
 import {
   QUESTION_TYPE_LIST,
   createQuestionBlock,
   buildQuestionBlock,
-} from "../lib/questions.js";
-import { createSpellingBlock } from "../lib/spelling.js";
+} from "@spelling-creator/core/questions";
+import { createSpellingBlock } from "@spelling-creator/core/spelling";
 
 function SectionCard({
   section,

@@ -21,7 +21,7 @@ import {
 } from "./ui/select.jsx";
 import { Field, FieldLabel } from "./ui/field.jsx";
 import { suggestQuestion } from "../lib/aiSuggest.js";
-import { QUESTION_TYPE_LIST } from "../lib/questions.js";
+import { QUESTION_TYPE_LIST } from "@spelling-creator/core/questions";
 import { TURNSTILE_SITE_KEY, whenTurnstileReady } from "../lib/turnstile.js";
 
 /**

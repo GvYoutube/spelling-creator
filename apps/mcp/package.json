@@ -23,6 +23,7 @@
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.18.0",
+    "@spelling-creator/core": "workspace:*",
     "zod": "^3.25.0"
   },
   "devDependencies": {

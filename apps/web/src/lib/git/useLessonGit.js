@@ -17,7 +17,7 @@
 //     doc, so there is always a baseline to diff against
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { DRAFT_REPO, repoIdFor } from "./doc.js";
+import { DRAFT_REPO, repoIdFor } from "@spelling-creator/core/git/doc";
 import { loadGitEngine } from "./load.js";
 import { fetchPack } from "./remote.js";
 

@@ -71,9 +71,9 @@ import FirstLessonWizard from "../components/FirstLessonWizard.jsx";
 import AiLessonIdeaDialog from "../components/AiLessonIdeaDialog.jsx";
 import HistoryDialog, { timeAgo } from "../components/HistoryDialog.jsx";
 import MergeDialog from "../components/MergeDialog.jsx";
-import { AGE_RANGES } from "../lib/ageRanges.js";
-import { newId } from "../lib/id.js";
-import { extractCapitalizedWords } from "../lib/spelling.js";
+import { AGE_RANGES } from "@spelling-creator/core/ageRanges";
+import { newId } from "@spelling-creator/core/id";
+import { extractCapitalizedWords } from "@spelling-creator/core/spelling";
 import { useLessonGit } from "../lib/git/useLessonGit.js";
 // The git engine (isomorphic-git + LightningFS) is loaded on demand rather than
 // imported directly, so it stays out of the bundle every homepage and hub visitor
@@ -93,15 +93,18 @@ import {
   loadWizardSeen,
   saveWizardSeen,
   migrateLocalStorage,
-} from "../lib/storage.js";
-import { convertDocImages } from "../lib/imageRef.js";
+} from "@spelling-creator/core/browser/storage";
+import { convertDocImages } from "@spelling-creator/core/browser/imageRef";
 import { ensureImagesUploaded } from "../lib/imagesClient.js";
-import { exportDocx } from "../lib/docxExport.js";
-import { importDocxFile } from "../lib/docxImport.js";
-import { exportJson } from "../lib/jsonExport.js";
-import { importJsonFile } from "../lib/jsonImport.js";
-import { exportPdf } from "../lib/pdfExport.js";
-import { previewHtml, PREVIEW_STYLES } from "../lib/htmlPreview.js";
+import { exportDocx } from "@spelling-creator/core/browser/docxExport";
+import { importDocxFile } from "@spelling-creator/core/browser/docxImport";
+import { exportJson } from "@spelling-creator/core/browser/jsonExport";
+import { importJsonFile } from "@spelling-creator/core/jsonImport";
+import { exportPdf } from "@spelling-creator/core/browser/pdfExport";
+import {
+  previewHtml,
+  PREVIEW_STYLES,
+} from "@spelling-creator/core/browser/htmlPreview";
 import { saveToGoogleDrive, googleDriveEnabled } from "../lib/googleDrive.js";
 import {
   publishLesson,

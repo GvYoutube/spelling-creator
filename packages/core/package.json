@@ -1,0 +1,52 @@
+{
+  "name": "@spelling-creator/core",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Framework-agnostic lesson domain logic shared by the web app, the Worker API and the MCP server.",
+  "license": "AGPL-3.0-only",
+  "author": "playforge-coding",
+  "type": "module",
+  "exports": {
+    "./ageRanges": "./src/ageRanges.js",
+    "./browser/docxExport": "./src/browser/docxExport.js",
+    "./browser/docxImport": "./src/browser/docxImport.js",
+    "./browser/htmlPreview": "./src/browser/htmlPreview.js",
+    "./browser/imageFile": "./src/browser/imageFile.js",
+    "./browser/imageRef": "./src/browser/imageRef.js",
+    "./browser/imageStore": "./src/browser/imageStore.js",
+    "./browser/jsonExport": "./src/browser/jsonExport.js",
+    "./browser/pdfExport": "./src/browser/pdfExport.js",
+    "./browser/storage": "./src/browser/storage.js",
+    "./config": "./src/config.js",
+    "./git/doc": "./src/git/doc.js",
+    "./git/layout": "./src/git/layout.js",
+    "./git/merge": "./src/git/merge.js",
+    "./git/ops": "./src/git/ops.js",
+    "./git/pack": "./src/git/pack.js",
+    "./git/repo": "./src/git/repo.js",
+    "./id": "./src/id.js",
+    "./image": "./src/image.js",
+    "./jsonImport": "./src/jsonImport.js",
+    "./lessonFile": "./src/lessonFile.js",
+    "./lessonSearch": "./src/lessonSearch.js",
+    "./questions": "./src/questions.js",
+    "./richText": "./src/richText.js",
+    "./spelling": "./src/spelling.js",
+    "./wikimedia": "./src/wikimedia.js",
+    "./ydoc": "./src/ydoc.js"
+  },
+  "scripts": {
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "docx": "^9.0.3",
+    "fuse.js": "^7.4.0",
+    "html2pdf.js": "^0.14.0",
+    "isomorphic-git": "^1.38.7",
+    "mammoth": "^1.8.0",
+    "yjs": "^13.6.31"
+  },
+  "devDependencies": {
+    "vitest": "~3.2.4"
+  }
+}

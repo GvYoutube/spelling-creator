@@ -41,7 +41,7 @@ export {
   readDocTree,
   readManifest,
   writeDocTree,
-} from "./layout.js";
+} from "@spelling-creator/core/git/layout";
 
 export {
   BRANCH,
@@ -61,7 +61,7 @@ export {
   readHeadDoc,
   restoreCommit,
   treeOfCommit,
-} from "./repo.js";
+} from "@spelling-creator/core/git/repo";
 
 export {
   cloneFromPack,
@@ -70,7 +70,7 @@ export {
   mergeBase,
   packRepo,
   reachableOids,
-} from "./pack.js";
+} from "@spelling-creator/core/git/pack";
 
 export {
   completeMerge,

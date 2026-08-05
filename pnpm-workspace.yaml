@@ -1,5 +1,6 @@
 packages:
   - "apps/*"
+  - "packages/*"
 
 # Build scripts allowed to run during install (union of both source repos).
 allowBuilds:

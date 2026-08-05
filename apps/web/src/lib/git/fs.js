@@ -15,7 +15,7 @@
 // before they first published isn't thrown away.
 
 import LightningFS from "@isomorphic-git/lightning-fs";
-import { DRAFT_REPO } from "./doc.js";
+import { DRAFT_REPO } from "@spelling-creator/core/git/doc";
 
 const DB_NAME = "s2c-lesson-git";
 const ROOT = "/lessons";

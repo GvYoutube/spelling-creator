@@ -50,20 +50,12 @@ src/
     languages.js           LANGUAGES registry for a future language switcher (English only today)
     colorScheme.jsx        ColorSchemeProvider + useColorScheme (light/dark/system, persisted, applied as data-theme on <html>)
     useLiveField.js        shared debounce/commit buffering behind LiveField.jsx
-    docxExport.js         build + download the .docx (text, images, questions)
-    docxImport.js         best-effort import of a .docx back into the lesson model
-    pdfExport.js          docx -> html (mammoth) -> pdf (html2pdf.js)
-    htmlPreview.js        docx -> html (mammoth) for the editor's in-app preview dialog + the PDF path (the hub lesson page renders directly via LessonView.jsx)
-    questions.js          question type definitions, colours, block factories
-    spelling.js           helpers for the explicit "spelling words" block
-    ageRanges.js          the age ranges a lesson can be pitched at
     aiSuggest.js          calls the Worker for AI text / questions / lesson ideas
     summarizer.js         browser Summarizer API wrapper (on-device lesson summaries; fails closed)
     pixabay.js            calls the Worker to search + fetch Pixabay images
     lessons.js            calls the Worker to list / fetch / publish hub lessons
-    lessonSearch.js       fully client-side hub search (Fuse.js)
     comments.js           calls the Worker to list / post / edit lesson comments
-    richText.js           render-time sanitizing (DOMPurify) + HTML→text for comments and bios
+    richText.js           render-time sanitizing (DOMPurify); policy + HTML→text come from core
     profile.js            calls the Worker for your own profile
     users.js              calls the Worker for other users' public profiles
     notifications.js      calls the Worker for the notification feed
@@ -72,28 +64,111 @@ src/
     presence.js           per-collaborator colour + selection presence helpers
     useSelectionBroadcast.js broadcasts the local editor selection to peers
     useDragAutoScroll.js  scrolls the page while a block drag hovers near a window edge (the browser only auto-scrolls a native drag while the pointer keeps moving)
-    imageStore.js         IndexedDB storage for the working lesson + its images
-    imageRef.js           binary image-ref model (a block references its bytes)
     imagesClient.js       uploads a lesson's images to the Worker (R2) on publish
-    git/                  version history — every lesson is a real git repo, one file per content block
-      doc.js              pure doc helpers: canonical JSON, manifest, block map (no git)
-      ops.js              diff two docs into block operations; render commit messages (no git)
-      merge.js            three-way merge by block id, field-level (no git)
-      layout.js           document <-> git tree (lesson.json manifest + blocks/<blockId>.json)
-      repo.js             commit, history, diff two commits, restore (bare repo, pure plumbing)
-      pack.js             pack for upload; clone/fetch from a pack; find the merge base
+    git/                  the browser-bound half of version history (the portable half is in core — see below)
       remote.js           calls the Worker's /git/:lessonId endpoints (pack in R2)
       sync.js             fork (= clone the repo) and merge-with-original flows
       fs.js               LightningFS — the IndexedDB filesystem the repos live on
       engine.js, load.js  the git engine, behind one dynamic import (keeps ~185 KB off the main bundle)
       useLessonGit.js     the editor's controller: setup, periodic commits, history, restore
     useImageSrc.js        resolves an image ref to a displayable src
-    image.js              file reading, sizing, data-url helpers
     supabase.js           Supabase client (auth only) + supabaseEnabled flag
     auth.jsx              AuthProvider + useAuth (session, magic link, sign out)
     googleDrive.js        OAuth2 + upload the docx to Drive as a Google Doc
     turnstile.js          Cloudflare Turnstile loader + site key
     seo.js                per-page document title + Open Graph / Twitter tags
-    storage.js            IndexedDB auto-save for the working lesson (migrates any pre-IndexedDB localStorage draft once, idempotently)
-    id.js                 id generation
 ```
+
+## Shared lesson logic
+
+The parts of the lesson model that don't depend on React live in
+`packages/core` (`@spelling-creator/core`), so the Worker and the MCP server can
+apply the same rules. Each module is its own subpath export.
+
+**Runtime-neutral** — safe to import from the browser, Node or the Worker:
+
+```
+@spelling-creator/core/
+  config                the seam the host app passes its configuration through
+  questions             question type definitions, colours, block factories
+  spelling              helpers for the explicit "spelling words" block
+  ageRanges             the age ranges a lesson can be pitched at
+  lessonSearch          fully client-side hub search (Fuse.js)
+  lessonFile            the .json lesson-file envelope (shared with the importer + MCP)
+  jsonImport            parse + validate a .json lesson file back into the lesson model
+  image                 image sizing: selectable sizes, scale, fit-within
+  id                    id generation
+  wikimedia             Commons action-API round-trip + attribution metadata
+  richText              rich-text policy: allow-list, link schemes, HTML→text
+  ydoc                  the Yjs lesson document: Y.Doc <-> doc model, remote apply, reconcile
+  git/doc               pure doc helpers: canonical JSON, manifest, block map (no git)
+  git/ops               diff two docs into block operations; render commit messages (no git)
+  git/merge             three-way merge by block id, field-level (no git)
+  git/layout            document <-> git tree (lesson.json manifest + blocks/<blockId>.json)
+  git/repo              commit, history, diff two commits, restore (bare repo, pure plumbing)
+  git/pack              pack for upload; clone/fetch from a pack; find the merge base
+```
+
+**Browser tier** — framework-agnostic, but needs a DOM (IndexedDB, `<canvas>`,
+`FileReader`, an `<a>` to download). Behind a separate subpath so the Worker and
+the MCP server cannot reach it by accident:
+
+```
+@spelling-creator/core/browser/
+  imageStore            IndexedDB storage for the working lesson + its images
+  imageRef              binary image-ref model (a block references its bytes)
+  imageFile             read a File to bytes, measure it, opportunistically re-encode to WEBP
+  storage               IndexedDB auto-save for the working lesson (+ the one-time localStorage migration)
+  docxExport            build the .docx (text, images, questions)
+  docxImport            best-effort import of a .docx back into the lesson model
+  htmlPreview           docx -> html (mammoth) for the preview dialog and the PDF path
+  pdfExport             docx -> html -> pdf (html2pdf.js)
+  jsonExport            download a lesson as .json (the envelope itself is in lessonFile)
+```
+
+`.oxlintrc.json` enforces the split: `packages/core` is linted against the
+`worker` env, and only `src/browser/**` is opted into `browser`. A module outside
+that directory that reaches for `document` fails the lint rather than breaking
+inside the Worker.
+
+### The config seam
+
+Core modules must not read `import.meta.env` — it is Rsbuild-specific, substituted
+at build time, and absent in Node, in the Worker and under any other bundler. A
+module that reads it at import time can only ever be used by the web app, which is
+what previously pinned the whole image/export tier inside `apps/web`.
+
+So the host passes its configuration in once, before anything uses it:
+
+```js
+// apps/web/src/main.jsx
+configureCore({ apiUrl: import.meta.env.VITE_API_URL });
+```
+
+Readers resolve **lazily** (`apiUrl()`, not a captured constant), which matters:
+ES imports are hoisted, so `configureCore` runs after every module in the graph has
+already been evaluated. Anything capturing the value at import time would capture
+`""`. `packages/core/src/config.test.js` pins that behaviour.
+
+### Why version history splits the way it does
+
+`git/repo` and friends never open a filesystem themselves — they take one through
+`repoCtx`, which is why they port unchanged. What stays in the web app is
+everything that names a concrete runtime: `fs` (LightningFS over IndexedDB),
+`remote` (reads `import.meta.env.VITE_API_URL` at module scope), `engine` and
+`load` (the dynamic-import boundary and the `Buffer` polyfill browsers need), and
+`sync`, which composes the two halves.
+
+That boundary is load-bearing for bundle size: isomorphic-git stays behind
+`load.js`'s dynamic import, in its own ~181 KB async chunk, rather than in the
+bundle every homepage visitor downloads.
+
+`wikimedia` holds only the parts of the Commons integration that are genuinely
+common to both clients — the endpoint, the query/unwrap call, and the
+licence/author handling. The web app and the MCP server keep their own search and
+download functions on top of it, because their result shapes, paging and error
+wording are part of their respective contracts and are not interchangeable.
+
+`image` and `jsonExport` still use the DOM (a `<canvas>` to downscale, an `<a>` to
+trigger a download), so only the web app imports them for now — see the
+[monorepo overview](../monorepo/overview.md) for how that tier is being split out.

@@ -22,7 +22,7 @@ import { Alert, AlertDescription } from "./ui/alert.jsx";
 import { Tooltip, TooltipTrigger, TooltipContent } from "./ui/tooltip.jsx";
 import { HistorySkeleton } from "./Skeletons.jsx";
 import { cn } from "../lib/utils.js";
-import { describeOp } from "../lib/git/ops.js";
+import { describeOp } from "@spelling-creator/core/git/ops";
 import i18n from "../lib/i18n.js";
 
 /** "just now" / "12 minutes ago" / "3 days ago" — then fall back to a date. */

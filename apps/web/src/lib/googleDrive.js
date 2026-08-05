@@ -13,7 +13,7 @@
 // "Authorised JavaScript origins" include the site's origin.
 
 import { Packer } from "docx";
-import { buildDocument } from "./docxExport.js";
+import { buildDocument } from "@spelling-creator/core/browser/docxExport";
 
 const CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID;
 

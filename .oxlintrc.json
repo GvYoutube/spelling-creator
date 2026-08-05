@@ -70,6 +70,24 @@
     {
       "files": ["apps/mcp/**/*.js", "apps/mcp/**/*.mjs"],
       "env": { "node": true }
+    },
+
+    // Shared core — runtime-neutral by default, so it stays importable from the
+    // Worker and the MCP server as well as the browser. `worker` is the narrowest
+    // env that covers the Web-standard globals it leans on (crypto, URL, Blob).
+    {
+      "files": ["packages/core/**/*.js"],
+      "env": { "worker": true }
+    },
+
+    // ...except the `browser/` tier, which is framework-agnostic but genuinely
+    // needs a DOM (IndexedDB, <canvas>, FileReader, an <a> to download). It sits
+    // behind the `@spelling-creator/core/browser/*` subpaths so the Worker and the
+    // MCP server can't reach it by accident, and the split above means a module
+    // outside this directory still fails lint the moment it touches the DOM.
+    {
+      "files": ["packages/core/src/browser/**/*.js"],
+      "env": { "browser": true }
     }
   ]
 }

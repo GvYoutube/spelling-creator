@@ -7,14 +7,14 @@
 // have it, otherwise to the public R2 URL the Worker serves (which exists once
 // the lesson has been saved/published).
 
+import { apiUrl } from "../config.js";
 import { getImageBlob, putImageBlob } from "./imageStore.js";
 
-const API_URL = import.meta.env.VITE_API_URL;
-
-// Public Worker/R2 URL for an uploaded image.
+// Public Worker/R2 URL for an uploaded image. Reads the base URL through the
+// config seam rather than the bundler's env, so this module is not tied to one
+// build tool — see ../config.js.
 export function imagePublicUrl(hash) {
-  const base = (API_URL || "").replace(/\/$/, "");
-  return `${base}/images/${hash}`;
+  return `${apiUrl()}/images/${hash}`;
 }
 
 // docx ImageRun wants one of: png | jpg | gif | bmp. Mirrors the rules the old

@@ -8,10 +8,10 @@ import {
   AlignmentType,
   BorderStyle,
 } from "docx";
-import { fitWithin, imageSizeScale } from "./image.js";
+import { fitWithin, imageSizeScale } from "../image.js";
 import { getImageBytes } from "./imageRef.js";
-import { questionMeta } from "./questions.js";
-import { SPELLING_COLOR } from "./spelling.js";
+import { questionMeta } from "../questions.js";
+import { SPELLING_COLOR } from "../spelling.js";
 
 // Max image width inside the docx page (in px; docx maps px→EMU internally). The
 // preview/PDF HTML path reuses this same number so an image is the identical size

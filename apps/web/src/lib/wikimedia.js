@@ -10,13 +10,25 @@
 // Every Commons image carries a licence, and most require attribution, so each
 // hit comes with a ready-made attribution string (author + licence + "via
 // Wikimedia Commons") that the dialog pre-fills as the image caption.
+//
+// The Commons round-trip and the attribution handling are shared with the MCP
+// server — see @spelling-creator/core/wikimedia. Only the pieces that differ
+// live here: paging, the hit shape the dialog renders, and the wording of the
+// errors it surfaces.
 
-const COMMONS_API = "https://commons.wikimedia.org/w/api.php";
+import {
+  cleanFileTitle,
+  commonsQuery,
+  extmetaCaption,
+  isUsableImage,
+  rankPages,
+} from "@spelling-creator/core/wikimedia";
 
 // Strip HTML to plain text using DOMParser, which (unlike assigning innerHTML)
 // never executes scripts or fetches sub-resources. Commons' extmetadata fields
 // like Artist arrive as HTML (often an <a> link), so we flatten them to text and
-// collapse whitespace. Falls back to a regex strip if DOMParser is unavailable.
+// collapse whitespace. Falls back to the shared regex strip if DOMParser is
+// unavailable.
 function stripHtml(html) {
   if (!html) return "";
   try {
@@ -30,28 +42,11 @@ function stripHtml(html) {
   }
 }
 
-// Build the caption we pre-fill, satisfying Commons' attribution norms:
-// author (when known) + licence short name + the source. Authors and licences
-// vary widely, so we degrade gracefully when either is missing.
-function buildCaption(author, license) {
-  const credit = [];
-  if (author) credit.push(`by ${author}`);
-  if (license) credit.push(license);
-  const tail = credit.length ? ` (${credit.join(", ")})` : "";
-  return `Image${tail} via Wikimedia Commons`;
-}
-
 // Map one generator=search result page (+ its imageinfo) to a normalised hit
 // with the same shape the dialog uses for Pixabay, plus the attribution fields.
 function normaliseHit(page, info) {
   const meta = info.extmetadata || {};
-  const author = stripHtml(meta.Artist && meta.Artist.value);
-  const license = stripHtml(
-    meta.LicenseShortName && meta.LicenseShortName.value,
-  );
-  const cleanTitle = (page.title || "")
-    .replace(/^File:/i, "")
-    .replace(/\.[a-z0-9]+$/i, "");
+  const { author, license, caption } = extmetaCaption(meta, stripHtml);
   return {
     id: page.pageid,
     title: page.title, // full "File:…" title — used by fetchWikimediaImage
@@ -64,8 +59,8 @@ function normaliseHit(page, info) {
     licenseURL: (meta.LicenseUrl && meta.LicenseUrl.value) || "",
     author,
     license,
-    tags: cleanTitle,
-    caption: buildCaption(author, license),
+    tags: cleanFileTitle(page.title),
+    caption,
   };
 }
 
@@ -93,49 +88,28 @@ export async function searchWikimediaImages(query, opts = {}) {
   const perPage = Math.max(3, Math.min(Number(opts.perPage) || 20, 50));
   const page = Math.max(1, Number(opts.page) || 1);
 
-  const params = new URLSearchParams({
-    action: "query",
-    format: "json",
-    origin: "*", // anonymous CORS
-    generator: "search",
-    gsrsearch: q,
-    gsrnamespace: "6", // File: namespace
-    gsrlimit: String(perPage),
-    gsroffset: String((page - 1) * perPage),
-    prop: "imageinfo",
-    iiprop: "url|size|mime|extmetadata",
-    iiurlwidth: "320", // grid thumbnail size
-    iiextmetadatafilter: "Artist|LicenseShortName|LicenseUrl",
-    iiextmetadatalanguage: "en",
-  });
-
-  let res;
-  try {
-    res = await fetch(`${COMMONS_API}?${params.toString()}`, {
-      headers: { Accept: "application/json" },
-    });
-  } catch (e) {
-    throw new Error("Could not reach Wikimedia Commons.", { cause: e });
-  }
-  if (!res.ok) {
-    throw new Error(`Search failed (${res.status}).`);
-  }
-
-  const data = await res.json().catch(() => ({}));
-  const pages =
-    data && data.query && data.query.pages
-      ? Object.values(data.query.pages)
-      : [];
-  // generator results come back keyed by pageid (unordered); `index` preserves
-  // the search ranking.
-  pages.sort((a, b) => (a.index || 0) - (b.index || 0));
+  const pages = await commonsQuery(
+    {
+      action: "query",
+      generator: "search",
+      gsrsearch: q,
+      gsrnamespace: "6", // File: namespace
+      gsrlimit: String(perPage),
+      gsroffset: String((page - 1) * perPage),
+      prop: "imageinfo",
+      iiprop: "url|size|mime|extmetadata",
+      iiurlwidth: "320", // grid thumbnail size
+      iiextmetadatafilter: "Artist|LicenseShortName|LicenseUrl",
+      iiextmetadatalanguage: "en",
+    },
+    { httpErrorMessage: (status) => `Search failed (${status}).` },
+  );
 
   const hits = [];
-  for (const p of pages) {
+  for (const p of rankPages(pages)) {
     const info = p.imageinfo && p.imageinfo[0];
-    if (!info || !info.thumburl) continue;
     // Skip non-images (Commons also holds audio/video/PDF in the File namespace).
-    if (!(info.mime || "").startsWith("image/")) continue;
+    if (!isUsableImage(info)) continue;
     hits.push(normaliseHit(p, info));
   }
   return { hits, total: hits.length, totalHits: hits.length };
@@ -160,33 +134,17 @@ export async function fetchWikimediaImage(hit) {
   }
 
   const embedWidth = Math.min(hit.width || 1280, 1600);
-  const params = new URLSearchParams({
-    action: "query",
-    format: "json",
-    origin: "*",
-    titles: title,
-    prop: "imageinfo",
-    iiprop: "url|size|mime",
-    iiurlwidth: String(embedWidth),
-  });
+  const pages = await commonsQuery(
+    {
+      action: "query",
+      titles: title,
+      prop: "imageinfo",
+      iiprop: "url|size|mime",
+      iiurlwidth: String(embedWidth),
+    },
+    { httpErrorMessage: (status) => `Download failed (${status}).` },
+  );
 
-  let res;
-  try {
-    res = await fetch(`${COMMONS_API}?${params.toString()}`, {
-      headers: { Accept: "application/json" },
-    });
-  } catch (e) {
-    throw new Error("Could not download the selected image.", { cause: e });
-  }
-  if (!res.ok) {
-    throw new Error(`Download failed (${res.status}).`);
-  }
-
-  const data = await res.json().catch(() => ({}));
-  const pages =
-    data && data.query && data.query.pages
-      ? Object.values(data.query.pages)
-      : [];
   const info = pages[0] && pages[0].imageinfo && pages[0].imageinfo[0];
   // thumburl is the scaled version; fall back to the original if scaling failed.
   const src = (info && (info.thumburl || info.url)) || "";

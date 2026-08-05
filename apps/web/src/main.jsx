@@ -1,6 +1,13 @@
 import React from "react";
 import ReactDOM from "react-dom/client";
 import { BrowserRouter } from "react-router-dom";
+import { configureCore } from "@spelling-creator/core/config";
+
+// Hand the shared package the one piece of build-time configuration it needs,
+// before anything imports a module that reads it. `import.meta.env` is
+// substituted by Rsbuild and exists nowhere else, so core takes it through this
+// seam rather than reaching for the bundler itself — see packages/core/src/config.js.
+configureCore({ apiUrl: import.meta.env.VITE_API_URL });
 // Registers all translation namespaces with i18next before anything renders.
 import "./lib/i18n.js";
 // Tailwind + shadcn/ui tokens (full preflight now that MUI's CssBaseline is

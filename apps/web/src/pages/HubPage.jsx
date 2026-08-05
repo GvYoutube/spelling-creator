@@ -46,7 +46,10 @@ import {
   EDIT_REQUEST_KEY,
 } from "../lib/lessons.js";
 import { LessonGridSkeleton } from "../components/Skeletons.jsx";
-import { buildLessonIndex, searchLessons } from "../lib/lessonSearch.js";
+import {
+  buildLessonIndex,
+  searchLessons,
+} from "@spelling-creator/core/lessonSearch";
 import { useAuth } from "../lib/auth.jsx";
 import {
   useDocumentMeta,

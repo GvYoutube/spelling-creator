@@ -3,8 +3,8 @@
 // offline; this is what copies them to the cloud so other viewers (and the
 // server-side og-image/prerender) can load them by hash.
 
-import { getImageBlob } from "./imageStore.js";
-import { imagePublicUrl } from "./imageRef.js";
+import { getImageBlob } from "@spelling-creator/core/browser/imageStore";
+import { imagePublicUrl } from "@spelling-creator/core/browser/imageRef";
 
 const API_URL = import.meta.env.VITE_API_URL;
 

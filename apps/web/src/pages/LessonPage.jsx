@@ -75,8 +75,8 @@ import {
   buildLessonCourseSchema,
   htmlToDescription,
 } from "../lib/seo.js";
-import { exportDocx } from "../lib/docxExport.js";
-import { exportPdf } from "../lib/pdfExport.js";
+import { exportDocx } from "@spelling-creator/core/browser/docxExport";
+import { exportPdf } from "@spelling-creator/core/browser/pdfExport";
 
 function formatDate(value) {
   if (!value) return "";

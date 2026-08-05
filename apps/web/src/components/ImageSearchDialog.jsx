@@ -21,7 +21,10 @@ import {
   searchWikimediaImages,
   fetchWikimediaImage,
 } from "../lib/wikimedia.js";
-import { decodeDataUrl, storeImageBytes } from "../lib/imageRef.js";
+import {
+  decodeDataUrl,
+  storeImageBytes,
+} from "@spelling-creator/core/browser/imageRef";
 import { TURNSTILE_SITE_KEY, whenTurnstileReady } from "../lib/turnstile.js";
 
 // The image sources the dialog can search. Each provider hides where its search,

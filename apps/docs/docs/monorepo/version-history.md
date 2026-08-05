@@ -15,7 +15,7 @@ disk.
 ## The layout: one file per block
 
 A lesson document is `{ title, sections: [{ id, name, blocks: [...] }] }`, and
-every block already carries a stable id (`lib/id.js`). The repository stores it
+every block already carries a stable id (`@spelling-creator/core/id`). The repository stores it
 like this:
 
 ```
@@ -49,7 +49,7 @@ on.
 The editor doesn't tell us what the user did — `setDoc` just replaces the
 document. So the intent is **recovered** by diffing the previous document against
 the next one, keyed by block id, and expressing the difference as operations
-(`lib/git/ops.js`):
+(`@spelling-creator/core/git/ops`):
 
 ```
 title.set / ageRange.set
@@ -155,7 +155,7 @@ The `forked_from` column is added by `apps/api/schema.sql` (safe to re-run).
 
 When a fork and its original have both moved on, the editor lines the three
 documents up **by block id** — base (their common ancestor), ours, theirs — and
-decides each block independently (`lib/git/merge.js`):
+decides each block independently (`@spelling-creator/core/git/merge`):
 
 | Situation                                     | Outcome                                                                          |
 | --------------------------------------------- | -------------------------------------------------------------------------------- |
@@ -251,25 +251,36 @@ They also can't delete the lesson — `DELETE /lessons/:id` is still author-only
 packed and uploaded so other people can clone it, so anything committed is
 readable by anyone who forks the lesson. Emails must not travel with it: the
 field is excluded from the tree and carried across a restore or merge from the
-live document instead (`preserveLocalFields` in `lib/git/doc.js`).
+live document instead (`preserveLocalFields` in `@spelling-creator/core/git/doc`).
 
 ## Where it lives
 
-Browser (`apps/web/src/lib/git/`):
+Portable (`@spelling-creator/core/git/*`) — no filesystem of its own, so it runs
+in the browser, in Node and inside the Worker:
+
+| Module   | Purpose                                                         |
+| -------- | --------------------------------------------------------------- |
+| `doc`    | Pure doc helpers: canonical JSON, manifest, block map. No git.  |
+| `ops`    | Diff two docs into operations; render commit messages. No git.  |
+| `merge`  | Three-way merge by block id, field-level. No git.               |
+| `layout` | Document ⇄ git tree (one file per block).                       |
+| `repo`   | Commit, history, diff two commits, restore.                     |
+| `pack`   | Pack for upload; clone/fetch from a pack; merge base; ancestry. |
+
+Browser-bound (`apps/web/src/lib/git/`) — everything that names a concrete
+runtime:
 
 | File                    | Purpose                                                            |
 | ----------------------- | ------------------------------------------------------------------ |
-| `doc.js`                | Pure doc helpers: canonical JSON, manifest, block map. No git.     |
-| `ops.js`                | Diff two docs into operations; render commit messages. No git.     |
-| `merge.js`              | Three-way merge by block id, field-level. No git.                  |
-| `layout.js`             | Document ⇄ git tree (one file per block).                          |
-| `repo.js`               | Commit, history, diff two commits, restore.                        |
-| `pack.js`               | Pack for upload; clone/fetch from a pack; merge base; ancestry.    |
 | `remote.js`             | The `/git/:lessonId` Worker calls (incl. the 409 on a stale push). |
 | `sync.js`               | Fork (clone), merge, and push — incl. the merge-back-in flow.      |
 | `fs.js`                 | LightningFS — the IndexedDB filesystem the repos live on.          |
 | `engine.js` + `load.js` | The git engine, behind one dynamic import.                         |
 | `useLessonGit.js`       | The editor's controller: setup, periodic commits, history.         |
+
+`repo` and friends take their filesystem through `repoCtx` rather than opening
+one, which is exactly what lets the same commit/merge/restore logic run against
+LightningFS in the browser and `node:fs` in tests.
 
 A repo tracks two remotes, in git's own vocabulary: `origin` (this lesson's own
 published history, which a trusted collaborator may have moved on without us) and

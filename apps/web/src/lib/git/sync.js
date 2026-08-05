@@ -21,17 +21,17 @@
 //    Without that, whoever saved second would quietly erase the other's work.
 
 import * as git from "isomorphic-git";
-import { newId } from "../id.js";
-import { preserveLocalFields } from "./doc.js";
+import { newId } from "@spelling-creator/core/id";
+import { preserveLocalFields } from "@spelling-creator/core/git/doc";
 import { DRAFT_REPO, copyRepo, deleteRepo, repoCtx } from "./fs.js";
-import { applyResolutions, mergeDocs } from "./merge.js";
+import { applyResolutions, mergeDocs } from "@spelling-creator/core/git/merge";
 import {
   cloneFromPack,
   contains,
   fetchRemotePack,
   mergeBase,
   packRepo,
-} from "./pack.js";
+} from "@spelling-creator/core/git/pack";
 import { fetchPack, pushPack } from "./remote.js";
 import {
   ORIGIN_REF,
@@ -39,7 +39,7 @@ import {
   commitDoc,
   headOid,
   readDocAt,
-} from "./repo.js";
+} from "@spelling-creator/core/git/repo";
 
 const EMPTY_AUTO = { merged: [], tookTheirs: [], added: [], removed: [] };
 

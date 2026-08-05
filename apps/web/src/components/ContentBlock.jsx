@@ -29,11 +29,11 @@ import {
   IMAGE_SIZES,
   DEFAULT_IMAGE_SIZE,
   DEFAULT_IMAGE_ALIGN,
-} from "../lib/image.js";
-import { newId } from "../lib/id.js";
+} from "@spelling-creator/core/image";
+import { newId } from "@spelling-creator/core/id";
 import { useImageSrc } from "../lib/useImageSrc.js";
-import { questionMeta } from "../lib/questions.js";
-import { SPELLING_COLOR } from "../lib/spelling.js";
+import { questionMeta } from "@spelling-creator/core/questions";
+import { SPELLING_COLOR } from "@spelling-creator/core/spelling";
 
 function ContentBlock({
   block,

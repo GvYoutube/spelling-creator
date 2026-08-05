@@ -1,8 +1,8 @@
 import { Packer } from "docx";
 import mammoth from "mammoth";
 import { buildDocument, DOCX_MAX_IMAGE_WIDTH } from "./docxExport.js";
-import { fitWithin, imageSizeScale } from "./image.js";
-import { QUESTION_TYPES } from "./questions.js";
+import { fitWithin, imageSizeScale } from "../image.js";
+import { QUESTION_TYPES } from "../questions.js";
 
 // Styles applied to the mammoth-generated HTML shown in the preview dialog.
 // Mirrors the docx/PDF look so the preview reflects the final document.
