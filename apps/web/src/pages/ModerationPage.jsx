@@ -43,7 +43,7 @@ import {
   resolveDeleteRequest,
   listShadowbannedLessons,
   setShadowban,
-} from "../lib/moderation.js";
+} from "@spelling-creator/core/moderation";
 
 function formatDate(value) {
   if (!value) return "";

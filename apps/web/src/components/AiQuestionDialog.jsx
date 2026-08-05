@@ -20,7 +20,7 @@ import {
   SelectItem,
 } from "./ui/select.jsx";
 import { Field, FieldLabel } from "./ui/field.jsx";
-import { suggestQuestion } from "../lib/aiSuggest.js";
+import { suggestQuestion } from "@spelling-creator/core/aiSuggest";
 import { QUESTION_TYPE_LIST } from "@spelling-creator/core/questions";
 import { TURNSTILE_SITE_KEY, whenTurnstileReady } from "../lib/turnstile.js";
 

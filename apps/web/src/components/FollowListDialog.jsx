@@ -18,7 +18,7 @@ import { Tabs, TabsList, TabsTrigger } from "./ui/tabs.jsx";
 import { Avatar, AvatarFallback } from "./ui/avatar.jsx";
 import { Alert, AlertDescription } from "./ui/alert.jsx";
 import { Skeleton } from "./ui/skeleton.jsx";
-import { fetchFollowList } from "../lib/users.js";
+import { fetchFollowList } from "@spelling-creator/core/users";
 import { richTextToLine } from "../lib/richText.js";
 
 function initial(name) {

@@ -19,7 +19,10 @@ import { Separator } from "../components/ui/separator.jsx";
 import { Skeleton } from "../components/ui/skeleton.jsx";
 import { Spinner } from "../components/ui/spinner.jsx";
 import { useAuth } from "../lib/auth.jsx";
-import { fetchOAuthRequest, approveOAuthRequest } from "../lib/mcpOAuth.js";
+import {
+  fetchOAuthRequest,
+  approveOAuthRequest,
+} from "@spelling-creator/core/mcpOAuth";
 import { useDocumentMeta } from "../lib/seo.js";
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;

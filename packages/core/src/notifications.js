@@ -5,20 +5,17 @@
 // credential, which the Worker verifies (and scopes results to that user).
 //
 // Worker endpoints this expects:
-//   GET  {API_URL}/notifications            -> { notifications: Notification[] }
-//   POST {API_URL}/notifications/read       -> { ok: true }        (body { id? })
-//   POST {API_URL}/notifications/send-link  -> { notification }    (body { email, link, message? })
+//   GET  {apiUrl()}/notifications            -> { notifications: Notification[] }
+//   POST {apiUrl()}/notifications/read       -> { ok: true }        (body { id? })
+//   POST {apiUrl()}/notifications/send-link  -> { notification }    (body { email, link, message? })
 //
 // Notification: { id, type, title, body, link, read, createdAt }
-
-const API_URL = import.meta.env.VITE_API_URL;
+import { apiUrl, hasApi } from "./config.js";
 
 // Whether a backend is configured at all (mirrors lessonHubEnabled).
-export const notificationsEnabled = Boolean(API_URL);
 
 function endpoint(path = "") {
-  // Tolerate a trailing slash on VITE_API_URL.
-  return `${API_URL.replace(/\/$/, "")}/notifications${path}`;
+  return `${apiUrl()}/notifications${path}`;
 }
 
 async function readError(res) {
@@ -33,7 +30,7 @@ async function readError(res) {
  * @returns {Promise<Array<{id, type, title, body, link, read, createdAt}>>}
  */
 export async function fetchNotifications(accessToken) {
-  if (!API_URL) throw new Error("The lesson hub is not configured.");
+  if (!hasApi()) throw new Error("The lesson hub is not configured.");
   if (!accessToken) return [];
 
   let res;
@@ -56,7 +53,7 @@ export async function fetchNotifications(accessToken) {
  * @param {string} [id]         A specific notification id, or omit for all.
  */
 export async function markNotificationsRead(accessToken, id) {
-  if (!API_URL) throw new Error("The lesson hub is not configured.");
+  if (!hasApi()) throw new Error("The lesson hub is not configured.");
   if (!accessToken) throw new Error("Please sign in first.");
 
   let res;
@@ -87,7 +84,7 @@ export async function markNotificationsRead(accessToken, id) {
  * @returns {Promise<{id, type, title, body, link, read, createdAt}>}
  */
 export async function sendLink({ email, link, message }, accessToken) {
-  if (!API_URL) throw new Error("The lesson hub is not configured.");
+  if (!hasApi()) throw new Error("The lesson hub is not configured.");
   if (!accessToken) throw new Error("Please sign in before sending a link.");
 
   let res;

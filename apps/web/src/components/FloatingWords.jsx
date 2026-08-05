@@ -15,7 +15,7 @@ import Particles, { ParticlesProvider } from "@tsparticles/react";
 import { loadSlim } from "@tsparticles/slim";
 import { loadTextShape } from "@tsparticles/shape-text";
 import { loadEmittersPlugin } from "@tsparticles/plugin-emitters";
-import { fetchSpellingWords } from "../lib/spellingWords.js";
+import { fetchSpellingWords } from "@spelling-creator/core/spellingWords";
 
 // Register exactly the features the hero uses. Must stay a single stable
 // reference for the lifetime of the app (see file header).

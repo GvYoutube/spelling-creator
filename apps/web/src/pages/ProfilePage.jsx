@@ -6,6 +6,7 @@
 // lesson), so a link survives a display-name change. The "RSS" button points at
 // the user's Atom activity feed (lessons + comments) served by the Worker.
 
+import { fetchUserActivity } from "@spelling-creator/core/browser/feeds";
 import { useCallback, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Link as RouterLink, useParams } from "react-router-dom";
@@ -41,10 +42,9 @@ import { LessonGridSkeleton } from "../components/Skeletons.jsx";
 import { richTextToLine } from "../lib/richText.js";
 import {
   fetchUserProfile,
-  fetchUserActivity,
   setFollowing,
   userFeedUrl,
-} from "../lib/users.js";
+} from "@spelling-creator/core/users";
 import { useAuth } from "../lib/auth.jsx";
 import { useDocumentMeta } from "../lib/seo.js";
 

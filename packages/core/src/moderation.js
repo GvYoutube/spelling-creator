@@ -26,11 +26,10 @@
 //   GET    /mod/moderators                     -> { moderators }      (admin)
 //   POST   /mod/moderators                     { email }              (admin)
 //   DELETE /mod/moderators/:userId                                    (admin)
-
-const API_URL = import.meta.env.VITE_API_URL;
+import { apiUrl, hasApi } from "./config.js";
 
 function endpoint(path = "") {
-  return `${API_URL.replace(/\/$/, "")}/mod${path}`;
+  return `${apiUrl()}/mod${path}`;
 }
 
 async function readError(res) {
@@ -43,7 +42,7 @@ async function readError(res) {
 // Shared request helper: attaches the Bearer token, parses JSON, surfaces the
 // Worker's plain-text reason on a non-2xx.
 async function request(path, { method = "GET", accessToken, body } = {}) {
-  if (!API_URL) throw new Error("The lesson hub is not configured.");
+  if (!hasApi()) throw new Error("The lesson hub is not configured.");
   if (!accessToken) throw new Error("Please sign in.");
   let res;
   try {
@@ -71,7 +70,7 @@ async function request(path, { method = "GET", accessToken, body } = {}) {
  * @returns {Promise<"admin"|"moderator"|null>}
  */
 export async function fetchMyRole(accessToken) {
-  if (!API_URL || !accessToken) return null;
+  if (!hasApi() || !accessToken) return null;
   try {
     const data = await request("/whoami", { accessToken });
     return data.role || null;

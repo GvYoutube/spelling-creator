@@ -9,8 +9,7 @@
 //
 // As with the AI features, every request carries a fresh Turnstile token that
 // the Worker verifies server-side before doing any work.
-
-const API_URL = import.meta.env.VITE_API_URL;
+import { apiUrl, hasApi } from "./config.js";
 
 /**
  * Search Pixabay for images matching `query`.
@@ -24,8 +23,8 @@ const API_URL = import.meta.env.VITE_API_URL;
  *   webformatHeight, tags, user, pageURL }.
  */
 export async function searchPixabayImages(query, token, opts = {}) {
-  if (!API_URL) {
-    throw new Error("VITE_API_URL is not configured.");
+  if (!hasApi()) {
+    throw new Error("The API is not configured.");
   }
   if (!token) {
     throw new Error("Please complete the verification challenge first.");
@@ -37,7 +36,7 @@ export async function searchPixabayImages(query, token, opts = {}) {
 
   let res;
   try {
-    res = await fetch(API_URL, {
+    res = await fetch(apiUrl(), {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -73,8 +72,8 @@ export async function searchPixabayImages(query, token, opts = {}) {
  * @returns {Promise<string>} A `data:` URL for the image bytes.
  */
 export async function fetchPixabayImage(url, token) {
-  if (!API_URL) {
-    throw new Error("VITE_API_URL is not configured.");
+  if (!hasApi()) {
+    throw new Error("The API is not configured.");
   }
   if (!token) {
     throw new Error("Please complete the verification challenge first.");
@@ -82,7 +81,7 @@ export async function fetchPixabayImage(url, token) {
 
   let res;
   try {
-    res = await fetch(API_URL, {
+    res = await fetch(apiUrl(), {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ mode: "imageFetch", url, token }),

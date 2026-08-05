@@ -10,6 +10,7 @@
 //
 // The editor itself now lives at /editor; this page is what greets visitors.
 
+import { hasApi } from "@spelling-creator/core/config";
 import { useCallback, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Link as RouterLink, useNavigate } from "react-router-dom";
@@ -36,9 +37,12 @@ import { Spinner } from "../components/ui/spinner.jsx";
 import { cn } from "../lib/utils.js";
 import { useAuth } from "../lib/auth.jsx";
 import { useDocumentMeta } from "../lib/seo.js";
-import { fetchLatestLessons, lessonHubEnabled } from "../lib/lessons.js";
-import { fetchUserActivity, fetchFollowingActivity } from "../lib/users.js";
-import { fetchNotifications } from "../lib/notifications.js";
+import {
+  fetchLatestLessons,
+  fetchUserActivity,
+} from "@spelling-creator/core/browser/feeds";
+import { fetchFollowingActivity } from "@spelling-creator/core/users";
+import { fetchNotifications } from "@spelling-creator/core/notifications";
 
 // The features shown to signed-out visitors. `image` points at a file under
 // apps/web/public/home/ (see that folder's README); a missing file degrades to a
@@ -321,7 +325,7 @@ function DashboardView() {
     // Each feed is independent; one failing shouldn't blank the others.
     const [latestRes, activityRes, followingRes, notifRes] =
       await Promise.allSettled([
-        lessonHubEnabled ? fetchLatestLessons() : Promise.resolve([]),
+        hasApi() ? fetchLatestLessons() : Promise.resolve([]),
         user ? fetchUserActivity(user.id) : Promise.resolve([]),
         accessToken ? fetchFollowingActivity(accessToken) : Promise.resolve([]),
         accessToken ? fetchNotifications(accessToken) : Promise.resolve([]),

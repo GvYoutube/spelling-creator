@@ -2,13 +2,12 @@
 // the same Worker as the rest of the hub (see lessons.js), which implements the
 // two endpoints below (see routes/oauth.js in apps/api).
 //
-//   GET  {API_URL}/oauth/request?state=   -> { clientName, redirectUri, scope, clientState }  (public)
-//   POST {API_URL}/oauth/approve          { state, refreshToken } -> { redirectTo }            (auth: Bearer)
-
-const API_URL = import.meta.env.VITE_API_URL;
+//   GET  {apiUrl()}/oauth/request?state=   -> { clientName, redirectUri, scope, clientState }  (public)
+//   POST {apiUrl()}/oauth/approve          { state, refreshToken } -> { redirectTo }            (auth: Bearer)
+import { apiUrl, hasApi } from "./config.js";
 
 function endpoint(path) {
-  return `${API_URL.replace(/\/$/, "")}/oauth${path}`;
+  return `${apiUrl()}/oauth${path}`;
 }
 
 async function readError(res) {
@@ -18,7 +17,7 @@ async function readError(res) {
 
 /** The pending authorization request a `state` token refers to. */
 export async function fetchOAuthRequest(state) {
-  if (!API_URL) throw new Error("The lesson hub is not configured.");
+  if (!hasApi()) throw new Error("The lesson hub is not configured.");
   let res;
   try {
     res = await fetch(endpoint(`/request?state=${encodeURIComponent(state)}`));
@@ -31,7 +30,7 @@ export async function fetchOAuthRequest(state) {
 
 /** Approve the pending request, minting the MCP grant. Returns where to send the browser next. */
 export async function approveOAuthRequest(state, accessToken, refreshToken) {
-  if (!API_URL) throw new Error("The lesson hub is not configured.");
+  if (!hasApi()) throw new Error("The lesson hub is not configured.");
   let res;
   try {
     res = await fetch(endpoint("/approve"), {

@@ -2,11 +2,10 @@
 // saved to the cloud. Images live only in IndexedDB while a lesson is drafted
 // offline; this is what copies them to the cloud so other viewers (and the
 // server-side og-image/prerender) can load them by hash.
+import { hasApi } from "./config.js";
 
 import { getImageBlob } from "@spelling-creator/core/browser/imageStore";
 import { imagePublicUrl } from "@spelling-creator/core/browser/imageRef";
-
-const API_URL = import.meta.env.VITE_API_URL;
 
 // Hashes already confirmed present in R2 this session (uploaded, or known to be
 // cloud-sourced). Lets repeated saves of the same lesson skip re-PUTting every
@@ -54,7 +53,7 @@ async function uploadImage(hash, blob, accessToken) {
 // is currently only local. Throws on the first failure so the caller aborts the
 // save before writing a doc row that would reference a missing object.
 export async function ensureImagesUploaded(doc, accessToken) {
-  if (!API_URL) throw new Error("The image store is not configured.");
+  if (!hasApi()) throw new Error("The image store is not configured.");
   if (!accessToken) throw new Error("Please sign in before saving.");
   for (const hash of collectImageHashes(doc)) {
     if (known.has(hash)) continue;

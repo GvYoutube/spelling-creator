@@ -16,7 +16,10 @@ import { Alert, AlertDescription } from "./ui/alert.jsx";
 import { Spinner } from "./ui/spinner.jsx";
 import { ToggleGroup, ToggleGroupItem } from "./ui/toggle-group.jsx";
 import { cn } from "../lib/utils.js";
-import { searchPixabayImages, fetchPixabayImage } from "../lib/pixabay.js";
+import {
+  searchPixabayImages,
+  fetchPixabayImage,
+} from "@spelling-creator/core/pixabay";
 import {
   searchWikimediaImages,
   fetchWikimediaImage,

@@ -38,7 +38,7 @@ import IconActionButton from "./IconActionButton.jsx";
 import { cn } from "../lib/utils.js";
 import { colorForId } from "../lib/presence.js";
 import { useAuth } from "../lib/auth.jsx";
-import { sendLink } from "../lib/notifications.js";
+import { sendLink } from "@spelling-creator/core/notifications";
 
 // Build a shareable invite link that deep-links into the editor with the host's
 // session code, so a recipient just clicks and lands on the join screen.

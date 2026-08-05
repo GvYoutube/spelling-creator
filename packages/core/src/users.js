@@ -7,20 +7,16 @@
 //
 // Worker endpoints (see handleUsers / handleFollow / handleFollowingFeed in
 // apps/api/src/index.js):
-//   GET    {API_URL}/profiles/:id           -> { user: { id, displayName, bio, followerCount, followingCount, isFollowing }, lessons: LessonSummary[] }
-//   GET    {API_URL}/profiles/:id/feed.xml  -> Atom feed (surfaced as "RSS" in the UI)
-//   POST   {API_URL}/profiles/:id/follow      -> { following: true,  followerCount }   (Bearer)
-//   DELETE {API_URL}/profiles/:id/follow      -> { following: false, followerCount }   (Bearer)
-//   GET    {API_URL}/profiles/:id/followers   -> { users: PublicUser[] }
-//   GET    {API_URL}/profiles/:id/following   -> { users: PublicUser[] }
-//   GET    {API_URL}/following/activity       -> { activity: FeedItem[] }              (Bearer)
-
-const API_URL = import.meta.env.VITE_API_URL;
+//   GET    {apiUrl()}/profiles/:id           -> { user: { id, displayName, bio, followerCount, followingCount, isFollowing }, lessons: LessonSummary[] }
+//   GET    {apiUrl()}/profiles/:id/feed.xml  -> Atom feed (surfaced as "RSS" in the UI)
+//   POST   {apiUrl()}/profiles/:id/follow      -> { following: true,  followerCount }   (Bearer)
+//   DELETE {apiUrl()}/profiles/:id/follow      -> { following: false, followerCount }   (Bearer)
+//   GET    {apiUrl()}/profiles/:id/followers   -> { users: PublicUser[] }
+//   GET    {apiUrl()}/profiles/:id/following   -> { users: PublicUser[] }
+//   GET    {apiUrl()}/following/activity       -> { activity: FeedItem[] }              (Bearer)
+import { apiUrl, hasApi } from "./config.js";
 
 // Whether profiles can be fetched at all (needs a configured backend).
-export const profilesEnabled = Boolean(API_URL);
-
-const base = () => API_URL.replace(/\/$/, "");
 
 /**
  * Fetch a user's public profile: their chosen display name, bio, follower/
@@ -33,12 +29,12 @@ const base = () => API_URL.replace(/\/$/, "");
  * @returns {Promise<{ user: { id, displayName, bio, followerCount, followingCount, isFollowing }, lessons: Array }>}
  */
 export async function fetchUserProfile(id, accessToken) {
-  if (!API_URL) throw new Error("Profiles are not configured.");
+  if (!hasApi()) throw new Error("Profiles are not configured.");
   if (!id) throw new Error("Missing user id.");
 
   let res;
   try {
-    res = await fetch(`${base()}/profiles/${encodeURIComponent(id)}`, {
+    res = await fetch(`${apiUrl()}/profiles/${encodeURIComponent(id)}`, {
       method: "GET",
       headers: accessToken ? { Authorization: `Bearer ${accessToken}` } : {},
     });
@@ -74,13 +70,13 @@ export async function fetchUserProfile(id, accessToken) {
  * @returns {Promise<{ following: boolean, followerCount: number }>}
  */
 export async function setFollowing(id, follow, accessToken) {
-  if (!API_URL) throw new Error("Profiles are not configured.");
+  if (!hasApi()) throw new Error("Profiles are not configured.");
   if (!id) throw new Error("Missing user id.");
   if (!accessToken) throw new Error("Please sign in to follow people.");
 
   let res;
   try {
-    res = await fetch(`${base()}/profiles/${encodeURIComponent(id)}/follow`, {
+    res = await fetch(`${apiUrl()}/profiles/${encodeURIComponent(id)}/follow`, {
       method: follow ? "POST" : "DELETE",
       headers: { Authorization: `Bearer ${accessToken}` },
     });
@@ -107,13 +103,13 @@ export async function setFollowing(id, follow, accessToken) {
  * @returns {Promise<Array<{ id, displayName, bio }>>}
  */
 export async function fetchFollowList(id, direction) {
-  if (!API_URL) throw new Error("Profiles are not configured.");
+  if (!hasApi()) throw new Error("Profiles are not configured.");
   if (!id) throw new Error("Missing user id.");
   const dir = direction === "followers" ? "followers" : "following";
 
   let res;
   try {
-    res = await fetch(`${base()}/profiles/${encodeURIComponent(id)}/${dir}`, {
+    res = await fetch(`${apiUrl()}/profiles/${encodeURIComponent(id)}/${dir}`, {
       method: "GET",
     });
   } catch {
@@ -136,12 +132,12 @@ export async function fetchFollowList(id, direction) {
  * @returns {Promise<Array<{ id, title, summary, link, updated }>>}
  */
 export async function fetchFollowingActivity(accessToken) {
-  if (!API_URL) throw new Error("Profiles are not configured.");
+  if (!hasApi()) throw new Error("Profiles are not configured.");
   if (!accessToken) return [];
 
   let res;
   try {
-    res = await fetch(`${base()}/following/activity`, {
+    res = await fetch(`${apiUrl()}/following/activity`, {
       method: "GET",
       headers: { Authorization: `Bearer ${accessToken}` },
     });
@@ -163,55 +159,6 @@ export async function fetchFollowingActivity(accessToken) {
  * @returns {string}
  */
 export function userFeedUrl(id) {
-  if (!API_URL || !id) return "";
-  return `${API_URL.replace(/\/$/, "")}/profiles/${encodeURIComponent(id)}/feed.xml`;
-}
-
-// Pull the trimmed text of the first descendant with the given local name
-// (namespace-agnostic, so the Atom default xmlns doesn't get in the way).
-function entryText(el, tag) {
-  const node = el.getElementsByTagNameNS("*", tag)[0];
-  return node ? (node.textContent || "").trim() : "";
-}
-
-/**
- * Fetch a user's recent activity for the in-page activity menu. Rather than add a
- * second backend route, this reads the very same Atom feed the "RSS" button points
- * at and parses it client-side with DOMParser — so the Worker only maintains the
- * one feed.xml endpoint.
- * @param {string} id  The user's Supabase id.
- * @returns {Promise<Array<{ id, title, summary, updated, link }>>} Newest first.
- */
-export async function fetchUserActivity(id) {
-  const url = userFeedUrl(id);
-  if (!url) throw new Error("Profiles are not configured.");
-
-  let res;
-  try {
-    res = await fetch(url, { method: "GET" });
-  } catch {
-    throw new Error("Could not reach the server.");
-  }
-  if (!res.ok) throw new Error(`Request failed (${res.status}).`);
-
-  const doc = new DOMParser().parseFromString(
-    await res.text(),
-    "application/xml",
-  );
-  if (doc.getElementsByTagName("parsererror").length) {
-    throw new Error("Could not read the activity feed.");
-  }
-
-  return Array.from(doc.getElementsByTagNameNS("*", "entry")).map((entry) => {
-    const links = Array.from(entry.getElementsByTagNameNS("*", "link"));
-    const alternate =
-      links.find((l) => l.getAttribute("rel") === "alternate") || links[0];
-    return {
-      id: entryText(entry, "id"),
-      title: entryText(entry, "title"),
-      summary: entryText(entry, "summary"),
-      updated: entryText(entry, "updated"),
-      link: alternate ? alternate.getAttribute("href") || "" : "",
-    };
-  });
+  if (!hasApi() || !id) return "";
+  return `${apiUrl()}/profiles/${encodeURIComponent(id)}/feed.xml`;
 }

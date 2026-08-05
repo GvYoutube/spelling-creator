@@ -23,7 +23,7 @@ import { useAuth } from "../lib/auth.jsx";
 import {
   fetchNotifications,
   markNotificationsRead,
-} from "../lib/notifications.js";
+} from "@spelling-creator/core/notifications";
 
 // How often to poll for new notifications while the user is signed in.
 const POLL_INTERVAL_MS = 30000;

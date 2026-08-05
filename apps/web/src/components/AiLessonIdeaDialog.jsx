@@ -13,7 +13,7 @@ import { Button } from "./ui/button.jsx";
 import { Alert, AlertDescription } from "./ui/alert.jsx";
 import { Spinner } from "./ui/spinner.jsx";
 import { Badge } from "./ui/badge.jsx";
-import { suggestLessonIdeas } from "../lib/aiSuggest.js";
+import { suggestLessonIdeas } from "@spelling-creator/core/aiSuggest";
 import { TURNSTILE_SITE_KEY, whenTurnstileReady } from "../lib/turnstile.js";
 
 /**

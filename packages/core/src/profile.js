@@ -6,8 +6,7 @@
 // Worker endpoints (see handleProfile in apps/api/src/index.js):
 //   POST /profile/display-name   Bearer  { displayName }  -> { displayName }
 //   POST /profile/bio            Bearer  { bio }          -> { bio }
-
-const API_URL = import.meta.env.VITE_API_URL;
+import { apiUrl, hasApi } from "./config.js";
 
 // Mirrors the Worker's bounds (DISPLAY_NAME_MIN / DISPLAY_NAME_MAX) so the form
 // can validate before sending; the Worker re-checks regardless.
@@ -27,11 +26,11 @@ export const BIO_MAX = 500;
  * @returns {Promise<string>}
  */
 export async function setDisplayName(displayName, accessToken) {
-  if (!API_URL) throw new Error("Accounts are not configured.");
+  if (!hasApi()) throw new Error("Accounts are not configured.");
   if (!accessToken) throw new Error("Please sign in.");
   let res;
   try {
-    res = await fetch(`${API_URL.replace(/\/$/, "")}/profile/display-name`, {
+    res = await fetch(`${apiUrl()}/profile/display-name`, {
       method: "POST",
       headers: {
         Authorization: `Bearer ${accessToken}`,
@@ -66,11 +65,11 @@ export async function setDisplayName(displayName, accessToken) {
  * @returns {Promise<string>}   The sanitized HTML actually stored.
  */
 export async function setBio(bio, accessToken) {
-  if (!API_URL) throw new Error("Accounts are not configured.");
+  if (!hasApi()) throw new Error("Accounts are not configured.");
   if (!accessToken) throw new Error("Please sign in.");
   let res;
   try {
-    res = await fetch(`${API_URL.replace(/\/$/, "")}/profile/bio`, {
+    res = await fetch(`${apiUrl()}/profile/bio`, {
       method: "POST",
       headers: {
         Authorization: `Bearer ${accessToken}`,

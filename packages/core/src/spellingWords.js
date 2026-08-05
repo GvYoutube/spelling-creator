@@ -2,8 +2,7 @@
 // published lessons on the hub, served by the Worker's GET /spelling-words.json
 // (rebuilt at most once every couple of days; see apps/api/src/routes/
 // spelling-words.js). The homepage's floating-words animation pulls from this.
-
-const API_URL = import.meta.env.VITE_API_URL;
+import { apiUrl, hasApi } from "./config.js";
 
 // A small built-in word list so the homepage animation still has something to
 // show when no backend is configured (or the fetch fails / returns nothing).
@@ -48,11 +47,11 @@ function isSingleWord(word) {
  * @returns {Promise<string[]>}
  */
 export async function fetchSpellingWords() {
-  if (!API_URL) return FALLBACK_WORDS;
+  if (!hasApi()) return FALLBACK_WORDS;
 
   let res;
   try {
-    res = await fetch(`${API_URL.replace(/\/$/, "")}/spelling-words.json`, {
+    res = await fetch(`${apiUrl()}/spelling-words.json`, {
       method: "GET",
     });
   } catch {

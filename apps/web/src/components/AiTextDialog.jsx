@@ -14,7 +14,7 @@ import { Alert, AlertDescription } from "./ui/alert.jsx";
 import { Spinner } from "./ui/spinner.jsx";
 import { Tooltip, TooltipTrigger, TooltipContent } from "./ui/tooltip.jsx";
 import { cn } from "../lib/utils.js";
-import { suggestText, dislikeText } from "../lib/aiSuggest.js";
+import { suggestText, dislikeText } from "@spelling-creator/core/aiSuggest";
 import { useAuth } from "../lib/auth.jsx";
 import { TURNSTILE_SITE_KEY, whenTurnstileReady } from "../lib/turnstile.js";
 

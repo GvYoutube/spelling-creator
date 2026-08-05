@@ -32,7 +32,7 @@ import {
   mergeBase,
   packRepo,
 } from "@spelling-creator/core/git/pack";
-import { fetchPack, pushPack } from "./remote.js";
+import { fetchPack, pushPack } from "@spelling-creator/core/git/remote";
 import {
   ORIGIN_REF,
   UPSTREAM_REF,

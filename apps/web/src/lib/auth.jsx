@@ -9,7 +9,7 @@ import {
   supabaseEnabled,
   readPersistedRefreshToken,
 } from "./supabase.js";
-import { fetchMyRole } from "./moderation.js";
+import { fetchMyRole } from "@spelling-creator/core/moderation";
 
 const AuthContext = createContext(null);
 
