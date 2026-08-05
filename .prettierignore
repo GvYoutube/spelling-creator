@@ -1,6 +1,0 @@
-pnpm-lock.yaml
-skills-lock.json
-
-# Rspress build output and generated files
-apps/docs/doc_build
-apps/docs/.rspress

@@ -1,0 +1,20 @@
+{
+  "$schema": "./node_modules/oxfmt/configuration_schema.json",
+
+  // Prettier's default width, which the existing code is wrapped to.
+  // Oxfmt's own default is 100.
+  "printWidth": 80,
+
+  "ignorePatterns": [
+    "pnpm-lock.yaml",
+    "skills-lock.json",
+    "patches/**",
+
+    "**/dist/**",
+    "**/build/**",
+    "**/.wrangler/**",
+
+    "apps/docs/doc_build/**",
+    "apps/docs/.rspress/**"
+  ]
+}

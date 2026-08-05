@@ -2,12 +2,12 @@
   "name": "@spelling-creator/mcp",
   "version": "0.2.0",
   "private": true,
-  "type": "module",
   "description": "MCP server for the Spelling Creator hub — lets any MCP-capable AI assistant author and publish spelling lessons.",
   "license": "AGPL-3.0-only",
   "bin": {
     "spelling-creator-mcp": "src/stdio.js"
   },
+  "type": "module",
   "exports": {
     ".": "./src/tools.js",
     "./worker": "./src/worker.js",
