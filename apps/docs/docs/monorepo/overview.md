@@ -39,5 +39,9 @@ to the image dialog than to an MCP tool, and pages results only in the browser â
 core holds the common plumbing and each app keeps a thin adapter over it. That
 keeps each app's public contract and error wording its own.
 
+The same split is what a change of frontend framework would rest on â€” see the
+[SvelteKit migration](./sveltekit-migration.md) plan, which is a proposal rather
+than a commitment.
+
 See the [Web App](../web-app/overview.md) docs for full app documentation, and the
 [MCP Server](../mcp-server/overview.md) docs for connecting an AI assistant to the hub.
