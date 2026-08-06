@@ -14,7 +14,8 @@ import { Alert, AlertDescription } from "./ui/alert.jsx";
 import { Spinner } from "./ui/spinner.jsx";
 import { Badge } from "./ui/badge.jsx";
 import { suggestLessonIdeas } from "@spelling-creator/core/aiSuggest";
-import { TURNSTILE_SITE_KEY, whenTurnstileReady } from "../lib/turnstile.js";
+import { turnstileSiteKey } from "@spelling-creator/core/config";
+import { whenTurnstileReady } from "@spelling-creator/core/browser/turnstile";
 
 /**
  * Dialog that suggests lesson topic ideas for the lesson's age range via the
@@ -54,7 +55,7 @@ export default function AiLessonIdeaDialog({
   // Mount the Turnstile widget while the dialog is open; tear it down on close.
   useEffect(() => {
     if (!open) return;
-    if (!TURNSTILE_SITE_KEY) {
+    if (!turnstileSiteKey()) {
       setError(t("aiLessonIdea.turnstileNotConfigured"));
       return;
     }
@@ -65,7 +66,7 @@ export default function AiLessonIdeaDialog({
       .then((turnstile) => {
         if (cancelled || !widgetRef.current) return;
         widgetIdRef.current = turnstile.render(widgetRef.current, {
-          sitekey: TURNSTILE_SITE_KEY,
+          sitekey: turnstileSiteKey(),
           callback: (tok) => setToken(tok),
           "expired-callback": () => setToken(""),
           "error-callback": () => {

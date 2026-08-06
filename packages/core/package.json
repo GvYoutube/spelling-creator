@@ -12,6 +12,7 @@
     "./browser/docxExport": "./src/browser/docxExport.js",
     "./browser/docxImport": "./src/browser/docxImport.js",
     "./browser/feeds": "./src/browser/feeds.js",
+    "./browser/googleDrive": "./src/browser/googleDrive.js",
     "./browser/htmlPreview": "./src/browser/htmlPreview.js",
     "./browser/imageFile": "./src/browser/imageFile.js",
     "./browser/imageRef": "./src/browser/imageRef.js",
@@ -19,6 +20,8 @@
     "./browser/jsonExport": "./src/browser/jsonExport.js",
     "./browser/pdfExport": "./src/browser/pdfExport.js",
     "./browser/storage": "./src/browser/storage.js",
+    "./browser/supabase": "./src/browser/supabase.js",
+    "./browser/turnstile": "./src/browser/turnstile.js",
     "./comments": "./src/comments.js",
     "./config": "./src/config.js",
     "./git/doc": "./src/git/doc.js",
@@ -52,6 +55,7 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@supabase/supabase-js": "^2.106.2",
     "docx": "^9.0.3",
     "fuse.js": "^7.4.0",
     "html2pdf.js": "^0.14.0",

@@ -68,7 +68,8 @@ thing the browser does directly with Supabase is **authentication**.
 
 **How sign-in works.** The login page (`/login`) uses
 [Supabase Auth](https://supabase.com/docs/guides/auth) magic links: enter an
-email, receive a one-time link, and the Supabase JS client (in `src/lib/supabase.js`)
+email, receive a one-time link, and the Supabase JS client (in
+`@spelling-creator/core/browser/supabase`)
 exchanges the callback for a session. We use the **PKCE** flow so the callback
 returns a `?code=` in the query string rather than access tokens in the URL
 fragment (hash). The session JWT is what authorises a

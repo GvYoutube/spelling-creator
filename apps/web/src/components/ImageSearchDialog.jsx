@@ -28,7 +28,8 @@ import {
   decodeDataUrl,
   storeImageBytes,
 } from "@spelling-creator/core/browser/imageRef";
-import { TURNSTILE_SITE_KEY, whenTurnstileReady } from "../lib/turnstile.js";
+import { turnstileSiteKey } from "@spelling-creator/core/config";
+import { whenTurnstileReady } from "@spelling-creator/core/browser/turnstile";
 
 // The image sources the dialog can search. Each provider hides where its search,
 // download, and attribution come from behind a common interface, so the dialog's
@@ -144,7 +145,7 @@ export default function ImageSearchDialog({
   // doesn't (e.g. Wikimedia).
   useEffect(() => {
     if (!open || !provider.needsToken) return;
-    if (!TURNSTILE_SITE_KEY) {
+    if (!turnstileSiteKey()) {
       setError(t("imageSearch.turnstileNotConfigured"));
       return;
     }
@@ -156,7 +157,7 @@ export default function ImageSearchDialog({
       .then((turnstile) => {
         if (cancelled || !widgetRef.current) return;
         widgetId = turnstile.render(widgetRef.current, {
-          sitekey: TURNSTILE_SITE_KEY,
+          sitekey: turnstileSiteKey(),
           callback: (tok) => setToken(tok),
           "expired-callback": () => setToken(""),
           "error-callback": () => {

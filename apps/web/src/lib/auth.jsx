@@ -4,11 +4,11 @@
 // Worker needs to authorise a publish.
 
 import { createContext, useContext, useEffect, useMemo, useState } from "react";
+import { hasSupabase } from "@spelling-creator/core/config";
 import {
-  supabase,
-  supabaseEnabled,
+  getSupabase,
   readPersistedRefreshToken,
-} from "./supabase.js";
+} from "@spelling-creator/core/browser/supabase";
 import { fetchMyRole } from "@spelling-creator/core/moderation";
 
 const AuthContext = createContext(null);
@@ -26,42 +26,44 @@ export function AuthProvider({ children }) {
   // `loading` is true until we know whether a session was restored from storage
   // (or parsed from a magic-link callback), so pages can avoid flashing a
   // signed-out state on first paint.
-  const [loading, setLoading] = useState(supabaseEnabled);
+  const [loading, setLoading] = useState(hasSupabase());
 
   useEffect(() => {
-    if (!supabaseEnabled) return;
+    if (!hasSupabase()) return;
 
     let active = true;
-    supabase.auth.getSession().then(async ({ data }) => {
-      if (!active) return;
-      if (data.session) {
-        setSession(data.session);
+    getSupabase()
+      .auth.getSession()
+      .then(async ({ data }) => {
+        if (!active) return;
+        if (data.session) {
+          setSession(data.session);
+          setLoading(false);
+          return;
+        }
+        // No session in memory — normally that just means signed out, but it's
+        // also what a known SDK gap looks like: a valid session can be stuck
+        // unloaded after a failed startup refresh (see readPersistedRefreshToken
+        // for the full story). If a persisted refresh token is sitting in
+        // storage, force one more real refresh attempt with it before
+        // concluding the user is actually signed out.
+        const refreshToken = readPersistedRefreshToken();
+        if (!refreshToken) {
+          setSession(null);
+          setLoading(false);
+          return;
+        }
+        const { data: refreshed } = await getSupabase()
+          .auth.refreshSession({ refresh_token: refreshToken })
+          .catch(() => ({ data: null }));
+        if (!active) return;
+        setSession(refreshed?.session ?? null);
         setLoading(false);
-        return;
-      }
-      // No session in memory — normally that just means signed out, but it's
-      // also what a known SDK gap looks like: a valid session can be stuck
-      // unloaded after a failed startup refresh (see readPersistedRefreshToken
-      // for the full story). If a persisted refresh token is sitting in
-      // storage, force one more real refresh attempt with it before
-      // concluding the user is actually signed out.
-      const refreshToken = readPersistedRefreshToken();
-      if (!refreshToken) {
-        setSession(null);
-        setLoading(false);
-        return;
-      }
-      const { data: refreshed } = await supabase.auth
-        .refreshSession({ refresh_token: refreshToken })
-        .catch(() => ({ data: null }));
-      if (!active) return;
-      setSession(refreshed?.session ?? null);
-      setLoading(false);
-    });
+      });
 
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, nextSession) => {
+    } = getSupabase().auth.onAuthStateChange((_event, nextSession) => {
       setSession(nextSession ?? null);
       setLoading(false);
     });
@@ -100,7 +102,7 @@ export function AuthProvider({ children }) {
 
   const value = useMemo(
     () => ({
-      enabled: supabaseEnabled,
+      enabled: hasSupabase(),
       loading,
       session,
       user,
@@ -111,7 +113,7 @@ export function AuthProvider({ children }) {
       // True once we know a signed-in user still needs to pick a display name, so
       // the app can force the choice before letting them post. Waits for `loading`
       // so we don't flash the prompt before the session is restored.
-      needsDisplayName: supabaseEnabled && !loading && !!user && !displayName,
+      needsDisplayName: hasSupabase() && !loading && !!user && !displayName,
       // Moderation tier (see `role` state above) plus convenience flags. A mod or
       // admin is a "moderator+"; only an admin is an "admin".
       role,
@@ -125,10 +127,10 @@ export function AuthProvider({ children }) {
       // on a specific page — e.g. the MCP OAuth consent screen, which carries
       // its own `?state=` — can pass an explicit redirectTo.
       async signInWithMagicLink(email, redirectTo = window.location.origin) {
-        if (!supabaseEnabled) {
+        if (!hasSupabase()) {
           throw new Error("Sign-in is not configured.");
         }
-        const { error } = await supabase.auth.signInWithOtp({
+        const { error } = await getSupabase().auth.signInWithOtp({
           email,
           options: { emailRedirectTo: redirectTo },
         });
@@ -136,8 +138,8 @@ export function AuthProvider({ children }) {
       },
 
       async signOut() {
-        if (!supabaseEnabled) return;
-        await supabase.auth.signOut();
+        if (!hasSupabase()) return;
+        await getSupabase().auth.signOut();
       },
 
       // Pull a fresh session from Supabase so newly-saved user_metadata (e.g. a
@@ -145,8 +147,8 @@ export function AuthProvider({ children }) {
       // `user`. The Worker writes metadata out-of-band, so the cached session must
       // be refreshed for the change to show up client-side.
       async refreshSession() {
-        if (!supabaseEnabled) return;
-        const { data } = await supabase.auth.refreshSession();
+        if (!hasSupabase()) return;
+        const { data } = await getSupabase().auth.refreshSession();
         setSession(data?.session ?? null);
       },
     }),

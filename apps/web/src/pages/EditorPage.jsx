@@ -105,7 +105,8 @@ import {
   previewHtml,
   PREVIEW_STYLES,
 } from "@spelling-creator/core/browser/htmlPreview";
-import { saveToGoogleDrive, googleDriveEnabled } from "../lib/googleDrive.js";
+import { hasGoogleDrive } from "@spelling-creator/core/config";
+import { saveToGoogleDrive } from "@spelling-creator/core/browser/googleDrive";
 import {
   publishLesson,
   updateLesson,
@@ -1448,7 +1449,7 @@ export default function EditorPage() {
               <PrinterIcon />
               {t("header.printPdf")}
             </DropdownMenuItem>
-            {googleDriveEnabled && (
+            {hasGoogleDrive() && (
               <DropdownMenuItem
                 onClick={handleSaveToGoogle}
                 disabled={busy !== null}
@@ -1551,7 +1552,7 @@ export default function EditorPage() {
                 <PrinterIcon />
                 {t("header.printPdf")}
               </DropdownMenuItem>
-              {googleDriveEnabled && (
+              {hasGoogleDrive() && (
                 <DropdownMenuItem onClick={handleSaveToGoogle}>
                   <SaveIcon />
                   {t("header.saveToGoogleDocs")}

@@ -1,10 +1,26 @@
 import { beforeEach, describe, expect, it } from "vitest";
 
-import { apiUrl, configureCore, hasApi } from "./config.js";
+import {
+  apiUrl,
+  configureCore,
+  googleClientId,
+  hasApi,
+  hasGoogleDrive,
+  hasSupabase,
+  hasTurnstile,
+  supabaseConfig,
+  turnstileSiteKey,
+} from "./config.js";
 import { imagePublicUrl } from "./browser/imageRef.js";
 
 beforeEach(() => {
-  configureCore({ apiUrl: "" });
+  configureCore({
+    apiUrl: "",
+    supabaseUrl: "",
+    supabaseAnonKey: "",
+    googleClientId: "",
+    turnstileSiteKey: "",
+  });
 });
 
 describe("configureCore", () => {
@@ -49,5 +65,46 @@ describe("consumers read the config lazily", () => {
 
     configureCore({ apiUrl: "https://other.example.com/" });
     expect(imagePublicUrl("abc")).toBe("https://other.example.com/images/abc");
+  });
+});
+
+describe("supabaseConfig", () => {
+  it("needs both halves — neither is usable alone", () => {
+    configureCore({ supabaseUrl: "https://x.supabase.co" });
+    expect(supabaseConfig()).toBeNull();
+    expect(hasSupabase()).toBe(false);
+
+    configureCore({ supabaseUrl: "", supabaseAnonKey: "anon-key" });
+    expect(supabaseConfig()).toBeNull();
+
+    configureCore({ supabaseUrl: "https://x.supabase.co" });
+    expect(supabaseConfig()).toEqual({
+      url: "https://x.supabase.co",
+      anonKey: "anon-key",
+    });
+    expect(hasSupabase()).toBe(true);
+  });
+});
+
+describe("the optional integrations", () => {
+  it("report unavailable rather than throwing when unset", () => {
+    // Each of these gates a feature that degrades: the AI dialogs, the Google
+    // Docs export and sign-in all explain themselves instead of failing.
+    expect(hasGoogleDrive()).toBe(false);
+    expect(googleClientId()).toBe("");
+    expect(hasTurnstile()).toBe(false);
+    expect(turnstileSiteKey()).toBe("");
+    expect(hasSupabase()).toBe(false);
+  });
+
+  it("become available once configured", () => {
+    configureCore({
+      googleClientId: "123.apps.googleusercontent.com",
+      turnstileSiteKey: "0x4AAA",
+    });
+    expect(hasGoogleDrive()).toBe(true);
+    expect(googleClientId()).toBe("123.apps.googleusercontent.com");
+    expect(hasTurnstile()).toBe(true);
+    expect(turnstileSiteKey()).toBe("0x4AAA");
   });
 });

@@ -17,13 +17,21 @@
 
 const config = {
   apiUrl: "",
+  supabaseUrl: "",
+  supabaseAnonKey: "",
+  googleClientId: "",
+  turnstileSiteKey: "",
 };
 
 /**
  * Set the host's configuration. Call once, as early as possible. Merges, so a
  * later call can add a key without clearing the others.
  * @param {object} next
- * @param {string} [next.apiUrl] Base URL of the Worker API, trailing slash optional.
+ * @param {string} [next.apiUrl]           Base URL of the Worker API, trailing slash optional.
+ * @param {string} [next.supabaseUrl]      Supabase project URL (browser auth only).
+ * @param {string} [next.supabaseAnonKey]  Supabase anon key.
+ * @param {string} [next.googleClientId]   OAuth 2.0 Web client id, for "save to Google Docs".
+ * @param {string} [next.turnstileSiteKey] Public Cloudflare Turnstile site key.
  */
 export function configureCore(next) {
   Object.assign(config, next);
@@ -51,4 +59,51 @@ export function apiUrl() {
  */
 export function hasApi() {
   return apiUrl() !== "";
+}
+
+/**
+ * Supabase's browser credentials, or null when auth isn't configured. Returned
+ * together because neither half is usable alone.
+ * @returns {{url: string, anonKey: string} | null}
+ */
+export function supabaseConfig() {
+  const { supabaseUrl, supabaseAnonKey } = config;
+  if (!supabaseUrl || !supabaseAnonKey) return null;
+  return { url: supabaseUrl, anonKey: supabaseAnonKey };
+}
+
+/**
+ * Whether sign-in is available. When false the login page and "Publish to hub"
+ * explain that accounts are unavailable, but browsing the hub still works.
+ * @returns {boolean}
+ */
+export function hasSupabase() {
+  return supabaseConfig() !== null;
+}
+
+/**
+ * OAuth 2.0 Web client id for the Google Docs export. "" when unconfigured.
+ * @returns {string}
+ */
+export function googleClientId() {
+  return config.googleClientId || "";
+}
+
+/** @returns {boolean} Whether "save to Google Docs" is available. */
+export function hasGoogleDrive() {
+  return googleClientId() !== "";
+}
+
+/**
+ * Public Turnstile site key for rendering the widget. "" when unconfigured, in
+ * which case the AI and image-search dialogs explain they're unavailable.
+ * @returns {string}
+ */
+export function turnstileSiteKey() {
+  return config.turnstileSiteKey || "";
+}
+
+/** @returns {boolean} Whether the Turnstile-gated features are available. */
+export function hasTurnstile() {
+  return turnstileSiteKey() !== "";
 }

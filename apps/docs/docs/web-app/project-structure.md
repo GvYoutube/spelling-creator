@@ -62,10 +62,7 @@ src/
       engine.js, load.js  the git engine, behind one dynamic import (keeps ~185 KB off the main bundle)
       useLessonGit.js     the editor's controller: setup, periodic commits, history, restore
     useImageSrc.js        resolves an image ref to a displayable src
-    supabase.js           Supabase client (auth only) + supabaseEnabled flag
     auth.jsx              AuthProvider + useAuth (session, magic link, sign out)
-    googleDrive.js        OAuth2 + upload the docx to Drive as a Google Doc
-    turnstile.js          Cloudflare Turnstile loader + site key
     seo.js                per-page document title + Open Graph / Twitter tags
 ```
 
@@ -127,6 +124,9 @@ the MCP server cannot reach it by accident:
   pdfExport             docx -> html -> pdf (html2pdf.js)
   jsonExport            download a lesson as .json (the envelope itself is in lessonFile)
   feeds                 read the hub / user Atom feeds (DOMParser)
+  supabase              the Supabase browser client (auth only), built on first use
+  turnstile             the Cloudflare Turnstile widget loader
+  googleDrive           OAuth2 + upload the docx to Drive as a Google Doc
 ```
 
 `.oxlintrc.json` enforces the split: `packages/core` is linted against the
@@ -144,14 +144,29 @@ what previously pinned the whole image/export tier inside `apps/web`.
 So the host passes its configuration in once, before anything uses it:
 
 ```js
-// apps/web/src/main.jsx
-configureCore({ apiUrl: import.meta.env.VITE_API_URL });
+// apps/web/src/main.jsx — the only place in the app that touches import.meta.env
+configureCore({
+  apiUrl: import.meta.env.VITE_API_URL,
+  supabaseUrl: import.meta.env.VITE_SUPABASE_URL,
+  supabaseAnonKey: import.meta.env.VITE_SUPABASE_ANON_KEY,
+  googleClientId: import.meta.env.VITE_GOOGLE_CLIENT_ID,
+  turnstileSiteKey: import.meta.env.VITE_TURNSTILE_SITE_KEY,
+});
 ```
 
 Readers resolve **lazily** (`apiUrl()`, not a captured constant), which matters:
 ES imports are hoisted, so `configureCore` runs after every module in the graph has
 already been evaluated. Anything capturing the value at import time would capture
 `""`. `packages/core/src/config.test.js` pins that behaviour.
+
+The same reasoning is why `browser/supabase` builds its client inside
+`getSupabase()` rather than at module scope, memoising it so the SDK's session and
+refresh timer exist exactly once. It is also why the old `supabaseEnabled`,
+`googleDriveEnabled`, `lessonHubEnabled`, `notificationsEnabled`, `profilesEnabled`
+and `gitRemoteEnabled` constants are gone: every one was computed at module scope,
+so under a lazily-resolved config all of them would have read as `false`. They are
+now `hasSupabase()`, `hasGoogleDrive()` and `hasApi()` — the last replacing four
+names for one predicate.
 
 ### Why version history splits the way it does
 

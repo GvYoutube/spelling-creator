@@ -22,7 +22,8 @@ import {
 import { Field, FieldLabel } from "./ui/field.jsx";
 import { suggestQuestion } from "@spelling-creator/core/aiSuggest";
 import { QUESTION_TYPE_LIST } from "@spelling-creator/core/questions";
-import { TURNSTILE_SITE_KEY, whenTurnstileReady } from "../lib/turnstile.js";
+import { turnstileSiteKey } from "@spelling-creator/core/config";
+import { whenTurnstileReady } from "@spelling-creator/core/browser/turnstile";
 
 /**
  * Dialog that suggests a quiz question via the Worker, alongside the text
@@ -65,7 +66,7 @@ export default function AiQuestionDialog({
   // Mount the Turnstile widget while the dialog is open; tear it down on close.
   useEffect(() => {
     if (!open) return;
-    if (!TURNSTILE_SITE_KEY) {
+    if (!turnstileSiteKey()) {
       setError(t("aiQuestion.turnstileNotConfigured"));
       return;
     }
@@ -77,7 +78,7 @@ export default function AiQuestionDialog({
       .then((turnstile) => {
         if (cancelled || !widgetRef.current) return;
         widgetId = turnstile.render(widgetRef.current, {
-          sitekey: TURNSTILE_SITE_KEY,
+          sitekey: turnstileSiteKey(),
           callback: (tok) => setToken(tok),
           "expired-callback": () => setToken(""),
           "error-callback": () => {

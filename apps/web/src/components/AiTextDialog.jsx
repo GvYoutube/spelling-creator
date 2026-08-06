@@ -16,7 +16,8 @@ import { Tooltip, TooltipTrigger, TooltipContent } from "./ui/tooltip.jsx";
 import { cn } from "../lib/utils.js";
 import { suggestText, dislikeText } from "@spelling-creator/core/aiSuggest";
 import { useAuth } from "../lib/auth.jsx";
-import { TURNSTILE_SITE_KEY, whenTurnstileReady } from "../lib/turnstile.js";
+import { turnstileSiteKey } from "@spelling-creator/core/config";
+import { whenTurnstileReady } from "@spelling-creator/core/browser/turnstile";
 
 /**
  * Dialog that generates a block of lesson text via the Worker. The subject is
@@ -69,7 +70,7 @@ export default function AiTextDialog({
   // Mount the Turnstile widget while the dialog is open; tear it down on close.
   useEffect(() => {
     if (!open) return;
-    if (!TURNSTILE_SITE_KEY) {
+    if (!turnstileSiteKey()) {
       setError(t("aiText.turnstileNotConfigured"));
       return;
     }
@@ -80,7 +81,7 @@ export default function AiTextDialog({
       .then((turnstile) => {
         if (cancelled || !widgetRef.current) return;
         widgetIdRef.current = turnstile.render(widgetRef.current, {
-          sitekey: TURNSTILE_SITE_KEY,
+          sitekey: turnstileSiteKey(),
           callback: (tok) => setToken(tok),
           "expired-callback": () => setToken(""),
           "error-callback": () => {
