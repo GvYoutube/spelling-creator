@@ -17,7 +17,7 @@ import { Input } from "./ui/input.jsx";
 import { Avatar, AvatarImage, AvatarFallback } from "./ui/avatar.jsx";
 import { Tooltip, TooltipTrigger, TooltipContent } from "./ui/tooltip.jsx";
 import { cn } from "../lib/utils.js";
-import { colorForId } from "../lib/presence.js";
+import { colorForId } from "@spelling-creator/core/browser/presence";
 
 function initials(entry) {
   const src = entry.name || entry.email || "?";

@@ -50,15 +50,10 @@ src/
     languages.js           LANGUAGES registry for a future language switcher (English only today)
     colorScheme.jsx        ColorSchemeProvider + useColorScheme (light/dark/system, persisted, applied as data-theme on <html>)
     useLiveField.js        shared debounce/commit buffering behind LiveField.jsx
-    summarizer.js         browser Summarizer API wrapper (on-device lesson summaries; fails closed)
-    richText.js           render-time sanitizing (DOMPurify); policy + HTML→text come from core
     collab.js             useCollaboration hook (one WebSocket to the CollabRoom Durable Object; doc sync, cursors, chat)
-    presence.js           per-collaborator colour + selection presence helpers
     useSelectionBroadcast.js broadcasts the local editor selection to peers
     useDragAutoScroll.js  scrolls the page while a block drag hovers near a window edge (the browser only auto-scrolls a native drag while the pointer keeps moving)
-    git/                  the browser-bound half of version history (the portable half is in core — see below)
-      sync.js             fork (= clone the repo) and merge-with-original flows
-      fs.js               LightningFS — the IndexedDB filesystem the repos live on
+    git/                  what has to stay in the app — the rest is in core (see below)
       engine.js, load.js  the git engine, behind one dynamic import (keeps ~185 KB off the main bundle)
       useLessonGit.js     the editor's controller: setup, periodic commits, history, restore
     useImageSrc.js        resolves an image ref to a displayable src
@@ -127,6 +122,12 @@ the MCP server cannot reach it by accident:
   supabase              the Supabase browser client (auth only), built on first use
   turnstile             the Cloudflare Turnstile widget loader
   googleDrive           OAuth2 + upload the docx to Drive as a Google Doc
+  sanitizeRichText      the render-time DOMPurify pass (policy comes from ../richText)
+  commonsImages         search Wikimedia Commons + download an image (no key, no proxy)
+  presence              per-collaborator colour + selection presence helpers
+  summarizer            browser Summarizer API wrapper (on-device summaries; fails closed)
+  git/fs                LightningFS — the IndexedDB filesystem the repos live on
+  git/sync              fork (= clone the repo) and merge-with-original flows
 ```
 
 `.oxlintrc.json` enforces the split: `packages/core` is linted against the

@@ -40,7 +40,7 @@ import { apiUrl, hasApi } from "@spelling-creator/core/config";
 import { useCallback, useEffect, useRef, useState } from "react";
 import * as Y from "yjs";
 import { newId } from "@spelling-creator/core/id";
-import { colorForId } from "./presence.js";
+import { colorForId } from "@spelling-creator/core/browser/presence";
 import {
   LOCAL,
   applyRemote,

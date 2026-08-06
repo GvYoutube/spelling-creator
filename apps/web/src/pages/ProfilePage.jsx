@@ -39,7 +39,7 @@ import {
   PopoverContent,
 } from "../components/ui/popover.jsx";
 import { LessonGridSkeleton } from "../components/Skeletons.jsx";
-import { richTextToLine } from "../lib/richText.js";
+import { richTextToLine } from "@spelling-creator/core/richText";
 import {
   fetchUserProfile,
   setFollowing,

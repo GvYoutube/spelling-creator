@@ -271,15 +271,20 @@ in the browser, in Node and inside the Worker:
 `remote` reads the API's base URL through `@spelling-creator/core/config` rather
 than the bundler's env, which is what lets it sit on this side of the line.
 
-Browser-bound (`apps/web/src/lib/git/`) — everything that names a concrete
-runtime:
+Browser-bound (`@spelling-creator/core/browser/git/*`) — framework-agnostic, but
+needs a real browser:
 
-| File                    | Purpose                                                       |
-| ----------------------- | ------------------------------------------------------------- |
-| `sync.js`               | Fork (clone), merge, and push — incl. the merge-back-in flow. |
-| `fs.js`                 | LightningFS — the IndexedDB filesystem the repos live on.     |
-| `engine.js` + `load.js` | The git engine, behind one dynamic import.                    |
-| `useLessonGit.js`       | The editor's controller: setup, periodic commits, history.    |
+| Module | Purpose                                                       |
+| ------ | ------------------------------------------------------------- |
+| `fs`   | LightningFS — the IndexedDB filesystem the repos live on.     |
+| `sync` | Fork (clone), merge, and push — incl. the merge-back-in flow. |
+
+App-bound (`apps/web/src/lib/git/`) — what cannot leave the bundle:
+
+| File                    | Purpose                                                    |
+| ----------------------- | ---------------------------------------------------------- |
+| `engine.js` + `load.js` | The git engine, behind one dynamic import.                 |
+| `useLessonGit.js`       | The editor's controller: setup, periodic commits, history. |
 
 `repo` and friends take their filesystem through `repoCtx` rather than opening
 one, which is exactly what lets the same commit/merge/restore logic run against

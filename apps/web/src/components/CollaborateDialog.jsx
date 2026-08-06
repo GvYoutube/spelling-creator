@@ -36,7 +36,7 @@ import { Spinner } from "./ui/spinner.jsx";
 import { Tooltip, TooltipTrigger, TooltipContent } from "./ui/tooltip.jsx";
 import IconActionButton from "./IconActionButton.jsx";
 import { cn } from "../lib/utils.js";
-import { colorForId } from "../lib/presence.js";
+import { colorForId } from "@spelling-creator/core/browser/presence";
 import { useAuth } from "../lib/auth.jsx";
 import { sendLink } from "@spelling-creator/core/notifications";
 

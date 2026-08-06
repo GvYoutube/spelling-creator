@@ -23,7 +23,7 @@ import {
 import {
   searchWikimediaImages,
   fetchWikimediaImage,
-} from "../lib/wikimedia.js";
+} from "@spelling-creator/core/browser/commonsImages";
 import {
   decodeDataUrl,
   storeImageBytes,
@@ -41,7 +41,7 @@ import { whenTurnstileReady } from "@spelling-creator/core/browser/turnstile";
 //
 // `needsToken` distinguishes Pixabay (proxied through the Worker, which enforces
 // a Turnstile check) from Wikimedia Commons (queried directly from the browser,
-// no key and no token needed — see web/src/lib/wikimedia.js).
+// no key and no token needed — see @spelling-creator/core/browser/commonsImages).
 const PROVIDERS = [
   {
     id: "pixabay",

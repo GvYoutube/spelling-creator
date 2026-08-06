@@ -19,7 +19,7 @@ import { Avatar, AvatarFallback } from "./ui/avatar.jsx";
 import { Alert, AlertDescription } from "./ui/alert.jsx";
 import { Skeleton } from "./ui/skeleton.jsx";
 import { fetchFollowList } from "@spelling-creator/core/users";
-import { richTextToLine } from "../lib/richText.js";
+import { richTextToLine } from "@spelling-creator/core/richText";
 
 function initial(name) {
   const s = (name || "").trim();

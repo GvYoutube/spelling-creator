@@ -24,7 +24,7 @@ import { Spinner } from "./ui/spinner.jsx";
 import RichTextInput from "./RichTextInput.jsx";
 import { useAuth } from "../lib/auth.jsx";
 import { setBio, BIO_MAX } from "@spelling-creator/core/profile";
-import { richTextLength } from "../lib/richText.js";
+import { richTextLength } from "@spelling-creator/core/richText";
 
 /**
  * @param {object}     props
