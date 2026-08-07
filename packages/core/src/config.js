@@ -1,6 +1,6 @@
 // The seam between the host app's configuration and this package.
 //
-// Core modules must not read `import.meta.env` — that is Rsbuild-specific, it is
+// Core modules must not read `import.meta.env` — that is bundler-specific, it is
 // substituted at build time, and it does not exist in Node, in the Worker, or in
 // another bundler's build. A module that reads it at import time can only ever be
 // used by the web app, which is what previously pinned the whole image/export

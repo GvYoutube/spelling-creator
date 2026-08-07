@@ -137,7 +137,7 @@ inside the Worker.
 
 ### The config seam
 
-Core modules must not read `import.meta.env` — it is Rsbuild-specific, substituted
+Core modules must not read `import.meta.env` — it is bundler-specific, substituted
 at build time, and absent in Node, in the Worker and under any other bundler. A
 module that reads it at import time can only ever be used by the web app, which is
 what previously pinned the whole image/export tier inside `apps/web`.

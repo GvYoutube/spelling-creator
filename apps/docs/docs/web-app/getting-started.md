@@ -15,8 +15,7 @@ pnpm preview  # preview the production build
 ## Environment variables
 
 The AI text feature needs two variables in a `.env` file at the project root
-(the app configures Rsbuild to expose `VITE_`-prefixed vars to the client,
-keeping the same convention it used before migrating off Vite):
+(Vite exposes `VITE_`-prefixed vars to client code):
 
 ```bash
 VITE_API_URL=https://your-worker.example.workers.dev   # apps/api Worker endpoint (AI, Pixabay, lesson hub)

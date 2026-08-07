@@ -4,7 +4,7 @@ import { BrowserRouter } from "react-router-dom";
 import { configureCore } from "@spelling-creator/core/config";
 
 // Hand the shared package every piece of build-time configuration it needs,
-// before anything reads it. `import.meta.env` is substituted by Rsbuild and
+// before anything reads it. `import.meta.env` is substituted by Vite and
 // exists nowhere else, so core takes these through this seam rather than
 // reaching for the bundler itself — see packages/core/src/config.js.
 //
@@ -31,7 +31,7 @@ import "@fontsource/public-sans/500.css";
 import "@fontsource/public-sans/600.css";
 // Preload the weights so the fonts are fetched in parallel with the bundle and
 // are ready before first paint — avoids the flash of fallback (unstyled) text.
-// Rsbuild fingerprints these URLs at build time, so we resolve them via ?url
+// Vite fingerprints these URLs at build time, so we resolve them via ?url
 // rather than hardcoding hashed paths in index.html.
 import fraunces600 from "@fontsource/fraunces/files/fraunces-latin-600-normal.woff2?url";
 import publicSans400 from "@fontsource/public-sans/files/public-sans-latin-400-normal.woff2?url";

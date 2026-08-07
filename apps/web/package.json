@@ -6,9 +6,9 @@
   "author": "playforge-coding",
   "type": "module",
   "scripts": {
-    "dev": "rsbuild dev",
-    "build": "rsbuild build",
-    "preview": "rsbuild preview",
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
     "test": "vitest run --passWithNoTests"
   },
   "dependencies": {
@@ -48,10 +48,13 @@
     "yjs": "^13.6.31"
   },
   "devDependencies": {
-    "@rsbuild/core": "^2.1.10",
-    "@rsbuild/plugin-react": "^2.1.0",
-    "@rsbuild/plugin-tailwindcss": "^2.0.3",
+    "@babel/core": "^7.29.7",
+    "@rolldown/plugin-babel": "^0.2.3",
+    "@tailwindcss/vite": "^4.3.3",
+    "@vitejs/plugin-react": "^6.0.5",
+    "babel-plugin-react-compiler": "^1.0.0",
     "tailwindcss": "^4.3.2",
+    "vite": "^8.2.1",
     "vitest": "~3.2.4"
   },
   "packageManager": "pnpm@11.1.3"
