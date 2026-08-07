@@ -10,7 +10,7 @@ doing on its own terms; the framework choice is still open.
 
 ## What phase 1 established
 
-Eighteen modules read `import.meta.env` at module scope — Rsbuild-specific, and
+Eighteen modules read `import.meta.env` at module scope — bundler-specific, and
 absent in Node, in the Worker, and under any other bundler. They now read through
 `@spelling-creator/core/config`, and `apps/web/src/main.jsx` is the only place in
 the app that touches `import.meta.env`.
@@ -117,12 +117,12 @@ Worker already running. Forgoes the reactivity improvement entirely.
 
 ### Comparison
 
-|                  | View-layer cost | SSR                   | Toolchain       | Ecosystem risk |
-| ---------------- | --------------- | --------------------- | --------------- | -------------- |
-| A SvelteKit      | Full rewrite    | Excellent             | oxc regression  | Low            |
-| B SolidStart     | Conversion      | Unproven here         | oxc kept        | High           |
-| C Solid, no meta | Conversion      | None (later, by hand) | see spike below | Medium         |
-| D React + SSR    | None            | Hand-rolled           | Unchanged       | None           |
+|                  | View-layer cost | SSR                   | Toolchain      | Ecosystem risk |
+| ---------------- | --------------- | --------------------- | -------------- | -------------- |
+| A SvelteKit      | Full rewrite    | Excellent             | oxc regression | Low            |
+| B SolidStart     | Conversion      | Unproven here         | oxc kept       | High           |
+| C Solid, no meta | Conversion      | None (later, by hand) | oxc kept       | Medium         |
+| D React + SSR    | None            | Hand-rolled           | Unchanged      | None           |
 
 ## What the spikes showed
 
@@ -154,11 +154,100 @@ than a hard incompatibility, but it was not resolved.
 `vite` 8.2.0 with `vite-plugin-solid` 2.11.14 compiled the identical source
 correctly — Solid's `template`/`insert` output with getter-based props.
 
-**Consequence:** a Solid app needs Vite today, not Rsbuild. The appealing "one
-package, two entries, keep your build config" story does not work, and Solid
-lands on the same shape as SvelteKit — a second package, a second build tool,
-route-split at the Worker. What _is_ preserved is oxfmt/oxlint, since `.jsx`
-stays `.jsx`.
+**Consequence, since acted on:** a Solid app needs Vite today, not Rsbuild — so
+`apps/web` was moved to Vite 8 on its own, still on React, before any framework
+decision. See [Build tooling](#build-tooling) below. That removes the "second
+build tool" cost from options B and C: a Solid app would now be a second entry
+under the same bundler, and `.jsx` stays `.jsx`, so oxfmt/oxlint are preserved
+either way.
+
+## Build tooling
+
+`apps/web` runs on **Vite 8** (`apps/web/vite.config.js`). This was done on its
+own, still on React, so that changing the build tool and changing the framework
+are separately attributable — the control group the risk list below asks for.
+
+Why, beyond unblocking B and C: Vite 8 bundles with **Rolldown**, which uses
+**Oxc** for JavaScript parsing, transforms and minification, and minifies CSS
+with **Lightning CSS** — a separate Parcel project, not part of Oxc. So the
+bundler's JavaScript pipeline now runs on the same engine as `oxlint` and
+`oxfmt`, and `apps/web`'s Vitest runs on that same Vite 8. Before this, building
+went through Rspack/SWC while linting and formatting went through Oxc, and
+`node_modules` carried both toolchains.
+
+What the move cost, measured against the Rsbuild build it replaced:
+
+|                   | Rsbuild  | Vite 8   |
+| ----------------- | -------- | -------- |
+| JS, gzipped total | 1,048 kB | 1,044 kB |
+| App chunk         | 401 kB   | 400 kB   |
+| Lazy git engine   | 186 kB   | 197 kB   |
+| Build time        | —        | ~2s      |
+
+Notes on the config, all of which are load-bearing:
+
+- **`VITE_*` env vars need no config** — Vite substitutes `import.meta.env`
+  natively, so Rsbuild's `loadEnv`/`publicVars` shim is gone. The prefix that
+  had been kept for continuity is now simply correct.
+- **The React Compiler runs as a Babel pass** (`@rolldown/plugin-babel` +
+  `reactCompilerPreset({ target: "18" })`), not through SWC. `target: "18"` is
+  required: it emits imports from `react-compiler-runtime` rather than React
+  19's `react/compiler-runtime`, which React 18 does not export.
+- **`codeSplitting.groups` is not optional.** Rolldown puts everything reachable
+  from the entry in one chunk, where Rsbuild split vendors by default; without
+  the groups, editing one app file invalidates ~3.4 MB for returning visitors.
+  Both groups are tagged `$initial` so they capture only the statically-reachable
+  graph — untagged, the vendor group also swallows isomorphic-git and the
+  tsparticles shapes, which are supposed to stay behind a dynamic import.
+- **No `build.target` override.** Vite 8's `baseline-widely-available` default
+  (chrome111, edge111, firefox114, safari16.4) governs **JavaScript syntax
+  only**. It is wider than the `["defaults", "not IE 11"]` browserslist this app
+  used to compile against, which now resolves to a floor of chrome 109,
+  edge 146, firefox 140, safari 26.3, so chrome 109–110 is the only JS coverage
+  given up.
+- **The effective floor is CSS, not JS.** Tailwind v4 supports **Chrome 111,
+  Safari 16.4 and Firefox 128** — and this build emits what that implies:
+  `@property` (70 occurrences) and `color-mix()` (92) in `index-*.css`. Firefox
+  114–127 satisfies Vite's JS target but **cannot render this stylesheet**;
+  `@property` did not ship in Firefox until 128. The app's real support window
+  is therefore chrome111 / safari16.4 / **firefox128**, and lowering
+  `build.target` would not widen it.
+
+**Vitest versions are deliberately split.** `apps/web` is on Vitest 4, because
+Vitest 3 depends on `vite ^5 || ^6 || ^7` and would otherwise run tests through
+a second, older Vite major than the one that builds the app — silently, since
+`apps/web` currently has no tests. `packages/core` and `apps/api` stay on
+Vitest 3: `@cloudflare/vitest-pool-workers` declares a `vitest 2.0.x - 3.2.x`
+peer, so a repo-wide bump breaks the Worker suite. Raise `apps/api` only when
+the pool package widens that range.
+
+`apps/docs` is still Rspress, so Rspack has not left the tree. Moving it would
+mean a different site generator and reworking every page — deliberately out of
+scope.
+
+### Vite+ — evaluated, deferred
+
+Vite+ (`vite-plus`, MIT, beta) bundles Vite, Vitest, Oxlint, Oxfmt, Rolldown and
+a caching monorepo task runner behind one `vp` CLI. It was considered at the same
+time and deferred, for reasons that are about sequencing rather than merit:
+
+- It ships its own `oxlint` and `oxfmt` binaries, which are **LSP-only wrappers
+  that exit 1** when invoked as linters. They lose the `.bin` slot to this repo's
+  direct `oxlint`/`oxfmt` devDependencies, so installing it alongside them is
+  harmless — but adopting it means removing those, and `pnpm lint` is
+  `oxfmt --check . && oxlint`.
+- Its docs explicitly do not recommend `.oxlintrc.json` or `.oxfmtrc.json`;
+  config belongs in `lint`/`fmt` blocks in `vite.config.ts`. This repo's
+  `.oxlintrc.json` is 95 lines of per-package overrides, including the one
+  enforcing the `core/browser/*` boundary, and override semantics differ.
+- `vp migrate` aliases `vite` to Vite+ core through a workspace-root pnpm
+  override and removes `vitest` as a direct dependency. `apps/api` runs
+  `@cloudflare/vitest-pool-workers`, which peers on a specific Vitest.
+- 0.2.8 pins `oxlint =1.76.0` and `oxfmt =0.61.0`; this repo is ahead of both.
+
+Its own prerequisite is Vite 8 + Vitest 4.1, which this move satisfies. Revisit
+at 1.0, on a branch, by running `vp migrate --no-interactive` and reading the
+diff.
 
 ## If option C is chosen — the plan
 

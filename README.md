@@ -3,13 +3,13 @@
 A pnpm monorepo containing the Spelling Lesson Maker web app and its Cloudflare
 Worker API.
 
-| Path            | Package                  | Description                                                                                                                |
-| --------------- | ------------------------ | -------------------------------------------------------------------------------------------------------------------------- |
-| `apps/web`      | `@spelling-creator/web`  | Rsbuild + React frontend (shadcn/ui + Tailwind, Supabase, react-router). Built into `apps/web/dist`, served by the Worker. |
-| `apps/api`      | `@spelling-creator/api`  | Cloudflare Worker backend (multi-provider AI suggestions, profanity filter, KV rate limiting, R2 lesson images).           |
-| `apps/mcp`      | `@spelling-creator/mcp`  | MCP server — lets an AI assistant author and publish lessons to the hub.                                                   |
-| `apps/docs`     | `@spelling-creator/docs` | The Rspress documentation site published at `/docs/`.                                                                      |
-| `packages/core` | `@spelling-creator/core` | Framework-agnostic lesson domain logic shared by the apps above.                                                           |
+| Path            | Package                  | Description                                                                                                             |
+| --------------- | ------------------------ | ----------------------------------------------------------------------------------------------------------------------- |
+| `apps/web`      | `@spelling-creator/web`  | Vite + React frontend (shadcn/ui + Tailwind, Supabase, react-router). Built into `apps/web/dist`, served by the Worker. |
+| `apps/api`      | `@spelling-creator/api`  | Cloudflare Worker backend (multi-provider AI suggestions, profanity filter, KV rate limiting, R2 lesson images).        |
+| `apps/mcp`      | `@spelling-creator/mcp`  | MCP server — lets an AI assistant author and publish lessons to the hub.                                                |
+| `apps/docs`     | `@spelling-creator/docs` | The Rspress documentation site published at `/docs/`.                                                                   |
+| `packages/core` | `@spelling-creator/core` | Framework-agnostic lesson domain logic shared by the apps above.                                                        |
 
 ## Documentation
 
@@ -29,7 +29,7 @@ The docs source is in `apps/docs/docs`.
 
 ```bash
 pnpm install            # install all workspace deps
-pnpm dev:web            # run the frontend (Rsbuild)
+pnpm dev:web            # run the frontend (Vite)
 pnpm dev:api            # run the Worker locally (wrangler dev)
 ```
 

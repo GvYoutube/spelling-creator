@@ -310,10 +310,16 @@ mounts (`load.js`). Nobody reading the homepage or browsing the hub downloads a
 git implementation. The pure parts (`doc.js`, `ops.js`, `merge.js`) have no git
 dependency, so the history and merge dialogs render without it.
 
-`rsbuild.config.mjs` provides a `Buffer` polyfill (from the `buffer` package) —
+`engine.js` also installs the `Buffer` polyfill (from the `buffer` package) —
 isomorphic-git writes git objects through Node's `Buffer`, which browsers don't
-have. `ProvidePlugin` only injects it into modules that reference it, so it lands
-in the git chunk, not the main bundle.
+have. It is imported and assigned to `globalThis` at the top of that module
+rather than injected by the bundler, so it lands in the git chunk alongside the
+code that needs it, not in the main bundle.
+
+Keeping it there depends on the `codeSplitting` groups in
+`apps/web/vite.config.js` being tagged `$initial`: without that tag the vendor
+group captures dependencies reached only through a dynamic import, and
+isomorphic-git ends up back in the bundle every visitor downloads.
 
 ## It really is git
 

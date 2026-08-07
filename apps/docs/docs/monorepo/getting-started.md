@@ -8,7 +8,7 @@ sidebar_position: 2
 ```bash
 pnpm install            # install all workspace deps
 
-pnpm dev:web            # run the frontend (Rsbuild)
+pnpm dev:web            # run the frontend (Vite)
 pnpm dev:api            # run the Worker locally (wrangler dev)
 
 pnpm build              # build the frontend
@@ -20,8 +20,8 @@ pnpm lint               # check formatting, then lint (oxfmt --check + oxlint)
 
 Each app keeps its own environment file:
 
-- `apps/web/.env` — `VITE_*`-prefixed values consumed by Rsbuild at build time
-  (the app deliberately kept the `VITE_` prefix — see `apps/web/rsbuild.config.mjs`).
+- `apps/web/.env` — `VITE_*`-prefixed values exposed to client code by Vite at
+  build time (see `apps/web/vite.config.js`).
 - `apps/api/.env` — Worker secrets (e.g. `GEMINI_API_KEY`, `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`,
   `GROQ_API_KEY` — the Worker tries each configured AI provider in order, skipping any without a
   key set). Cloudflare Workers AI needs no key — it's wired up via the `AI` binding in
