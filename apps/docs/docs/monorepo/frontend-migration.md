@@ -167,10 +167,13 @@ either way.
 own, still on React, so that changing the build tool and changing the framework
 are separately attributable — the control group the risk list below asks for.
 
-Why, beyond unblocking B and C: Vite 8 is Rolldown and Lightning CSS, which is
-Oxc underneath, so the bundler now shares an engine with oxlint, oxfmt and
-Vitest. Before this, the repo ran Rspack/SWC for building and Rolldown/Oxc for
-everything else, and `node_modules` carried both.
+Why, beyond unblocking B and C: Vite 8 bundles with **Rolldown**, which uses
+**Oxc** for JavaScript parsing, transforms and minification, and minifies CSS
+with **Lightning CSS** — a separate Parcel project, not part of Oxc. So the
+bundler's JavaScript pipeline now runs on the same engine as `oxlint` and
+`oxfmt`, and `apps/web`'s Vitest runs on that same Vite 8. Before this, building
+went through Rspack/SWC while linting and formatting went through Oxc, and
+`node_modules` carried both toolchains.
 
 What the move cost, measured against the Rsbuild build it replaced:
 
