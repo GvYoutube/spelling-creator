@@ -4,6 +4,10 @@
 
 This is a React + `shadcn` project for making Spelling lessons.
 
+## Verifying in a Browser
+
+If you have it installed, use the Playwright MCP for this. If not, use the Playwright CLI instead (see `playwright-cli --help`).
+
 ## Code Quality
 
 Always lint and format:
