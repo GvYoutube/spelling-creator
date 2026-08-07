@@ -44,9 +44,13 @@ controls wrap underneath, right-aligned, with a hairline (`border-t … sm:borde
 that makes the row read as a footer rather than as more content. From `sm` up
 it's the original corner column, unchanged.
 
-`SectionCard`'s section header does the same thing with `flex-wrap` plus a
-`w-full sm:w-auto` control group, so the section number and name keep the first
-row and the move/delete buttons wrap onto their own.
+`SectionCard`'s section header splits the same way: the section number and name
+keep the first row and the move/delete buttons drop below them. It does this by
+rendering the control group twice — once inside the header row (`hidden sm:flex`)
+and once beneath it (`sm:hidden`) — rather than by wrapping, because the header
+row is sticky and the controls must **not** be pinned with it. Pinning them cost
+113px, 13% of an 844px screen. See
+[Navigating large lessons](./navigating-large-lessons.md#only-the-identity-is-pinned).
 
 **If you add a new block type, use `BLOCK_LAYOUT`** rather than a bare
 `flex items-start gap-2`.

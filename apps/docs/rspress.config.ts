@@ -106,6 +106,10 @@ export default defineConfig({
               link: "/web-app/mobile-layout",
             },
             {
+              text: "Navigating large lessons",
+              link: "/web-app/navigating-large-lessons",
+            },
+            {
               text: "Installable app & offline use",
               link: "/web-app/pwa-and-offline",
             },

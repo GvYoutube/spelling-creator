@@ -42,7 +42,9 @@
     "syncTooltip": "Bring in the changes made to {{name}} since you forked it. Edits to different blocks — or to different parts of the same block — merge automatically; anything genuinely clashing is put to you.",
     "contributeMerging": "Merging...",
     "contributeButton": "Merge back into {{name}}",
-    "contributeTooltip": "You’re a trusted collaborator on {{name}}, so you can merge your changes back into it. Its latest changes are pulled in first, block by block, and only genuine clashes are put to you. Its author is notified."
+    "contributeTooltip": "You’re a trusted collaborator on {{name}}, so you can merge your changes back into it. Its latest changes are pulled in first, block by block, and only genuine clashes are put to you. Its author is notified.",
+    "collapseAll": "Collapse all",
+    "expandAll": "Expand all"
   },
   "stats": {
     "sections_one": "{{count}} section",

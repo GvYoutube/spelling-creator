@@ -43,15 +43,20 @@ import NotificationBell from "./NotificationBell.jsx";
 import DisplayNameDialog from "./DisplayNameDialog.jsx";
 import InstallAppButton from "./InstallAppButton.jsx";
 
-// See the file header for why these use --primary-foreground rather than
-// the usual tokens. bg-transparent and border-0/cursor-pointer are explicit
-// (not just hover:bg-primary-foreground/10) because Tailwind's preflight
-// reset is off for now (see globals.css), so a plain <button> still gets the
-// browser's default gray button chrome.
+// See the file header for why these use --primary-foreground rather than the
+// usual tokens. bg-transparent, border-0 and cursor-pointer are explicit rather
+// than inherited, so these keep their intended shape wherever they're dropped
+// and don't pick up default <button> chrome.
+//
+// Neither carries a border. The labelled hub link used to have one, which made
+// it the only outlined control on the bar — it read as a primary call to action
+// sitting next to Preview / Export / Collaborate, which are plain ghost
+// buttons. Hover fill is the affordance here, as it is for every other control
+// in the header.
 const iconTrigger =
   "inline-flex size-10 cursor-pointer items-center justify-center rounded-full border-0 bg-transparent text-primary-foreground no-underline transition-colors hover:bg-primary-foreground/10";
-const outlineTrigger =
-  "inline-flex items-center gap-2 rounded-md border border-primary-foreground/60 bg-transparent px-4 py-2 text-sm font-medium text-primary-foreground no-underline transition-colors hover:bg-primary-foreground/10";
+const textTrigger =
+  "inline-flex items-center gap-2 rounded-md border-0 bg-transparent px-4 py-2 text-sm font-medium text-primary-foreground no-underline transition-colors hover:bg-primary-foreground/10";
 
 export default function NavActions({ current }) {
   const { t } = useTranslation("common");
@@ -80,7 +85,7 @@ export default function NavActions({ current }) {
           </Tooltip>
           <RouterLink
             to="/hub"
-            className={cn(outlineTrigger, "hidden md:inline-flex")}
+            className={cn(textTrigger, "hidden md:inline-flex")}
           >
             <BookMarkedIcon data-icon="inline-start" />
             {t("nav.lessonHub")}

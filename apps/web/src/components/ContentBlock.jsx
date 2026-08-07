@@ -73,6 +73,9 @@ function ContentBlock({
   onMoveDown,
   isFirst,
   isLast,
+  // 1-based position among the section's question blocks; null for every other
+  // block type. Supplied by SectionCard.
+  questionNumber = null,
   capitalizedWords = [],
   dragHandle = null,
   onReplaceImageFile = null,
@@ -112,7 +115,12 @@ function ContentBlock({
 
   if (block.type === "question") {
     return (
-      <QuestionBlock block={block} onChange={onChange} controls={controls} />
+      <QuestionBlock
+        block={block}
+        onChange={onChange}
+        controls={controls}
+        questionNumber={questionNumber}
+      />
     );
   }
 
@@ -467,7 +475,7 @@ function SpellingBlock({
   );
 }
 
-function QuestionBlock({ block, onChange, controls }) {
+function QuestionBlock({ block, onChange, controls, questionNumber = null }) {
   const { t } = useTranslation("editorSections");
   const meta = questionMeta(block.questionType);
   const answers = block.answers || [];
@@ -504,12 +512,19 @@ function QuestionBlock({ block, onChange, controls }) {
     >
       <div className={BLOCK_LAYOUT}>
         <div className="min-w-0 grow">
-          <Badge
-            style={{ backgroundColor: meta.color, color: "#fff" }}
-            className="mb-3"
-          >
-            {meta.label}
-          </Badge>
+          {/* The type badge alone doesn't distinguish one question from the
+              fourteen others in the section — the number is what makes a
+              question findable again after you've scrolled away from it. */}
+          <div className="mb-3 flex flex-wrap items-center gap-2">
+            <Badge style={{ backgroundColor: meta.color, color: "#fff" }}>
+              {meta.label}
+            </Badge>
+            {questionNumber !== null && (
+              <span className="text-xs font-semibold text-muted-foreground tabular-nums">
+                {t("contentBlock.question.number", { number: questionNumber })}
+              </span>
+            )}
+          </div>
           <Field>
             <FieldLabel htmlFor={`${block.id}-prompt`}>
               {t("contentBlock.question.label")}

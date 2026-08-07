@@ -33,6 +33,19 @@ PDF printing.
   AI, running entirely on the reader's own device (no server, no cost). Only
   appears on browsers that can actually run it (see
   [Lesson summaries](./lesson-summaries.md)).
+- **Navigating a long lesson** - a finished lesson runs to ~37 screens on a
+  desktop and ~54 on a phone, so each section's header is sticky (pinned below
+  the app bar, naming the section you're in for as long as you're in it), every
+  question is numbered within its section (`Q7`), a newly added section is
+  scrolled to rather than silently appended at the end, reordering a section or
+  block keeps it under the pointer instead of flinging the page, and returning
+  to the editor puts you back at the block you were last editing (see
+  [Navigating large lessons](./navigating-large-lessons.md)).
+- **Collapse sections** - fold any section to its header, or the whole lesson at
+  once, turning 37 screens into 1.5. A folded section still says what's inside
+  it, still reorders, still takes a dragged block (dwell over it and it springs
+  open), and is still found by Cmd-F. What you fold is yours — it isn't saved
+  into the lesson and collaborators don't see it.
 - **Reorder / delete** sections and blocks with inline controls. On a device
   with a mouse or trackpad, blocks can also be dragged by their grab handle,
   both within a section and **from one section into another** (an empty section

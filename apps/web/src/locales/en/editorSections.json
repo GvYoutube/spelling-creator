@@ -1,6 +1,21 @@
 {
   "sectionCard": {
     "sectionNamePlaceholder": "Section name",
+    "blockCount_one": "{{count}} block",
+    "blockCount_other": "{{count}} blocks",
+    "collapse": "Collapse “{{name}}”",
+    "expand": "Expand this section",
+    "collapsedDropHint": "Hold the block here to open this section.",
+    "collapsedSummary": {
+      "text_one": "{{count}} paragraph",
+      "text_other": "{{count}} paragraphs",
+      "image_one": "{{count}} image",
+      "image_other": "{{count}} images",
+      "spelling_one": "{{count}} spelling list",
+      "spelling_other": "{{count}} spelling lists",
+      "question_one": "{{count}} question",
+      "question_other": "{{count}} questions"
+    },
     "moveUp": "Move section up",
     "moveDown": "Move section down",
     "delete": "Delete section",
@@ -68,6 +83,7 @@
     },
     "question": {
       "label": "Question",
+      "number": "Q{{number}}",
       "promptPlaceholder": "Type the question…",
       "answerLabel": "Answer",
       "answerPlaceholder": "The correct answer…",
