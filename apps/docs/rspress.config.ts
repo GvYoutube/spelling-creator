@@ -105,6 +105,10 @@ export default defineConfig({
               text: "Mobile layout & touch targets",
               link: "/web-app/mobile-layout",
             },
+            {
+              text: "Installable app & offline use",
+              link: "/web-app/pwa-and-offline",
+            },
           ],
         },
         {

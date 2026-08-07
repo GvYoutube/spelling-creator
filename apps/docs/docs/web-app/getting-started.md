@@ -12,6 +12,10 @@ pnpm build    # production build into dist/
 pnpm preview  # preview the production build
 ```
 
+The PWA service worker is a production concern and is switched off under
+`pnpm dev`, so HMR behaves normally; use `pnpm build && pnpm preview` to exercise
+it (see [Installable app & offline use](./pwa-and-offline.md#local-development)).
+
 ## Environment variables
 
 Optional features are configured in `apps/web/.env` — Vite reads env

@@ -53,6 +53,7 @@ import { ColorSchemeProvider } from "./lib/colorScheme.jsx";
 import { TooltipProvider } from "./components/ui/tooltip.jsx";
 import { Toaster } from "./components/ui/sonner.jsx";
 import DisplayNameGate from "./components/DisplayNameGate.jsx";
+import ServiceWorkerPrompt from "./lib/pwa.jsx";
 
 // BrowserRouter gives every page a real path (e.g. /hub/:id) so the Worker can
 // see which page a crawler requested and return a prerendered snapshot. The
@@ -61,6 +62,10 @@ import DisplayNameGate from "./components/DisplayNameGate.jsx";
 // Supabase session to every page. ColorSchemeProvider is outermost (and reads
 // a value already applied pre-paint by index.html's inline script) so
 // light/dark is available everywhere.
+//
+// ServiceWorkerPrompt renders nothing; it registers the PWA service worker and
+// raises a toast when a new build is waiting, so it sits inside <Toaster>'s
+// tree but outside the router — it isn't tied to any one page.
 ReactDOM.createRoot(document.getElementById("root")).render(
   <React.StrictMode>
     <ColorSchemeProvider>
@@ -73,6 +78,7 @@ ReactDOM.createRoot(document.getElementById("root")).render(
           </AuthProvider>
         </BrowserRouter>
         <Toaster />
+        <ServiceWorkerPrompt />
       </TooltipProvider>
     </ColorSchemeProvider>
   </React.StrictMode>,

@@ -90,6 +90,20 @@
   margin-bottom: env(safe-area-inset-bottom);
 }
 
+/* The top half of the same problem, and only for the installed PWA. iOS in
+   standalone mode draws the app's content under the status bar (that's what
+   `apple-mobile-web-app-status-bar-style: black-translucent` in index.html asks
+   for, so AppHeader's indigo bar fills the notch area rather than leaving a
+   mismatched strip above it) — which would put the header's title and buttons
+   behind the clock. Padding the header by the inset drops its contents back
+   below the status bar while the background still reaches the top edge.
+
+   Zero in a browser tab, where the browser's own chrome occupies that space, so
+   this changes nothing outside an installed app. See pwa-and-offline.md. */
+@utility pt-safe {
+  padding-top: env(safe-area-inset-top);
+}
+
 :root {
   /* Tells the browser to render native chrome (scrollbars, form controls) in
      the light palette — without this, native scrollbars stay light-themed

@@ -8,7 +8,7 @@ sidebar_position: 15
 ```
 src/
   App.jsx                 route table (editor / hub / lesson / profile / login / moderation)
-  main.jsx                React entry: ColorSchemeProvider + BrowserRouter + AuthProvider + DisplayNameGate + Toaster
+  main.jsx                React entry: ColorSchemeProvider + BrowserRouter + AuthProvider + DisplayNameGate + Toaster + ServiceWorkerPrompt
   styles/globals.css      Tailwind v4 + shadcn/ui design tokens (light/dark palettes, glass-surface shadows/blur), plus the `mb-safe` utility (see mobile-layout.md)
   locales/en/*.json      one JSON file per i18next namespace (see internationalization.md)
   pages/
@@ -20,7 +20,8 @@ src/
     ModerationPage.jsx    moderator/admin queue for reported content
   components/
     AppHeader.jsx          shared sticky glass toolbar (title + left slot + children) every page mounts
-    NavActions.jsx        shared header nav: hub link + dark-mode toggle + account menu + notification bell
+    NavActions.jsx        shared header nav: hub link + install button + dark-mode toggle + account menu + notification bell
+    InstallAppButton.jsx  the "install app" header button; renders nothing unless the app is installable (see pwa-and-offline.md)
     NotificationBell.jsx  header bell that polls for and shows the user's notifications
     DisplayNameGate.jsx   makes a signed-in user pick a display name before using the app
     DisplayNameDialog.jsx pick / change your public display name
@@ -60,7 +61,14 @@ src/
     useImageSrc.js        resolves an image ref to a displayable src
     auth.jsx              AuthProvider + useAuth (session, magic link, sign out)
     seo.js                per-page document title + Open Graph / Twitter tags
+    pwa.jsx               registers the service worker; toasts when a new build is waiting
+    useInstallPrompt.js   captures beforeinstallprompt (or detects iOS Safari) behind the install button
 ```
+
+Outside `src/`, `public/icons/` holds the PWA icons and the two SVGs they're
+rasterised from, and the `VitePWA` block in `vite.config.js` holds the manifest
+and service-worker configuration — see
+[Installable app & offline use](./pwa-and-offline.md).
 
 ## Shared lesson logic
 
@@ -174,10 +182,11 @@ names for one predicate.
 
 `git/repo` and friends never open a filesystem themselves — they take one through
 `repoCtx`, which is why they port unchanged. What stays in the web app is
-everything that names a concrete runtime: `fs` (LightningFS over IndexedDB),
-`remote` (reads `import.meta.env.VITE_API_URL` at module scope), `engine` and
-`load` (the dynamic-import boundary and the `Buffer` polyfill browsers need), and
-`sync`, which composes the two halves.
+`engine` and `load` (the dynamic-import boundary and the `Buffer` polyfill
+browsers need) plus `useLessonGit`, the editor's own controller. `fs`
+(LightningFS over IndexedDB) and `sync` sit in core's browser tier, and `remote`
+is runtime-neutral now that it reads its base URL through
+[the config seam](#the-config-seam) rather than `import.meta.env`.
 
 That boundary is load-bearing for bundle size: isomorphic-git stays behind
 `load.js`'s dynamic import, in its own ~181 KB async chunk, rather than in the

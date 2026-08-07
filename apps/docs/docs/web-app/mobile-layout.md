@@ -93,21 +93,35 @@ touch, which is fine — it only runs while a drag is in flight.
 `index.html`'s viewport meta sets `viewport-fit=cover`, which is what makes
 `env(safe-area-inset-*)` resolve to anything other than zero.
 
-`globals.css` defines one utility on top of it:
+`globals.css` defines two utilities on top of it:
 
 ```css
 @utility mb-safe {
   margin-bottom: env(safe-area-inset-bottom);
 }
+
+@utility pt-safe {
+  padding-top: env(safe-area-inset-top);
+}
 ```
 
-It's a **margin**, not a `bottom-safe` replacement for `bottom-*`, so it
+`mb-safe` is a **margin**, not a `bottom-safe` replacement for `bottom-*`, so it
 composes with whatever offset an element already has (the add-section FAB is
 `bottom-4 sm:bottom-8`) instead of having to restate it. Every bottom-anchored
 floating element uses it — the FAB, the collapsed collab-chat launcher, and the
 first-lesson wizard — because 1rem of clearance puts their lower half inside the
 ~34px iOS home-indicator swipe strip, where the gesture wins and the tap
 doesn't land.
+
+`pt-safe` is the top half of the same problem, and only bites in the
+[installed app](./pwa-and-offline.md). iOS in standalone mode draws the page
+under the status bar — which is what
+`apple-mobile-web-app-status-bar-style: black-translucent` asks for, so that
+`AppHeader`'s indigo bar fills the notch area instead of leaving a mismatched
+strip above it. Without padding, the header's title and buttons would sit behind
+the clock. It's a **padding** on `AppHeader` rather than a margin so the
+background still reaches the top edge while its contents drop below the status
+bar. In a browser tab the inset is zero, so nothing changes there.
 
 ## `dvh`, not `vh`
 
@@ -139,7 +153,12 @@ From `sm` up every one of those is reverted and it's the original corner panel.
   in `EditorPage.jsx`, so they land in the initial vendor chunk that every
   visitor downloads — including on the homepage. This is the largest remaining
   mobile-performance item; see [How the export pipeline works](./export-pipeline.md).
-- **No PWA.** There's no web app manifest or service worker, so the editor —
-  which is already local-first, see
-  [Version history](../monorepo/version-history.md) — can't be installed to a
-  home screen or opened offline.
+
+## Installing to a Home Screen
+
+The app ships a web app manifest and a service worker, so on a phone it can be
+installed and opened in its own full-screen window, and the editor — already
+local-first, see [Version history](../monorepo/version-history.md) — keeps
+working with no network. The header's install button and the iOS Share → "Add to
+Home Screen" instructions are covered in
+[Installable app & offline use](./pwa-and-offline.md).

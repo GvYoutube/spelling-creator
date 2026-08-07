@@ -22,10 +22,17 @@ so the Worker can return a prerendered snapshot to crawlers and serves
 
 Unknown paths redirect to the home page (`/`).
 
-Every page's header carries a shared nav (a **Lesson hub** link and an account
-control that shows **Sign in** or the signed-in account menu). Routing is set up
-in `src/main.jsx` (`BrowserRouter` + `AuthProvider`, wrapped in a
-`DisplayNameGate`) and the route table is in `src/App.jsx`.
+Once the PWA service worker is installed it resolves these routes itself, from
+the precached `index.html`, which is what lets a deep link open with no network.
+The paths the Worker answers instead — `/docs`, `/images/…`, the SEO and MCP
+OAuth endpoints — are excluded by name; see
+[Installable app & offline use](./pwa-and-offline.md#navigation-fallback-and-the-paths-it-must-not-touch).
+
+Every page's header carries a shared nav (a **Lesson hub** link, an **install
+app** button when the app is installable, and an account control that shows
+**Sign in** or the signed-in account menu). Routing is set up in `src/main.jsx`
+(`BrowserRouter` + `AuthProvider`, wrapped in a `DisplayNameGate`) and the route
+table is in `src/App.jsx`.
 
 ## Home page
 

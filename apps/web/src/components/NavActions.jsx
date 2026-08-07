@@ -1,6 +1,9 @@
-// Right-hand header cluster shared by every page: a link to the lesson hub, a
-// light/dark toggle, and an account control that reflects the Supabase auth
-// state (sign in / sign out). Signed-in users also get a notification bell.
+// Right-hand header cluster shared by every page: a link to the lesson hub, an
+// "install app" button, a light/dark toggle, and an account control that
+// reflects the Supabase auth state (sign in / sign out). Signed-in users also
+// get a notification bell. The install button renders nothing unless the app is
+// actually installable, so on most desktop visits the cluster is unchanged —
+// see InstallAppButton.jsx.
 //
 // The trigger elements below (the hub link, the icon buttons) sit directly on
 // AppHeader's colored --primary surface, not on the page's own light/dark
@@ -38,6 +41,7 @@ import {
 } from "./ui/dropdown-menu.jsx";
 import NotificationBell from "./NotificationBell.jsx";
 import DisplayNameDialog from "./DisplayNameDialog.jsx";
+import InstallAppButton from "./InstallAppButton.jsx";
 
 // See the file header for why these use --primary-foreground rather than
 // the usual tokens. bg-transparent and border-0/cursor-pointer are explicit
@@ -83,6 +87,8 @@ export default function NavActions({ current }) {
           </RouterLink>
         </>
       )}
+
+      <InstallAppButton className={iconTrigger} />
 
       <Tooltip>
         <TooltipTrigger asChild>

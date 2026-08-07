@@ -31,6 +31,7 @@ Full documentation lives on the docs site under **Web App**:
 - [Getting started & environment variables](https://spellingcreator.org/docs/web-app/getting-started)
 - [How the export pipeline works](https://spellingcreator.org/docs/web-app/export-pipeline)
 - [Project structure](https://spellingcreator.org/docs/web-app/project-structure)
+- [Installable app & offline use](https://spellingcreator.org/docs/web-app/pwa-and-offline)
 
 The docs source is in `apps/docs/docs/web-app`.
 

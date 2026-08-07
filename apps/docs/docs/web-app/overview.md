@@ -79,6 +79,10 @@ PDF printing.
   [Version history](/monorepo/version-history)).
 - **Auto-save** - your work is kept in IndexedDB between reloads (images as binary
   blobs, so large drafts aren't capped by `localStorage`'s ~5 MB quota).
+- **Installable, and works offline** - the app can be installed to a Home Screen
+  or dock and opens in its own window; a service worker precaches the shell, so
+  the editor, version history and DOCX/PDF export all keep working with no
+  network (see [Installable app & offline use](./pwa-and-offline.md)).
 - **Internationalization** - every user-facing string is routed through
   react-i18next; only English ships today, but adding a language needs no component
   changes (see [Internationalization](./internationalization.md)).
