@@ -9,13 +9,12 @@
 //      to store it as `application/vnd.google-apps.document` so it is converted
 //      to a Google Doc on the way in.
 //
-// Requires VITE_GOOGLE_CLIENT_ID to be set to an OAuth 2.0 Web client ID whose
+// Requires an OAuth 2.0 Web client ID (passed via configureCore) whose
 // "Authorised JavaScript origins" include the site's origin.
 
+import { googleClientId, hasGoogleDrive } from "../config.js";
 import { Packer } from "docx";
-import { buildDocument } from "@spelling-creator/core/browser/docxExport";
-
-const CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID;
+import { buildDocument } from "./docxExport.js";
 
 // Only request access to files this app creates — the least-privileged Drive scope.
 const SCOPE = "https://www.googleapis.com/auth/drive.file";
@@ -79,16 +78,14 @@ function whenGisReady(timeoutMs = 10000) {
  * needed. Resolves with the access token string.
  */
 async function getAccessToken() {
-  if (!CLIENT_ID) {
-    throw new Error(
-      "Google saving is not configured (VITE_GOOGLE_CLIENT_ID is missing).",
-    );
+  if (!hasGoogleDrive()) {
+    throw new Error("Google saving is not configured (no OAuth client id).");
   }
   const oauth2 = await whenGisReady();
 
   if (!tokenClient) {
     tokenClient = oauth2.initTokenClient({
-      client_id: CLIENT_ID,
+      client_id: googleClientId(),
       scope: SCOPE,
       // Callbacks are (re)assigned per request below.
       callback: () => {},
@@ -234,4 +231,3 @@ export async function saveToGoogleDrive(doc) {
 }
 
 // Whether the Google integration is configured at build time.
-export const googleDriveEnabled = Boolean(CLIENT_ID);

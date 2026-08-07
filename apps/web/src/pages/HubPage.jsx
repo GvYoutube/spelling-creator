@@ -3,6 +3,7 @@
 // navigates to that lesson's own page (/hub/:id), where the full document is
 // fetched and rendered. Each lesson therefore has a shareable URL.
 
+import { hasApi } from "@spelling-creator/core/config";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link as RouterLink, useNavigate, useLocation } from "react-router-dom";
 import { toast } from "sonner";
@@ -41,10 +42,9 @@ import {
   fetchPublishedLessons,
   fetchMyLessons,
   deleteLesson,
-  lessonHubEnabled,
   lessonsFeedUrl,
   EDIT_REQUEST_KEY,
-} from "../lib/lessons.js";
+} from "@spelling-creator/core/lessons";
 import { LessonGridSkeleton } from "../components/Skeletons.jsx";
 import {
   buildLessonIndex,
@@ -245,13 +245,13 @@ export default function HubPage() {
   }, [accessToken]);
 
   useEffect(() => {
-    if (lessonHubEnabled) load();
+    if (hasApi()) load();
     else setLoading(false);
   }, [load]);
 
   // Load (or clear) the user's drafts whenever their sign-in state changes.
   useEffect(() => {
-    if (lessonHubEnabled) loadDrafts();
+    if (hasApi()) loadDrafts();
   }, [loadDrafts]);
 
   // The lesson page hands us a one-shot toast (e.g. after a delete) via router
@@ -353,7 +353,7 @@ export default function HubPage() {
           <p className="text-sm text-muted-foreground">
             {t("toolbar.description")}
           </p>
-          {lessonHubEnabled && (
+          {hasApi() && (
             <div className="flex shrink-0 items-center gap-0.5">
               <IconActionButton
                 tooltip={t("toolbar.feedTooltip")}
@@ -383,7 +383,7 @@ export default function HubPage() {
           )}
         </div>
 
-        {lessonHubEnabled && drafts.length > 0 && (
+        {hasApi() && drafts.length > 0 && (
           <div className="mb-8">
             <div className="mb-3 flex flex-wrap items-center gap-2">
               <CloudIcon className="size-4 text-muted-foreground" />
@@ -407,7 +407,7 @@ export default function HubPage() {
           </div>
         )}
 
-        {lessonHubEnabled && !loading && !error && lessons.length > 0 && (
+        {hasApi() && !loading && !error && lessons.length > 0 && (
           <Field className="mb-4">
             <FieldLabel htmlFor="hub-search" className="sr-only">
               {t("search.label")}
@@ -437,7 +437,7 @@ export default function HubPage() {
           </Field>
         )}
 
-        {!lessonHubEnabled && (
+        {!hasApi() && (
           <Alert className="border-primary/40 bg-primary/10 text-primary">
             <AlertDescription className="text-primary">
               {t("alerts.hubDisabled")}
@@ -445,7 +445,7 @@ export default function HubPage() {
           </Alert>
         )}
 
-        {lessonHubEnabled && error && (
+        {hasApi() && error && (
           <Alert variant="destructive">
             <AlertDescription className="flex items-center justify-between gap-2">
               {error}
@@ -456,9 +456,9 @@ export default function HubPage() {
           </Alert>
         )}
 
-        {lessonHubEnabled && loading && <LessonGridSkeleton />}
+        {hasApi() && loading && <LessonGridSkeleton />}
 
-        {lessonHubEnabled && !loading && !error && lessons.length === 0 && (
+        {hasApi() && !loading && !error && lessons.length === 0 && (
           <div className="rounded-md border border-dashed border-border p-12 text-center">
             <p className="mb-1 text-lg font-semibold">
               {t("emptyState.noLessonsTitle")}
@@ -470,7 +470,7 @@ export default function HubPage() {
           </div>
         )}
 
-        {lessonHubEnabled &&
+        {hasApi() &&
           !loading &&
           !error &&
           lessons.length > 0 &&
@@ -486,24 +486,21 @@ export default function HubPage() {
             </div>
           )}
 
-        {lessonHubEnabled &&
-          !loading &&
-          !error &&
-          visibleLessons.length > 0 && (
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 md:grid-cols-3">
-              {visibleLessons.map((lesson) => (
-                <LessonCard
-                  key={lesson.id}
-                  lesson={lesson}
-                  editable={Boolean(
-                    user && lesson.authorId && lesson.authorId === user.id,
-                  )}
-                  onEdit={editLesson}
-                  onDelete={askDelete}
-                />
-              ))}
-            </div>
-          )}
+        {hasApi() && !loading && !error && visibleLessons.length > 0 && (
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 md:grid-cols-3">
+            {visibleLessons.map((lesson) => (
+              <LessonCard
+                key={lesson.id}
+                lesson={lesson}
+                editable={Boolean(
+                  user && lesson.authorId && lesson.authorId === user.id,
+                )}
+                onEdit={editLesson}
+                onDelete={askDelete}
+              />
+            ))}
+          </div>
+        )}
       </div>
 
       <Dialog

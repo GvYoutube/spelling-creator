@@ -3,9 +3,9 @@
 // directly; it only calls these Worker endpoints.
 //
 // Worker endpoints this expects (see README "Lesson hub" for the full contract):
-//   GET   {API_URL}/lessons/:id/comments      -> { comments: Comment[] }  (public)
-//   POST  {API_URL}/lessons/:id/comments      -> { comment: Comment }     (auth: Bearer Supabase JWT)
-//   PATCH {API_URL}/lessons/:id/comments/:cid -> { comment: Comment }     (auth: the comment's author)
+//   GET   {apiUrl()}/lessons/:id/comments      -> { comments: Comment[] }  (public)
+//   POST  {apiUrl()}/lessons/:id/comments      -> { comment: Comment }     (auth: Bearer Supabase JWT)
+//   PATCH {apiUrl()}/lessons/:id/comments/:cid -> { comment: Comment }     (auth: the comment's author)
 //
 // Comment: { id, parentId, authorId, author, body, createdAt, editedAt }
 //   parentId is the comment this one replies to, or null for a top-level comment.
@@ -22,12 +22,10 @@
 // in CommentsSection). The Worker stores one rating per user per lesson and, when
 // a rating is included, returns the lesson's new average so the page can update
 // its displayed stars. See postComment's return shape.
-
-const API_URL = import.meta.env.VITE_API_URL;
+import { apiUrl, hasApi } from "./config.js";
 
 function endpoint(lessonId) {
-  // Tolerate a trailing slash on VITE_API_URL.
-  return `${API_URL.replace(/\/$/, "")}/lessons/${encodeURIComponent(lessonId)}/comments`;
+  return `${apiUrl()}/lessons/${encodeURIComponent(lessonId)}/comments`;
 }
 
 async function readError(res) {
@@ -59,7 +57,7 @@ export const COMMENT_MAX = 2000;
  * @returns {Promise<Array<{id, author, body, createdAt}>>}
  */
 export async function fetchComments(lessonId, accessToken) {
-  if (!API_URL) throw new Error("The lesson hub is not configured.");
+  if (!hasApi()) throw new Error("The lesson hub is not configured.");
   if (!lessonId) throw new Error("Missing lesson id.");
 
   let res;
@@ -102,7 +100,7 @@ export async function postComment(
   parentId,
   rating,
 ) {
-  if (!API_URL) throw new Error("The lesson hub is not configured.");
+  if (!hasApi()) throw new Error("The lesson hub is not configured.");
   if (!lessonId) throw new Error("Missing lesson id.");
   if (!accessToken) throw new Error("Please sign in before commenting.");
 
@@ -149,7 +147,7 @@ export async function postComment(
  * @returns {Promise<{id, parentId, authorId, author, body, createdAt, editedAt}>}
  */
 export async function updateComment(lessonId, commentId, body, accessToken) {
-  if (!API_URL) throw new Error("The lesson hub is not configured.");
+  if (!hasApi()) throw new Error("The lesson hub is not configured.");
   if (!lessonId || !commentId) throw new Error("Missing comment id.");
   if (!accessToken) throw new Error("Please sign in before editing.");
 

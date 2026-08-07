@@ -36,10 +36,11 @@
 // map slot -> identity from the presence roster so cursors and chat can be
 // labelled without shipping a name in every packet.
 
+import { apiUrl, hasApi } from "@spelling-creator/core/config";
 import { useCallback, useEffect, useRef, useState } from "react";
 import * as Y from "yjs";
 import { newId } from "@spelling-creator/core/id";
-import { colorForId } from "./presence.js";
+import { colorForId } from "@spelling-creator/core/browser/presence";
 import {
   LOCAL,
   applyRemote,
@@ -70,14 +71,13 @@ const SYNC_DEBOUNCE_MS = 50;
 // string. Chat is ephemeral (kept only in memory for the session).
 const MAX_CHAT_LEN = 2000;
 
-const API_URL = import.meta.env.VITE_API_URL;
 const encoder = new TextEncoder();
 const decoder = new TextDecoder();
 
 // The wss:// base for the collaboration endpoint, derived from the API URL.
 function wsBase() {
-  if (!API_URL) return null;
-  const base = API_URL.replace(/\/$/, "");
+  if (!hasApi()) return null;
+  const base = apiUrl();
   if (base.startsWith("https://")) return `wss://${base.slice(8)}`;
   if (base.startsWith("http://")) return `ws://${base.slice(7)}`;
   return base;

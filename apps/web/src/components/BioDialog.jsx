@@ -23,8 +23,8 @@ import { Alert, AlertDescription } from "./ui/alert.jsx";
 import { Spinner } from "./ui/spinner.jsx";
 import RichTextInput from "./RichTextInput.jsx";
 import { useAuth } from "../lib/auth.jsx";
-import { setBio, BIO_MAX } from "../lib/profile.js";
-import { richTextLength } from "../lib/richText.js";
+import { setBio, BIO_MAX } from "@spelling-creator/core/profile";
+import { richTextLength } from "@spelling-creator/core/richText";
 
 /**
  * @param {object}     props

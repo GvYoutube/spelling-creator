@@ -7,7 +7,7 @@
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Avatar, AvatarImage, AvatarFallback } from "./ui/avatar.jsx";
-import { getCaretCoordinates } from "../lib/presence.js";
+import { getCaretCoordinates } from "@spelling-creator/core/browser/presence";
 
 // Drop a collaborator's marker if we haven't heard a fresh selection from them
 // in this long — guards against a stale cursor lingering after a disconnect.

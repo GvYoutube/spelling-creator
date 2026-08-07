@@ -1,3 +1,4 @@
+import { hasApi } from "@spelling-creator/core/config";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { useDocumentMeta } from "../lib/seo.js";
@@ -80,7 +81,6 @@ import { useLessonGit } from "../lib/git/useLessonGit.js";
 // downloads. loadGitEngine() memoises the import; by the time any of these flows
 // runs, useLessonGit has already fetched the chunk.
 import { loadGitEngine } from "../lib/git/load.js";
-import { gitRemoteEnabled } from "../lib/git/remote.js";
 import {
   loadDocument,
   saveDocument,
@@ -95,7 +95,7 @@ import {
   migrateLocalStorage,
 } from "@spelling-creator/core/browser/storage";
 import { convertDocImages } from "@spelling-creator/core/browser/imageRef";
-import { ensureImagesUploaded } from "../lib/imagesClient.js";
+import { ensureImagesUploaded } from "@spelling-creator/core/imagesClient";
 import { exportDocx } from "@spelling-creator/core/browser/docxExport";
 import { importDocxFile } from "@spelling-creator/core/browser/docxImport";
 import { exportJson } from "@spelling-creator/core/browser/jsonExport";
@@ -105,15 +105,15 @@ import {
   previewHtml,
   PREVIEW_STYLES,
 } from "@spelling-creator/core/browser/htmlPreview";
-import { saveToGoogleDrive, googleDriveEnabled } from "../lib/googleDrive.js";
+import { hasGoogleDrive } from "@spelling-creator/core/config";
+import { saveToGoogleDrive } from "@spelling-creator/core/browser/googleDrive";
 import {
   publishLesson,
   updateLesson,
   fetchLesson,
-  lessonHubEnabled,
   EDIT_REQUEST_KEY,
   FORK_REQUEST_KEY,
-} from "../lib/lessons.js";
+} from "@spelling-creator/core/lessons";
 import { useAuth } from "../lib/auth.jsx";
 import { useCollaboration } from "../lib/collab.js";
 import { useSelectionBroadcast } from "../lib/useSelectionBroadcast.js";
@@ -246,7 +246,7 @@ export default function EditorPage() {
   } = useAuth();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-  const showPublish = lessonHubEnabled && authEnabled;
+  const showPublish = hasApi() && authEnabled;
 
   // A thin shim over sonner's toast() that keeps every call site below
   // exactly as it was under the old { severity, message, link?, route? }
@@ -890,7 +890,7 @@ export default function EditorPage() {
       // is refused and we stop here, *before* overwriting the doc row with a
       // document that doesn't contain their work. The user merges (below) and
       // saves again.
-      if (editingId && gitRemoteEnabled) {
+      if (editingId && hasApi()) {
         await git.commitNow();
         const engine = await loadGitEngine();
         const result = await engine.pushHistory({
@@ -939,7 +939,7 @@ export default function EditorPage() {
       // push. Deliberately non-fatal: the lesson itself is safely stored either
       // way, and the next save will carry the history up.
       let historyWarning = null;
-      if (!editingId && lessonId && gitRemoteEnabled) {
+      if (!editingId && lessonId && hasApi()) {
         try {
           const engine = await loadGitEngine();
           await engine.pushHistory({
@@ -1449,7 +1449,7 @@ export default function EditorPage() {
               <PrinterIcon />
               {t("header.printPdf")}
             </DropdownMenuItem>
-            {googleDriveEnabled && (
+            {hasGoogleDrive() && (
               <DropdownMenuItem
                 onClick={handleSaveToGoogle}
                 disabled={busy !== null}
@@ -1552,7 +1552,7 @@ export default function EditorPage() {
                 <PrinterIcon />
                 {t("header.printPdf")}
               </DropdownMenuItem>
-              {googleDriveEnabled && (
+              {hasGoogleDrive() && (
                 <DropdownMenuItem onClick={handleSaveToGoogle}>
                   <SaveIcon />
                   {t("header.saveToGoogleDocs")}
@@ -1758,7 +1758,7 @@ export default function EditorPage() {
 
               {/* This lesson is a fork. Offer to pull in whatever the original
                   has changed since — merged block by block. */}
-              {forkedFrom && gitRemoteEnabled && (
+              {forkedFrom && hasApi() && (
                 <Tooltip>
                   <TooltipTrigger asChild>
                     <Button
@@ -1787,7 +1787,7 @@ export default function EditorPage() {
               {/* We're a trusted collaborator on the lesson this was forked from,
                   so we can merge our work back INTO it — the contribution flow.
                   Anyone else can fork and sync, but only push their own copy. */}
-              {forkedFrom && canContribute && gitRemoteEnabled && (
+              {forkedFrom && canContribute && hasApi() && (
                 <Tooltip>
                   <TooltipTrigger asChild>
                     <Button

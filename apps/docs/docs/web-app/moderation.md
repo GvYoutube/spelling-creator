@@ -64,7 +64,7 @@ That column is **only ever surfaced to mods/admins**, never in public responses.
 ## Worker endpoints
 
 All require a `Bearer <Supabase JWT>` and the appropriate role; the frontend
-wrapper is `src/lib/moderation.js`.
+wrapper is `@spelling-creator/core/moderation`.
 
 | Method & path                              | Role  | What it does                                 |
 | ------------------------------------------ | ----- | -------------------------------------------- |

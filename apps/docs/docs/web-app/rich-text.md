@@ -28,15 +28,15 @@ document.
 
 ## The pieces
 
-| File                                        | Role                                                                      |
-| ------------------------------------------- | ------------------------------------------------------------------------- |
-| `@spelling-creator/core/richText`           | **The policy.** Allow-list, link schemes, link `rel`/`target`, HTML→text. |
-| `packages/core/src/richText.test.js`        | Its tests — link safety, the allow-list, the browser-side helpers.        |
-| `apps/api/src/lib/richtext.js`              | **The boundary.** Sanitizes on write (HTMLRewriter).                      |
-| `apps/api/src/lib/richtext.test.js`         | Its tests — media, XSS, links, legacy values.                             |
-| `apps/web/src/components/RichTextInput.jsx` | The editor (toolbar, limits, no media affordances).                       |
-| `apps/web/src/components/RichText.jsx`      | The renderer, for both rich text and legacy plain text.                   |
-| `apps/web/src/lib/richText.js`              | Render-time sanitizing (DOMPurify).                                       |
+| File                                              | Role                                                                      |
+| ------------------------------------------------- | ------------------------------------------------------------------------- |
+| `@spelling-creator/core/richText`                 | **The policy.** Allow-list, link schemes, link `rel`/`target`, HTML→text. |
+| `packages/core/src/richText.test.js`              | Its tests — link safety, the allow-list, the browser-side helpers.        |
+| `apps/api/src/lib/richtext.js`                    | **The boundary.** Sanitizes on write (HTMLRewriter).                      |
+| `apps/api/src/lib/richtext.test.js`               | Its tests — media, XSS, links, legacy values.                             |
+| `apps/web/src/components/RichTextInput.jsx`       | The editor (toolbar, limits, no media affordances).                       |
+| `apps/web/src/components/RichText.jsx`            | The renderer, for both rich text and legacy plain text.                   |
+| `@spelling-creator/core/browser/sanitizeRichText` | Render-time sanitizing (DOMPurify).                                       |
 
 The two sanitizers are deliberately separate — HTMLRewriter is the Workers
 runtime's native streaming parser and DOMPurify needs a real DOM, so neither can
@@ -61,7 +61,7 @@ in four places, only the third of which is load-bearing:
    client cannot skip. It is an **allow-list**: anything not explicitly permitted is
    dropped, so a tag nobody thought of fails closed. Media tags are removed along
    with their content, and every attribute is stripped except a validated `href`.
-4. **A second sanitizing pass at render time** (DOMPurify, in `lib/richText.js`).
+4. **A second sanitizing pass at render time** (DOMPurify, in `@spelling-creator/core/browser/sanitizeRichText`).
    The render path uses `dangerouslySetInnerHTML`, and a reader's safety shouldn't
    depend on assuming every row in the database was written by the current server
    code. Rows predating rich text, or written by some future path that forgets to

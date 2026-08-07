@@ -1,6 +1,6 @@
 // Supabase client — used in the browser for authentication ONLY (magic-link
 // sign-in). Lesson data never goes through this client; it is read from and
-// written to the companion Worker (`apps/api`; see lib/lessons.js),
+// written to the companion Worker (`apps/api`; see ../lessons.js),
 // which talks to Supabase Postgres server-side with privileged credentials.
 //
 // The client manages the signed-in session (persisting it in localStorage) and
@@ -10,32 +10,48 @@
 
 import { createClient } from "@supabase/supabase-js";
 
-const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
-const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY;
+import { supabaseConfig } from "../config.js";
 
-// Whether auth is configured at build time. When false the login page and the
-// "Publish to hub" action explain that sign-in is unavailable, but browsing the
-// hub (a public, unauthenticated read) still works.
-export const supabaseEnabled = Boolean(SUPABASE_URL && SUPABASE_ANON_KEY);
+// Built on first use rather than at import time. The host calls configureCore()
+// after this module has already been evaluated (ES imports are hoisted), so a
+// client constructed here at module scope would be constructed from nothing.
+let client;
 
-export const supabase = supabaseEnabled
-  ? createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
-      auth: {
-        flowType: "pkce",
-        persistSession: true,
-        autoRefreshToken: true,
-        detectSessionInUrl: true,
-      },
-    })
-  : null;
+/**
+ * The Supabase browser client, or null when auth isn't configured. Memoised —
+ * the SDK holds the session and its refresh timer, so there must be exactly one.
+ * @returns {import("@supabase/supabase-js").SupabaseClient | null}
+ */
+export function getSupabase() {
+  if (client !== undefined) return client;
+  const cfg = supabaseConfig();
+  client = cfg
+    ? createClient(cfg.url, cfg.anonKey, {
+        auth: {
+          flowType: "pkce",
+          persistSession: true,
+          autoRefreshToken: true,
+          detectSessionInUrl: true,
+        },
+      })
+    : null;
+  return client;
+}
 
 // The localStorage key Supabase persists the session under. We don't pass a
 // `storageKey` above, so the SDK computes its own default — this mirrors that
 // formula (`sb-<project-ref>-auth-token`) so `readPersistedRefreshToken`
 // below can read the same entry. See its comment for why that's needed.
-const STORAGE_KEY = supabaseEnabled
-  ? `sb-${new URL(SUPABASE_URL).hostname.split(".")[0]}-auth-token`
-  : null;
+// Resolved on demand, for the same import-order reason as the client.
+function storageKey() {
+  const cfg = supabaseConfig();
+  if (!cfg) return null;
+  try {
+    return `sb-${new URL(cfg.url).hostname.split(".")[0]}-auth-token`;
+  } catch {
+    return null;
+  }
+}
 
 /**
  * The refresh token from the session Supabase has persisted to localStorage,
@@ -60,9 +76,10 @@ const STORAGE_KEY = supabaseEnabled
  * depending on it.
  */
 export function readPersistedRefreshToken() {
-  if (!STORAGE_KEY || typeof localStorage === "undefined") return null;
+  const key = storageKey();
+  if (!key || typeof localStorage === "undefined") return null;
   try {
-    const raw = localStorage.getItem(STORAGE_KEY);
+    const raw = localStorage.getItem(key);
     const parsed = raw ? JSON.parse(raw) : null;
     return (parsed && parsed.refresh_token) || null;
   } catch {

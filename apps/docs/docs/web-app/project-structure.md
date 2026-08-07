@@ -50,32 +50,14 @@ src/
     languages.js           LANGUAGES registry for a future language switcher (English only today)
     colorScheme.jsx        ColorSchemeProvider + useColorScheme (light/dark/system, persisted, applied as data-theme on <html>)
     useLiveField.js        shared debounce/commit buffering behind LiveField.jsx
-    aiSuggest.js          calls the Worker for AI text / questions / lesson ideas
-    summarizer.js         browser Summarizer API wrapper (on-device lesson summaries; fails closed)
-    pixabay.js            calls the Worker to search + fetch Pixabay images
-    lessons.js            calls the Worker to list / fetch / publish hub lessons
-    comments.js           calls the Worker to list / post / edit lesson comments
-    richText.js           render-time sanitizing (DOMPurify); policy + HTML→text come from core
-    profile.js            calls the Worker for your own profile
-    users.js              calls the Worker for other users' public profiles
-    notifications.js      calls the Worker for the notification feed
-    moderation.js         calls the Worker for the moderation queue
     collab.js             useCollaboration hook (one WebSocket to the CollabRoom Durable Object; doc sync, cursors, chat)
-    presence.js           per-collaborator colour + selection presence helpers
     useSelectionBroadcast.js broadcasts the local editor selection to peers
     useDragAutoScroll.js  scrolls the page while a block drag hovers near a window edge (the browser only auto-scrolls a native drag while the pointer keeps moving)
-    imagesClient.js       uploads a lesson's images to the Worker (R2) on publish
-    git/                  the browser-bound half of version history (the portable half is in core — see below)
-      remote.js           calls the Worker's /git/:lessonId endpoints (pack in R2)
-      sync.js             fork (= clone the repo) and merge-with-original flows
-      fs.js               LightningFS — the IndexedDB filesystem the repos live on
+    git/                  what has to stay in the app — the rest is in core (see below)
       engine.js, load.js  the git engine, behind one dynamic import (keeps ~185 KB off the main bundle)
       useLessonGit.js     the editor's controller: setup, periodic commits, history, restore
     useImageSrc.js        resolves an image ref to a displayable src
-    supabase.js           Supabase client (auth only) + supabaseEnabled flag
     auth.jsx              AuthProvider + useAuth (session, magic link, sign out)
-    googleDrive.js        OAuth2 + upload the docx to Drive as a Google Doc
-    turnstile.js          Cloudflare Turnstile loader + site key
     seo.js                per-page document title + Open Graph / Twitter tags
 ```
 
@@ -99,6 +81,18 @@ apply the same rules. Each module is its own subpath export.
   image                 image sizing: selectable sizes, scale, fit-within
   id                    id generation
   wikimedia             Commons action-API round-trip + attribution metadata
+  lessons               list / fetch / publish hub lessons (+ the feed URL)
+  comments              list / post / edit lesson comments
+  users                 other users' public profiles, follows, activity
+  profile               your own profile (display name, bio)
+  notifications         the notification feed
+  moderation            the moderation queue
+  pixabay               search + fetch Pixabay images via the Worker
+  aiSuggest             AI text / questions / lesson ideas via the Worker
+  spellingWords         the aggregated published-lesson word list
+  mcpOAuth              the MCP OAuth approval handshake
+  imagesClient          upload a lesson's images to the Worker (R2) on publish
+  git/remote            the /git/:lessonId endpoints (pack in R2)
   richText              rich-text policy: allow-list, link schemes, HTML→text
   ydoc                  the Yjs lesson document: Y.Doc <-> doc model, remote apply, reconcile
   git/doc               pure doc helpers: canonical JSON, manifest, block map (no git)
@@ -124,6 +118,16 @@ the MCP server cannot reach it by accident:
   htmlPreview           docx -> html (mammoth) for the preview dialog and the PDF path
   pdfExport             docx -> html -> pdf (html2pdf.js)
   jsonExport            download a lesson as .json (the envelope itself is in lessonFile)
+  feeds                 read the hub / user Atom feeds (DOMParser)
+  supabase              the Supabase browser client (auth only), built on first use
+  turnstile             the Cloudflare Turnstile widget loader
+  googleDrive           OAuth2 + upload the docx to Drive as a Google Doc
+  sanitizeRichText      the render-time DOMPurify pass (policy comes from ../richText)
+  commonsImages         search Wikimedia Commons + download an image (no key, no proxy)
+  presence              per-collaborator colour + selection presence helpers
+  summarizer            browser Summarizer API wrapper (on-device summaries; fails closed)
+  git/fs                LightningFS — the IndexedDB filesystem the repos live on
+  git/sync              fork (= clone the repo) and merge-with-original flows
 ```
 
 `.oxlintrc.json` enforces the split: `packages/core` is linted against the
@@ -141,14 +145,29 @@ what previously pinned the whole image/export tier inside `apps/web`.
 So the host passes its configuration in once, before anything uses it:
 
 ```js
-// apps/web/src/main.jsx
-configureCore({ apiUrl: import.meta.env.VITE_API_URL });
+// apps/web/src/main.jsx — the only place in the app that touches import.meta.env
+configureCore({
+  apiUrl: import.meta.env.VITE_API_URL,
+  supabaseUrl: import.meta.env.VITE_SUPABASE_URL,
+  supabaseAnonKey: import.meta.env.VITE_SUPABASE_ANON_KEY,
+  googleClientId: import.meta.env.VITE_GOOGLE_CLIENT_ID,
+  turnstileSiteKey: import.meta.env.VITE_TURNSTILE_SITE_KEY,
+});
 ```
 
 Readers resolve **lazily** (`apiUrl()`, not a captured constant), which matters:
 ES imports are hoisted, so `configureCore` runs after every module in the graph has
 already been evaluated. Anything capturing the value at import time would capture
 `""`. `packages/core/src/config.test.js` pins that behaviour.
+
+The same reasoning is why `browser/supabase` builds its client inside
+`getSupabase()` rather than at module scope, memoising it so the SDK's session and
+refresh timer exist exactly once. It is also why the old `supabaseEnabled`,
+`googleDriveEnabled`, `lessonHubEnabled`, `notificationsEnabled`, `profilesEnabled`
+and `gitRemoteEnabled` constants are gone: every one was computed at module scope,
+so under a lazily-resolved config all of them would have read as `false`. They are
+now `hasSupabase()`, `hasGoogleDrive()` and `hasApi()` — the last replacing four
+names for one predicate.
 
 ### Why version history splits the way it does
 

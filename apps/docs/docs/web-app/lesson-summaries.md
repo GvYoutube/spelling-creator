@@ -44,7 +44,7 @@ showing them a button that can't work.
 | `downloading`  | Supported; a download is already running.                    | Same as `downloadable`.                                                          |
 | `unavailable`  | No API, unsupported options, or hardware below the minimums. | **Renders nothing.**                                                             |
 
-Everything in `src/lib/summarizer.js` **fails closed**: a missing API, unsupported
+Everything in `@spelling-creator/core/browser/summarizer` **fails closed**: a missing API, unsupported
 options, or a probe that throws all collapse to `"unavailable"`, so a browser that
 half-implements the API can't produce a broken card.
 
@@ -56,7 +56,7 @@ text — below that the summary would be about as long as the lesson.
 ```
 LessonPage.jsx
   └── LessonSummary.jsx      the card: probe, controls, progress, streamed output
-        └── lib/summarizer.js  the API wrapper (no React, fails closed)
+        └── core/browser/summarizer  the API wrapper (no React, fails closed)
 ```
 
 1. **Probe.** On mount, `summarizerAvailability()` asks the browser whether it can
@@ -100,7 +100,7 @@ else. A model that ignores `format` and returns prose still renders correctly.
 
 ## Input and prompting
 
-`lessonSummaryText(doc)` (in `src/lib/summarizer.js`) turns the lesson document
+`lessonSummaryText(doc)` (in `@spelling-creator/core/browser/summarizer`) turns the lesson document
 into the text handed to the model. It deliberately **isn't** `lessonPlainText()`
 (the flattened prose used for the page's [SEO description](./pages-and-routing.md)):
 here the structure is the point, so it keeps the title and section headings as

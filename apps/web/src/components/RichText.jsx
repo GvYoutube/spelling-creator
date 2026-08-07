@@ -3,7 +3,7 @@
 // Two kinds of value arrive here, and both must render correctly:
 //
 //   - Rich text: HTML written with RichTextInput and sanitized by the Worker. It is
-//     injected as HTML, after a second sanitizing pass (lib/richText.js) so that a
+//     injected as HTML, after a second sanitizing pass (@spelling-creator/core/browser/sanitizeRichText) so that a
 //     reader's safety never rests on assuming every row in the database was written
 //     by the current server code.
 //   - Plain text: every comment and bio written before rich text existed is a bare
@@ -15,7 +15,8 @@
 
 import { useMemo } from "react";
 import { cn } from "../lib/utils.js";
-import { isRichTextHtml, sanitizeRichText } from "../lib/richText.js";
+import { isRichTextHtml } from "@spelling-creator/core/richText";
+import { sanitizeRichText } from "@spelling-creator/core/browser/sanitizeRichText";
 
 // Text size for the two places this renders: a comment body (the default,
 // smaller) and a profile bio (the one caller that asks for the larger size).

@@ -3,8 +3,7 @@
 // The Worker validates the Turnstile token server-side (verifying both that the
 // challenge passed and that it was solved on an allowed domain) before doing any
 // AI work, so every request must carry a fresh token.
-
-const API_URL = import.meta.env.VITE_API_URL;
+import { apiUrl, hasApi } from "./config.js";
 
 /**
  * Ask the Worker for a block of text about `subject`.
@@ -15,8 +14,8 @@ const API_URL = import.meta.env.VITE_API_URL;
  * @returns {Promise<string>} The generated text.
  */
 export async function suggestText(subject, token, context = {}) {
-  if (!API_URL) {
-    throw new Error("VITE_API_URL is not configured.");
+  if (!hasApi()) {
+    throw new Error("The API is not configured.");
   }
   if (!token) {
     throw new Error("Please complete the verification challenge first.");
@@ -24,7 +23,7 @@ export async function suggestText(subject, token, context = {}) {
 
   let res;
   try {
-    res = await fetch(API_URL, {
+    res = await fetch(apiUrl(), {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -63,8 +62,8 @@ export async function suggestText(subject, token, context = {}) {
  * @returns {Promise<void>}
  */
 export async function dislikeText(subject, accessToken, context = {}) {
-  if (!API_URL) {
-    throw new Error("VITE_API_URL is not configured.");
+  if (!hasApi()) {
+    throw new Error("The API is not configured.");
   }
   if (!accessToken) {
     throw new Error("Please sign in to give feedback.");
@@ -72,7 +71,7 @@ export async function dislikeText(subject, accessToken, context = {}) {
 
   let res;
   try {
-    res = await fetch(`${API_URL.replace(/\/$/, "")}/ai-text/dislike`, {
+    res = await fetch(`${apiUrl()}/ai-text/dislike`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -105,8 +104,8 @@ export async function dislikeText(subject, accessToken, context = {}) {
  * @returns {Promise<object>} The suggested question data (shape depends on type).
  */
 export async function suggestQuestion(subject, token, context = {}) {
-  if (!API_URL) {
-    throw new Error("VITE_API_URL is not configured.");
+  if (!hasApi()) {
+    throw new Error("The API is not configured.");
   }
   if (!token) {
     throw new Error("Please complete the verification challenge first.");
@@ -114,7 +113,7 @@ export async function suggestQuestion(subject, token, context = {}) {
 
   let res;
   try {
-    res = await fetch(API_URL, {
+    res = await fetch(apiUrl(), {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -151,8 +150,8 @@ export async function suggestQuestion(subject, token, context = {}) {
  * @returns {Promise<Array<{title: string, description: string}>>} Suggested ideas.
  */
 export async function suggestLessonIdeas(ageRange, token) {
-  if (!API_URL) {
-    throw new Error("VITE_API_URL is not configured.");
+  if (!hasApi()) {
+    throw new Error("The API is not configured.");
   }
   if (!token) {
     throw new Error("Please complete the verification challenge first.");
@@ -160,7 +159,7 @@ export async function suggestLessonIdeas(ageRange, token) {
 
   let res;
   try {
-    res = await fetch(API_URL, {
+    res = await fetch(apiUrl(), {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({

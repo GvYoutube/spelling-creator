@@ -12,7 +12,7 @@
 // Wikimedia Commons") that the dialog pre-fills as the image caption.
 //
 // The Commons round-trip and the attribution handling are shared with the MCP
-// server — see @spelling-creator/core/wikimedia. Only the pieces that differ
+// server — see ../wikimedia.js. Only the pieces that differ
 // live here: paging, the hit shape the dialog renders, and the wording of the
 // errors it surfaces.
 
@@ -22,7 +22,7 @@ import {
   extmetaCaption,
   isUsableImage,
   rankPages,
-} from "@spelling-creator/core/wikimedia";
+} from "../wikimedia.js";
 
 // Strip HTML to plain text using DOMParser, which (unlike assigning innerHTML)
 // never executes scripts or fetches sub-resources. Commons' extmetadata fields

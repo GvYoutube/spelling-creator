@@ -12,14 +12,12 @@
 //
 // Because a lesson has more than one possible writer, PUT is a compare-and-swap:
 // see pushPack below.
-
-const API_URL = import.meta.env.VITE_API_URL;
+import { apiUrl, hasApi } from "../config.js";
 
 /** Whether the lesson hub (and so the shared history) is reachable at all. */
-export const gitRemoteEnabled = Boolean(API_URL);
 
 function endpoint(lessonId, path) {
-  const base = API_URL.replace(/\/$/, "");
+  const base = apiUrl();
   return `${base}/git/${encodeURIComponent(lessonId)}${path}`;
 }
 
@@ -29,7 +27,7 @@ function endpoint(lessonId, path) {
  *          on the server (it predates this feature, or was never pushed).
  */
 export async function fetchRefs(lessonId) {
-  if (!API_URL || !lessonId) return null;
+  if (!hasApi() || !lessonId) return null;
 
   let res;
   try {
@@ -57,7 +55,7 @@ export async function fetchRefs(lessonId) {
  *          lesson has no published history.
  */
 export async function fetchPack(lessonId) {
-  if (!API_URL || !lessonId) return null;
+  if (!hasApi() || !lessonId) return null;
 
   let res;
   try {
@@ -103,7 +101,7 @@ export async function pushPack(
   { packfile, head, parent },
   accessToken,
 ) {
-  if (!API_URL) throw new Error("The lesson hub is not configured.");
+  if (!hasApi()) throw new Error("The lesson hub is not configured.");
   if (!lessonId) throw new Error("Missing lesson id.");
   if (!accessToken) throw new Error("Please sign in before saving.");
 

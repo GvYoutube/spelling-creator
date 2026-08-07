@@ -32,7 +32,7 @@ export {
   gitFs,
   repoCtx,
   repoExists,
-} from "./fs.js";
+} from "@spelling-creator/core/browser/git/fs";
 
 export {
   BLOCK_DIR,
@@ -80,4 +80,4 @@ export {
   pushHistory,
   pushToUpstream,
   remoteStatus,
-} from "./sync.js";
+} from "@spelling-creator/core/browser/git/sync";

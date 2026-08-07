@@ -19,7 +19,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { DRAFT_REPO, repoIdFor } from "@spelling-creator/core/git/doc";
 import { loadGitEngine } from "./load.js";
-import { fetchPack } from "./remote.js";
+import { fetchPack } from "@spelling-creator/core/git/remote";
 
 // Commit once the user has been still for this long.
 const IDLE_MS = 4000;

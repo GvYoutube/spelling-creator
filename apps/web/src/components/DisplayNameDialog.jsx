@@ -32,7 +32,7 @@ import {
   setDisplayName,
   DISPLAY_NAME_MIN,
   DISPLAY_NAME_MAX,
-} from "../lib/profile.js";
+} from "@spelling-creator/core/profile";
 
 /**
  * @param {object}   props

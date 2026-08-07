@@ -4,12 +4,12 @@
 // and pixabay already proxy through the same Worker).
 //
 // Worker endpoints this expects (see README "Lesson hub" for the full contract):
-//   GET  {API_URL}/lessons          -> { lessons: LessonSummary[] }   (public; published only)
-//   GET  {API_URL}/lessons/mine     -> { lessons: LessonSummary[] }   (auth: Bearer; caller's own, incl. drafts)
-//   GET  {API_URL}/lessons/:id      -> { lesson: Lesson }             (public)
-//   POST {API_URL}/lessons          -> { lesson: LessonSummary }      (auth: Bearer Supabase JWT)
-//   PUT  {API_URL}/lessons/:id      -> { lesson: LessonSummary }      (auth: Bearer; author only)
-//   DELETE {API_URL}/lessons/:id    -> { ok: true }                   (auth: Bearer; author only)
+//   GET  {apiUrl()}/lessons          -> { lessons: LessonSummary[] }   (public; published only)
+//   GET  {apiUrl()}/lessons/mine     -> { lessons: LessonSummary[] }   (auth: Bearer; caller's own, incl. drafts)
+//   GET  {apiUrl()}/lessons/:id      -> { lesson: Lesson }             (public)
+//   POST {apiUrl()}/lessons          -> { lesson: LessonSummary }      (auth: Bearer Supabase JWT)
+//   PUT  {apiUrl()}/lessons/:id      -> { lesson: LessonSummary }      (auth: Bearer; author only)
+//   DELETE {apiUrl()}/lessons/:id    -> { ok: true }                   (auth: Bearer; author only)
 //
 // LessonSummary: { id, authorId, title, author, sectionCount, published, createdAt }
 //                `published` is false for a draft — a lesson backed up to the
@@ -21,8 +21,7 @@
 //                the lesson page (see CommentsSection for how ratings are left).
 //                `authorId` is the publisher's Supabase user id — the hub compares
 //                it with the signed-in user to decide whether to offer "Edit".
-
-const API_URL = import.meta.env.VITE_API_URL;
+import { apiUrl, hasApi } from "./config.js";
 
 // sessionStorage key the hub uses to hand the editor the id of a lesson to open
 // for editing. The hub sets it then navigates to the editor, which consumes and
@@ -38,11 +37,9 @@ export const FORK_REQUEST_KEY = "s2c-lesson-maker:fork-lesson-id";
 
 // Whether the hub can reach a backend at all. Browsing needs only this; the
 // publish step additionally needs a signed-in Supabase session.
-export const lessonHubEnabled = Boolean(API_URL);
 
 function endpoint(path = "") {
-  // Tolerate a trailing slash on VITE_API_URL.
-  return `${API_URL.replace(/\/$/, "")}/lessons${path}`;
+  return `${apiUrl()}/lessons${path}`;
 }
 
 /**
@@ -52,59 +49,8 @@ function endpoint(path = "") {
  * @returns {string}
  */
 export function lessonsFeedUrl() {
-  if (!API_URL) return "";
-  return `${API_URL.replace(/\/$/, "")}/feed.xml`;
-}
-
-// Pull the trimmed text of the first descendant with the given local name
-// (namespace-agnostic, so the Atom default xmlns doesn't get in the way). Mirrors
-// the helper in lib/users.js used for the per-user activity feed.
-function entryText(el, tag) {
-  const node = el.getElementsByTagNameNS("*", tag)[0];
-  return node ? (node.textContent || "").trim() : "";
-}
-
-/**
- * Fetch the hub's "latest lessons" Atom feed and parse it client-side with
- * DOMParser — the same approach lib/users.js uses for a user's activity feed, so
- * the Worker only maintains the one feed.xml endpoint. The homepage dashboard
- * renders these for signed-in users. Each entry's <link rel="alternate"> points
- * at the lesson's /hub/:id page.
- * @returns {Promise<Array<{ id, title, author, summary, updated, link }>>} Newest first.
- */
-export async function fetchLatestLessons() {
-  const url = lessonsFeedUrl();
-  if (!url) throw new Error("The lesson hub is not configured.");
-
-  let res;
-  try {
-    res = await fetch(url, { method: "GET" });
-  } catch {
-    throw new Error("Could not reach the lesson hub.");
-  }
-  if (!res.ok) throw new Error(`Request failed (${res.status}).`);
-
-  const doc = new DOMParser().parseFromString(
-    await res.text(),
-    "application/xml",
-  );
-  if (doc.getElementsByTagName("parsererror").length) {
-    throw new Error("Could not read the latest-lessons feed.");
-  }
-
-  return Array.from(doc.getElementsByTagNameNS("*", "entry")).map((entry) => {
-    const links = Array.from(entry.getElementsByTagNameNS("*", "link"));
-    const alternate =
-      links.find((l) => l.getAttribute("rel") === "alternate") || links[0];
-    return {
-      id: entryText(entry, "id"),
-      title: entryText(entry, "title"),
-      author: entryText(entry, "author"),
-      summary: entryText(entry, "summary"),
-      updated: entryText(entry, "updated"),
-      link: alternate ? alternate.getAttribute("href") || "" : "",
-    };
-  });
+  if (!hasApi()) return "";
+  return `${apiUrl()}/feed.xml`;
 }
 
 async function readError(res) {
@@ -118,7 +64,7 @@ async function readError(res) {
  * @returns {Promise<Array<{id, title, author, sectionCount, createdAt}>>}
  */
 export async function fetchPublishedLessons() {
-  if (!API_URL) throw new Error("The lesson hub is not configured.");
+  if (!hasApi()) throw new Error("The lesson hub is not configured.");
 
   let res;
   try {
@@ -140,7 +86,7 @@ export async function fetchPublishedLessons() {
  * @returns {Promise<Array<{id, authorId, title, author, sectionCount, published, createdAt}>>}
  */
 export async function fetchMyLessons(accessToken) {
-  if (!API_URL) throw new Error("The lesson hub is not configured.");
+  if (!hasApi()) throw new Error("The lesson hub is not configured.");
   if (!accessToken) throw new Error("Please sign in to see your lessons.");
 
   let res;
@@ -168,7 +114,7 @@ export async function fetchMyLessons(accessToken) {
  * @returns {Promise<{id, title, author, sectionCount, published, createdAt, doc, avgRating, ratingCount}>}
  */
 export async function fetchLesson(id, accessToken) {
-  if (!API_URL) throw new Error("The lesson hub is not configured.");
+  if (!hasApi()) throw new Error("The lesson hub is not configured.");
   if (!id) throw new Error("Missing lesson id.");
 
   let res;
@@ -208,7 +154,7 @@ export async function publishLesson(
   accessToken,
   { published = true, forkedFrom = null } = {},
 ) {
-  if (!API_URL) throw new Error("The lesson hub is not configured.");
+  if (!hasApi()) throw new Error("The lesson hub is not configured.");
   if (!accessToken) throw new Error("Please sign in before saving.");
   if (!doc || !Array.isArray(doc.sections) || doc.sections.length === 0) {
     throw new Error("Add at least one section before saving.");
@@ -251,7 +197,7 @@ export async function publishLesson(
  * @returns {Promise<{id, authorId, title, author, sectionCount, published, createdAt}>}
  */
 export async function updateLesson(id, doc, accessToken, { published } = {}) {
-  if (!API_URL) throw new Error("The lesson hub is not configured.");
+  if (!hasApi()) throw new Error("The lesson hub is not configured.");
   if (!id) throw new Error("Missing lesson id.");
   if (!accessToken) throw new Error("Please sign in before editing.");
   if (!doc || !Array.isArray(doc.sections) || doc.sections.length === 0) {
@@ -294,7 +240,7 @@ export async function updateLesson(id, doc, accessToken, { published } = {}) {
  * @returns {Promise<void>}
  */
 export async function deleteLesson(id, accessToken) {
-  if (!API_URL) throw new Error("The lesson hub is not configured.");
+  if (!hasApi()) throw new Error("The lesson hub is not configured.");
   if (!id) throw new Error("Missing lesson id.");
   if (!accessToken) throw new Error("Please sign in before deleting.");
 

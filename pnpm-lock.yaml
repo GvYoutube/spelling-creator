@@ -353,9 +353,6 @@ importers:
       '@spelling-creator/core':
         specifier: workspace:*
         version: link:../../packages/core
-      '@supabase/supabase-js':
-        specifier: ^2.106.2
-        version: 2.106.2
       '@tiptap/core':
         specifier: ^2.27.2
         version: 2.27.2(@tiptap/pm@2.27.2)
@@ -401,9 +398,6 @@ importers:
       clsx:
         specifier: ^2.1.1
         version: 2.1.1
-      docx:
-        specifier: ^9.0.3
-        version: 9.7.1
       dompurify:
         specifier: ^3.4.12
         version: 3.4.12
@@ -468,9 +462,18 @@ importers:
 
   packages/core:
     dependencies:
+      '@isomorphic-git/lightning-fs':
+        specifier: ^4.6.2
+        version: 4.6.2
+      '@supabase/supabase-js':
+        specifier: ^2.106.2
+        version: 2.106.2
       docx:
         specifier: ^9.0.3
         version: 9.7.1
+      dompurify:
+        specifier: ^3.4.12
+        version: 3.4.12
       fuse.js:
         specifier: ^7.4.0
         version: 7.4.0

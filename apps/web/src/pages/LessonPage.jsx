@@ -4,6 +4,7 @@
 // renders its document with the same docx→HTML preview pipeline the editor and
 // export use, and shows the comments below. Authors get Edit/Delete here too.
 
+import { hasApi } from "@spelling-creator/core/config";
 import { useEffect, useState } from "react";
 import { Link as RouterLink, useNavigate, useParams } from "react-router-dom";
 import { useTranslation } from "react-i18next";
@@ -57,17 +58,16 @@ import LessonView, { lessonPlainText } from "../components/LessonView.jsx";
 import {
   fetchLesson,
   deleteLesson,
-  lessonHubEnabled,
   EDIT_REQUEST_KEY,
   FORK_REQUEST_KEY,
-} from "../lib/lessons.js";
+} from "@spelling-creator/core/lessons";
 import {
   setShadowban,
   banName,
   banIp,
   requestLessonDeletion,
   deleteLessonAsAdmin,
-} from "../lib/moderation.js";
+} from "@spelling-creator/core/moderation";
 import { useAuth } from "../lib/auth.jsx";
 import {
   useDocumentMeta,
@@ -130,7 +130,7 @@ export default function LessonPage() {
   const [ipBanError, setIpBanError] = useState("");
 
   useEffect(() => {
-    if (!lessonHubEnabled) {
+    if (!hasApi()) {
       setLoading(false);
       return;
     }
@@ -577,7 +577,7 @@ export default function LessonPage() {
       </AppHeader>
 
       <div className="mx-auto max-w-3xl px-4 pt-6">
-        {!lessonHubEnabled && (
+        {!hasApi() && (
           <Alert className="border-primary/40 bg-primary/10 text-primary">
             <AlertDescription className="text-primary">
               {t("lessonPage.hubDisabled")}
@@ -585,9 +585,9 @@ export default function LessonPage() {
           </Alert>
         )}
 
-        {lessonHubEnabled && loading && <LessonContentSkeleton />}
+        {hasApi() && loading && <LessonContentSkeleton />}
 
-        {lessonHubEnabled && !loading && error && (
+        {hasApi() && !loading && error && (
           <Alert variant="destructive">
             <AlertDescription className="flex items-center justify-between gap-2">
               {error}
@@ -600,7 +600,7 @@ export default function LessonPage() {
           </Alert>
         )}
 
-        {lessonHubEnabled && !loading && !error && lesson && (
+        {hasApi() && !loading && !error && lesson && (
           <>
             <div className="mb-4 flex flex-col">
               <div className="flex items-center gap-2">

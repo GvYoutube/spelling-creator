@@ -46,9 +46,12 @@ import {
   deleteComment,
   COMMENT_BLOCKED_STATUS,
   COMMENT_MAX,
-} from "../lib/comments.js";
-import { isRichTextEmpty, richTextLength } from "../lib/richText.js";
-import { banName } from "../lib/moderation.js";
+} from "@spelling-creator/core/comments";
+import {
+  isRichTextEmpty,
+  richTextLength,
+} from "@spelling-creator/core/richText";
+import { banName } from "@spelling-creator/core/moderation";
 
 // How deep replies are allowed to indent before they stop nesting further. Deeper
 // replies still thread (they sit under their parent) but share the cap's inset, so

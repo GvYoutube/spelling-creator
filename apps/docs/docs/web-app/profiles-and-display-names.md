@@ -126,5 +126,5 @@ the caller and merges those users' published lessons and comments into the same
 returns an empty feed when you follow no one.
 
 The frontend wrappers are `setFollowing()`, `fetchFollowList()` and
-`fetchFollowingActivity()` in `src/lib/users.js`; the Worker handlers are in
+`fetchFollowingActivity()` in `@spelling-creator/core/users`; the Worker handlers are in
 `apps/api/src/routes/follows.js`.

@@ -44,4 +44,4 @@ flag, and a timestamp.
 | `POST /notifications/read`      | `Bearer <Supabase JWT>` | Marks the caller's notifications (or a given one) as read.               |
 | `POST /notifications/send-link` | `Bearer <Supabase JWT>` | Sends a `link` notification (URL + optional message) to a user by email. |
 
-The frontend wrapper is `src/lib/notifications.js`.
+The frontend wrapper is `@spelling-creator/core/notifications`.

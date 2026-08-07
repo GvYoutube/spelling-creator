@@ -1,5 +1,5 @@
 // "Summarise this lesson" card on the lesson page, powered by the browser's
-// built-in Summarizer API (see lib/summarizer.js). The model runs on the reader's
+// built-in Summarizer API (see @spelling-creator/core/browser/summarizer). The model runs on the reader's
 // own device: no Worker call, no Turnstile, no cost, and the lesson text never
 // leaves the machine.
 //
@@ -41,7 +41,7 @@ import {
   summarizeStream,
   summarizerAvailability,
   summarizerErrorMessage,
-} from "../lib/summarizer.js";
+} from "@spelling-creator/core/browser/summarizer";
 
 // Bold/italic runs inside one line of the model's markdown.
 const INLINE_MARKDOWN = /\*\*([^*]+)\*\*|\*([^*]+)\*/g;

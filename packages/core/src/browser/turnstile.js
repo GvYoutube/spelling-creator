@@ -3,8 +3,9 @@
 // The widget is loaded via the explicit-render script in index.html. We expose
 // the public site key and a small promise that resolves once `window.turnstile`
 // is available, so components can render a widget as soon as the script loads.
-
-export const TURNSTILE_SITE_KEY = import.meta.env.VITE_TURNSTILE_SITE_KEY;
+//
+// The site key itself comes from the config seam (`turnstileSiteKey()`), not a
+// build-time constant — see ../config.js.
 
 let readyPromise = null;
 

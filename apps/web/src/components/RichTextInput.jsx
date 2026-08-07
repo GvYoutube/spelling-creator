@@ -23,7 +23,7 @@ import Underline from "@tiptap/extension-underline";
 import Link from "@tiptap/extension-link";
 import Placeholder from "@tiptap/extension-placeholder";
 import { cn } from "../lib/utils.js";
-import { richTextLength } from "../lib/richText.js";
+import { richTextLength } from "@spelling-creator/core/richText";
 import RichTextToolbar from "./RichTextToolbar.jsx";
 
 // The editable feature set: everything the sanitizer's allow-list keeps, and nothing
