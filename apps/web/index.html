@@ -2,7 +2,15 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!-- viewport-fit=cover lets the page reach under a notch/home indicator,
+         which is what makes the env(safe-area-inset-*) values non-zero. The
+         bottom-anchored overlays (the add-section FAB, the collab chat, the
+         first-lesson wizard) use them to stay clear of the iOS home indicator
+         — see the `bottom-safe` utility in src/styles/globals.css. -->
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, viewport-fit=cover"
+    />
     <meta
       name="description"
       content="Create and print Spelling lessons with sections, text, and images."

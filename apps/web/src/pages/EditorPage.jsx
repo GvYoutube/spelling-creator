@@ -1328,7 +1328,7 @@ export default function EditorPage() {
   );
 
   return (
-    <div className="min-h-screen bg-background pb-24 text-foreground">
+    <div className="min-h-dvh bg-background pb-24 text-foreground">
       <AppHeader
         title={t("header.title")}
         left={
@@ -1910,7 +1910,7 @@ export default function EditorPage() {
             size="icon-lg"
             onClick={openAddDialog}
             aria-label={t("addSectionFab.ariaLabel")}
-            className="fixed right-4 bottom-4 z-40 size-14 rounded-full shadow-[var(--shadow-panel)] sm:right-8 sm:bottom-8"
+            className="mb-safe fixed right-4 bottom-4 z-40 size-14 rounded-full shadow-[var(--shadow-panel)] sm:right-8 sm:bottom-8"
           >
             <PlusIcon className="size-6" />
           </Button>
@@ -1955,7 +1955,7 @@ export default function EditorPage() {
         open={Boolean(previewContent)}
         onOpenChange={(next) => !next && setPreviewContent(null)}
       >
-        <DialogContent className="flex max-h-[90vh] w-full flex-col sm:max-w-3xl">
+        <DialogContent className="flex max-h-[90dvh] w-full flex-col sm:max-w-3xl">
           <DialogHeader>
             <DialogTitle>{t("previewDialog.title")}</DialogTitle>
           </DialogHeader>

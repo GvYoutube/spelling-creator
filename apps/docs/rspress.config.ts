@@ -101,6 +101,10 @@ export default defineConfig({
               link: "/web-app/export-pipeline",
             },
             { text: "Project structure", link: "/web-app/project-structure" },
+            {
+              text: "Mobile layout & touch targets",
+              link: "/web-app/mobile-layout",
+            },
           ],
         },
         {

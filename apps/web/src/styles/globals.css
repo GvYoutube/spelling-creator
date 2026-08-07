@@ -76,6 +76,20 @@
   }
 }
 
+/* Keeps a bottom-anchored floating element clear of the iOS home indicator.
+   The FAB, the collab chat and the first-lesson wizard all sit `bottom-4`
+   (1rem) off the edge, which puts their lower half inside the ~34px swipe
+   strip — the gesture wins, so the tap doesn't land.
+
+   Implemented as a margin rather than a `bottom-safe` replacement for
+   `bottom-*` so it composes with whatever offset an element already uses
+   (`bottom-4 sm:bottom-8` on the FAB) instead of having to restate it.
+   env() only resolves to something non-zero because the viewport meta sets
+   viewport-fit=cover — see index.html. */
+@utility mb-safe {
+  margin-bottom: env(safe-area-inset-bottom);
+}
+
 :root {
   /* Tells the browser to render native chrome (scrollbars, form controls) in
      the light palette — without this, native scrollbars stay light-themed

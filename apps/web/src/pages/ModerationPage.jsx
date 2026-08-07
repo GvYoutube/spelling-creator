@@ -544,7 +544,7 @@ export default function ModerationPage() {
   const showAccessNotice = !resolvingAuth && user && !isModerator;
 
   return (
-    <div className="min-h-screen bg-background pb-16">
+    <div className="min-h-dvh bg-background pb-16">
       <AppHeader
         title={t("page.title")}
         left={

@@ -37,6 +37,11 @@ import {
 } from "@spelling-creator/core/questions";
 import { createSpellingBlock } from "@spelling-creator/core/spelling";
 
+// The add-block toolbar's buttons are `size="sm"` — 32px tall, under the touch
+// target minimum, and there are six of them wrapping across a phone screen.
+// Matches the constant of the same name in ContentBlock.jsx.
+const TOUCH_SM_BUTTON = "h-10 sm:h-8";
+
 function SectionCard({
   section,
   documentName,
@@ -330,7 +335,12 @@ function SectionCard({
 
   const addToolbar = (
     <div className="flex flex-wrap gap-2">
-      <Button variant="outline" size="sm" onClick={addTextBlock}>
+      <Button
+        variant="outline"
+        size="sm"
+        onClick={addTextBlock}
+        className={TOUCH_SM_BUTTON}
+      >
         <TypeIcon data-icon="inline-start" />
         {t("sectionCard.toolbar.addText")}
       </Button>
@@ -338,6 +348,7 @@ function SectionCard({
         variant="outline"
         size="sm"
         onClick={() => fileInputRef.current?.click()}
+        className={TOUCH_SM_BUTTON}
       >
         <ImageIcon data-icon="inline-start" />
         {t("sectionCard.toolbar.addImage")}
@@ -346,13 +357,14 @@ function SectionCard({
         variant="outline"
         size="sm"
         onClick={() => setImageSearchOpen(true)}
+        className={TOUCH_SM_BUTTON}
       >
         <SearchIcon data-icon="inline-start" />
         {t("sectionCard.toolbar.searchImages")}
       </Button>
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
-          <Button variant="outline" size="sm">
+          <Button variant="outline" size="sm" className={TOUCH_SM_BUTTON}>
             <CircleHelpIcon data-icon="inline-start" />
             {t("sectionCard.toolbar.addQuestion")}
           </Button>
@@ -377,13 +389,18 @@ function SectionCard({
           ))}
         </DropdownMenuContent>
       </DropdownMenu>
-      <Button variant="outline" size="sm" onClick={addSpellingBlock}>
+      <Button
+        variant="outline"
+        size="sm"
+        onClick={addSpellingBlock}
+        className={TOUCH_SM_BUTTON}
+      >
         <SpellCheckIcon data-icon="inline-start" />
         {t("sectionCard.toolbar.spellingWords")}
       </Button>
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
-          <Button variant="outline" size="sm">
+          <Button variant="outline" size="sm" className={TOUCH_SM_BUTTON}>
             <SparklesIcon data-icon="inline-start" />
             {t("sectionCard.toolbar.generateWithAi")}
           </Button>
@@ -426,7 +443,12 @@ function SectionCard({
         onDrop={handleDrop}
         onDragLeave={handleDragLeave}
       >
-        <div className="mb-3 flex items-center gap-2">
+        {/* `flex-wrap` + a full-width control group is what splits this into two
+            rows on a phone: the number and the name take the first row, the
+            move/delete buttons wrap onto their own. Inline (one row) from `sm`
+            up. Without it the three buttons and the badge left ~130px of a
+            360px screen for the section name. */}
+        <div className="mb-3 flex flex-wrap items-center gap-2">
           <div className="flex size-[30px] shrink-0 items-center justify-center rounded-full bg-primary text-sm font-bold text-primary-foreground">
             {index + 1}
           </div>
@@ -435,29 +457,31 @@ function SectionCard({
             value={section.name}
             onCommit={(name) => onChange(section.id, { ...section, name })}
             data-collab-field={`section:${section.id}:name`}
-            className="border-0 border-b border-transparent bg-transparent px-0 text-xl font-semibold shadow-none focus-visible:border-b-ring focus-visible:ring-0"
+            className="min-w-0 flex-1 border-0 border-b border-transparent bg-transparent px-0 text-xl font-semibold shadow-none focus-visible:border-b-ring focus-visible:ring-0"
           />
-          <IconActionButton
-            tooltip={t("sectionCard.moveUp")}
-            onClick={() => onMove(section.id, -1)}
-            disabled={isFirst}
-          >
-            <ArrowUpIcon />
-          </IconActionButton>
-          <IconActionButton
-            tooltip={t("sectionCard.moveDown")}
-            onClick={() => onMove(section.id, 1)}
-            disabled={isLast}
-          >
-            <ArrowDownIcon />
-          </IconActionButton>
-          <IconActionButton
-            tooltip={t("sectionCard.delete")}
-            onClick={() => onDelete(section.id)}
-            destructive
-          >
-            <Trash2Icon />
-          </IconActionButton>
+          <div className="flex w-full shrink-0 items-center gap-1 sm:w-auto">
+            <IconActionButton
+              tooltip={t("sectionCard.moveUp")}
+              onClick={() => onMove(section.id, -1)}
+              disabled={isFirst}
+            >
+              <ArrowUpIcon />
+            </IconActionButton>
+            <IconActionButton
+              tooltip={t("sectionCard.moveDown")}
+              onClick={() => onMove(section.id, 1)}
+              disabled={isLast}
+            >
+              <ArrowDownIcon />
+            </IconActionButton>
+            <IconActionButton
+              tooltip={t("sectionCard.delete")}
+              onClick={() => onDelete(section.id)}
+              destructive
+            >
+              <Trash2Icon />
+            </IconActionButton>
+          </div>
         </div>
 
         <hr className="mb-3 border-border" />
@@ -644,6 +668,13 @@ const BlockRow = memo(function BlockRow({
         // The grab handle lives inside the block (in its controls row), so it
         // reads as part of the card rather than a bar above it. Drag must start
         // here so editing fields never drags by accident.
+        //
+        // Hidden on coarse pointers, because this is HTML5 drag-and-drop:
+        // Android Chrome never synthesises drag events from touch, and iOS
+        // Safari only does so for a long-press in some cases — so on a phone
+        // the handle was a control that mostly did nothing, and `touch-none`
+        // meant touching it swallowed the scroll gesture too. The move up/down
+        // buttons next to it reorder blocks without a drag, so nothing is lost.
         dragHandle={
           <Tooltip>
             <TooltipTrigger asChild>
@@ -653,7 +684,7 @@ const BlockRow = memo(function BlockRow({
                 onDragEnd={onDragEnd}
                 role="button"
                 aria-label={t("sectionCard.dragHandle.ariaLabel")}
-                className="inline-flex cursor-grab touch-none items-center justify-center rounded-md p-0.5 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground active:cursor-grabbing active:bg-accent"
+                className="inline-flex cursor-grab touch-none items-center justify-center rounded-md p-0.5 text-muted-foreground transition-colors pointer-coarse:hidden hover:bg-accent hover:text-foreground active:cursor-grabbing active:bg-accent"
               >
                 <GripVerticalIcon className="size-4" />
               </span>

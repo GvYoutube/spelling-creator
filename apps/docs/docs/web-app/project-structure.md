@@ -9,7 +9,7 @@ sidebar_position: 15
 src/
   App.jsx                 route table (editor / hub / lesson / profile / login / moderation)
   main.jsx                React entry: ColorSchemeProvider + BrowserRouter + AuthProvider + DisplayNameGate + Toaster
-  styles/globals.css      Tailwind v4 + shadcn/ui design tokens (light/dark palettes, glass-surface shadows/blur)
+  styles/globals.css      Tailwind v4 + shadcn/ui design tokens (light/dark palettes, glass-surface shadows/blur), plus the `mb-safe` utility (see mobile-layout.md)
   locales/en/*.json      one JSON file per i18next namespace (see internationalization.md)
   pages/
     EditorPage.jsx        the lesson builder (toolbar, section list, + button, publish, collaborate)
@@ -34,14 +34,15 @@ src/
     LessonView.jsx        read-only renderer for the lesson page (blocks straight to React, lazy images)
     LessonSummary.jsx     on-device AI summary card on the lesson page (hidden unless the browser supports it)
     SectionCard.jsx       a named section with its content blocks + add buttons; measures the pointer against its own rows during a block drag, but the drag itself is owned by EditorPage (blocks can move between sections)
-    ContentBlock.jsx      a single text, spelling, image, or question block
+    ContentBlock.jsx      a single text, spelling, image, or question block; owns BLOCK_LAYOUT, the responsive content/controls split (see mobile-layout.md)
+    IconActionButton.jsx  the icon + tooltip button behind every block/section control; the tooltip doubles as its aria-label
     AiTextDialog.jsx       Turnstile-verified "suggest text with AI" dialog
     AiQuestionDialog.jsx   Turnstile-verified "suggest a question with AI" dialog
     AiLessonIdeaDialog.jsx Turnstile-verified "suggest a whole lesson outline with AI" dialog
     ImageSearchDialog.jsx  Turnstile-verified "search Pixabay images" dialog
     CollaborateDialog.jsx  live-collaboration control panel (host/join, roster, trusted collaborators)
     CollabCursors.jsx      floating coloured carets showing collaborators' selections
-    CollabChat.jsx         floating in-session chat panel
+    CollabChat.jsx         in-session chat: a floating corner panel on desktop, a bottom sheet on mobile
     HistoryDialog.jsx      the lesson's version timeline: what each commit changed, per block, + restore
     MergeDialog.jsx        settle a merge with the lesson this one was forked from (mine / theirs / keep both)
     ui/                    shadcn/ui primitives (Button, Dialog, DropdownMenu, Select, Tooltip, Sonner Toaster, etc.) — Radix underneath, styled from the tokens in styles/globals.css

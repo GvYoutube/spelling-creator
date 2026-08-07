@@ -31,9 +31,39 @@ import {
   DEFAULT_IMAGE_ALIGN,
 } from "@spelling-creator/core/image";
 import { newId } from "@spelling-creator/core/id";
+import { cn } from "../lib/utils.js";
 import { useImageSrc } from "../lib/useImageSrc.js";
 import { questionMeta } from "@spelling-creator/core/questions";
 import { SPELLING_COLOR } from "@spelling-creator/core/spelling";
+
+// Every block is content + a stack of controls (drag/move/delete, plus a couple
+// of block-specific extras). On a wide screen those controls sit in a fixed
+// column down the right-hand side; on a phone that column was eating the block.
+// The control stack costs the same ~130-165px whatever the viewport, and a
+// 360px phone only has 264px inside the block's padding to begin with — which
+// left a spelling word being typed into a ~56px box and a lesson paragraph into
+// a ~128px one.
+//
+// So below `sm` the row becomes a column: content gets the full width and the
+// controls wrap underneath as a footer (`controls` in ContentBlock adds the
+// hairline that separates them).
+//
+// That footer is left-aligned, not right-. The add-section FAB is pinned to the
+// bottom-right of the viewport, so right-aligning put every block's delete
+// button in exactly the ~72px corner the FAB floats over — whichever block
+// happened to sit at that scroll position had its controls covered by it.
+const BLOCK_LAYOUT = "flex flex-col gap-2 sm:flex-row sm:items-start";
+
+// The image block's alignment/size toggles are `size="sm"` — 32px tall, under
+// the touch-target minimum. Grow them to 40px on a phone. ToggleGroup's own
+// className lands on the group root and can't reach the items, so this selects
+// them by the data-slot ToggleGroupItem sets.
+const TOUCH_TOGGLES =
+  "[&_[data-slot=toggle-group-item]]:h-10 sm:[&_[data-slot=toggle-group-item]]:h-8";
+
+// Same bump for the compact `size="sm"` buttons inside block bodies (replace
+// image, add word/answer/step).
+const TOUCH_SM_BUTTON = "h-10 sm:h-8";
 
 function ContentBlock({
   block,
@@ -49,8 +79,12 @@ function ContentBlock({
   onReplaceImageSearch = null,
 }) {
   const { t } = useTranslation("editorSections");
+  // Below `sm` the controls drop out of the right-hand column and become a
+  // footer row under the block's content — see BLOCK_LAYOUT. The hairline is
+  // what makes that row read as a footer rather than as more content; from
+  // `sm` up the controls are back in the corner and it disappears.
   const controls = (
-    <div className="flex shrink-0 items-center gap-1">
+    <div className="flex shrink-0 items-center gap-1 border-t border-border pt-2 sm:border-t-0 sm:pt-0">
       {dragHandle}
       <IconActionButton
         tooltip={t("contentBlock.controls.moveUp")}
@@ -113,7 +147,7 @@ function ContentBlock({
   // text block
   return (
     <div className="rounded-md border border-border bg-card p-4 text-card-foreground">
-      <div className="flex items-start gap-2">
+      <div className={BLOCK_LAYOUT}>
         <LiveTextarea
           placeholder={t("contentBlock.text.placeholder")}
           value={block.text || ""}
@@ -165,7 +199,7 @@ function ImageBlock({
         : "0 auto";
   return (
     <div className="rounded-md border border-border bg-card p-4 text-card-foreground">
-      <div className="flex items-start justify-between gap-2">
+      <div className={cn(BLOCK_LAYOUT, "sm:justify-between")}>
         <div className="min-w-0 grow">
           {src ? (
             <img
@@ -198,6 +232,7 @@ function ImageBlock({
                 next && onChange({ ...block, align: next })
               }
               aria-label={t("contentBlock.image.alignmentAriaLabel")}
+              className={TOUCH_TOGGLES}
             >
               <ToggleGroupItem
                 value="left"
@@ -226,6 +261,7 @@ function ImageBlock({
                 next && onChange({ ...block, size: next })
               }
               aria-label={t("contentBlock.image.sizeAriaLabel")}
+              className={TOUCH_TOGGLES}
             >
               {IMAGE_SIZES.map((s) => (
                 <ToggleGroupItem key={s.key} value={s.key}>
@@ -237,7 +273,12 @@ function ImageBlock({
               <>
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
-                    <Button type="button" variant="outline" size="sm">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className={TOUCH_SM_BUTTON}
+                    >
                       <ArrowLeftRightIcon data-icon="inline-start" />
                       {t("contentBlock.image.replace")}
                     </Button>
@@ -341,8 +382,8 @@ function SpellingBlock({
       className="rounded-md border border-border bg-card p-4 text-card-foreground"
       style={{ borderLeftWidth: 5, borderLeftColor: SPELLING_COLOR }}
     >
-      <div className="flex items-start gap-2">
-        <div className="grow">
+      <div className={BLOCK_LAYOUT}>
+        <div className="min-w-0 grow">
           <Badge
             style={{ backgroundColor: SPELLING_COLOR, color: "#fff" }}
             className="mb-3"
@@ -370,14 +411,22 @@ function SpellingBlock({
               </div>
             ))}
             <div>
-              <Button type="button" variant="ghost" size="sm" onClick={addWord}>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                onClick={addWord}
+                className={TOUCH_SM_BUTTON}
+              >
                 <PlusIcon data-icon="inline-start" />
                 {t("contentBlock.spelling.addWord")}
               </Button>
             </div>
           </div>
         </div>
-        <div className="flex shrink-0 items-center gap-1">
+        {/* Mirrors ContentBlock's shared `controls` (this block has two extra
+            buttons of its own), including its mobile footer treatment. */}
+        <div className="flex shrink-0 items-center gap-1 border-t border-border pt-2 sm:border-t-0 sm:pt-0">
           {dragHandle}
           <IconActionButton
             tooltip={t("contentBlock.controls.moveUp")}
@@ -453,8 +502,8 @@ function QuestionBlock({ block, onChange, controls }) {
       className="rounded-md border border-border bg-card p-4 text-card-foreground"
       style={{ borderLeftWidth: 5, borderLeftColor: meta.color }}
     >
-      <div className="flex items-start gap-2">
-        <div className="grow">
+      <div className={BLOCK_LAYOUT}>
+        <div className="min-w-0 grow">
           <Badge
             style={{ backgroundColor: meta.color, color: "#fff" }}
             className="mb-3"
@@ -515,6 +564,7 @@ function QuestionBlock({ block, onChange, controls }) {
                     variant="ghost"
                     size="sm"
                     onClick={addStep}
+                    className={TOUCH_SM_BUTTON}
                   >
                     <PlusIcon data-icon="inline-start" />
                     {t("contentBlock.question.addStep")}
@@ -570,6 +620,7 @@ function QuestionBlock({ block, onChange, controls }) {
                   variant="ghost"
                   size="sm"
                   onClick={addAnswer}
+                  className={TOUCH_SM_BUTTON}
                 >
                   <PlusIcon data-icon="inline-start" />
                   {t("contentBlock.question.addAnswer")}

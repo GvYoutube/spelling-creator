@@ -90,7 +90,7 @@ export default function CollabChat({ collab }) {
   // needs to clear the header, not Dialog/Popover/DropdownMenu's z-50.
   if (!open) {
     return (
-      <div className="fixed bottom-4 left-4 z-40">
+      <div className="mb-safe fixed bottom-4 left-4 z-40">
         <Tooltip>
           <TooltipTrigger asChild>
             <Button
@@ -114,8 +114,17 @@ export default function CollabChat({ collab }) {
     );
   }
 
+  // On a phone this is a bottom sheet: flush to the bottom edge, full width,
+  // rounded at the top only. The old treatment — a 420px-tall floating panel
+  // inset 16px, `w-[calc(100vw-32px)]` — covered most of a phone screen *and*
+  // sat on top of the editor's add-section FAB while still looking like a
+  // window that wasn't meant to. Height is in `dvh` so the sheet shrinks
+  // against the on-screen keyboard rather than having its composer pushed out
+  // of sight, and the bottom padding clears the home indicator.
+  //
+  // From `sm` up it goes back to the original floating corner panel.
   return (
-    <div className="fixed bottom-4 left-4 z-40 flex h-[420px] max-h-[calc(100vh-32px)] w-[calc(100vw-32px)] max-w-[360px] flex-col overflow-hidden rounded-panel border border-border bg-card text-card-foreground shadow-[var(--shadow-panel),0_0_0_1px_var(--glass-border-outer)] backdrop-blur-(--glass-blur) backdrop-saturate-[1.4] sm:w-80">
+    <div className="fixed inset-x-0 bottom-0 z-40 flex h-[60dvh] max-h-[70dvh] flex-col overflow-hidden rounded-t-panel border border-b-0 border-border bg-card pb-[env(safe-area-inset-bottom)] text-card-foreground shadow-[var(--shadow-panel),0_0_0_1px_var(--glass-border-outer)] backdrop-blur-(--glass-blur) backdrop-saturate-[1.4] sm:inset-x-auto sm:bottom-4 sm:left-4 sm:h-[420px] sm:max-h-[calc(100dvh-32px)] sm:w-80 sm:rounded-panel sm:border-b sm:pb-0">
       {/* Header */}
       <div className="flex items-center gap-2 bg-primary px-3 py-2 text-primary-foreground">
         <MessageCircleIcon className="size-4" />
