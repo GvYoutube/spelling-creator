@@ -38,7 +38,7 @@ The docs source is in `apps/docs/docs/web-app`.
 
 ```bash
 pnpm install
-pnpm dev      # start the dev server (http://localhost:3000)
+pnpm dev      # start the dev server (http://localhost:5173)
 pnpm build    # production build into dist/
 pnpm preview  # preview the production build
 ```

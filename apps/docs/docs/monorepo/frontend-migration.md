@@ -197,10 +197,26 @@ Notes on the config, all of which are load-bearing:
   graph — untagged, the vendor group also swallows isomorphic-git and the
   tsparticles shapes, which are supposed to stay behind a dynamic import.
 - **No `build.target` override.** Vite 8's `baseline-widely-available` default
-  (chrome111, edge111, firefox114, safari16.4) is wider than the
-  `["defaults", "not IE 11"]` browserslist this app used to compile against,
-  which now resolves to a floor of chrome 109, edge 146, firefox 140,
-  safari 26.3. Chrome 109–110 is the only coverage given up.
+  (chrome111, edge111, firefox114, safari16.4) governs **JavaScript syntax
+  only**. It is wider than the `["defaults", "not IE 11"]` browserslist this app
+  used to compile against, which now resolves to a floor of chrome 109,
+  edge 146, firefox 140, safari 26.3, so chrome 109–110 is the only JS coverage
+  given up.
+- **The effective floor is CSS, not JS.** Tailwind v4 supports **Chrome 111,
+  Safari 16.4 and Firefox 128** — and this build emits what that implies:
+  `@property` (70 occurrences) and `color-mix()` (92) in `index-*.css`. Firefox
+  114–127 satisfies Vite's JS target but **cannot render this stylesheet**;
+  `@property` did not ship in Firefox until 128. The app's real support window
+  is therefore chrome111 / safari16.4 / **firefox128**, and lowering
+  `build.target` would not widen it.
+
+**Vitest versions are deliberately split.** `apps/web` is on Vitest 4, because
+Vitest 3 depends on `vite ^5 || ^6 || ^7` and would otherwise run tests through
+a second, older Vite major than the one that builds the app — silently, since
+`apps/web` currently has no tests. `packages/core` and `apps/api` stay on
+Vitest 3: `@cloudflare/vitest-pool-workers` declares a `vitest 2.0.x - 3.2.x`
+peer, so a repo-wide bump breaks the Worker suite. Raise `apps/api` only when
+the pool package widens that range.
 
 `apps/docs` is still Rspress, so Rspack has not left the tree. Moving it would
 mean a different site generator and reworking every page — deliberately out of

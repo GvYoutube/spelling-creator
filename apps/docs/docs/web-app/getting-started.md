@@ -7,15 +7,16 @@ sidebar_position: 13
 
 ```bash
 pnpm install
-pnpm dev      # start the dev server (http://localhost:3000)
+pnpm dev      # start the dev server (http://localhost:5173)
 pnpm build    # production build into dist/
 pnpm preview  # preview the production build
 ```
 
 ## Environment variables
 
-The AI text feature needs two variables in a `.env` file at the project root
-(Vite exposes `VITE_`-prefixed vars to client code):
+Optional features are configured in `apps/web/.env` — Vite reads env
+files from the package holding `vite.config.js`, not from the monorepo root, and
+exposes only `VITE_`-prefixed vars to client code:
 
 ```bash
 VITE_API_URL=https://your-worker.example.workers.dev   # apps/api Worker endpoint (AI, Pixabay, lesson hub)
