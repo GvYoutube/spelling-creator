@@ -28,7 +28,7 @@ import {
   UsersIcon,
 } from "lucide-react";
 import AppHeader from "../components/AppHeader.jsx";
-import NavActions from "../components/NavActions.jsx";
+import NavActions, { headerTextTrigger } from "../components/NavActions.jsx";
 import FloatingWords from "../components/FloatingWords.jsx";
 import { FeedListSkeleton } from "../components/Skeletons.jsx";
 import { Button } from "../components/ui/button.jsx";
@@ -195,18 +195,20 @@ function LandingView() {
           {/* Hand-styled rather than the shadcn Button variants — this hero
               is a fixed-color surface regardless of app theme (see the note
               above), and Button's variants carry their own dark: overrides
-              (meant for a normal page background) that would fight it. */}
+              (meant for a normal page background) that would fight it.
+              outline-white for the same reason: the app-wide focus ring in
+              globals.css is --ring, which is this gradient's own indigo. */}
           <div className="flex flex-col justify-center gap-3 sm:flex-row">
             <RouterLink
               to="/editor"
-              className="inline-flex items-center justify-center gap-2 rounded-md bg-white px-8 py-3 text-base font-medium text-[#1e2138] no-underline transition-colors hover:bg-white/90"
+              className="inline-flex items-center justify-center gap-2 rounded-md bg-white px-8 py-3 text-base font-medium text-[#1e2138] no-underline transition-colors focus-visible:outline-white hover:bg-white/90"
             >
               <PencilIcon data-icon="inline-start" />
               {t("marketing.hero.openEditor")}
             </RouterLink>
             <RouterLink
               to="/hub"
-              className="inline-flex items-center justify-center gap-2 rounded-md border border-white/70 bg-transparent px-8 py-3 text-base font-medium text-white no-underline transition-colors hover:border-white hover:bg-white/10"
+              className="inline-flex items-center justify-center gap-2 rounded-md border border-white/70 bg-transparent px-8 py-3 text-base font-medium text-white no-underline transition-colors focus-visible:outline-white hover:border-white hover:bg-white/10"
             >
               <BookMarkedIcon data-icon="inline-start" />
               {t("marketing.hero.browseHub")}
@@ -515,9 +517,15 @@ export default function HomePage() {
         }
         titleHref="/"
       >
+        {/* headerTextTrigger, not a hand-written copy of it: this link is a
+            sibling of the hub link NavActions renders half a centimetre to its
+            right, and the two have to read as the same control. */}
         <RouterLink
           to="/editor"
-          className="mr-1 hidden shrink-0 items-center gap-2 rounded-md border border-primary-foreground/60 bg-transparent px-4 py-2 text-sm font-medium text-primary-foreground no-underline transition-colors hover:bg-primary-foreground/10 md:inline-flex"
+          className={cn(
+            headerTextTrigger,
+            "mr-1 hidden shrink-0 md:inline-flex",
+          )}
         >
           <PencilIcon data-icon="inline-start" />
           {t("header.editor")}

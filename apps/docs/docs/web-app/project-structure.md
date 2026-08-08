@@ -94,6 +94,37 @@ hand-dragged height would be overwritten by the next keystroke) and
 `overflow-hidden` (the field is always exactly as tall as its text, so there is
 nothing to scroll).
 
+## Focus rings
+
+`globals.css` gives `:focus-visible` the app's own ring — 2px of `--ring`, offset
+by 2px — in the base layer. shadcn's primitives are unaffected: they pair
+`outline-none` with a `focus-visible:ring-*` of their own, and utilities beat
+base. The rule is there for everything else, and the app has a lot of it: the
+header's links and icon buttons, the editor's toolbar buttons, the star rating.
+None of those had a focus style, so they fell through to the browser's default
+ring, which Chrome draws as a dark outline banded with white — stray chrome
+rather than part of the app, and on the indigo header bar the white band was
+the only part of it you could see.
+
+It's a base rule rather than a class each control opts into because the
+controls that were missing it are exactly the ones nobody thought about; this
+way a new hand-rolled button gets it without anyone remembering.
+
+Two surfaces override the color, because `--ring` _is_ `--primary` and would
+disappear into them:
+
+- **`AppHeader`** — `header :focus-visible` switches the ring to
+  `--primary-foreground`, the same token everything else on that bar is drawn
+  from (see the note at the top of `NavActions.jsx`).
+- **HomePage's hero** — a fixed gradient that doesn't follow the theme, so its
+  two call-to-action links carry `focus-visible:outline-white` themselves.
+
+Controls that sit on the header surface should use the exported
+`headerIconTrigger` / `headerTextTrigger` from `NavActions.jsx` rather than
+restating them. Pages assemble their own header contents, and HomePage's
+"Editor" link had drifted into a hand-written copy carrying a border no other
+control on the bar has.
+
 ## Shared lesson logic
 
 The parts of the lesson model that don't depend on React live in

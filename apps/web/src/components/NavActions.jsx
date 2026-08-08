@@ -53,9 +53,16 @@ import InstallAppButton from "./InstallAppButton.jsx";
 // sitting next to Preview / Export / Collaborate, which are plain ghost
 // buttons. Hover fill is the affordance here, as it is for every other control
 // in the header.
-const iconTrigger =
+//
+// Exported because the header bar is assembled per page: pages pass their own
+// controls to AppHeader alongside <NavActions>, and one of them (HomePage's
+// "Editor" link) had grown its own hand-written copy of headerTextTrigger — with the
+// border still on it, so the one control this rule was written for was the one
+// still breaking it. Anything that sits on the header surface should use these
+// rather than restate them.
+export const headerIconTrigger =
   "inline-flex size-10 cursor-pointer items-center justify-center rounded-full border-0 bg-transparent text-primary-foreground no-underline transition-colors hover:bg-primary-foreground/10";
-const textTrigger =
+export const headerTextTrigger =
   "inline-flex items-center gap-2 rounded-md border-0 bg-transparent px-4 py-2 text-sm font-medium text-primary-foreground no-underline transition-colors hover:bg-primary-foreground/10";
 
 export default function NavActions({ current }) {
@@ -76,7 +83,7 @@ export default function NavActions({ current }) {
               <RouterLink
                 to="/hub"
                 aria-label={t("nav.lessonHubAriaLabel")}
-                className={cn(iconTrigger, "md:hidden")}
+                className={cn(headerIconTrigger, "md:hidden")}
               >
                 <BookMarkedIcon />
               </RouterLink>
@@ -85,7 +92,7 @@ export default function NavActions({ current }) {
           </Tooltip>
           <RouterLink
             to="/hub"
-            className={cn(textTrigger, "hidden md:inline-flex")}
+            className={cn(headerTextTrigger, "hidden md:inline-flex")}
           >
             <BookMarkedIcon data-icon="inline-start" />
             {t("nav.lessonHub")}
@@ -93,7 +100,7 @@ export default function NavActions({ current }) {
         </>
       )}
 
-      <InstallAppButton className={iconTrigger} />
+      <InstallAppButton className={headerIconTrigger} />
 
       <Tooltip>
         <TooltipTrigger asChild>
@@ -105,7 +112,7 @@ export default function NavActions({ current }) {
                 : t("nav.switchToDarkMode")
             }
             onClick={() => setScheme(resolved === "dark" ? "light" : "dark")}
-            className={iconTrigger}
+            className={headerIconTrigger}
           >
             {resolved === "dark" ? <SunIcon /> : <MoonIcon />}
           </button>
@@ -127,7 +134,7 @@ export default function NavActions({ current }) {
                   <button
                     type="button"
                     aria-label={t("nav.accountMenuAriaLabel")}
-                    className={iconTrigger}
+                    className={headerIconTrigger}
                   >
                     <CircleUserIcon />
                   </button>
@@ -171,7 +178,7 @@ export default function NavActions({ current }) {
                 <button
                   type="button"
                   aria-label={t("nav.accountMenuAriaLabel")}
-                  className={iconTrigger}
+                  className={headerIconTrigger}
                 >
                   <CircleUserIcon />
                 </button>

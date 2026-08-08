@@ -74,6 +74,35 @@
     color: var(--foreground);
     font-family: var(--font-sans);
   }
+
+  /* The app's keyboard focus ring, for everything that doesn't draw its own.
+     shadcn's primitives all pair `outline-none` with a `focus-visible:ring-*`
+     of their own, but the app is full of hand-written links and icon buttons
+     (the header triggers, the editor's toolbar buttons, the star rating) that
+     never had a focus style — so they fell through to the browser's default
+     ring, which Chrome draws as a dark outline banded with white. That looked
+     like stray chrome rather than part of the app, and on the indigo header
+     bar the white band was the only part you saw.
+
+     A base-layer rule rather than a class each control has to remember: the
+     ones that were missing it are exactly the ones nobody thought about, and
+     a new hand-rolled control gets this for free. `outline-none` is a utility,
+     and utilities beat base, so nothing that already styles its own focus is
+     touched. */
+  :focus-visible {
+    outline-style: solid;
+    outline-width: 2px;
+    outline-color: var(--ring);
+    outline-offset: 2px;
+  }
+
+  /* --ring *is* --primary, so the ring above is invisible against the app
+     bar's own --primary surface. Everything up there is drawn from
+     --primary-foreground (see NavActions.jsx); its focus ring is too. The
+     header element is AppHeader and nothing else. */
+  header :focus-visible {
+    outline-color: var(--primary-foreground);
+  }
 }
 
 /* Keeps a bottom-anchored floating element clear of the iOS home indicator.
