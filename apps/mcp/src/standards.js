@@ -141,10 +141,11 @@ Rejected (errors):
 - an open question carrying an answer, answers, or exampleAnswer
 - a pink question using the retired "...one word that comes to mind..." stem
 Flagged but allowed (warnings, returned with the saved lesson): a section count other than 6, a
-section whose 15 questions differ in type or order from the list above, pink questions that don't
-read as 4 tight + 3 extended, a multi-word orange answer, an orange question with fewer than 2 or
-more than 4 answers, a section without exactly 4 spelling words, a word problem with no steps, and
-a spelling word that is also ALL-CAPS vocabulary in the same section.
+section with no questions at all, a section whose 15 questions differ in type or order from the
+list above, pink questions that don't read as 4 tight + 3 extended, a multi-word orange answer, an
+orange question with fewer than 2 or more than 4 answers, a section without exactly 4 spelling
+words, a word problem with no steps, and a spelling word that is also ALL-CAPS vocabulary in the
+same section.
 
 If the user deliberately wants a lesson the standard forbids — a 3-section lesson, questions in a
 different order — pass "skipValidation": true, which turns the errors off. Don't reach for it to

@@ -90,11 +90,22 @@ lesson the standard forbids, not as a way around a defect that should be fixed.
 `patch_lesson` validates the lesson **before** and **after** the edit and holds the caller
 only to the difference. Without that, a one-line tweak to a lesson written in the web
 editor — or written before these rules existed — would be blocked by defects the patch
-never touched and the assistant may have no mandate to change.
+never touched and the assistant may have no mandate to change. The filter applies to
+**warnings as well as errors**, so a patch reports only what its own edit introduced.
 
-Findings are matched on the defect's identity (its code plus the offending value) rather
-than its message, so inserting or moving a section doesn't make every later finding look
-new.
+Findings are matched on the defect's identity rather than its message, which has to hold
+two properties at once:
+
+- **Section numbers can't be part of it.** Moving or inserting a section would otherwise
+  make every later finding look new. The identity uses the section's and block's **ids**,
+  which survive `move_section`, `move_block` and `replace_block`.
+- **Block identity has to be part of it.** Code plus offending value alone is not enough:
+  a patch can add a genuinely new question carrying the same defect on the same word, and
+  it would be written off as pre-existing. Including the block's id separates them.
+
+For a collision, which names two parties (two spelling words, two questions), the pair is
+sorted before it becomes a key — otherwise reordering the sections swaps which end the
+walk reaches first and rewrites the identity of a defect nobody touched.
 
 `update_lesson` replaces the whole document, so it gets no such exemption: whatever the
 result contains, the caller sent. That is a reason to prefer `patch_lesson` for small

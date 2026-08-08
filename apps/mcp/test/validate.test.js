@@ -13,11 +13,14 @@ import test from "node:test";
 import { buildDoc } from "../src/doc.js";
 import { applyPatch } from "../src/patch.js";
 import {
+  formatFindings,
+  inputBlocksFromOperations,
   inputBlocksFromSections,
   newFindings,
   normalizeText,
   validateInput,
   validateLesson,
+  validationErrorMessage,
 } from "../src/validate.js";
 
 // A section written to the standard: 2 paragraphs holding every answer the
@@ -460,6 +463,17 @@ test("two questions resolving to the same number is rejected", () => {
   assert.match(errors[0].message, /section 1 and section 3/);
 });
 
+test("two questions in the same section sharing a number say so plainly", () => {
+  const { errors } = check((input) => {
+    // Both purple questions land on 7, which is also the fill-in-the-blank's
+    // value — "section 1 and section 1" would leave the author hunting.
+    question(input, 0, 4).answer = 7;
+  });
+  assert.deepEqual(codes(errors), ["E_NUMBER_DUPLICATE"]);
+  assert.match(errors[0].message, /both in section 1/);
+  assert.doesNotMatch(errors[0].message, /section 1 and section 1/);
+});
+
 test("the retired 'comes to mind' stem is rejected", () => {
   const { errors } = check((input) => {
     question(input, 0, 8).prompt =
@@ -482,6 +496,91 @@ test("an open question carrying an answer is rejected from the raw input", () =>
   assert.match(findings[1].message, /`answer`/);
 });
 
+// patch_lesson feeds validateInput from operations rather than sections, so the
+// rule has to reach that write path too.
+test("an open question carrying an answer is rejected when it arrives via a patch", () => {
+  const findings = validateInput(
+    inputBlocksFromOperations([
+      { op: "set_title", title: "Renamed" },
+      {
+        op: "add_block",
+        sectionId: "s1",
+        block: {
+          type: "question",
+          questionType: "open",
+          prompt: "Name a color.",
+          exampleAnswer: "blue",
+        },
+      },
+      {
+        op: "add_section",
+        name: "New",
+        blocks: [
+          { type: "text", text: "Prose." },
+          {
+            type: "question",
+            questionType: "open",
+            prompt: "Name a fruit.",
+            answers: ["apple"],
+          },
+        ],
+      },
+    ]),
+  );
+
+  assert.deepEqual(codes(findings), ["E_OPEN_HAS_ANSWER", "E_OPEN_HAS_ANSWER"]);
+  assert.match(findings[0].message, /Operation 2 \(add_block\)/);
+  assert.match(findings[0].message, /`exampleAnswer`/);
+  assert.match(findings[1].message, /Operation 3 \(add_section\), block 2/);
+  assert.match(findings[1].message, /`answers`/);
+});
+
+test("formatFindings caps the list and says how many it held back", () => {
+  const many = Array.from({ length: 30 }, (_, i) => ({
+    level: "error",
+    code: "E_GROUNDING_SINGLE",
+    key: `k${i}`,
+    section: 1,
+    message: `defect ${i}`,
+  }));
+
+  const capped = formatFindings(many, 25);
+  const lines = capped.split("\n");
+  assert.equal(lines.length, 26, "25 findings plus the summary line");
+  assert.match(lines[0], /^1\. \[E_GROUNDING_SINGLE\] defect 0$/);
+  assert.match(lines[24], /^25\. \[E_GROUNDING_SINGLE\] defect 24$/);
+  assert.match(lines[25], /and 5 more/);
+  assert.doesNotMatch(capped, /defect 25/);
+
+  // Under the cap there is nothing to hold back, so no summary line.
+  const short = formatFindings(many.slice(0, 3), 25);
+  assert.equal(short.split("\n").length, 3);
+  assert.doesNotMatch(short, /more/);
+});
+
+test("validationErrorMessage states the count and points at the escape hatch", () => {
+  const one = validationErrorMessage([
+    {
+      level: "error",
+      code: "E_SPELLING_LENGTH",
+      key: "k",
+      section: 2,
+      message: 'Section 2: the spelling word "cat" is 3 letters.',
+    },
+  ]);
+  assert.match(one, /1 problem to fix/);
+  assert.match(one, /nothing was saved/);
+  assert.match(one, /\[E_SPELLING_LENGTH\]/);
+  assert.match(one, /"cat" is 3 letters/);
+  assert.match(one, /"skipValidation": true/);
+
+  const two = validationErrorMessage([
+    { level: "error", code: "A", key: "a", section: 1, message: "first" },
+    { level: "error", code: "B", key: "b", section: 1, message: "second" },
+  ]);
+  assert.match(two, /2 problems to fix/, "pluralised");
+});
+
 test("shape deviations warn rather than block", () => {
   const short = check((input) => {
     input.sections = input.sections.slice(0, 3);
@@ -494,9 +593,10 @@ test("shape deviations warn rather than block", () => {
   );
 
   const reordered = check((input) => {
-    const blocks = input.sections[0].blocks;
-    const questions = blocks.filter((b) => b.type === "question");
-    [questions[0].questionType, questions[0].answer] = ["open", undefined];
+    const questions = input.sections[0].blocks.filter(
+      (b) => b.type === "question",
+    );
+    questions[0].questionType = "open";
     delete questions[0].answer;
   });
   assert.ok(codes(reordered.warnings).includes("W_QUESTION_SHAPE"));
@@ -544,22 +644,78 @@ test("newFindings keeps only what an edit introduced", () => {
   assert.deepEqual(newFindings(afterResult.errors, afterResult.errors), []);
 });
 
+test("a new defect matching a pre-existing one's code and value is still reported", () => {
+  // Keying a finding on its code and offending value alone was not enough: a
+  // patch could add a genuinely new question carrying the same defect on the same
+  // word, and the baseline filter would write it off as pre-existing. The block's
+  // own id is what separates them.
+  const before = buildDoc({
+    title: "T",
+    sections: [
+      {
+        name: "One",
+        blocks: [
+          { type: "text", text: "The delta spreads wide." },
+          {
+            type: "question",
+            questionType: "background",
+            prompt: "Q1",
+            background: "ctx",
+            answer: "delta",
+          },
+        ],
+      },
+      {
+        name: "Two",
+        blocks: [{ type: "text", text: "A delta forms slowly." }],
+      },
+    ],
+  });
+  const beforeErrors = validateLesson(before).errors;
+  assert.deepEqual(codes(beforeErrors), ["E_BACKGROUND_IN_TEXT"]);
+
+  const after = applyPatch(before, [
+    {
+      op: "add_block",
+      sectionId: before.sections[1].id,
+      block: {
+        type: "question",
+        questionType: "background",
+        prompt: "Q2",
+        background: "ctx",
+        answer: "delta",
+      },
+    },
+  ]);
+  const introduced = newFindings(beforeErrors, validateLesson(after).errors);
+  assert.deepEqual(codes(introduced), ["E_BACKGROUND_IN_TEXT"]);
+  assert.equal(introduced[0].section, 2, "the new one, not the inherited one");
+});
+
 test("a patch that renumbers sections doesn't resurrect pre-existing findings", () => {
   const input = lessonInput();
   input.sections[4].blocks[2].words[0] = "torrent"; // pre-existing duplicate
+  input.sections[4].blocks[2].words.push("shipping"); // pre-existing 5th word
   const before = buildDoc(input);
   const beforeResult = validateLesson(before);
   assert.ok(codes(beforeResult.errors).includes("E_SPELLING_DUPLICATE"));
+  assert.ok(codes(beforeResult.warnings).includes("W_SPELLING_COUNT"));
 
-  // Move the offending section; the finding's identity must not move with it.
+  // Move the offending section to the front. Two things could betray the
+  // finding's identity: the section's number, and — for a collision, which names
+  // two parties — which end of the pair the walk reaches first. Neither may.
   const after = applyPatch(before, [
     { op: "move_section", sectionId: before.sections[4].id, index: 0 },
   ]);
-  const introduced = newFindings(
-    beforeResult.errors,
-    validateLesson(after).errors,
+  const afterResult = validateLesson(after);
+  assert.deepEqual(
+    codes(newFindings(beforeResult.errors, afterResult.errors)),
+    [],
   );
-  assert.deepEqual(codes(introduced), []);
+  assert.deepEqual(
+    codes(newFindings(beforeResult.warnings, afterResult.warnings)),
+    [],
+  );
 });
 
 test("rich-text passages are flattened before grounding", () => {

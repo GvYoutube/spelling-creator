@@ -196,6 +196,14 @@ function numericKey(value) {
   return Number.isFinite(n) ? String(n) : normalizeText(value);
 }
 
+// A collision names two parties, and which one the walk reaches first depends on
+// section order — so moving a section would otherwise rewrite the key and make an
+// untouched defect look newly introduced. Sorting makes the pair itself the
+// identity, whichever end it was found from.
+function pairKey(a, b) {
+  return [String(a), String(b)].sort().join("|");
+}
+
 /**
  * Check a built lesson document against the authoring standard.
  *
@@ -223,6 +231,7 @@ export function validateLesson(doc) {
     return {
       index: i,
       number: i + 1,
+      id: section?.id || `section#${i}`,
       label: sectionLabel(section, i),
       blocks,
       passage: sectionPassage(blocks),
@@ -235,11 +244,13 @@ export function validateLesson(doc) {
   // Every text answer in the lesson, tagged with the question that owns it — the
   // input to the lesson-wide collision checks further down.
   const allAnswers = [];
-  let questionCounter = 0;
 
   for (const ctx of context) {
     ctx.questions.forEach((block, qi) => {
-      const questionId = questionCounter++;
+      // Block ids are what make a finding's identity survive an edit elsewhere in
+      // the lesson: they are generated once and carried through move_section,
+      // move_block and replace_block alike. Position would not be.
+      const questionId = block?.id || `${ctx.id}#q${qi}`;
       const answers = answersOf(block);
       const where = `${ctx.label}, question ${qi + 1}`;
 
@@ -260,7 +271,7 @@ export function validateLesson(doc) {
             if (containsPhrase(ctx.passage, normalizeText(answer))) continue;
             error(
               "E_GROUNDING_SINGLE",
-              normalizeText(answer),
+              `${questionId}:${normalizeText(answer)}`,
               ctx.number,
               `${ctx.label}: the answer "${answer}" does not appear in that section's passage. ` +
                 "A green (single) answer must be findable, word for word, in the section's own text — " +
@@ -277,7 +288,7 @@ export function validateLesson(doc) {
           ) {
             warn(
               "W_ORANGE_ANSWER_COUNT",
-              `${ctx.number}:${qi}`,
+              questionId,
               ctx.number,
               `${where}: this orange (multiple) question accepts ${answers.length} answer(s). ` +
                 `Aim for ${ORANGE_MIN_ANSWERS}-${ORANGE_MAX_ANSWERS}, so the speller has a real choice without hunting.`,
@@ -288,7 +299,7 @@ export function validateLesson(doc) {
             if (!isSingleWord(norm)) {
               warn(
                 "W_ORANGE_MULTIWORD",
-                norm,
+                `${questionId}:${norm}`,
                 ctx.number,
                 `${where}: the accepted answer "${answer}" is more than one word. ` +
                   "Orange answers should be single words — a speller pointing to letters on a letterboard " +
@@ -299,7 +310,7 @@ export function validateLesson(doc) {
             if (isSingleWord(norm)) {
               error(
                 "E_ORANGE_PARAPHRASED",
-                norm,
+                `${questionId}:${norm}`,
                 ctx.number,
                 `${ctx.label}: the accepted answer "${answer}" does not appear in that section's passage. ` +
                   "Orange answers must be words the passage actually uses — do not paraphrase (if the text says " +
@@ -309,7 +320,7 @@ export function validateLesson(doc) {
             } else {
               error(
                 "E_GROUNDING_MULTIPLE",
-                norm,
+                `${questionId}:${norm}`,
                 ctx.number,
                 `${ctx.label}: the accepted answer "${answer}" does not appear in that section's passage. ` +
                   "Match the passage's own wording, and prefer a single concrete word the speller can find in the text.",
@@ -328,7 +339,7 @@ export function validateLesson(doc) {
             if (containsPhrase(ctx.passage, normalizeText(answer))) continue;
             error(
               "E_GROUNDING_NUMBER_FILL",
-              normalizeText(answer),
+              `${questionId}:${normalizeText(answer)}`,
               ctx.number,
               `${ctx.label}: the answer ${answer} does not appear in that section's passage. ` +
                 "A fill-in-the-blank purple question asks for a number the passage states. If this is meant to be " +
@@ -344,7 +355,7 @@ export function validateLesson(doc) {
           if (!backgroundText) {
             error(
               "E_BACKGROUND_NO_CONTEXT",
-              `${ctx.number}:${qi}`,
+              questionId,
               ctx.number,
               `${where}: this blue (background) question has no \`background\` field. ` +
                 "Add the prior-knowledge context the speller is expected to bring to it.",
@@ -354,7 +365,7 @@ export function validateLesson(doc) {
             if (!containsPhrase(ctx.passage, normalizeText(answer))) continue;
             error(
               "E_BACKGROUND_IN_TEXT",
-              normalizeText(answer),
+              `${questionId}:${normalizeText(answer)}`,
               ctx.number,
               `${ctx.label}: the background answer "${answer}" appears in that section's passage. ` +
                 "A blue question must need knowledge from outside the lesson — that is the entire point of the type. " +
@@ -368,7 +379,7 @@ export function validateLesson(doc) {
           if (RETIRED_STEM.test(block.prompt || "")) {
             error(
               "E_RETIRED_STEM",
-              `${ctx.number}:${qi}`,
+              questionId,
               ctx.number,
               `${where}: the stem "…one word that comes to mind…" is retired — it was overused to the point ` +
                 'of becoming a tic. For a tight open, name an everyday category instead: "Name a color of a crayon", ' +
@@ -388,7 +399,7 @@ export function validateLesson(doc) {
     if (!ctx.questions.length) {
       warn(
         "W_NO_QUESTION",
-        String(ctx.number),
+        ctx.id,
         ctx.number,
         `${ctx.label} has no question. Each section should end with its own questions about its own content — ` +
           "add them, or move them out of any separate quiz section at the end.",
@@ -398,7 +409,7 @@ export function validateLesson(doc) {
       if (shape.join(",") !== QUESTION_ORDER.join(",")) {
         warn(
           "W_QUESTION_SHAPE",
-          String(ctx.number),
+          ctx.id,
           ctx.number,
           `${ctx.label} has ${shape.length} question(s) in the order ${shape.join(", ")}. ` +
             `The default is ${QUESTION_ORDER.length}, in this order: ${QUESTION_ORDER.join(", ")} ` +
@@ -416,7 +427,7 @@ export function validateLesson(doc) {
         if (!tightOk || !extendedOk) {
           warn(
             "W_OPEN_SPLIT",
-            String(ctx.number),
+            ctx.id,
             ctx.number,
             `${ctx.label}: the ${opens.length} pink questions don't read as ${TIGHT_OPENS} tight opens followed by ` +
               `${EXTENDED_OPENS} extended opens. The first ${TIGHT_OPENS} should be easy one-word recall from the ` +
@@ -430,7 +441,7 @@ export function validateLesson(doc) {
       if (numbers.length >= 2 && !numbers.some(hasSteps)) {
         warn(
           "W_NUMBER_NO_STEPS",
-          String(ctx.number),
+          ctx.id,
           ctx.number,
           `${ctx.label}: no purple question carries \`steps\`. The second one is the word problem — put its ` +
             "worked solution in the `steps` array, one step per element, rather than in the prompt or nowhere at all.",
@@ -441,7 +452,7 @@ export function validateLesson(doc) {
     if (ctx.spelling.length !== SPELLING_WORDS_PER_SECTION) {
       warn(
         "W_SPELLING_COUNT",
-        String(ctx.number),
+        ctx.id,
         ctx.number,
         `${ctx.label} has ${ctx.spelling.length} spelling word(s). The default is exactly ` +
           `${SPELLING_WORDS_PER_SECTION} per section.`,
@@ -453,7 +464,7 @@ export function validateLesson(doc) {
       if (letters < SPELLING_MIN_LETTERS || letters > SPELLING_MAX_LETTERS) {
         error(
           "E_SPELLING_LENGTH",
-          normalizeText(word),
+          `${ctx.id}:${normalizeText(word)}`,
           ctx.number,
           `${ctx.label}: the spelling word "${word}" is ${letters} letters. Spelling words must be ` +
             `${SPELLING_MIN_LETTERS}-${SPELLING_MAX_LETTERS} letters.`,
@@ -462,7 +473,7 @@ export function validateLesson(doc) {
       if (ctx.caps.has(normalizeText(word))) {
         warn(
           "W_SPELLING_IN_CAPS",
-          normalizeText(word),
+          `${ctx.id}:${normalizeText(word)}`,
           ctx.number,
           `${ctx.label}: the spelling word "${word}" is also ALL-CAPS learning vocabulary in that section's ` +
             "passage. The two lists are meant to be separate — reusing the passage's vocabulary as a warm-up word " +
@@ -485,7 +496,7 @@ export function validateLesson(doc) {
       if (first && first.ctx.number !== ctx.number) {
         error(
           "E_SPELLING_DUPLICATE",
-          norm,
+          `${pairKey(first.ctx.id, ctx.id)}|${norm}`,
           ctx.number,
           `The spelling word "${word}" is used in both section ${first.ctx.number} and section ${ctx.number}. ` +
             "Each section needs its own four words.",
@@ -493,7 +504,7 @@ export function validateLesson(doc) {
       } else if (first) {
         error(
           "E_SPELLING_DUPLICATE",
-          norm,
+          `${ctx.id}|${norm}`,
           ctx.number,
           `${ctx.label} lists the spelling word "${word}" twice.`,
         );
@@ -508,7 +519,7 @@ export function validateLesson(doc) {
       if (!answer.norm.includes(norm)) continue;
       error(
         "E_SPELLING_COLLISION",
-        `${norm}|${answer.norm}`,
+        `${pairKey(ctx.id, answer.questionId)}|${norm}|${answer.norm}`,
         ctx.number,
         `Section ${ctx.number}'s spelling word "${word}" appears inside the answer "${answer.text}" ` +
           `(${answer.where}). A spelling word must not turn up in any answer anywhere in the lesson — the ` +
@@ -535,7 +546,7 @@ export function validateLesson(doc) {
     if (seen.questionId === answer.questionId) continue;
     error(
       "E_ANSWER_WORD_REUSED",
-      answer.norm,
+      `${pairKey(seen.questionId, answer.questionId)}|${answer.norm}`,
       answer.section,
       `The answer "${answer.text}" is used by more than one question (${seen.where} and ${answer.where}). ` +
         "Each answer word belongs to exactly one question, anywhere in the lesson and at any length — give this " +
@@ -551,7 +562,7 @@ export function validateLesson(doc) {
       if (!wordsOf(other.norm).includes(norm)) continue;
       error(
         "E_ANSWER_WORD_REUSED",
-        `${norm}|${other.norm}`,
+        `${pairKey(answer.questionId, other.questionId)}|${norm}|${other.norm}`,
         answer.section,
         `The one-word answer "${answer.text}" (${answer.where}) also appears inside the answer "${other.text}" ` +
           `(${other.where}). A word that answers one question should not turn up in another question's answer.`,
@@ -563,25 +574,32 @@ export function validateLesson(doc) {
   // ever resolve to the same figure.
   const seenNumbers = new Map();
   for (const ctx of context) {
-    for (const block of ctx.questions) {
-      if (block.questionType !== "number") continue;
+    ctx.questions.forEach((block, qi) => {
+      if (block.questionType !== "number") return;
+      const questionId = block?.id || `${ctx.id}#q${qi}`;
       for (const answer of answersOf(block)) {
         const key = numericKey(answer);
         const first = seenNumbers.get(key);
         if (first) {
+          // Both purple questions in one section can land on the same figure, and
+          // "section 1 and section 1" would leave the author hunting.
+          const place =
+            first.ctx.number === ctx.number
+              ? `both in section ${ctx.number}`
+              : `section ${first.ctx.number} and section ${ctx.number}`;
           error(
             "E_NUMBER_DUPLICATE",
-            key,
+            `${pairKey(first.questionId, questionId)}|${key}`,
             ctx.number,
-            `The number ${answer} answers two different questions (section ${first} and section ${ctx.number}). ` +
+            `The number ${answer} answers two different questions (${place}). ` +
               "Every numeric answer in a lesson should be distinct — rework one of the problems so it lands on a " +
               "different figure.",
           );
         } else {
-          seenNumbers.set(key, ctx.number);
+          seenNumbers.set(key, { ctx, questionId });
         }
       }
-    }
+    });
   }
 
   if (sections.length !== SECTION_COUNT) {
