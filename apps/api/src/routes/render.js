@@ -4,9 +4,16 @@
 // scrapers that don't run JavaScript would otherwise only see the empty
 // index.html shell, so we detect them by User-Agent and instead return a fully
 // rendered HTML snapshot produced by headless Chromium (@cloudflare/puppeteer).
+//
+// Most of that job now belongs to routes/ssr.js, which renders /hub, /hub/:id
+// and /users/:id with React for every visitor. What's left here is the tail:
+// "/" (whose content is auth-gated, so an anonymous render is only ever the
+// marketing splash) and any future route SSR doesn't reach. The og-image
+// endpoint below is unaffected — it takes screenshots, which SSR cannot do.
 
 import puppeteer from '@cloudflare/puppeteer';
 import { textResponse } from '../lib/http.js';
+import { serverRender, shouldServerRender } from './ssr.js';
 
 // User-Agents of crawlers/scrapers worth prerendering for: search engines and
 // the link-preview bots used by social/chat platforms.
@@ -164,9 +171,20 @@ export async function ogImage(request, env, ctx, url) {
 	}
 }
 
-// Serve the frontend: prerender for crawlers, otherwise hand back the static
-// asset (env.ASSETS resolves SPA routes to index.html via not_found_handling).
+// Serve the frontend, in preference order:
+//
+//   1. Server-render it, for everyone, if it's one of the public read routes
+//      (routes/ssr.js). Returns null if it isn't, or if anything went wrong.
+//   2. Prerender it with headless Chromium, for crawlers only, on the routes
+//      SSR doesn't cover — today that's "/" and nothing else, since the rest
+//      are auth-gated pages no crawler has any business indexing.
+//   3. Hand back the static asset (env.ASSETS resolves SPA routes to index.html
+//      via not_found_handling).
 export async function handleFrontend(request, env, ctx, url) {
+	if (shouldServerRender(request, url)) {
+		const rendered = await serverRender(request, env, ctx, url);
+		if (rendered) return rendered;
+	}
 	if (env.BROWSER && shouldPrerender(request, url)) {
 		return prerender(request, env, ctx, url);
 	}

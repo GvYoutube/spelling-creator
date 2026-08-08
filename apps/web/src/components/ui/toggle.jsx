@@ -34,9 +34,8 @@ const toggleVariants = cva(
   },
 );
 
-// forwardRef so Toggle can be an asChild/Anchor target of Radix components —
-// React 18 requires it explicitly (React 19 accepts ref as a plain prop, but
-// this project is still on 18).
+// forwardRef so Toggle can be an asChild/Anchor target of Radix components.
+// See the note in dialog.jsx on why these wrappers outlived React 18.
 const Toggle = forwardRef(function Toggle(
   { className, variant, size, ...props },
   ref,

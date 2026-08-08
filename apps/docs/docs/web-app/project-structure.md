@@ -7,8 +7,9 @@ sidebar_position: 15
 
 ```
 src/
-  App.jsx                 route table (editor / hub / lesson / profile / login / moderation)
-  main.jsx                React entry: ColorSchemeProvider + BrowserRouter + AuthProvider + DisplayNameGate + Toaster + ServiceWorkerPrompt
+  App.jsx                 route table (editor / hub / lesson / profile / login / moderation); the editor, moderation, login and OAuth routes are lazy (see pages-and-routing.md)
+  main.jsx                React entry: ColorSchemeProvider + BrowserRouter + SsrProvider + AuthProvider + DisplayNameGate + Toaster + ServiceWorkerPrompt; hydrates a server-rendered page, mounts a plain one
+  entry-server.jsx        the same tree built for the Worker (see server-rendering.md) — kept structurally in step with main.jsx
   styles/globals.css      Tailwind v4 + shadcn/ui design tokens (light/dark palettes, glass-surface shadows/blur), plus the `mb-safe` utility (see mobile-layout.md)
   locales/en/*.json      one JSON file per i18next namespace (see internationalization.md)
   pages/
@@ -59,10 +60,13 @@ src/
     useScrollAnchor.js    keeps a section/block still on screen while the move buttons reorder it, plus scrollToElement/idSelector (see navigating-large-lessons.md)
     git/                  what has to stay in the app — the rest is in core (see below)
       engine.js, load.js  the git engine, behind one dynamic import (keeps ~185 KB off the main bundle)
+    exports/
+      engine.js, load.js  the docx/PDF/preview/import pipeline, behind one dynamic import (keeps ~390 KB gzipped off every page that never exports)
       useLessonGit.js     the editor's controller: setup, periodic commits, history, restore
     useImageSrc.js        resolves an image ref to a displayable src
     auth.jsx              AuthProvider + useAuth (session, magic link, sign out)
-    seo.js                per-page document title + Open Graph / Twitter tags
+    seo.jsx               <DocumentMeta> / <JsonLd> — React 19 hoists these into <head>, which is what makes them work under SSR
+    ssr.jsx               the client/server handoff: SsrProvider, useServerData, useSiteOrigin
     pwa.jsx               registers the service worker; toasts when a new build is waiting
     useInstallPrompt.js   captures beforeinstallprompt (or detects iOS Safari) behind the install button
 ```
@@ -143,6 +147,7 @@ apply the same rules. Each module is its own subpath export.
   lessonFile            the .json lesson-file envelope (shared with the importer + MCP)
   jsonImport            parse + validate a .json lesson file back into the lesson model
   image                 image sizing: selectable sizes, scale, fit-within
+  lessonLayout          the two presentation constants every lesson render shares (DOCX_MAX_IMAGE_WIDTH, PREVIEW_STYLES) — outside browser/ so the viewer and the server render can use them without pulling in docx + mammoth
   id                    id generation
   wikimedia             Commons action-API round-trip + attribution metadata
   lessons               list / fetch / publish hub lessons (+ the feed URL)

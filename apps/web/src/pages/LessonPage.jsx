@@ -5,7 +5,7 @@
 // export use, and shows the comments below. Authors get Edit/Delete here too.
 
 import { hasApi } from "@spelling-creator/core/config";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link as RouterLink, useNavigate, useParams } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
@@ -70,13 +70,15 @@ import {
 } from "@spelling-creator/core/moderation";
 import { useAuth } from "../lib/auth.jsx";
 import {
-  useDocumentMeta,
-  useJsonLd,
+  DocumentMeta,
+  JsonLd,
   buildLessonCourseSchema,
   htmlToDescription,
-} from "../lib/seo.js";
-import { exportDocx } from "@spelling-creator/core/browser/docxExport";
-import { exportPdf } from "@spelling-creator/core/browser/pdfExport";
+} from "../lib/seo.jsx";
+import { useServerData, useSiteOrigin } from "../lib/ssr.jsx";
+// The docx/PDF pipeline loads on demand — see lib/exports/engine.js. This is a
+// public, server-rendered route, so it must not preload the Word toolchain.
+import { loadExportEngine } from "../lib/exports/load.js";
 
 function formatDate(value) {
   if (!value) return "";
@@ -100,9 +102,16 @@ export default function LessonPage() {
     isAdmin,
   } = useAuth();
   const navigate = useNavigate();
+  const origin = useSiteOrigin();
 
-  const [lesson, setLesson] = useState(null);
-  const [loading, setLoading] = useState(true);
+  // Present only on the very first render of a server-rendered page load: the
+  // Worker already fetched this lesson anonymously, so hydration starts with the
+  // document rather than a skeleton, and the effect below skips the round trip
+  // it would otherwise repeat. undefined on every client-side navigation.
+  const serverLesson = useServerData("lesson");
+
+  const [lesson, setLesson] = useState(serverLesson ?? null);
+  const [loading, setLoading] = useState(!serverLesson);
   const [error, setError] = useState("");
 
   // Which export is in flight ('docx' | 'pdf' | null).
@@ -129,6 +138,13 @@ export default function LessonPage() {
   const [ipBanBusy, setIpBanBusy] = useState(false);
   const [ipBanError, setIpBanError] = useState("");
 
+  // Which lesson the server-rendered copy is of, or null when there isn't one.
+  // Keyed by id rather than a spend-once flag: this effect re-runs for reasons
+  // that have nothing to do with the data going stale (i18next handing back a
+  // new `t`, the session resolving), and a one-shot flag would be burnt by the
+  // first of those and re-fetch a lesson we already have.
+  const serverLessonId = useRef(serverLesson ? id : null);
+
   useEffect(() => {
     if (!hasApi()) {
       setLoading(false);
@@ -138,10 +154,24 @@ export default function LessonPage() {
     // the access token to load for its owner, and firing off token-less first
     // would flash a spurious "not found" for them until this effect re-runs.
     if (authLoading) return;
+
+    // The Worker renders anonymously, so what it sent is the public view of the
+    // lesson — exactly what a signed-out visitor should see, and no reason to
+    // fetch it a second time. A signed-in one still needs the authenticated
+    // view (their own unpublished draft, the moderator fields), so they fall
+    // through and re-fetch quietly underneath what's already on screen rather
+    // than dropping back to a skeleton.
+    const hadServerLesson = serverLessonId.current === id;
+    if (hadServerLesson && !accessToken) return;
+    // Past this point we're fetching, so the server's copy stops counting.
+    serverLessonId.current = null;
+
     let cancelled = false;
-    setLoading(true);
-    setError("");
-    setLesson(null);
+    if (!hadServerLesson) {
+      setLoading(true);
+      setError("");
+      setLesson(null);
+    }
     (async () => {
       try {
         const full = await fetchLesson(id, accessToken);
@@ -151,7 +181,13 @@ export default function LessonPage() {
         // on here — the page shows as soon as the lesson JSON arrives.
         setLesson(full);
       } catch (err) {
-        if (!cancelled) setError(err.message || t("lessonPage.couldNotOpen"));
+        if (cancelled) return;
+        // A failed *quiet* re-fetch must not take the page down with it: the
+        // server-rendered lesson on screen is still correct public content, and
+        // `error` would replace it with an alert. All that's lost is the
+        // signed-in view of it, which is worth strictly less than the content.
+        if (hadServerLesson) console.error("Lesson re-fetch failed", err);
+        else setError(err.message || t("lessonPage.couldNotOpen"));
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -205,9 +241,11 @@ export default function LessonPage() {
     setBusy(kind);
     try {
       if (kind === "docx") {
+        const { exportDocx } = await loadExportEngine();
         await exportDocx(lesson.doc);
         toast(t("lessonPage.wordDownloaded"));
       } else {
+        const { exportPdf } = await loadExportEngine();
         await exportPdf(lesson.doc);
         toast(t("lessonPage.pdfGenerated"));
       }
@@ -333,37 +371,37 @@ export default function LessonPage() {
         : t("lessonPage.metaDescription")
       : undefined);
 
-  // Per-page title + social/SEO tags. Crawlers receive these in the Worker's
-  // prerendered snapshot.
-  useDocumentMeta({
-    type: "article",
-    title:
-      lesson?.title ||
-      (loading
-        ? t("lessonPage.lessonFallback")
-        : error
-          ? t("lessonPage.lessonNotFound")
-          : t("lessonPage.lessonFallback")),
-    description,
-  });
+  const metaTitle =
+    lesson?.title ||
+    (loading
+      ? t("lessonPage.lessonFallback")
+      : error
+        ? t("lessonPage.lessonNotFound")
+        : t("lessonPage.lessonFallback"));
 
   // schema.org Course structured data so Google can show this lesson as a rich
-  // result. Captured by the prerendered snapshot the same way the meta tags are.
-  // Only emit it once the lesson has loaded successfully (no markup for the
-  // loading/error states).
-  useJsonLd(
+  // result. Only emitted once the lesson has loaded successfully — no markup for
+  // the loading or error states.
+  const courseSchema =
     lesson && !error
       ? buildLessonCourseSchema({
           lesson,
           description,
-          url: `${window.location.origin}/hub/${id}`,
-          origin: window.location.origin,
+          url: `${origin}/hub/${id}`,
+          origin,
         })
-      : null,
-  );
+      : null;
 
   return (
     <div className="min-h-dvh bg-background pb-16 text-foreground">
+      {/* Title + social/SEO tags. React hoists these into <head>, so the
+          server-rendered HTML carries them and a crawler needs no JavaScript. */}
+      <DocumentMeta
+        type="article"
+        title={metaTitle}
+        description={description}
+      />
+      <JsonLd data={courseSchema} />
       <AppHeader
         title={lesson?.title || t("lessonPage.lessonFallback")}
         left={

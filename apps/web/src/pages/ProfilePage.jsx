@@ -7,7 +7,7 @@
 // the user's Atom activity feed (lessons + comments) served by the Worker.
 
 import { fetchUserActivity } from "@spelling-creator/core/browser/feeds";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Link as RouterLink, useParams } from "react-router-dom";
 import {
@@ -46,7 +46,8 @@ import {
   userFeedUrl,
 } from "@spelling-creator/core/users";
 import { useAuth } from "../lib/auth.jsx";
-import { useDocumentMeta } from "../lib/seo.js";
+import { DocumentMeta } from "../lib/seo.jsx";
+import { useServerData } from "../lib/ssr.jsx";
 
 function formatDate(value) {
   if (!value) return "";
@@ -70,9 +71,14 @@ export default function ProfilePage() {
   const { user: me, accessToken, enabled } = useAuth();
   const isOwner = Boolean(me && me.id === id);
 
-  const [profile, setProfile] = useState(null);
-  const [lessons, setLessons] = useState([]);
-  const [loading, setLoading] = useState(true);
+  // What the Worker fetched and rendered for this profile, on a server-rendered
+  // page load. The profile and its lesson list are public; the activity feed is
+  // parsed with DOMParser and stays client-only. See lib/ssr.jsx.
+  const serverProfile = useServerData("profile");
+
+  const [profile, setProfile] = useState(serverProfile?.user ?? null);
+  const [lessons, setLessons] = useState(serverProfile?.lessons ?? []);
+  const [loading, setLoading] = useState(!serverProfile);
   const [error, setError] = useState("");
   const [bioOpen, setBioOpen] = useState(false);
 
@@ -107,25 +113,50 @@ export default function ProfilePage() {
       .finally(() => setActivityLoading(false));
   };
 
-  const load = useCallback(() => {
-    if (!id) return;
-    setLoading(true);
-    setError("");
-    // Pass the token so the server can tell us whether *we* follow this profile.
-    fetchUserProfile(id, accessToken)
-      .then(({ user, lessons }) => {
-        setProfile(user);
-        setLessons(lessons);
-      })
-      .catch((err) =>
-        setError(err.message || t("profilePage.profileLoadError")),
-      )
-      .finally(() => setLoading(false));
-  }, [id, accessToken, t]);
+  // `quiet` re-fetches underneath whatever is already on screen, instead of
+  // clearing back to a skeleton — used when the server already rendered this
+  // profile and we're only upgrading it to the signed-in view.
+  const load = useCallback(
+    (quiet = false) => {
+      if (!id) return;
+      if (!quiet) {
+        setLoading(true);
+        setError("");
+      }
+      // Pass the token so the server can tell us whether *we* follow this profile.
+      return fetchUserProfile(id, accessToken)
+        .then(({ user, lessons }) => {
+          setProfile(user);
+          setLessons(lessons);
+        })
+        .catch((err) => {
+          // Same rule as LessonPage: a failed quiet re-fetch leaves the
+          // server-rendered profile alone rather than replacing correct public
+          // content with an error alert.
+          if (quiet) console.error("Profile re-fetch failed", err);
+          else setError(err.message || t("profilePage.profileLoadError"));
+        })
+        .finally(() => setLoading(false));
+    },
+    [id, accessToken, t],
+  );
+
+  // Which profile the server-rendered copy is of, or null when there isn't one.
+  // Keyed by id rather than a spend-once flag, for the same reason as
+  // LessonPage: this effect re-runs whenever `load` changes identity, and a
+  // one-shot flag would be burnt by that and re-fetch what we already have.
+  const serverProfileId = useRef(serverProfile ? id : null);
 
   useEffect(() => {
-    load();
-  }, [load]);
+    const hadServerProfile = serverProfileId.current === id;
+    // The Worker renders anonymously, which is the complete public profile — a
+    // signed-out visitor needs nothing more. A signed-in one does: only an
+    // authenticated fetch reports whether *they* follow this person, so they
+    // re-fetch quietly rather than dropping back to a skeleton.
+    if (hadServerProfile && !accessToken) return;
+    serverProfileId.current = null;
+    load(hadServerProfile);
+  }, [load, accessToken, id]);
 
   // Follow or unfollow this profile, then patch the local follow flag + count
   // from the server's response so the button and header update immediately.
@@ -158,21 +189,22 @@ export default function ProfilePage() {
   const followerCount = profile?.followerCount ?? 0;
   const followingCount = profile?.followingCount ?? 0;
 
-  useDocumentMeta({
-    title: profile ? `${displayName}` : t("profilePage.documentTitle"),
-    // The bio is rich-text HTML, but a meta/OG description is plain text — raw markup
-    // would show up verbatim in search snippets and link previews. Flatten it to one
-    // truncated line.
-    description: profile
-      ? richTextToLine(bio) ||
-        t("profilePage.metaDescriptionFallback", { name: displayName })
-      : undefined,
-  });
-
   const feedUrl = userFeedUrl(id);
 
   return (
     <div className="min-h-dvh bg-background pb-16 text-foreground">
+      <DocumentMeta
+        title={profile ? displayName : t("profilePage.documentTitle")}
+        // The bio is rich-text HTML, but a meta/OG description is plain text — raw
+        // markup would show up verbatim in search snippets and link previews.
+        // Flatten it to one truncated line.
+        description={
+          profile
+            ? richTextToLine(bio) ||
+              t("profilePage.metaDescriptionFallback", { name: displayName })
+            : undefined
+        }
+      />
       <AppHeader
         title={t("profilePage.headerTitle")}
         left={

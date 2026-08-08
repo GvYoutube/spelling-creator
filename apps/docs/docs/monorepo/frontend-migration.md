@@ -5,8 +5,59 @@ sidebar_position: 5
 
 # Frontend migration
 
-A decision record, not a commitment. The enabling work is done and was worth
-doing on its own terms; the framework choice is still open.
+A decision record. **Resolved: option D — stay on React, add SSR.** The rest of
+this page is kept as the reasoning, because the measurement that settled it is
+worth not repeating.
+
+## The decision
+
+Option C (Solid without a meta-framework) was measured against option D and lost
+on its own terms. The short version:
+
+- The reactivity win lands on **~2% of the shipped bytes**. Before any of this
+  work, initial JS was **981 kB gzipped**; React itself was ~15–20 kB of it. The
+  ~800 kB `vendor` chunk was the actual problem, and it was full of `docx`,
+  `mammoth`, `html2pdf.js` and `html2canvas` — an export pipeline nobody needs
+  until they click Export.
+- Conversion cost is 14,600 lines plus a silent-failure mode (destructured
+  props) across 107 sites.
+- The one place fine-grained reactivity would genuinely pay — the editor's
+  per-field and presence rendering — is phase 5, gated on `solid-tiptap`, which
+  was last published in August 2025. That is the same exposure as option B, so
+  C's "Medium" ecosystem risk in the table below was too generous.
+
+What was done instead, in order:
+
+| Change                                                                           | Effect                                                |
+| -------------------------------------------------------------------------------- | ----------------------------------------------------- |
+| Export pipeline behind a dynamic import; editor and other non-public routes lazy | initial JS **981 kB → 406 kB gzipped**                |
+| React 18.3 → 19                                                                  | document metadata hoisting; compiler targets 19       |
+| Hand-rolled SSR on the Worker for `/hub`, `/hub/:id`, `/users/:id`               | real HTML for readers and crawlers, no meta-framework |
+
+See [Server rendering](../web-app/server-rendering.md) and
+[How the export pipeline works](../web-app/export-pipeline.md) for what shipped.
+
+Solid remains available later, if the editor's reactivity cost ever becomes the
+_measured_ problem rather than the assumed one.
+
+### What the bundle actually contained
+
+Attributed through sourcemaps, before the split:
+
+| Chunk         | gzipped | Dominated by                                                                   |
+| ------------- | ------- | ------------------------------------------------------------------------------ |
+| `vendor`      | 802 kB  | html2pdf.js, docx, html2canvas, yjs, prosemirror-view, mammoth, jszip          |
+| `index` (app) | 119 kB  | all 14,600 lines of view layer                                                 |
+| `react`       | 59 kB   | of which react-router is the larger share; react + react-dom is ~143 kB of src |
+
+All three were `modulepreload`ed, so all three were on the critical path for
+`/hub/:id`. The framework was never the weight.
+
+---
+
+Everything below is the original record, kept as written. Later corrections are
+marked as block quotes rather than edited in, so the reasoning at the time stays
+legible.
 
 ## What phase 1 established
 
@@ -87,6 +138,13 @@ deliberately: Satori cannot use system fonts, so Fraunces and Public Sans must b
 embedded as assets; and previews become a **designed card** rather than a
 screenshot. Probably an improvement for a lesson, but a visual change.
 
+> What shipped is narrower than this. `useDocumentMeta` and its 226 lines are
+> gone, replaced by React 19's hoisted metadata. But `prerender()`,
+> `shouldPrerender()` and `CRAWLER_UA` **stay**: they still cover `/`, whose
+> content is auth-gated, and they are the fallback when an SSR attempt fails.
+> Satori was not attempted, so `ogImage()`, the `browser` binding and
+> `nodejs_compat` are all untouched. Both remain open follow-ups.
+
 ## Options considered
 
 ### A — SvelteKit
@@ -103,6 +161,12 @@ Keeps JSX, but SolidStart is the weak link: **104K weekly downloads against
 SvelteKit's 2.5M**, on precisely the layer being adopted. Kobalte, the component
 foundation, is still 0.13.x.
 
+> Re-checked when the decision was made: Solid's own ecosystem is healthier than
+> this reads — `solid-js` 3.4M/wk, `@solidjs/router` since released as 1.0.0,
+> Kobalte 338K/wk and actively maintained (though still 0.13.x). The 104K figure
+> is SolidStart specifically and still accurate. The binding that actually
+> matters for this app is `solid-tiptap`, last published August 2025.
+
 ### C — Solid without a meta-framework
 
 Keeps JSX and the current SPA-served-by-the-Worker architecture. No SSR, so the
@@ -114,6 +178,15 @@ that can come later.
 
 The cheapest route to the only clear architectural win. React 19 SSR on the
 Worker already running. Forgoes the reactivity improvement entirely.
+
+> As originally written this said "React 19", but the app was on **18.3.1** —
+> so D also meant an upgrade. It turned out to be a bump and one config line:
+> every React-coupled dependency (`radix-ui`, `@tiptap/react`, `react-i18next`,
+> `sonner`, `react-router-dom`, `@tsparticles/react`, `lucide-react`) already
+> declared a `^19` peer, and there were no `defaultProps`, `propTypes`,
+> `ReactDOM.render` or `findDOMNode` call sites. React 19 also earns its keep
+> here beyond SSR: it hoists `<title>`/`<meta>` from anywhere in the tree, which
+> deleted `useDocumentMeta` — 226 lines across 7 pages — outright.
 
 ### Comparison
 
@@ -190,9 +263,11 @@ Notes on the config, all of which are load-bearing:
   natively, so Rsbuild's `loadEnv`/`publicVars` shim is gone. The prefix that
   had been kept for continuity is now simply correct.
 - **The React Compiler runs as a Babel pass** (`@rolldown/plugin-babel` +
-  `reactCompilerPreset({ target: "18" })`), not through SWC. `target: "18"` is
-  required: it emits imports from `react-compiler-runtime` rather than React
-  19's `react/compiler-runtime`, which React 18 does not export.
+  `reactCompilerPreset({ target: "19" })`), not through SWC. The target has to
+  match the installed React: on 18 it emits imports from the separate
+  `react-compiler-runtime` shim, on 19 from `react/compiler-runtime`, which
+  React itself exports. (Written as `target: "18"` originally; flipped, and the
+  shim package dropped, with the React 19 upgrade.)
 - **`codeSplitting.groups` is not optional.** Rolldown puts everything reachable
   from the entry in one chunk, where Rsbuild split vendors by default; without
   the groups, editing one app file invalidates ~3.4 MB for returning visitors.

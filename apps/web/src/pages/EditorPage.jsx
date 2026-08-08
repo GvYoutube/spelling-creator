@@ -1,7 +1,7 @@
 import { hasApi } from "@spelling-creator/core/config";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import { useDocumentMeta } from "../lib/seo.js";
+import { DocumentMeta } from "../lib/seo.jsx";
 import { toast } from "sonner";
 import { Trans, useTranslation } from "react-i18next";
 import {
@@ -98,17 +98,14 @@ import {
 } from "@spelling-creator/core/browser/storage";
 import { convertDocImages } from "@spelling-creator/core/browser/imageRef";
 import { ensureImagesUploaded } from "@spelling-creator/core/imagesClient";
-import { exportDocx } from "@spelling-creator/core/browser/docxExport";
-import { importDocxFile } from "@spelling-creator/core/browser/docxImport";
+// exportJson is a Blob and an <a> — no heavy dependency, so it stays static.
+// The docx/PDF/preview/import pipeline is not: it loads on demand through
+// lib/exports/load.js. See the comment in lib/exports/engine.js.
 import { exportJson } from "@spelling-creator/core/browser/jsonExport";
 import { importJsonFile } from "@spelling-creator/core/jsonImport";
-import { exportPdf } from "@spelling-creator/core/browser/pdfExport";
-import {
-  previewHtml,
-  PREVIEW_STYLES,
-} from "@spelling-creator/core/browser/htmlPreview";
+import { loadExportEngine } from "../lib/exports/load.js";
+import { PREVIEW_STYLES } from "@spelling-creator/core/lessonLayout";
 import { hasGoogleDrive } from "@spelling-creator/core/config";
-import { saveToGoogleDrive } from "@spelling-creator/core/browser/googleDrive";
 import {
   publishLesson,
   updateLesson,
@@ -217,7 +214,6 @@ function applyBlockDrag(
 }
 
 export default function EditorPage() {
-  useDocumentMeta();
   const { t } = useTranslation("editor");
   const [doc, setDoc] = useState(() => createInitialDoc(t));
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -981,12 +977,14 @@ export default function EditorPage() {
     setBusy(kind);
     try {
       if (kind === "docx") {
+        const { exportDocx } = await loadExportEngine();
         await exportDocx(doc);
         notify({ severity: "success", message: t("messages.wordDownloaded") });
       } else if (kind === "json") {
         exportJson(doc);
         notify({ severity: "success", message: t("messages.jsonDownloaded") });
       } else {
+        const { exportPdf } = await loadExportEngine();
         await exportPdf(doc);
         notify({
           severity: "success",
@@ -1014,6 +1012,7 @@ export default function EditorPage() {
     }
     setBusy("gdocs");
     try {
+      const { saveToGoogleDrive } = await loadExportEngine();
       const file = await saveToGoogleDrive(doc);
       notify({
         severity: "success",
@@ -1045,6 +1044,7 @@ export default function EditorPage() {
     }
     setBusy("preview");
     try {
+      const { previewHtml } = await loadExportEngine();
       const html = await previewHtml(doc);
       setPreviewContent(html);
     } catch (err) {
@@ -1427,6 +1427,7 @@ export default function EditorPage() {
     if (!file) return;
     setBusy("import");
     try {
+      const { importDocxFile } = await loadExportEngine();
       const imported = await importDocxFile(file);
       // Reuse the overwrite-confirmation flow when there's in-progress work to
       // lose; otherwise load straight away.
@@ -1539,6 +1540,8 @@ export default function EditorPage() {
 
   return (
     <div className="min-h-dvh bg-background pb-24 text-foreground">
+      {/* No page-specific title: the editor is the app default. */}
+      <DocumentMeta />
       <AppHeader
         title={t("header.title")}
         left={

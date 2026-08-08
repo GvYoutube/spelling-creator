@@ -6,11 +6,14 @@ import { Dialog as DialogPrimitive } from "radix-ui";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 
-// Every direct wrapper of a Radix primitive below is forwardRef'd — React 18
-// requires it explicitly (React 19 accepts ref as a plain prop, but this
-// project is still on 18). Radix needs these refs not just for asChild
-// composition but internally too: Overlay/Content use Presence, which grabs
-// the real DOM node to wait out exit animations before unmounting.
+// Every direct wrapper of a Radix primitive below is forwardRef'd. On React 19
+// `ref` is an ordinary prop, so this is no longer what makes a ref arrive — the
+// wrappers are kept because they still work and unwinding all 58 of them across
+// ui/ is a mechanical cleanup in its own right, not part of the upgrade.
+//
+// The refs themselves are not optional either way: Radix needs them for asChild
+// composition and internally too — Overlay/Content use Presence, which grabs the
+// real DOM node to wait out exit animations before unmounting.
 
 function Dialog({ ...props }) {
   return <DialogPrimitive.Root data-slot="dialog" {...props} />;

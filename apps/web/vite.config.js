@@ -21,6 +21,13 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 // unlisted SPA route falls through to the network, which online still lands on
 // index.html via the Worker's single-page-application fallback.
 const WORKER_PATHS = [
+  // The server-rendered routes (apps/api/src/routes/ssr.js). These have to be
+  // here or the service worker answers the navigation from its precached shell
+  // and the Worker is never asked — which silently turns SSR off for every
+  // returning visitor, the exact people whose browsers have the shell cached.
+  // Nothing is lost offline: all three need the network for their data anyway.
+  /^\/hub(\/|$)/,
+  /^\/users\//,
   /^\/docs(\/|$)/,
   /^\/images\//,
   /^\/git\//,
@@ -34,16 +41,64 @@ const WORKER_PATHS = [
   /^\/(sitemap\.xml|robots\.txt|feed\.xml|spelling-words\.json)$/,
 ];
 
+// Modules that exist only behind a click or a route the Worker never renders.
+// They are all reached through a dynamic import(), so the server build pulls
+// them in as emitted chunks it can never execute — the export pipeline alone is
+// 3.6 MB of docx/mammoth/html2pdf, and the editor another 550 kB, all of it
+// uploaded to the edge to sit unused. Replacing them with a stub in the SSR
+// build keeps the Worker to what it can actually run.
+//
+// Safe only because nothing static-imports them: src/lib/exports/load.js and
+// the lazy routes in src/App.jsx both use import(), so there are no named
+// bindings for the stub to fail to provide.
+const SSR_UNREACHABLE = [
+  "src/lib/exports/engine.js",
+  "src/pages/EditorPage.jsx",
+  "src/pages/ModerationPage.jsx",
+  "src/pages/LoginPage.jsx",
+  "src/pages/OAuthAuthorizePage.jsx",
+];
+
+function stubUnreachableOnServer() {
+  const targets = new Set(
+    SSR_UNREACHABLE.map((p) => path.resolve(__dirname, p)),
+  );
+  const STUB_ID = "\0ssr-unreachable";
+  return {
+    name: "stub-unreachable-on-server",
+    // Ahead of vite:resolve — a normal-phase plugin never gets asked, because
+    // the built-in resolver has already returned an id by then.
+    enforce: "pre",
+    async resolveId(source, importer, options) {
+      const resolved = await this.resolve(source, importer, {
+        ...options,
+        skipSelf: true,
+      });
+      return resolved && targets.has(resolved.id) ? STUB_ID : null;
+    },
+    load(id) {
+      if (id !== STUB_ID) return null;
+      // Reaching this means the route table and this list disagree.
+      return `export default function SsrUnreachable() {
+  throw new Error("This module was stubbed out of the server build (vite.config.js).");
+}\n`;
+    },
+  };
+}
+
 // `VITE_`-prefixed env vars from apps/web/.env are exposed to client code as
 // `import.meta.env.VITE_*` natively — no config needed. src/main.jsx is the
 // only place in the app that reads them (see packages/core/src/config.js).
-export default defineConfig({
+export default defineConfig(({ isSsrBuild }) => ({
   plugins: [
+    isSsrBuild && stubUnreachableOnServer(),
     react(),
-    // The React Compiler runs as a Babel pass. `target: "18"` makes it emit
-    // imports from `react-compiler-runtime` instead of React 19's
-    // `react/compiler-runtime`, which React 18 does not export.
-    babel({ presets: [reactCompilerPreset({ target: "18" })] }),
+    // The React Compiler runs as a Babel pass. This used to pass
+    // `target: "18"`, which makes it emit imports from the `react-compiler-runtime`
+    // shim; on React 19 the memoisation hooks it needs are exported by React
+    // itself as `react/compiler-runtime`, so the target matches the installed
+    // React and the shim package is gone.
+    babel({ presets: [reactCompilerPreset({ target: "19" })] }),
     tailwindcss(),
     // Progressive web app: the installable manifest plus a Workbox service
     // worker that precaches the built shell. The editor already keeps lessons
@@ -182,6 +237,21 @@ export default defineConfig({
     // so the browser build resolves it.
     global: "globalThis",
   },
+  // The server build (`pnpm build:ssr` -> dist-ssr/entry-server.js) that the
+  // Worker imports. `target: "webworker"` and the `react-dom/server.browser`
+  // entry below are what keep it inside the Web-standard surface workerd
+  // provides: no node:stream, no Node globals.
+  //
+  // Nothing is externalised — the Worker has no node_modules to resolve at
+  // runtime, so React and every component have to be in the bundle.
+  ssr: {
+    target: "webworker",
+    noExternal: true,
+    resolve: {
+      conditions: ["workerd", "worker", "browser", "module", "import"],
+    },
+  },
+
   build: {
     rolldownOptions: {
       output: {
@@ -221,4 +291,4 @@ export default defineConfig({
   // than the `["defaults", "not IE 11"]` browserslist this app used to compile
   // against — that query now resolves to a floor of chrome 109, edge 146,
   // firefox 140, safari 26.3. Chrome 109-110 is the only coverage given up.
-});
+}));

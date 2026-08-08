@@ -1,112 +1,102 @@
-// Per-page document metadata (title + Open Graph / Twitter tags).
+// Per-page document metadata (title + Open Graph / Twitter tags) and JSON-LD.
 //
-// The app is a client-rendered SPA, so the static index.html carries only
-// generic, site-wide tags. The Worker prerenders pages for crawlers with
-// headless Chromium and captures the live DOM, so any tags this hook writes
-// into <head> end up in the snapshot social/search scrapers receive. For real
-// users it just keeps the browser tab title in sync with the current page.
+// These used to be hooks that reached into `document.head` from an effect,
+// because the app was client-rendered and React 18 had no notion of document
+// metadata. React 19 hoists `<title>`, `<meta>` and `<link>` into `<head>` from
+// anywhere in the tree, so they are now ordinary JSX — which is what makes them
+// work under SSR: a crawler receives the real tags in the served HTML rather
+// than tags an effect writes after the bundle has run.
+//
+// (JSON-LD is deliberately *not* hoisted. React only hoists `<script>` when it
+// is `async`, and an async JSON-LD block would be meaningless — the type isn't
+// executable. It renders in place instead, which search engines accept: the
+// spec allows `application/ld+json` anywhere in the document.)
 
-import { useEffect } from "react";
+import { useLocation } from "react-router-dom";
+import { useSiteOrigin } from "./ssr.jsx";
 
 const SITE_NAME = "Spelling Lesson Maker";
 const DEFAULT_DESCRIPTION =
   "Create and print Spelling lessons with sections, text, and images.";
 
-// Upsert (or remove, when content is empty) a single <meta> tag identified by
-// the given attribute/key pair (e.g. name="description" or property="og:title").
-function setMetaTag(attr, key, content) {
-  const selector = `meta[${attr}="${key}"]`;
-  let el = document.head.querySelector(selector);
-  if (!content) {
-    if (el) el.remove();
-    return;
-  }
-  if (!el) {
-    el = document.createElement("meta");
-    el.setAttribute(attr, key);
-    document.head.appendChild(el);
-  }
-  el.setAttribute("content", content);
-}
-
 /**
- * Keep the document title and social/SEO meta tags in sync with the page.
- * @param {object}  meta
- * @param {string} [meta.title]        Page title; appended to the site name.
- * @param {string} [meta.description]  Meta/OG description (falls back to site default).
- * @param {string} [meta.image]        Absolute URL for the OG/Twitter preview
+ * Document title and social/SEO meta tags for the current page. Render it
+ * anywhere in a page's tree; React puts the tags in `<head>`.
+ *
+ * @param {object}  props
+ * @param {string} [props.title]        Page title; appended to the site name.
+ * @param {string} [props.description]  Meta/OG description (falls back to the site default).
+ * @param {string} [props.image]        Absolute URL for the OG/Twitter preview
  *   image. Leave undefined to default to a live screenshot of the current page
  *   (rendered by the Worker's /og-image endpoint); pass null to opt out entirely.
- * @param {string} [meta.type]         OG type: "website" (default) or "article".
+ * @param {string} [props.type]         OG type: "website" (default) or "article".
  */
-export function useDocumentMeta({
-  title,
-  description,
-  image,
-  type = "website",
-} = {}) {
-  useEffect(() => {
-    const fullTitle = title ? `${title} · ${SITE_NAME}` : SITE_NAME;
-    const desc = description || DEFAULT_DESCRIPTION;
-    const { origin, pathname, href } = window.location;
+export function DocumentMeta({ title, description, image, type = "website" }) {
+  const origin = useSiteOrigin();
+  const { pathname } = useLocation();
 
-    // Default the preview image to a screenshot of this page: the Worker's
-    // /og-image endpoint renders the path with headless Chromium (the same
-    // method used to prerender pages for crawlers). Pass `null` to opt out.
-    const ogImage =
-      image === undefined
-        ? `${origin}/og-image?path=${encodeURIComponent(pathname)}`
-        : image;
+  const fullTitle = title ? `${title} · ${SITE_NAME}` : SITE_NAME;
+  const desc = description || DEFAULT_DESCRIPTION;
 
-    document.title = fullTitle;
-    setMetaTag("name", "description", desc);
+  // Default the preview image to a screenshot of this page: the Worker's
+  // /og-image endpoint renders the path with headless Chromium. Pass `null` to
+  // opt out.
+  const ogImage =
+    image === undefined
+      ? `${origin}/og-image?path=${encodeURIComponent(pathname)}`
+      : image;
 
-    setMetaTag("property", "og:site_name", SITE_NAME);
-    setMetaTag("property", "og:type", type);
-    setMetaTag("property", "og:title", fullTitle);
-    setMetaTag("property", "og:description", desc);
-    setMetaTag("property", "og:url", href);
-    setMetaTag("property", "og:image", ogImage);
-    // The screenshot is a fixed-size PNG; advertise its dimensions/type so
-    // scrapers can lay out the large-image card without fetching it first.
-    setMetaTag("property", "og:image:width", ogImage ? "1200" : "");
-    setMetaTag("property", "og:image:height", ogImage ? "630" : "");
-    setMetaTag("property", "og:image:type", ogImage ? "image/png" : "");
+  return (
+    <>
+      <title>{fullTitle}</title>
+      <meta name="description" content={desc} />
 
-    setMetaTag(
-      "name",
-      "twitter:card",
-      ogImage ? "summary_large_image" : "summary",
-    );
-    setMetaTag("name", "twitter:title", fullTitle);
-    setMetaTag("name", "twitter:description", desc);
-    setMetaTag("name", "twitter:image", ogImage);
-  }, [title, description, image, type]);
+      <meta property="og:site_name" content={SITE_NAME} />
+      <meta property="og:type" content={type} />
+      <meta property="og:title" content={fullTitle} />
+      <meta property="og:description" content={desc} />
+      <meta property="og:url" content={`${origin}${pathname}`} />
+      {ogImage && (
+        <>
+          <meta property="og:image" content={ogImage} />
+          {/* The screenshot is a fixed-size PNG; advertise its dimensions/type
+              so scrapers can lay out the large-image card without fetching it. */}
+          <meta property="og:image:width" content="1200" />
+          <meta property="og:image:height" content="630" />
+          <meta property="og:image:type" content="image/png" />
+        </>
+      )}
+
+      <meta
+        name="twitter:card"
+        content={ogImage ? "summary_large_image" : "summary"}
+      />
+      <meta name="twitter:title" content={fullTitle} />
+      <meta name="twitter:description" content={desc} />
+      {ogImage && <meta name="twitter:image" content={ogImage} />}
+    </>
+  );
 }
 
 /**
- * Inject (and keep in sync) a single JSON-LD `<script>` in `<head>` for the
- * current page. Like useDocumentMeta, this exists for crawlers: the Worker's
- * prerendered snapshot captures whatever we write into the DOM, so search
- * engines receive the structured data even though the app is client-rendered.
- * The block is removed when the data clears or the page unmounts, so navigating
- * between routes never leaves stale structured data behind.
- * @param {object|null} data  A schema.org object to serialise, or null/undefined
- *   to emit nothing.
+ * A single JSON-LD block for the current page, or nothing when there's no data.
+ * @param {object} props
+ * @param {object|null} [props.data]  A schema.org object to serialise.
  */
-export function useJsonLd(data) {
-  // Serialise outside the effect so the dependency is a stable string: the
-  // effect re-runs only when the structured data actually changes, not on every
-  // render (a fresh object literal would otherwise look "new" each time).
-  const json = data ? JSON.stringify(data) : "";
-  useEffect(() => {
-    if (!json) return undefined;
-    const el = document.createElement("script");
-    el.type = "application/ld+json";
-    el.textContent = json;
-    document.head.appendChild(el);
-    return () => el.remove();
-  }, [json]);
+export function JsonLd({ data }) {
+  if (!data) return null;
+  return (
+    <script
+      type="application/ld+json"
+      // JSON.stringify escapes nothing HTML-significant on its own, so close
+      // the one hole that matters: a "</script>" inside any string value would
+      // otherwise end the block early. Escaping every "<" keeps the JSON
+      // identical to a parser while making the sequence inert to the HTML one.
+      dangerouslySetInnerHTML={{
+        __html: JSON.stringify(data).replace(/</g, "\\u003c"),
+      }}
+    />
+  );
 }
 
 // Build the bare schema.org `Course` object (no top-level @context, so it can

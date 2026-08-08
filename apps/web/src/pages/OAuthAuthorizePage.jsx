@@ -23,13 +23,12 @@ import {
   fetchOAuthRequest,
   approveOAuthRequest,
 } from "@spelling-creator/core/mcpOAuth";
-import { useDocumentMeta } from "../lib/seo.js";
+import { DocumentMeta } from "../lib/seo.jsx";
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 export default function OAuthAuthorizePage() {
   const { t } = useTranslation("oauth");
-  useDocumentMeta({ title: t("pageTitle") });
   const [searchParams] = useSearchParams();
   const state = searchParams.get("state") || "";
   const { enabled, loading, user, session, displayName, signInWithMagicLink } =
@@ -116,6 +115,7 @@ export default function OAuthAuthorizePage() {
 
   return (
     <div className="flex min-h-dvh items-center justify-center bg-background p-4">
+      <DocumentMeta title={t("pageTitle")} />
       <div className="w-full max-w-sm rounded-panel border border-border bg-card p-8 text-card-foreground shadow-(--shadow-panel)">
         {!enabled ? (
           <Alert>

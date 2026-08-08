@@ -19,7 +19,7 @@ function Tooltip({ ...props }) {
   return <TooltipPrimitive.Root data-slot="tooltip" {...props} />;
 }
 
-// forwardRef so these can be asChild/Slot targets under React 18, and
+// forwardRef so these can be asChild/Slot targets, and
 // because Content uses Presence internally for exit animations — see the
 // forwardRef note in dialog.jsx.
 const TooltipTrigger = forwardRef(function TooltipTrigger(props, ref) {

@@ -5,7 +5,7 @@ import { Popover as PopoverPrimitive } from "radix-ui";
 
 import { cn } from "@/lib/utils";
 
-// forwardRef so these can be asChild/Slot targets under React 18, and
+// forwardRef so these can be asChild/Slot targets, and
 // because Content uses Presence internally for exit animations — see the
 // note in dialog.jsx.
 

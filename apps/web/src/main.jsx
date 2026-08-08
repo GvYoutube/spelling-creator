@@ -1,5 +1,5 @@
 import React from "react";
-import ReactDOM from "react-dom/client";
+import { createRoot, hydrateRoot } from "react-dom/client";
 import { BrowserRouter } from "react-router-dom";
 import { configureCore } from "@spelling-creator/core/config";
 
@@ -54,32 +54,54 @@ import { TooltipProvider } from "./components/ui/tooltip.jsx";
 import { Toaster } from "./components/ui/sonner.jsx";
 import DisplayNameGate from "./components/DisplayNameGate.jsx";
 import ServiceWorkerPrompt from "./lib/pwa.jsx";
+import { SsrProvider } from "./lib/ssr.jsx";
 
-// BrowserRouter gives every page a real path (e.g. /hub/:id) so the Worker can
-// see which page a crawler requested and return a prerendered snapshot. The
-// Worker serves index.html for unknown paths (assets single-page-application
-// fallback), so client-side deep links resolve. AuthProvider exposes the
-// Supabase session to every page. ColorSchemeProvider is outermost (and reads
-// a value already applied pre-paint by index.html's inline script) so
-// light/dark is available everywhere.
+// BrowserRouter gives every page a real path (e.g. /hub/:id), which is what
+// lets the Worker recognise a route it can render server-side and what makes a
+// deep link resolve (the assets binding serves index.html for unknown paths).
+// AuthProvider exposes the Supabase session to every page. ColorSchemeProvider
+// is outermost (and adopts a value already applied pre-paint by index.html's
+// inline script) so light/dark is available everywhere.
 //
-// ServiceWorkerPrompt renders nothing; it registers the PWA service worker and
-// raises a toast when a new build is waiting, so it sits inside <Toaster>'s
-// tree but outside the router — it isn't tied to any one page.
-ReactDOM.createRoot(document.getElementById("root")).render(
+// The tree below has to stay structurally in step with src/entry-server.jsx —
+// anything that renders DOM must appear in both, in the same order, or
+// hydration will find markup it didn't expect. ServiceWorkerPrompt is the one
+// exception: it renders null, so its absence there changes nothing.
+//
+// Data the Worker rendered this page with, if it rendered it at all (see
+// apps/api/src/routes/ssr.js and lib/ssr.jsx). Read and removed immediately:
+// it's a one-shot handoff, and leaving a copy of the page's data on `window`
+// serves nothing afterwards.
+const bootstrap = window.__SSR__ ?? null;
+delete window.__SSR__;
+
+const tree = (
   <React.StrictMode>
     <ColorSchemeProvider>
       <TooltipProvider>
         <BrowserRouter>
-          <AuthProvider>
-            <DisplayNameGate>
-              <App />
-            </DisplayNameGate>
-          </AuthProvider>
+          <SsrProvider bootstrap={bootstrap} origin={window.location.origin}>
+            <AuthProvider>
+              <DisplayNameGate>
+                <App />
+              </DisplayNameGate>
+            </AuthProvider>
+          </SsrProvider>
         </BrowserRouter>
         <Toaster />
+        {/* Renders nothing; registers the PWA service worker and raises a toast
+            when a new build is waiting. Outside the router because it isn't
+            tied to any one page. */}
         <ServiceWorkerPrompt />
       </TooltipProvider>
     </ColorSchemeProvider>
-  </React.StrictMode>,
+  </React.StrictMode>
 );
+
+const container = document.getElementById("root");
+
+// Hydrate what the Worker sent rather than throwing it away and re-rendering.
+// A page it didn't render (the editor, a client-side navigation target, any
+// route in the local dev server) arrives with an empty #root and mounts normally.
+if (bootstrap) hydrateRoot(container, tree);
+else createRoot(container).render(tree);

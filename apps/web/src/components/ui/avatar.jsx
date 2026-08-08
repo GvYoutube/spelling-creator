@@ -3,7 +3,7 @@ import { Avatar as AvatarPrimitive } from "radix-ui";
 
 import { cn } from "@/lib/utils";
 
-// forwardRef so these can be asChild/Slot targets under React 18 — see the
+// forwardRef so these can be asChild/Slot targets — see the
 // note in dialog.jsx.
 const Avatar = forwardRef(function Avatar(
   { className, size = "default", ...props },

@@ -62,20 +62,27 @@ export const resources = {
   },
 };
 
+// Everything except which language to start in and how to work that out. The
+// server render (src/entry-server.jsx) reuses this and supplies its own — it
+// has no localStorage and no navigator, and it always renders "en".
+export const baseConfig = {
+  resources,
+  ns: namespaces,
+  defaultNS,
+  fallbackLng: "en",
+  supportedLngs: ["en"],
+  interpolation: {
+    // React already escapes values when rendering, so double-escaping here
+    // would mangle apostrophes/ampersands in interpolated strings.
+    escapeValue: false,
+  },
+};
+
 i18n
   .use(LanguageDetector)
   .use(initReactI18next)
   .init({
-    resources,
-    ns: namespaces,
-    defaultNS,
-    fallbackLng: "en",
-    supportedLngs: ["en"],
-    interpolation: {
-      // React already escapes values when rendering, so double-escaping here
-      // would mangle apostrophes/ampersands in interpolated strings.
-      escapeValue: false,
-    },
+    ...baseConfig,
     detection: {
       order: ["localStorage", "navigator"],
       caches: ["localStorage"],

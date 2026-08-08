@@ -26,7 +26,7 @@ const badgeVariants = cva(
   },
 );
 
-// forwardRef so this can be an asChild target under React 18 — see the note
+// forwardRef so this can be an asChild target — see the note
 // in dialog.jsx.
 const Badge = forwardRef(function Badge(
   { className, variant = "default", asChild = false, ...props },

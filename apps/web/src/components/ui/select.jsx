@@ -6,7 +6,7 @@ import { cn } from "@/lib/utils";
 
 // forwardRef on every direct Radix-primitive wrapper below — needed for
 // asChild composition and for Content's internal Presence (exit animation)
-// tracking under React 18. See the note in dialog.jsx.
+// tracking. See the note in dialog.jsx.
 
 function Select({ ...props }) {
   return <SelectPrimitive.Root data-slot="select" {...props} />;

@@ -54,8 +54,8 @@ const buttonVariants = cva(
 );
 
 // forwardRef so Button can be an asChild target of Radix components (Dialog,
-// Popover, Tooltip triggers, etc.) — React 18 requires it explicitly (React
-// 19 accepts ref as a plain prop, but this project is still on 18).
+// Popover, Tooltip triggers, etc.). See the note in dialog.jsx on why these
+// wrappers outlived React 18.
 const Button = forwardRef(function Button(
   {
     className,

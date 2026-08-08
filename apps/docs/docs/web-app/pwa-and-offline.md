@@ -67,11 +67,18 @@ means it sees every request before the static assets do — and the service work
 must not shadow those with the app shell.
 
 `WORKER_PATHS` at the top of `apps/web/vite.config.js` is that list, passed to
-Workbox as `navigateFallbackDenylist`: `/docs`, `/images/…`, `/git/…`,
-`/collab`, `/og-image`, the MCP OAuth paths (`/authorize`, `/token`, `/register`,
-`/mcp`, `/.well-known/…`), and the SEO endpoints (`sitemap.xml`, `robots.txt`,
+Workbox as `navigateFallbackDenylist`: the [server-rendered routes](./server-rendering.md)
+(`/hub`, `/hub/…`, `/users/…`), `/docs`, `/images/…`, `/git/…`, `/collab`,
+`/og-image`, the MCP OAuth paths (`/authorize`, `/token`, `/register`, `/mcp`,
+`/.well-known/…`), and the SEO endpoints (`sitemap.xml`, `robots.txt`,
 `feed.xml`, `spelling-words.json`). Anything not on it is assumed to be a route
 in `src/App.jsx`.
+
+The server-rendered routes are on the list for a reason worth spelling out: if
+the service worker answers `/hub/abc123` from the precached shell, the Worker is
+never asked, and server rendering silently stops happening — for returning
+visitors specifically, the only people whose browsers have the shell cached.
+Nothing is lost offline, since all three need the network for their data anyway.
 
 It's a **denylist rather than an allowlist** on purpose. Adding a page to
 `App.jsx` shouldn't require a matching edit to the build config, and the failure

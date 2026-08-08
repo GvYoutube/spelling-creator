@@ -42,6 +42,7 @@
     "./imagesClient": "./src/imagesClient.js",
     "./jsonImport": "./src/jsonImport.js",
     "./lessonFile": "./src/lessonFile.js",
+    "./lessonLayout": "./src/lessonLayout.js",
     "./lessonSearch": "./src/lessonSearch.js",
     "./lessons": "./src/lessons.js",
     "./mcpOAuth": "./src/mcpOAuth.js",
