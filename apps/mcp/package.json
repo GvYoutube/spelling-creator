@@ -17,7 +17,6 @@
     "start": "node src/stdio.js",
     "login": "node src/login.js",
     "test": "node --test",
-    "icon": "node scripts/make-icon.mjs",
     "validate": "mcpb validate manifest.json",
     "pack": "node scripts/pack.mjs"
   },

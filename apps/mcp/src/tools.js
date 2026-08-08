@@ -11,15 +11,18 @@
 // checks (we never set the author; the Worker derives it from the token).
 
 import { z } from "zod";
-import {
-  buildDoc,
-  buildLessonFile,
-  lessonWarnings,
-  QUESTION_TYPES,
-} from "./doc.js";
+import { buildDoc, buildLessonFile, QUESTION_TYPES } from "./doc.js";
 import { applyPatch, findBlock } from "./patch.js";
 import { searchWikimediaImages, resolveWikimediaImage } from "./wikimedia.js";
 import { LESSON_STANDARDS } from "./standards.js";
+import {
+  inputBlocksFromOperations,
+  inputBlocksFromSections,
+  newFindings,
+  validateInput,
+  validateLesson,
+  validationErrorMessage,
+} from "./validate.js";
 
 // One content block, described richly so the model fills the right fields per
 // type. buildDoc() does the strict per-type validation and returns clear errors
@@ -49,7 +52,13 @@ const blockSchema = z
       .enum(QUESTION_TYPES)
       .optional()
       .describe(
-        'For type "question": number (numeric answer), single (one text answer), multiple (several accepted answers), open (free response), background (needs prior knowledge).',
+        'For type "question": number (numeric answer), single (one text answer), multiple (several accepted ' +
+          "answers), open (free response), background (needs prior knowledge). Every answer except a background " +
+          "one must appear, word for word, in that section's own passage; a background answer must NOT. Of the 7 " +
+          "open questions in a section, the first 4 are TIGHT OPENS — open-ended but answerable in ONE WORD from " +
+          "the speller's own everyday world, and crucially EASY, with no hard thinking, nothing abstract, and no " +
+          'reference to the lesson ("Name a color of a crayon", "Name something found in a hospital"). The last 3 ' +
+          'are EXTENDED OPENS, inviting a full sentence ("In your own words, explain…", "…Defend your answer.").',
       ),
     prompt: z
       .string()
@@ -62,12 +71,23 @@ const blockSchema = z
     answers: z
       .array(z.string())
       .optional()
-      .describe('Accepted answers for a "multiple" question.'),
+      .describe(
+        'Accepted answers for a "multiple" (orange) question: 2-4 of them, each a SINGLE WORD appearing verbatim ' +
+          'in that section\'s passage. These are simple retrieval — "Name a material used to build the dam" -> ' +
+          'CONCRETE, STEEL, ROCK. Don\'t paraphrase (if the text says "superheated", HOT is not an accepted ' +
+          "answer), don't ask general knowledge (\"name an ocean\" is a background question), and don't use long " +
+          "evidence phrases — a speller pointing at a letterboard has to spell every word.",
+      ),
     steps: z
       .array(z.string())
       .optional()
       .describe(
-        'Optional worked-solution steps for a "number" question, in order.',
+        'Worked-solution steps for a "number" word problem, one step per element, in order. Always supply these ' +
+          "for a word problem — never put the working in the prompt string, and never give a bare answer. Good steps " +
+          "show the set-up (not just the arithmetic), flag the common error where one exists, break hard arithmetic " +
+          "into manageable pieces, and verify the result where that is cheap. Leave them off the plain " +
+          "fill-in-the-blank number question, whose answer is quoted from the passage rather than computed — the " +
+          "absence of steps is what marks it as the fill-in-the-blank one.",
       ),
     background: z
       .string()
@@ -103,6 +123,11 @@ const blockSchema = z
         'For type "image": display size key ("small", "medium", "large", or "full"; default full).',
       ),
   })
+  // Unknown keys survive the parse so validation can object to them by name.
+  // Models reach for `exampleAnswer` on open questions out of habit; stripping it
+  // silently would leave the model believing the lesson holds an answer it does
+  // not, so it reaches validate.js instead and comes back as a specific error.
+  .passthrough()
   .describe("A lesson content block.");
 
 const sectionSchema = z.object({
@@ -212,6 +237,63 @@ function errorResult(err) {
   };
 }
 
+// The `skipValidation` input, shared by every tool that writes a lesson.
+const skipValidationSchema = z
+  .boolean()
+  .optional()
+  .describe(
+    "Save even if the lesson breaks the authoring standard (see this tool's standards text). Only for when " +
+      "the user deliberately wants something the standard forbids — a 3-section lesson, a different question " +
+      "order. Never use it to get past a defect you could fix; the rejection message says exactly what to change.",
+  );
+
+// Findings carry an internal level and dedupe key; the assistant only needs to
+// know what is wrong and where.
+function toWireWarnings(warnings) {
+  return warnings.map(({ code, section, message }) =>
+    section == null ? { code, message } : { code, section, message },
+  );
+}
+
+/**
+ * Run the authoring standard over a lesson about to be written.
+ *
+ * Throws when it fails, which the `tool()` wrapper turns into a readable isError
+ * result — so a rejected lesson is never saved, and the assistant gets a message
+ * naming every defect and its fix. Returns the warnings to ride along with a
+ * successful write.
+ *
+ * `baselineDoc` (patch_lesson only) holds the lesson as it was before the edit,
+ * and limits both errors and warnings to the ones the edit actually introduced.
+ * Without it, a one-line tweak to a lesson written in the web editor — or written
+ * before these rules existed — would be blocked by defects the caller never
+ * touched and may not be able to fix.
+ *
+ * @param {{ doc: any, rawBlocks?: any[], skipValidation?: boolean, baselineDoc?: any }} args
+ * @returns {Array<{ code: string, section?: number, message: string }>}
+ */
+function checkStandard({
+  doc,
+  rawBlocks = [],
+  skipValidation = false,
+  baselineDoc = null,
+}) {
+  if (skipValidation) return [];
+
+  const { errors, warnings } = validateLesson(doc);
+  let failures = [...validateInput(rawBlocks), ...errors];
+  let flags = warnings;
+
+  if (baselineDoc) {
+    const before = validateLesson(baselineDoc);
+    failures = newFindings(before.errors, failures);
+    flags = newFindings(before.warnings, flags);
+  }
+
+  if (failures.length) throw new Error(validationErrorMessage(failures));
+  return toWireWarnings(flags);
+}
+
 /**
  * Attach all tools to an MCP server.
  * @param {import('@modelcontextprotocol/sdk/server/mcp.js').McpServer} server
@@ -266,6 +348,10 @@ export function registerTools(server, ctx) {
         "paragraphs + 4 spelling words + 15 questions, and ENDS with those question blocks about that section. " +
         "Put questions after EVERY section — do NOT gather them into a single quiz section at the end. Honour the " +
         "user when they request a different length, more/fewer questions, or a specific shape.\n\n" +
+        "Lessons are written for spellers who answer by pointing to letters on a letterboard, so answers must be " +
+        "short and unambiguous, and every answer except the background one must be findable in that section's own " +
+        "passage. Writes are validated against the standard below: grounding, spelling-word and uniqueness failures " +
+        "are REJECTED with a message naming the section, the offending value and the fix — read it and resubmit.\n\n" +
         LESSON_STANDARDS,
       inputSchema: {
         title: z.string().describe("The lesson title / topic."),
@@ -276,11 +362,17 @@ export function registerTools(server, ctx) {
           .describe(
             "true = publish to the public hub now; false (default) = save as a private draft.",
           ),
+        skipValidation: skipValidationSchema,
       },
     },
-    tool(async ({ title, sections, published = false }) => {
+    tool(async ({ title, sections, published = false, skipValidation }) => {
       const doc = buildDoc({ title, sections });
-      const warnings = lessonWarnings(doc);
+      // Throws (and saves nothing) when the lesson breaks the standard.
+      const warnings = checkStandard({
+        doc,
+        rawBlocks: inputBlocksFromSections(sections),
+        skipValidation,
+      });
       const lesson = await api.createLesson({
         title: doc.title,
         doc,
@@ -316,15 +408,21 @@ export function registerTools(server, ctx) {
         "(unless asked otherwise): 6 sections; each is [image?] + 2 text paragraphs + 4 spelling words + 15 " +
         "questions, and ENDS with those question blocks about that section. Same full authoring standard as " +
         "create_lesson (question order/counts, spelling-word rules, math/steps conventions, image placement) — " +
-        "see that tool's description.",
+        "see that tool's description. The same validation applies too: a lesson that breaks the standard is " +
+        "rejected with a message naming each defect and its fix, and no file is returned.",
       inputSchema: {
         title: z.string().describe("The lesson title / topic."),
         sections: sectionsSchema,
+        skipValidation: skipValidationSchema,
       },
     },
-    tool(async ({ title, sections }) => {
+    tool(async ({ title, sections, skipValidation }) => {
       const doc = buildDoc({ title, sections });
-      const warnings = lessonWarnings(doc);
+      const warnings = checkStandard({
+        doc,
+        rawBlocks: inputBlocksFromSections(sections),
+        skipValidation,
+      });
       const result = {
         lessonFile: buildLessonFile(doc),
         filename: lessonFileName(doc.title),
@@ -344,7 +442,11 @@ export function registerTools(server, ctx) {
       description:
         "Replace the title and content of a lesson you authored. This overwrites the whole document, so pass the " +
         "complete set of sections you want the lesson to have (use get_lesson first if you need the current content). " +
-        "Optionally flip published to move between draft and public.",
+        "Optionally flip published to move between draft and public.\n\n" +
+        "The result is checked against the same authoring standard as create_lesson (see that tool's description) " +
+        "and rejected if it breaks it. Because this replaces everything, you own every defect in the result — " +
+        "including ones already in the lesson you fetched. Prefer patch_lesson for a small edit: it only holds you " +
+        "to the problems your edit introduces.",
       inputSchema: {
         id: z.string().describe("The id of the lesson to update."),
         title: z.string().describe("The (possibly unchanged) lesson title."),
@@ -355,11 +457,17 @@ export function registerTools(server, ctx) {
           .describe(
             "Omit to leave visibility unchanged; true/false to publish or unpublish.",
           ),
+        skipValidation: skipValidationSchema,
       },
     },
-    tool(async ({ id, title, sections, published }) => {
+    tool(async ({ id, title, sections, published, skipValidation }) => {
       const doc = buildDoc({ title, sections });
-      const warnings = lessonWarnings(doc);
+      // A full replace, so the caller owns every defect in the result.
+      const warnings = checkStandard({
+        doc,
+        rawBlocks: inputBlocksFromSections(sections),
+        skipValidation,
+      });
       const lesson = await api.updateLesson(id, {
         title: doc.title,
         doc,
@@ -390,7 +498,10 @@ export function registerTools(server, ctx) {
         "• replace_block { blockId, block }         — keeps the block's id\n" +
         "• remove_block { blockId }\n" +
         "• move_block { blockId, sectionId?, index? }\n\n" +
-        "`block`/`blocks` use the same shape as create_lesson. `index` is 0-based; omit it to append.",
+        "`block`/`blocks` use the same shape as create_lesson. `index` is 0-based; omit it to append.\n\n" +
+        "The patched lesson is checked against the authoring standard (see create_lesson), but only the defects " +
+        "your edit introduces are held against you — pre-existing problems in a lesson written elsewhere won't " +
+        "block a small tweak.",
       inputSchema: {
         id: z.string().describe("The id of the lesson to patch."),
         operations: z
@@ -403,14 +514,22 @@ export function registerTools(server, ctx) {
           .describe(
             "Omit to leave visibility unchanged; true/false to publish or unpublish.",
           ),
+        skipValidation: skipValidationSchema,
       },
     },
-    tool(async ({ id, operations, published }) => {
+    tool(async ({ id, operations, published, skipValidation }) => {
       // Fetch current content, apply the diff in memory, then save (the Worker
       // only offers a full-replace PUT — see api.updateLesson).
       const current = await api.getLesson(id);
       const doc = applyPatch(current.doc, operations);
-      const warnings = lessonWarnings(doc);
+      // Only the defects this patch introduced: a small edit to a lesson written
+      // elsewhere shouldn't be blocked by what was already there.
+      const warnings = checkStandard({
+        doc,
+        rawBlocks: inputBlocksFromOperations(operations),
+        skipValidation,
+        baselineDoc: current.doc,
+      });
       const lesson = await api.updateLesson(id, {
         title: doc.title || current.title,
         doc,
@@ -559,7 +678,15 @@ export function registerTools(server, ctx) {
         "give none of these, the image is inserted at the end of the LAST section's prose, before any trailing " +
         "question block(s) — never buried after the quiz. Run search_images first to get a `ref`. To change an " +
         "image later, remove_block it and add_image again, or have the user replace it in the editor (which keeps " +
-        "its place).",
+        "its place).\n\n" +
+        "The standard puts a section's image FIRST, above both paragraphs, so pass `sectionId`/`sectionIndex` with " +
+        "`index: 0` rather than relying on the default. Prefer images that do double duty — reinforcing an answer " +
+        "as well as illustrating — and diagrams that carry an argument over decorative photos; a letter-frequency " +
+        "chart IS the reason a Caesar cipher fails, a stock padlock photo is not. Check the image doesn't " +
+        "contradict the passage (a diagram showing a left shift under text describing A -> D will confuse). Source " +
+        'files roughly 1000-1900px wide upload reliably; a much larger one can fail with a Cloudflare "Worker ' +
+        'exceeded resource limits" error, which is a size problem rather than a transient one — pick a smaller ' +
+        "candidate instead of retrying the same file.",
       inputSchema: {
         lessonId: z
           .string()

@@ -122,6 +122,10 @@ export default defineConfig({
             { text: "Overview", link: "/mcp-server/overview" },
             { text: "Tools", link: "/mcp-server/tools" },
             {
+              text: "Lesson validation (errors & warnings)",
+              link: "/mcp-server/lesson-validation",
+            },
+            {
               text: "Install as a one-click bundle (.mcpb)",
               link: "/mcp-server/install-bundle",
             },
