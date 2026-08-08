@@ -107,6 +107,20 @@ export function useInstallPrompt() {
       const { outcome } = await event.userChoice;
       return outcome === "accepted";
     } catch {
+      // prompt() *rejected*, which means the browser never showed anything —
+      // it throws when called outside a user gesture, or while another prompt
+      // is already up. Nothing was consumed, so put the event back rather than
+      // retiring the only chance to install; otherwise one failed call hides
+      // the button for the life of the page. A "dismissed" outcome is the
+      // opposite case — the prompt did run, so it stays cleared and doesn't
+      // come through here.
+      //
+      // Guarded: a fresh `beforeinstallprompt` may have landed while we were
+      // awaiting, and that newer event supersedes this one.
+      if (!deferred && !installed) {
+        deferred = event;
+        emit();
+      }
       return false;
     }
   }, []);

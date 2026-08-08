@@ -89,9 +89,21 @@ worker confidently answer `/docs/intro` with the React app.
 
 The image rule is matched by a callback rather than a `RegExp`: `VITE_API_URL`
 may point at a different origin, and Workbox only applies a `RegExp` route
-cross-origin when it matches from the very start of the URL. `cacheableResponse`
-accepts status `0` for the same reason — a cross-origin `<img>` the app didn't
-fetch itself yields an opaque response.
+cross-origin when it matches from the very start of the URL.
+
+`cacheableResponse` accepts status `200` and **not** `0`. Status `0` is an
+opaque response, which is what a cross-origin `<img>` the app didn't fetch
+itself yields — but opaque means _no status at all_, so a 404 or a 502 looks
+exactly like a hit. Under `CacheFirst` that error would then be served from
+the cache for the full 30 days with no retry, so a single blip while an image
+was still uploading would break it permanently. (Opaque entries are padded to
+megabytes apiece for quota accounting too, and the rule allows 300 of them.)
+
+The deployed app gives nothing up for this: the Worker serves both the SPA and
+`/images` from the same origin, so the responses are `basic` and carry a real
+status. A self-host that points `VITE_API_URL` at a different origin loses
+offline images — the browser's own HTTP cache still applies — which is the
+right way round from a cache that can poison itself.
 
 Hub listings, profiles and comments are **not** cached. They're user-specific
 and change often, and a stale hub is more confusing than an unavailable one.

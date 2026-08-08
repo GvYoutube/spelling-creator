@@ -53,7 +53,7 @@ import { createSpellingBlock } from "@spelling-creator/core/spelling";
 // The add-block toolbar's buttons are `size="sm"` — 32px tall, under the touch
 // target minimum, and there are six of them wrapping across a phone screen.
 // Matches the constant of the same name in ContentBlock.jsx.
-const TOUCH_SM_BUTTON = "h-10 sm:h-8";
+const TOUCH_SM_BUTTON = "h-10 sm:pointer-fine:h-8";
 
 function SectionCard({
   section,
@@ -134,6 +134,12 @@ function SectionCard({
   // to; the body is what carries hidden="until-found".
   const cardRef = useRef(null);
   const bodyRef = useRef(null);
+  // Ties the collapse button to what it actually collapses, so a screen reader
+  // announcing "expanded"/"collapsed" can also point at the region. Whitespace
+  // is stripped because `aria-controls` is a space-separated *list* of ids, and
+  // section ids aren't always ours — jsonImport's keepId() passes any string in
+  // a lesson file through verbatim (the same reason idSelector uses CSS.escape).
+  const bodyId = `section-body-${section.id}`.replace(/\s+/g, "-");
   // Pending spring-open timer while a dragged block hovers this collapsed card.
   const springRef = useRef(null);
 
@@ -376,6 +382,17 @@ function SectionCard({
   }, []);
 
   useEffect(() => cancelSpring, [cancelSpring]);
+
+  // The drag ended without this card hearing about it. `drop` and `dragleave`
+  // cover the ordinary paths, but a cancelled drag (Escape, or a release over
+  // something that won't take it) only reliably fires `dragend` on the *source*
+  // element — the card the pointer happens to be resting over isn't guaranteed
+  // a matching `dragleave`, and Safari in particular doesn't send one. Without
+  // this, a pending timer springs a collapsed section open seconds after the
+  // drag it belonged to is over.
+  useEffect(() => {
+    if (!dragBlockId) cancelSpring();
+  }, [dragBlockId, cancelSpring]);
 
   // Drop: the editor page holds the in-flight drag and applies the move, since
   // it may span two sections.
@@ -653,6 +670,7 @@ function SectionCard({
             }
             onClick={handleToggleCollapse}
             aria-expanded={!collapsed}
+            aria-controls={bodyId}
             className="-ml-1"
           >
             <ChevronDownIcon
@@ -723,7 +741,7 @@ function SectionCard({
         {/* Folded away with hidden="until-found" rather than unmounted, so the
             browser can still search it — see the effect that sets the
             attribute, which is deliberately not done through JSX. */}
-        <div ref={bodyRef}>
+        <div ref={bodyRef} id={bodyId}>
           {section.blocks.length === 0 ? (
             // An empty section has no row for the insertion line to sit against,
             // so while a block is in flight the placeholder text becomes the drop

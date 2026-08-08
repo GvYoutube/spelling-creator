@@ -55,15 +55,18 @@ import { SPELLING_COLOR } from "@spelling-creator/core/spelling";
 const BLOCK_LAYOUT = "flex flex-col gap-2 sm:flex-row sm:items-start";
 
 // The image block's alignment/size toggles are `size="sm"` — 32px tall, under
-// the touch-target minimum. Grow them to 40px on a phone. ToggleGroup's own
+// the touch-target minimum. Grow them to 40px on touch. ToggleGroup's own
 // className lands on the group root and can't reach the items, so this selects
 // them by the data-slot ToggleGroupItem sets.
+//
+// `sm:pointer-fine:` rather than `sm:` — see IconActionButton for why width
+// alone is the wrong signal (a tablet is 640px+ and still finger-driven).
 const TOUCH_TOGGLES =
-  "[&_[data-slot=toggle-group-item]]:h-10 sm:[&_[data-slot=toggle-group-item]]:h-8";
+  "[&_[data-slot=toggle-group-item]]:h-10 sm:pointer-fine:[&_[data-slot=toggle-group-item]]:h-8";
 
 // Same bump for the compact `size="sm"` buttons inside block bodies (replace
 // image, add word/answer/step).
-const TOUCH_SM_BUTTON = "h-10 sm:h-8";
+const TOUCH_SM_BUTTON = "h-10 sm:pointer-fine:h-8";
 
 function ContentBlock({
   block,

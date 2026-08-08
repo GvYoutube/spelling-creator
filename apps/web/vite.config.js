@@ -133,9 +133,21 @@ export default defineConfig({
             options: {
               cacheName: "lesson-images",
               expiration: { maxEntries: 300, maxAgeSeconds: 60 * 60 * 24 * 30 },
-              // 0 covers an opaque response, which is what a cross-origin
-              // VITE_API_URL yields for an <img> the app didn't fetch itself.
-              cacheableResponse: { statuses: [0, 200] },
+              // 200 only — deliberately *not* 0. An opaque response carries no
+              // status, so a cross-origin 404 or 502 is indistinguishable from
+              // a hit, and CacheFirst would then serve that error from the
+              // cache for the full 30 days without ever retrying: one blip
+              // while an image is still uploading breaks it permanently.
+              // (Opaque entries are also quota-padded to megabytes apiece,
+              // which 300 of would blow the origin's storage budget.)
+              //
+              // Nothing is lost in the deployed app: the Worker serves the SPA
+              // and /images from the same origin (apps/api/wrangler.jsonc), so
+              // these responses are `basic` with a real status. A self-host
+              // that points VITE_API_URL at another origin just doesn't get
+              // offline images — the browser's own HTTP cache still applies —
+              // which is the right way round from poisoning the cache.
+              cacheableResponse: { statuses: [200] },
             },
           },
           {

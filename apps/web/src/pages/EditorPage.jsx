@@ -568,6 +568,15 @@ export default function EditorPage() {
   // Once per mount only (restoredRef), so it can never yank the page out from
   // under someone who has already started scrolling.
   const restoredRef = useRef(false);
+  // collapsedIds is read inside the animation frame below, but must not be a
+  // dependency: a collapse landing between the effect and the frame would run
+  // the cleanup — cancelling the pending frame — and then bail on
+  // restoredRef, so the restore would be dropped and never rescheduled. A ref
+  // gets the current value without giving the effect a reason to re-run.
+  const collapsedIdsRef = useRef(collapsedIds);
+  useEffect(() => {
+    collapsedIdsRef.current = collapsedIds;
+  }, [collapsedIds]);
   useEffect(() => {
     if (!hydrated || restoredRef.current) return;
     restoredRef.current = true;
@@ -587,7 +596,7 @@ export default function EditorPage() {
       // a collapsed section is a decision, and the header still gets them to
       // the right place.
       const card = el.closest("[data-section-id]");
-      if (card && collapsedIds.has(card.dataset.sectionId)) {
+      if (card && collapsedIdsRef.current.has(card.dataset.sectionId)) {
         scrollToElement(card, { smooth: false });
         return;
       }
@@ -597,10 +606,7 @@ export default function EditorPage() {
       scrollToElement(el, { block: "center", smooth: false });
     });
     return () => cancelAnimationFrame(raf);
-    // collapsedIds is read for the "is that section folded?" check. It's in the
-    // deps for correctness, but restoredRef makes every run after the first a
-    // no-op, so a later collapse can't re-trigger the restore.
-  }, [hydrated, collapsedIds]);
+  }, [hydrated]);
 
   // Adopt a fetched lesson into the editor: replace the working doc (this is the
   // step that overwrites the auto-saved draft). For an edit, enter edit mode so
@@ -832,19 +838,31 @@ export default function EditorPage() {
 
   const moveSection = useCallback(
     (id, dir) => {
+      // Bounds-check before anchoring, the same order moveBlock uses: anchoring
+      // arms a scroll correction that the *next* commit consumes, so doing it
+      // ahead of a move that turns out to be a no-op leaves it primed to fire
+      // against an unrelated later render. Read through docRef so this stays
+      // dependency-free and every SectionCard keeps its memoized onMove.
+      const sections = docRef.current.sections;
+      const from = sections.findIndex((s) => s.id === id);
+      const to = from + dir;
+      if (from === -1 || to < 0 || to >= sections.length) return;
       // Ride with the section being moved. Sections are ~6 screens tall on a
       // desktop and ~9 on a phone, so reordering under a fixed scroll position
       // dumped the user into the middle of a *different* section and left the
       // button they'd just pressed thousands of pixels away.
       anchorScroll(idSelector("data-section-id", id));
       setDoc((d) => {
-        const from = d.sections.findIndex((s) => s.id === id);
-        const to = from + dir;
-        if (from === -1 || to < 0 || to >= d.sections.length) return d;
-        const sections = [...d.sections];
-        const [moved] = sections.splice(from, 1);
-        sections.splice(to, 0, moved);
-        return { ...d, sections };
+        // Re-derived inside the updater rather than reusing the array above:
+        // the updater must be a pure function of `d`, which a concurrent edit
+        // may have moved on from since docRef was read.
+        const i = d.sections.findIndex((s) => s.id === id);
+        const j = i + dir;
+        if (i === -1 || j < 0 || j >= d.sections.length) return d;
+        const next = [...d.sections];
+        const [moved] = next.splice(i, 1);
+        next.splice(j, 0, moved);
+        return { ...d, sections: next };
       });
     },
     [anchorScroll],

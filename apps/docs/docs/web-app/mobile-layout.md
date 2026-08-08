@@ -26,9 +26,12 @@ there aren't many to spare:
 | less the block card's `p-4` | **264** |
 
 Out of that 264px the control stack took 128px (text, image, question blocks)
-or 164px (spelling blocks, which have two extra buttons). What remained was a
-~128px box for typing a 60–110 word lesson paragraph, and a **~56px box for
-typing a 6–9 letter spelling word**.
+or 164px (spelling blocks, which have two extra buttons). Subtract the `gap-2`
+between the content and the controls and what remained was a ~128px box for
+typing a 60–110 word lesson paragraph. A spelling word is worse than the 92px
+that leaves suggests: each word sits in its own row with a delete button beside
+it (`gap-1` + 32px), so the field itself came out at a **~56px box for typing a
+6–9 letter word**.
 
 ## Rule 1 — controls become a footer below `sm`
 
@@ -55,19 +58,32 @@ row is sticky and the controls must **not** be pinned with it. Pinning them cost
 **If you add a new block type, use `BLOCK_LAYOUT`** rather than a bare
 `flex items-start gap-2`.
 
-## Rule 2 — 40px touch targets, shrinking to 32px from `sm`
+## Rule 2 — 40px touch targets, shrinking to 32px only for a mouse
 
 The editor's icon buttons were `size="icon-sm"` (32px) and its inline buttons
 `size="sm"` (h-8, 32px). Both are under Apple's 44pt and Material's 48dp
 minimums, and they sit in rows of three to five with 4px between them.
 
-- `IconActionButton` now applies `size-10 sm:size-8` itself, so every block and
-  section control gets this for free.
-- Inline `size="sm"` buttons use the `TOUCH_SM_BUTTON` constant (`h-10 sm:h-8`),
-  defined in both `ContentBlock.jsx` and `SectionCard.jsx`.
+- `IconActionButton` now applies `size-10 sm:pointer-fine:size-8` itself, so
+  every block and section control gets this for free.
+- Inline `size="sm"` buttons use the `TOUCH_SM_BUTTON` constant
+  (`h-10 sm:pointer-fine:h-8`), defined in both `ContentBlock.jsx` and
+  `SectionCard.jsx`.
 - `ToggleGroup` passes no sizing down to its items, so the image block's
   alignment/size toggles use `TOUCH_TOGGLES`, which reaches them by their
   `data-slot`.
+
+**The shrink is gated on the pointer, not only on the width.** A tablet is
+`sm` and up and still driven by a finger, so keying off the breakpoint alone
+handed every tablet exactly the 32px targets this rule exists to avoid. The
+variants are stacked — shrink only where the screen is wide _and_ the pointer
+is fine — rather than written as a `pointer-coarse:` override competing with
+`sm:`, because those two are equally specific and which one wins would come
+down to the order Tailwind emits the media queries in.
+
+This is the same signal that hides the drag handle (see
+[Drag-and-drop is desktop-only](#drag-and-drop-is-desktop-only));
+`pointer-coarse` and `pointer-fine` are the two halves of it.
 
 ## Rule 3 — `tooltip` is also the accessible name
 
