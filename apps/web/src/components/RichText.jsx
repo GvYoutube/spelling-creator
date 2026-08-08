@@ -13,7 +13,7 @@
 // Media never renders, whichever branch runs: the sanitizer's allow-list has no img,
 // video, audio, iframe or svg in it.
 
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { cn } from "../lib/utils.js";
 import { isRichTextHtml } from "@spelling-creator/core/richText";
 import { sanitizeRichText } from "@spelling-creator/core/browser/sanitizeRichText";
@@ -37,9 +37,21 @@ const VARIANT_CLASSES = {
  * @param {string} [props.className]        Extra classes, merged last.
  */
 export default function RichText({ value, variant = "body2", className }) {
+  // The sanitizer is DOMPurify, which needs a real DOM — so the rich-text branch
+  // is browser-only. The server render and the client's first (hydrating) pass
+  // both produce nothing here, which is what keeps them identical; the content
+  // appears in the effect immediately afterwards. A profile bio still reaches a
+  // crawler, as the page's meta description (see lib/seo.jsx).
+  //
+  // Rendering the *unsanitized* HTML on the server instead is not an option:
+  // React never re-checks dangerouslySetInnerHTML during hydration, so whatever
+  // the server put there is what the reader ends up with, permanently.
+  const [canSanitize, setCanSanitize] = useState(false);
+  useEffect(() => setCanSanitize(true), []);
+
   const html = useMemo(
-    () => (isRichTextHtml(value) ? sanitizeRichText(value) : ""),
-    [value],
+    () => (canSanitize && isRichTextHtml(value) ? sanitizeRichText(value) : ""),
+    [canSanitize, value],
   );
 
   if (!value) return null;

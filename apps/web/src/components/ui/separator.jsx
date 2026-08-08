@@ -5,7 +5,7 @@ import { Separator as SeparatorPrimitive } from "radix-ui";
 
 import { cn } from "@/lib/utils";
 
-// forwardRef so this can be an asChild/Slot target under React 18 — see the
+// forwardRef so this can be an asChild/Slot target — see the
 // note in dialog.jsx.
 const Separator = forwardRef(function Separator(
   { className, orientation = "horizontal", decorative = true, ...props },

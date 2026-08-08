@@ -4,7 +4,7 @@
 // fetched and rendered. Each lesson therefore has a shareable URL.
 
 import { hasApi } from "@spelling-creator/core/config";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link as RouterLink, useNavigate, useLocation } from "react-router-dom";
 import { toast } from "sonner";
 import { useTranslation } from "react-i18next";
@@ -51,11 +51,8 @@ import {
   searchLessons,
 } from "@spelling-creator/core/lessonSearch";
 import { useAuth } from "../lib/auth.jsx";
-import {
-  useDocumentMeta,
-  useJsonLd,
-  buildLessonListSchema,
-} from "../lib/seo.js";
+import { DocumentMeta, JsonLd, buildLessonListSchema } from "../lib/seo.jsx";
+import { useServerData, useSiteOrigin } from "../lib/ssr.jsx";
 
 function formatDate(value) {
   if (!value) return "";
@@ -163,16 +160,17 @@ function LessonCard({ lesson, draft, editable, onEdit, onDelete }) {
 
 export default function HubPage() {
   const { t } = useTranslation("hub");
-  useDocumentMeta({
-    title: t("meta.title"),
-    description: t("meta.description"),
-  });
   const { user, accessToken } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
+  const origin = useSiteOrigin();
 
-  const [lessons, setLessons] = useState([]);
-  const [loading, setLoading] = useState(true);
+  // The published listing the Worker already fetched and rendered, on a
+  // server-rendered page load. undefined otherwise — see lib/ssr.jsx.
+  const serverLessons = useServerData("lessons");
+
+  const [lessons, setLessons] = useState(serverLessons ?? []);
+  const [loading, setLoading] = useState(!serverLessons);
   const [error, setError] = useState("");
 
   // The signed-in user's own drafts (lessons backed up to the cloud but not
@@ -207,8 +205,8 @@ export default function HubPage() {
   // retired by Google in Sept 2025). Each entry embeds a full named Course, as
   // the carousel requires. We always describe the full published set (not the
   // transient search view), and the builder emits nothing below Google's three-
-  // course minimum. Captured for crawlers via the Worker's prerendered snapshot.
-  useJsonLd(buildLessonListSchema({ lessons, origin: window.location.origin }));
+  // course minimum.
+  const listSchema = buildLessonListSchema({ lessons, origin });
 
   // Delete-confirmation dialog. `deleting` holds the lesson summary being
   // deleted (null when closed); the user must retype its title to confirm, which
@@ -244,9 +242,19 @@ export default function HubPage() {
     }
   }, [accessToken]);
 
+  // The published hub is public, so the Worker's copy is the same listing this
+  // would fetch — no reason to ask for it again on a server-rendered load. Held
+  // until something actually re-fetches rather than being spent on the first
+  // effect run, which fires again whenever `load` changes identity.
+  const haveServerLessons = useRef(Boolean(serverLessons));
+
   useEffect(() => {
-    if (hasApi()) load();
-    else setLoading(false);
+    if (!hasApi()) {
+      setLoading(false);
+      return;
+    }
+    if (haveServerLessons.current) return;
+    load();
   }, [load]);
 
   // Load (or clear) the user's drafts whenever their sign-in state changes.
@@ -323,6 +331,11 @@ export default function HubPage() {
 
   return (
     <div className="min-h-dvh bg-background pb-16 text-foreground">
+      <DocumentMeta
+        title={t("meta.title")}
+        description={t("meta.description")}
+      />
+      <JsonLd data={listSchema} />
       <AppHeader
         title={t("header.title")}
         left={

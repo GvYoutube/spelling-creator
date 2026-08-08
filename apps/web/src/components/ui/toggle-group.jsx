@@ -11,7 +11,7 @@ const ToggleGroupContext = React.createContext({
   spacing: 0,
 });
 
-// forwardRef so these can be asChild/Slot targets under React 18 — see the
+// forwardRef so these can be asChild/Slot targets — see the
 // note in dialog.jsx.
 const ToggleGroup = React.forwardRef(function ToggleGroup(
   { className, variant, size, spacing = 0, children, ...props },

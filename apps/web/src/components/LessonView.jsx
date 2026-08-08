@@ -13,9 +13,11 @@
 
 import { useTranslation } from "react-i18next";
 import { Skeleton } from "./ui/skeleton.jsx";
-import { PREVIEW_STYLES } from "@spelling-creator/core/browser/htmlPreview";
 import { fitWithin, imageSizeScale } from "@spelling-creator/core/image";
-import { DOCX_MAX_IMAGE_WIDTH } from "@spelling-creator/core/browser/docxExport";
+import {
+  DOCX_MAX_IMAGE_WIDTH,
+  PREVIEW_STYLES,
+} from "@spelling-creator/core/lessonLayout";
 import { useImageSrc } from "../lib/useImageSrc.js";
 import { questionMeta } from "@spelling-creator/core/questions";
 import { SPELLING_COLOR } from "@spelling-creator/core/spelling";

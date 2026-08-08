@@ -35,9 +35,8 @@ function fitToContent(el) {
   el.style.height = `${el.scrollHeight + border}px`;
 }
 
-// forwardRef because this owns a ref of its own and React 18 doesn't pass
-// `ref` through as an ordinary prop — a caller's ref would be dropped silently
-// otherwise.
+// forwardRef because this owns a ref of its own and has to merge a caller's ref
+// into it. See the note in dialog.jsx on why these wrappers outlived React 18.
 const Textarea = forwardRef(function Textarea(
   { className, value, onInput, ...props },
   forwardedRef,

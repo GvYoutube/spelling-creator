@@ -3,7 +3,7 @@ import { Label as LabelPrimitive } from "radix-ui";
 
 import { cn } from "@/lib/utils";
 
-// forwardRef so this can be an asChild/Slot target under React 18 — see the
+// forwardRef so this can be an asChild/Slot target — see the
 // note in dialog.jsx.
 const Label = forwardRef(function Label({ className, ...props }, ref) {
   return (

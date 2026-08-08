@@ -545,10 +545,11 @@ function SectionCard({
   // leaving it searchable: Cmd-F still finds text inside a collapsed section,
   // and the browser reveals it itself (see the `beforematch` handler below).
   //
-  // Set imperatively rather than through JSX because React 18 treats `hidden`
+  // Set imperatively rather than through JSX because React treats `hidden`
   // as a *boolean* attribute — `hidden="until-found"` renders as a plain
   // `hidden=""`, which is `display: none` and not searchable at all (verified
-  // in the browser; it's the whole reason this isn't a one-line prop). Since
+  // in the browser, and still true on React 19; it's the whole reason this isn't
+  // a one-line prop). Since
   // React never renders the attribute, the two can't fight over it, including
   // when the browser removes it on a match.
   //

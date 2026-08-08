@@ -1,4 +1,12 @@
-import { createContext, useContext, useEffect, useMemo, useState } from "react";
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useState,
+} from "react";
 
 // Persisted user choice: "light" | "dark" | "system". Resolved value (what's
 // actually applied) is always "light" | "dark" — "system" tracks the OS via
@@ -28,19 +36,45 @@ function readStoredScheme() {
   return "system";
 }
 
-export function ColorSchemeProvider({ children }) {
-  const [scheme, setScheme] = useState(readStoredScheme);
-  const [resolved, setResolved] = useState(() =>
-    scheme === "system" ? getSystemScheme() : scheme,
-  );
+// What the first render assumes, before the stored choice has been read. The
+// server has neither localStorage nor matchMedia, so it can only ever render
+// this — and a hydrating client has to render the same thing or React tears the
+// tree down and re-renders it. (NavActions' toggle shows a sun or a moon
+// depending on `resolved`, so this is markup, not just a CSS variable.)
+const INITIAL_SCHEME = "light";
 
-  useEffect(() => {
+// useLayoutEffect warns when it is reached through the server renderer, where
+// it can't run at all. There is nothing to adopt on the server, so fall back to
+// useEffect there and keep the before-paint timing in the browser.
+const useAdoptEffect =
+  typeof window === "undefined" ? useEffect : useLayoutEffect;
+
+export function ColorSchemeProvider({ children }) {
+  // Deliberately not seeded from storage: see INITIAL_SCHEME. The real value is
+  // adopted below, in a *layout* effect, so it lands after hydration but before
+  // the browser paints — there is no flash of the wrong toggle icon, and the
+  // page's actual colours were already set pre-paint by index.html's inline
+  // script regardless.
+  const [scheme, setScheme] = useState("system");
+  const [resolved, setResolved] = useState(INITIAL_SCHEME);
+
+  useAdoptEffect(() => {
+    setScheme(readStoredScheme());
+  }, []);
+
+  // Persisting belongs to the act of choosing, not to observing the state —
+  // doing it in an effect would write the placeholder "system" over a stored
+  // "dark" during the first render, before the value above has been adopted.
+  const chooseScheme = useCallback((next) => {
+    setScheme(next);
     try {
-      localStorage.setItem(STORAGE_KEY, scheme);
+      localStorage.setItem(STORAGE_KEY, next);
     } catch {
       // Ignore write failures — the choice just won't persist this session.
     }
+  }, []);
 
+  useEffect(() => {
     if (scheme !== "system") {
       setResolved(scheme);
       return;
@@ -58,8 +92,8 @@ export function ColorSchemeProvider({ children }) {
   }, [resolved]);
 
   const value = useMemo(
-    () => ({ scheme, resolved, setScheme }),
-    [scheme, resolved],
+    () => ({ scheme, resolved, setScheme: chooseScheme }),
+    [scheme, resolved, chooseScheme],
   );
 
   return (

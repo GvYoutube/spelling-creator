@@ -7,8 +7,8 @@ sidebar_position: 2
 
 The app is a single-page app with real-path client-side routes (served by
 `BrowserRouter`, not hash routes). Every page has a genuine URL like `/hub/:id`,
-so the Worker can return a prerendered snapshot to crawlers and serves
-`index.html` for unknown paths so deep links resolve:
+which is what lets the Worker recognise a route it can [render server-side](./server-rendering.md),
+and it serves `index.html` for unknown paths so deep links resolve:
 
 | Route         | Page             | What it does                                                                                                                                                                                          |
 | ------------- | ---------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -24,15 +24,32 @@ Unknown paths redirect to the home page (`/`).
 
 Once the PWA service worker is installed it resolves these routes itself, from
 the precached `index.html`, which is what lets a deep link open with no network.
-The paths the Worker answers instead — `/docs`, `/images/…`, the SEO and MCP
-OAuth endpoints — are excluded by name; see
+The paths the Worker answers instead — the server-rendered routes, `/docs`,
+`/images/…`, the SEO and MCP OAuth endpoints — are excluded by name; see
 [Installable app & offline use](./pwa-and-offline.md#navigation-fallback-and-the-paths-it-must-not-touch).
 
 Every page's header carries a shared nav (a **Lesson hub** link, an **install
 app** button when the app is installable, and an account control that shows
 **Sign in** or the signed-in account menu). Routing is set up in `src/main.jsx`
-(`BrowserRouter` + `AuthProvider`, wrapped in a `DisplayNameGate`) and the route
-table is in `src/App.jsx`.
+(`BrowserRouter` + `SsrProvider` + `AuthProvider`, wrapped in a
+`DisplayNameGate`) and the route table is in `src/App.jsx`.
+
+## Which routes are lazy
+
+`src/App.jsx` splits the route table deliberately rather than lazy-loading
+everything:
+
+- **Eager** — `/`, `/hub`, `/hub/:id`, `/users/:id`. The last three are
+  server-rendered, so their components must be in the bundle the client
+  hydrates with; deferring them would trade a smaller download for a round trip
+  on the pages where first paint matters most. `/` is the commonest entry point.
+- **Lazy** — `/editor`, `/moderation`, `/login`, `/oauth/authorize`. None is
+  server-rendered or reachable without a deliberate click. The editor is the one
+  that matters: ~6,000 lines, and the only owner of Yjs, `lib0` and the
+  collaboration client, none of which a reader of a lesson should download.
+
+Tiptap/ProseMirror stays eager on purpose — `CommentsSection` uses
+`RichTextInput` on the public lesson page, so it isn't editor-only.
 
 ## Home page
 

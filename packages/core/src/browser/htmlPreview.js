@@ -1,39 +1,14 @@
 import { Packer } from "docx";
 import mammoth from "mammoth";
-import { buildDocument, DOCX_MAX_IMAGE_WIDTH } from "./docxExport.js";
+import { buildDocument } from "./docxExport.js";
 import { fitWithin, imageSizeScale } from "../image.js";
+import { DOCX_MAX_IMAGE_WIDTH, PREVIEW_STYLES } from "../lessonLayout.js";
 import { QUESTION_TYPES } from "../questions.js";
 
-// Styles applied to the mammoth-generated HTML shown in the preview dialog.
-// Mirrors the docx/PDF look so the preview reflects the final document.
-export const PREVIEW_STYLES = `
-  .s2c-preview-root {
-    font-family: 'Roboto', 'Helvetica Neue', Arial, sans-serif;
-    color: #1a1a1a;
-    line-height: 1.5;
-    font-size: 14px;
-  }
-  .s2c-preview-root h1 {
-    text-align: center;
-    font-size: 26px;
-    margin: 0 0 24px;
-    color: #1a1a1a;
-  }
-  .s2c-preview-root h2 {
-    font-size: 19px;
-    color: #3b5bdb;
-    border-bottom: 2px solid #3b5bdb;
-    padding-bottom: 4px;
-    margin: 22px 0 12px;
-  }
-  .s2c-preview-root p { margin: 0 0 10px; }
-  .s2c-preview-root figure { margin: 0; }
-  .s2c-preview-root img {
-    display: block;
-    width: 100%;
-    height: auto;
-  }
-`;
+// Re-exported for callers that already reach for it here. New code that wants
+// only the constant should import ../lessonLayout.js directly — this module
+// pulls in docx + mammoth, which is most of the vendor bundle.
+export { PREVIEW_STYLES };
 
 // The image blocks of a lesson, in document order — the same order mammoth emits
 // their <img> tags, so we can match each tag to its block by position.

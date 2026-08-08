@@ -35,7 +35,7 @@ const tabsListVariants = cva(
 );
 
 // forwardRef on List/Trigger/Content — needed for asChild composition and
-// for Content's internal Presence tracking under React 18. See the note in
+// for Content's internal Presence tracking. See the note in
 // dialog.jsx.
 
 const TabsList = forwardRef(function TabsList(

@@ -3,6 +3,7 @@
 
   "ignorePatterns": [
     "**/dist/**",
+    "**/dist-ssr/**",
     "**/build/**",
     "**/node_modules/**",
     "**/.wrangler/**",

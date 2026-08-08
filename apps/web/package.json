@@ -7,9 +7,11 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "vite build",
+    "build": "vite build && vite build --ssr src/entry-server.jsx --outDir dist-ssr",
     "preview": "vite preview",
-    "test": "vitest run --passWithNoTests"
+    "test": "vitest run --passWithNoTests",
+    "build:client": "vite build",
+    "build:ssr": "vite build --ssr src/entry-server.jsx --outDir dist-ssr"
   },
   "dependencies": {
     "@fontsource/fraunces": "^5.2.7",
@@ -37,9 +39,8 @@
     "isomorphic-git": "^1.38.7",
     "lucide-react": "^1.24.0",
     "radix-ui": "^1.6.2",
-    "react": "^18.3.1",
-    "react-compiler-runtime": "^1.0.0",
-    "react-dom": "^18.3.1",
+    "react": "^19.2.8",
+    "react-dom": "^19.2.8",
     "react-i18next": "^17.0.10",
     "react-router-dom": "^7.16.0",
     "sonner": "^2.0.7",

@@ -36,7 +36,7 @@ import { Alert, AlertDescription } from "../components/ui/alert.jsx";
 import { Spinner } from "../components/ui/spinner.jsx";
 import { cn } from "../lib/utils.js";
 import { useAuth } from "../lib/auth.jsx";
-import { useDocumentMeta } from "../lib/seo.js";
+import { DocumentMeta } from "../lib/seo.jsx";
 import {
   fetchLatestLessons,
   fetchUserActivity,
@@ -495,10 +495,6 @@ function DashboardView() {
 
 export default function HomePage() {
   const { t } = useTranslation("home");
-  useDocumentMeta({
-    title: t("meta.title"),
-    description: t("meta.description"),
-  });
   const { enabled, loading, user } = useAuth();
 
   // Wait for the session to resolve before choosing a face, so a returning user
@@ -508,6 +504,10 @@ export default function HomePage() {
 
   return (
     <div className="min-h-dvh bg-background pb-16 text-foreground">
+      <DocumentMeta
+        title={t("meta.title")}
+        description={t("meta.description")}
+      />
       <AppHeader
         title={
           <span className="inline-flex items-center gap-2">

@@ -23,13 +23,12 @@ import {
   TooltipContent,
 } from "../components/ui/tooltip.jsx";
 import { useAuth } from "../lib/auth.jsx";
-import { useDocumentMeta } from "../lib/seo.js";
+import { DocumentMeta } from "../lib/seo.jsx";
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 export default function LoginPage() {
   const { t } = useTranslation("login");
-  useDocumentMeta({ title: t("meta.title") });
   const { enabled, user, displayName, loading, signInWithMagicLink, signOut } =
     useAuth();
   const navigate = useNavigate();
@@ -59,6 +58,7 @@ export default function LoginPage() {
 
   return (
     <div className="min-h-dvh bg-background">
+      <DocumentMeta title={t("meta.title")} />
       <AppHeader
         title={t("meta.title")}
         left={

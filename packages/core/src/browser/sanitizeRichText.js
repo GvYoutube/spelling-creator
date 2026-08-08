@@ -41,15 +41,26 @@ const FORBID_TAGS = [
   "style",
 ];
 
+// DOMPurify is a wrapper around a real DOM: with no `window` to bind to, the
+// module's default export is an inert stub with no `addHook` and no `sanitize`.
+// That is fine — this is a `browser/` module and by the boundary in
+// .oxlintrc.json nothing outside a browser may call it. It has to survive being
+// *imported* without one, though, because the server render bundles the same
+// component tree the browser does (RichText.jsx, which defers the actual
+// sanitizing to after mount for exactly this reason).
+const hasDom = typeof window !== "undefined" && typeof document !== "undefined";
+
 // User-generated links open away from the app, carry no SEO value for spammers, and
 // can't reach back through window.opener. The Worker sets these too; we re-assert
 // them here so a link that reaches us any other way still gets them.
-DOMPurify.addHook("afterSanitizeAttributes", (node) => {
-  if (node.tagName === "A" && node.hasAttribute("href")) {
-    node.setAttribute("target", LINK_TARGET);
-    node.setAttribute("rel", LINK_REL);
-  }
-});
+if (hasDom) {
+  DOMPurify.addHook("afterSanitizeAttributes", (node) => {
+    if (node.tagName === "A" && node.hasAttribute("href")) {
+      node.setAttribute("target", LINK_TARGET);
+      node.setAttribute("rel", LINK_REL);
+    }
+  });
+}
 
 /**
  * Sanitize rich-text HTML for rendering. See the note above on why this runs even
@@ -59,6 +70,13 @@ DOMPurify.addHook("afterSanitizeAttributes", (node) => {
  */
 export function sanitizeRichText(html) {
   if (!html) return "";
+  if (!hasDom) {
+    // Loud rather than a silent pass-through: returning the input unsanitized
+    // would hand a caller exactly the unchecked HTML this function exists to
+    // stop, and React does not re-check dangerouslySetInnerHTML on hydration,
+    // so it would never be scrubbed afterwards either.
+    throw new Error("sanitizeRichText needs a DOM; call it from the browser.");
+  }
   return DOMPurify.sanitize(html, {
     ALLOWED_TAGS: RICH_TEXT_TAGS,
     ALLOWED_ATTR,

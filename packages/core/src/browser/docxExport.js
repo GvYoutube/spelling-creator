@@ -10,13 +10,14 @@ import {
 } from "docx";
 import { fitWithin, imageSizeScale } from "../image.js";
 import { getImageBytes } from "./imageRef.js";
+import { DOCX_MAX_IMAGE_WIDTH } from "../lessonLayout.js";
 import { questionMeta } from "../questions.js";
 import { SPELLING_COLOR } from "../spelling.js";
 
-// Max image width inside the docx page (in px; docx maps px→EMU internally). The
-// preview/PDF HTML path reuses this same number so an image is the identical size
-// everywhere (see htmlPreview.js).
-export const DOCX_MAX_IMAGE_WIDTH = 480;
+// Re-exported for callers that already reach for it here. New code that wants
+// only the constant should import ../lessonLayout.js directly — this module
+// pulls in the whole `docx` library.
+export { DOCX_MAX_IMAGE_WIDTH };
 
 const ALIGNMENT_MAP = {
   left: AlignmentType.LEFT,
