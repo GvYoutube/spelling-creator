@@ -47,6 +47,7 @@ src/
     HistoryDialog.jsx      the lesson's version timeline: what each commit changed, per block, + restore
     MergeDialog.jsx        settle a merge with the lesson this one was forked from (mine / theirs / keep both)
     ui/                    shadcn/ui primitives (Button, Dialog, DropdownMenu, Select, Tooltip, Sonner Toaster, etc.) — Radix underneath, styled from the tokens in styles/globals.css
+    ui/textarea.jsx        Textarea, which grows to fit its text (see "Auto-growing text fields"); hence `resize-none`, and never a scrollbar
   lib/
     i18n.js                react-i18next setup: registers every namespace's resources, fallback/supported languages
     languages.js           LANGUAGES registry for a future language switcher (English only today)
@@ -70,6 +71,28 @@ Outside `src/`, `public/icons/` holds the PWA icons and the two SVGs they're
 rasterised from, and the `VitePWA` block in `vite.config.js` holds the manifest
 and service-worker configuration — see
 [Installable app & offline use](./pwa-and-offline.md).
+
+## Auto-growing text fields
+
+Every `Textarea` sizes itself to its content, so a lesson paragraph or a long
+question prompt is read in full inside its content block rather than scrolled
+through a two-line slot. `ui/textarea.jsx` measures it: on each `input`, on any
+change to a controlled `value` (a lesson loading, a collaborator's edit, an AI
+suggestion landing in a block), and — via a `ResizeObserver` on the field — on
+any change to its _width_, since re-wrapping the text changes how tall it needs
+to be. That last one also covers a field going from zero width to a real one,
+which is how a block inside a collapsed section gets measured when the section
+is opened.
+
+This was `field-sizing: content` — a single CSS declaration that does the same
+job. It's deliberately gone: where a browser doesn't honour it there is no
+symptom to debug, only a field stuck at its min-height showing a scrollbar and
+a resize grabber, which is the exact state it existed to prevent. Measuring in
+JS behaves identically everywhere, so it's the only path rather than a fallback
+behind a feature test. Two class names ride along with it: `resize-none` (a
+hand-dragged height would be overwritten by the next keystroke) and
+`overflow-hidden` (the field is always exactly as tall as its text, so there is
+nothing to scroll).
 
 ## Shared lesson logic
 
