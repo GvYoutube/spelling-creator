@@ -2,7 +2,15 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!-- viewport-fit=cover lets the page reach under a notch/home indicator,
+         which is what makes the env(safe-area-inset-*) values non-zero. The
+         bottom-anchored overlays (the add-section FAB, the collab chat, the
+         first-lesson wizard) use them to stay clear of the iOS home indicator
+         — see the `bottom-safe` utility in src/styles/globals.css. -->
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, viewport-fit=cover"
+    />
     <meta
       name="description"
       content="Create and print Spelling lessons with sections, text, and images."
@@ -30,6 +38,29 @@
     <meta name="twitter:card" content="summary_large_image" />
     <title>Spelling Lesson Maker</title>
     <link rel="icon" href="/src/favicon.svg" type="image/svg+xml" />
+    <!-- PWA. The <link rel="manifest"> is injected at build time by
+         vite-plugin-pwa from the `manifest` block in vite.config.js; what it
+         doesn't own is written here.
+
+         theme-color tints the OS/browser chrome around an installed window, so
+         it tracks the theme the same way AppHeader's --primary does (see
+         src/styles/globals.css). Safari picks the first matching tag, so the
+         dark one must come first. iOS ignores the manifest's icons and uses
+         apple-touch-icon; it also ignores `display: standalone` unless
+         mobile-web-app-capable is present. -->
+    <meta
+      name="theme-color"
+      media="(prefers-color-scheme: dark)"
+      content="#5b64dd"
+    />
+    <meta name="theme-color" content="#4f5fd9" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-title" content="Spelling" />
+    <meta
+      name="apple-mobile-web-app-status-bar-style"
+      content="black-translucent"
+    />
+    <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" />
     <!-- Autodiscovery for the hub's "latest lessons" Atom feed, served same-origin
          by the Worker at /feed.xml (surfaced as "RSS" in the UI). -->
     <link

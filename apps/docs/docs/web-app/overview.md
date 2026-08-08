@@ -33,13 +33,29 @@ PDF printing.
   AI, running entirely on the reader's own device (no server, no cost). Only
   appears on browsers that can actually run it (see
   [Lesson summaries](./lesson-summaries.md)).
-- **Reorder / delete** sections and blocks with inline controls. Blocks can also
-  be dragged by their grab handle, both within a section and **from one section
-  into another** (an empty section shows a drop zone that takes the block). An
-  insertion line shows where the block will land — anywhere in a section,
-  including the gaps between blocks — and holding the pointer near the top or
-  bottom of the window scrolls the page on its own, so a block can be carried to
-  a section well past the visible part of a long lesson.
+- **Navigating a long lesson** - a finished lesson runs to ~37 screens on a
+  desktop and ~54 on a phone, so each section's header is sticky (pinned below
+  the app bar, naming the section you're in for as long as you're in it), every
+  question is numbered within its section (`Q7`), a newly added section is
+  scrolled to rather than silently appended at the end, reordering a section or
+  block keeps it under the pointer instead of flinging the page, and returning
+  to the editor puts you back at the block you were last editing (see
+  [Navigating large lessons](./navigating-large-lessons.md)).
+- **Collapse sections** - fold any section to its header, or the whole lesson at
+  once, turning 37 screens into 1.5. A folded section still says what's inside
+  it, still reorders, still takes a dragged block (dwell over it and it springs
+  open), and is still found by Cmd-F. What you fold is yours — it isn't saved
+  into the lesson and collaborators don't see it.
+- **Reorder / delete** sections and blocks with inline controls. On a device
+  with a mouse or trackpad, blocks can also be dragged by their grab handle,
+  both within a section and **from one section into another** (an empty section
+  shows a drop zone that takes the block). An insertion line shows where the
+  block will land — anywhere in a section, including the gaps between blocks —
+  and holding the pointer near the top or bottom of the window scrolls the page
+  on its own, so a block can be carried to a section well past the visible part
+  of a long lesson. The grab handle is hidden on touch devices, where the
+  browser doesn't deliver drag events at all; the move up/down buttons do the
+  same job (see [Mobile layout & touch targets](./mobile-layout.md)).
 - **Export DOCX** - downloads a formatted `.docx`.
 - **Print PDF** - builds the docx, converts it to HTML with mammoth, then renders
   a PDF with html2pdf.js so the printout mirrors the Word document.
@@ -76,6 +92,10 @@ PDF printing.
   [Version history](/monorepo/version-history)).
 - **Auto-save** - your work is kept in IndexedDB between reloads (images as binary
   blobs, so large drafts aren't capped by `localStorage`'s ~5 MB quota).
+- **Installable, and works offline** - the app can be installed to a Home Screen
+  or dock and opens in its own window; a service worker precaches the shell, so
+  the editor, version history and DOCX/PDF export all keep working with no
+  network (see [Installable app & offline use](./pwa-and-offline.md)).
 - **Internationalization** - every user-facing string is routed through
   react-i18next; only English ships today, but adding a language needs no component
   changes (see [Internationalization](./internationalization.md)).

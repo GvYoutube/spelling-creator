@@ -53,6 +53,22 @@ export default function CollabCursors({ selections }) {
       `[data-collab-field="${escapeField(c.field)}"]`,
     );
     if (!el) continue;
+    // The field is in the document but isn't being rendered — it's inside a
+    // section this user has collapsed, and drawing a caret for it would pin a
+    // collaborator's avatar over the folded card.
+    //
+    // checkVisibility() rather than measuring: a collapsed section is hidden
+    // with `hidden="until-found"`, i.e. `content-visibility: hidden`, and its
+    // descendants still report a full-size getBoundingClientRect — so the
+    // measurements below look perfectly reasonable. `closest("[hidden]")` is
+    // the fallback for browsers without checkVisibility.
+    if (
+      el.checkVisibility
+        ? !el.checkVisibility()
+        : Boolean(el.closest("[hidden]"))
+    ) {
+      continue;
+    }
 
     const index = typeof c.end === "number" ? c.end : 0;
     let coords;

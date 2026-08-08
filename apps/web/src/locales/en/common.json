@@ -22,6 +22,19 @@
     "signedOut": "Signed out",
     "signIn": "Sign in"
   },
+  "install": {
+    "ariaLabel": "install app",
+    "tooltip": "Install app",
+    "iosTitle": "Install Spelling Lesson Maker",
+    "iosDescription": "Add it to your Home Screen to open it like an app — full screen, and your lessons stay available offline.",
+    "iosStepShare": "Tap the Share button in Safari's toolbar.",
+    "iosStepAdd": "Choose \"Add to Home Screen\"."
+  },
+  "pwa": {
+    "updateTitle": "A new version is available",
+    "updateDescription": "Reload to update. Your saved lessons aren't affected.",
+    "updateAction": "Reload"
+  },
   "notificationBell": {
     "tooltip": "Notifications",
     "menuLabel": "Notifications",

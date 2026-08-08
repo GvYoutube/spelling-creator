@@ -1,4 +1,11 @@
-import { memo, useCallback, useRef, useState } from "react";
+import {
+  memo,
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from "react";
 import { useTranslation } from "react-i18next";
 import {
   TypeIcon,
@@ -10,6 +17,7 @@ import {
   Trash2Icon,
   ArrowUpIcon,
   ArrowDownIcon,
+  ChevronDownIcon,
   GripVerticalIcon,
 } from "lucide-react";
 import { Button } from "./ui/button.jsx";
@@ -27,6 +35,11 @@ import AiTextDialog from "./AiTextDialog.jsx";
 import AiQuestionDialog from "./AiQuestionDialog.jsx";
 import ImageSearchDialog from "./ImageSearchDialog.jsx";
 import { cn } from "../lib/utils.js";
+import {
+  idSelector,
+  scrollToElement,
+  useScrollAnchor,
+} from "../lib/useScrollAnchor.js";
 import { newId } from "@spelling-creator/core/id";
 import { readImageFile } from "@spelling-creator/core/browser/imageFile";
 import { storeImageBytes } from "@spelling-creator/core/browser/imageRef";
@@ -36,6 +49,11 @@ import {
   buildQuestionBlock,
 } from "@spelling-creator/core/questions";
 import { createSpellingBlock } from "@spelling-creator/core/spelling";
+
+// The add-block toolbar's buttons are `size="sm"` — 32px tall, under the touch
+// target minimum, and there are six of them wrapping across a phone screen.
+// Matches the constant of the same name in ContentBlock.jsx.
+const TOUCH_SM_BUTTON = "h-10 sm:pointer-fine:h-8";
 
 function SectionCard({
   section,
@@ -48,6 +66,12 @@ function SectionCard({
   isLast,
   onError,
   capitalizedWords = [],
+  // Folded to just this card's header. Owned by EditorPage (so "collapse all"
+  // is possible) and passed down as a plain boolean. onToggleCollapse(id, next)
+  // takes an optional forced state; omitted, it toggles.
+  collapsed = false,
+  onToggleCollapse,
+  springOpenMs = 500,
   // Block drag-and-drop is owned by the editor page (a block can be dragged from
   // one section into another, so no single card can hold the in-flight drag).
   // This card only measures the pointer against its own rows and reports where
@@ -67,6 +91,9 @@ function SectionCard({
 }) {
   const { t } = useTranslation("editorSections");
   const fileInputRef = useRef(null);
+  // Keeps a block still on screen while the move buttons reorder it past its
+  // (tall) neighbours — see moveBlock.
+  const anchorScroll = useScrollAnchor();
   // The element wrapping this section's block rows; drop targeting measures the
   // rows inside it against the pointer.
   const listRef = useRef(null);
@@ -89,12 +116,32 @@ function SectionCard({
   const [activeBlockId, setActiveBlockId] = useState(null);
   // Mirror the id of the block in flight (and this section's id) so the drag
   // handlers below stay stable — re-creating them on every dragover would hand
-  // every <BlockRow> new props mid-drag.
-  const dragRef = useRef({ dragBlockId: null, sectionId: null });
+  // every <BlockRow> new props mid-drag. `collapsed` rides along for the
+  // spring-open path, which runs from inside those same stable handlers.
+  const dragRef = useRef({
+    dragBlockId: null,
+    sectionId: null,
+    collapsed: false,
+  });
   // eslint-disable-next-line react-hooks/refs -- intentional mirror ref, read only in stable drag handlers
   dragRef.current.dragBlockId = dragBlockId;
   // eslint-disable-next-line react-hooks/refs -- intentional mirror ref, read only in stable drag handlers
   dragRef.current.sectionId = section.id;
+  // eslint-disable-next-line react-hooks/refs -- intentional mirror ref, read only in stable drag handlers
+  dragRef.current.collapsed = collapsed;
+
+  // The card's root and its foldable body. The root is what a collapse scrolls
+  // to; the body is what carries hidden="until-found".
+  const cardRef = useRef(null);
+  const bodyRef = useRef(null);
+  // Ties the collapse button to what it actually collapses, so a screen reader
+  // announcing "expanded"/"collapsed" can also point at the region. Whitespace
+  // is stripped because `aria-controls` is a space-separated *list* of ids, and
+  // section ids aren't always ours — jsonImport's keepId() passes any string in
+  // a lesson file through verbatim (the same reason idSelector uses CSS.escape).
+  const bodyId = `section-body-${section.id}`.replace(/\s+/g, "-");
+  // Pending spring-open timer while a dragged block hovers this collapsed card.
+  const springRef = useRef(null);
 
   // Replace the whole block list. Reads the current section from the ref and
   // routes through the (stable) parent onChange(id, next).
@@ -252,9 +299,14 @@ function SectionCard({
       if (from === -1 || to < 0 || to >= blocks.length) return;
       const [moved] = blocks.splice(from, 1);
       blocks.splice(to, 0, moved);
+      // Ride with the block being moved: blocks here run 160-360px tall, so
+      // without this each press slides the block (and the button that was just
+      // pressed) out from under the pointer, and walking one up a section means
+      // re-finding the button every click.
+      anchorScroll(idSelector("data-block-id", blockId));
       updateBlocks(blocks);
     },
-    [updateBlocks],
+    [updateBlocks, anchorScroll],
   );
 
   const activateBlock = useCallback((blockId) => setActiveBlockId(blockId), []);
@@ -292,15 +344,55 @@ function SectionCard({
   // to measure against (an empty one) reports a null target: land at the end.
   const handleDragOver = useCallback(
     (e) => {
-      const { dragBlockId, sectionId } = dragRef.current;
+      const { dragBlockId, sectionId, collapsed } = dragRef.current;
       if (!dragBlockId) return;
       e.preventDefault();
       e.dataTransfer.dropEffect = "move";
+      // Dwell over a collapsed section and it springs open, so a block can be
+      // carried into a section that's currently folded away. On a dwell rather
+      // than on the first dragover event because dragging *past* a collapsed
+      // card on the way somewhere else would otherwise keep re-flowing the page
+      // under the pointer.
+      if (collapsed) {
+        if (springRef.current === null) {
+          springRef.current = setTimeout(() => {
+            springRef.current = null;
+            onToggleCollapse?.(sectionId, false);
+          }, springOpenMs);
+        }
+        // No rows to measure against while it's still folded: report the
+        // section with no insertion point, which lands the block at the end —
+        // the same thing an empty section does.
+        onBlockDragOver(sectionId, null, null);
+        return;
+      }
       const target = dropTargetAt(listRef.current, e.clientY, dragBlockId);
       onBlockDragOver(sectionId, target?.id ?? null, target?.pos ?? null);
     },
-    [onBlockDragOver],
+    [onBlockDragOver, onToggleCollapse, springOpenMs],
   );
+
+  // Cancel a pending spring-open: the pointer left, the drop happened, or this
+  // card is going away.
+  const cancelSpring = useCallback(() => {
+    if (springRef.current !== null) {
+      clearTimeout(springRef.current);
+      springRef.current = null;
+    }
+  }, []);
+
+  useEffect(() => cancelSpring, [cancelSpring]);
+
+  // The drag ended without this card hearing about it. `drop` and `dragleave`
+  // cover the ordinary paths, but a cancelled drag (Escape, or a release over
+  // something that won't take it) only reliably fires `dragend` on the *source*
+  // element — the card the pointer happens to be resting over isn't guaranteed
+  // a matching `dragleave`, and Safari in particular doesn't send one. Without
+  // this, a pending timer springs a collapsed section open seconds after the
+  // drag it belonged to is over.
+  useEffect(() => {
+    if (!dragBlockId) cancelSpring();
+  }, [dragBlockId, cancelSpring]);
 
   // Drop: the editor page holds the in-flight drag and applies the move, since
   // it may span two sections.
@@ -308,9 +400,15 @@ function SectionCard({
     (e) => {
       if (!dragRef.current.dragBlockId) return;
       e.preventDefault();
+      cancelSpring();
+      // Dropped before the spring-open fired: expand, or the block the user
+      // just carried here would vanish into a folded card.
+      if (dragRef.current.collapsed) {
+        onToggleCollapse?.(dragRef.current.sectionId, false);
+      }
       onBlockDrop();
     },
-    [onBlockDrop],
+    [onBlockDrop, cancelSpring, onToggleCollapse],
   );
 
   // The pointer left this card entirely (not just moved between its children):
@@ -318,9 +416,10 @@ function SectionCard({
   const handleDragLeave = useCallback(
     (e) => {
       if (e.currentTarget.contains(e.relatedTarget)) return;
+      cancelSpring();
       onBlockDragLeave(dragRef.current.sectionId);
     },
-    [onBlockDragLeave],
+    [onBlockDragLeave, cancelSpring],
   );
 
   // Where the "add block" toolbar sits: directly under the block being edited,
@@ -328,9 +427,26 @@ function SectionCard({
   // another section) — at the bottom of the section.
   const activeIndex = section.blocks.findIndex((b) => b.id === activeBlockId);
 
+  // 1-based position among *this section's* question blocks. A section in a
+  // standard lesson holds fifteen of them, and a question block otherwise shows
+  // nothing but its type badge — so ten "Open ended" cards in a row are
+  // visually interchangeable and scrolling back to the one you were fixing is a
+  // guess. Numbering them makes each one nameable ("Q7"). Counted per section,
+  // not per lesson, because that's how the questions are authored and read.
+  const questionNumbers = new Map();
+  for (const b of section.blocks) {
+    if (b.type === "question")
+      questionNumbers.set(b.id, questionNumbers.size + 1);
+  }
+
   const addToolbar = (
     <div className="flex flex-wrap gap-2">
-      <Button variant="outline" size="sm" onClick={addTextBlock}>
+      <Button
+        variant="outline"
+        size="sm"
+        onClick={addTextBlock}
+        className={TOUCH_SM_BUTTON}
+      >
         <TypeIcon data-icon="inline-start" />
         {t("sectionCard.toolbar.addText")}
       </Button>
@@ -338,6 +454,7 @@ function SectionCard({
         variant="outline"
         size="sm"
         onClick={() => fileInputRef.current?.click()}
+        className={TOUCH_SM_BUTTON}
       >
         <ImageIcon data-icon="inline-start" />
         {t("sectionCard.toolbar.addImage")}
@@ -346,13 +463,14 @@ function SectionCard({
         variant="outline"
         size="sm"
         onClick={() => setImageSearchOpen(true)}
+        className={TOUCH_SM_BUTTON}
       >
         <SearchIcon data-icon="inline-start" />
         {t("sectionCard.toolbar.searchImages")}
       </Button>
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
-          <Button variant="outline" size="sm">
+          <Button variant="outline" size="sm" className={TOUCH_SM_BUTTON}>
             <CircleHelpIcon data-icon="inline-start" />
             {t("sectionCard.toolbar.addQuestion")}
           </Button>
@@ -377,13 +495,18 @@ function SectionCard({
           ))}
         </DropdownMenuContent>
       </DropdownMenu>
-      <Button variant="outline" size="sm" onClick={addSpellingBlock}>
+      <Button
+        variant="outline"
+        size="sm"
+        onClick={addSpellingBlock}
+        className={TOUCH_SM_BUTTON}
+      >
         <SpellCheckIcon data-icon="inline-start" />
         {t("sectionCard.toolbar.spellingWords")}
       </Button>
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
-          <Button variant="outline" size="sm">
+          <Button variant="outline" size="sm" className={TOUCH_SM_BUTTON}>
             <SparklesIcon data-icon="inline-start" />
             {t("sectionCard.toolbar.generateWithAi")}
           </Button>
@@ -418,15 +541,145 @@ function SectionCard({
     </div>
   );
 
+  // Fold the body away with `hidden="until-found"`, which hides it while
+  // leaving it searchable: Cmd-F still finds text inside a collapsed section,
+  // and the browser reveals it itself (see the `beforematch` handler below).
+  //
+  // Set imperatively rather than through JSX because React 18 treats `hidden`
+  // as a *boolean* attribute — `hidden="until-found"` renders as a plain
+  // `hidden=""`, which is `display: none` and not searchable at all (verified
+  // in the browser; it's the whole reason this isn't a one-line prop). Since
+  // React never renders the attribute, the two can't fight over it, including
+  // when the browser removes it on a match.
+  //
+  // Browsers without `until-found` fall back to hiding it outright, which is
+  // what unmounting the content would have given us anyway.
+  useLayoutEffect(() => {
+    const el = bodyRef.current;
+    if (!el) return;
+    if (collapsed) el.setAttribute("hidden", "until-found");
+    else el.removeAttribute("hidden");
+  }, [collapsed]);
+
+  useEffect(() => {
+    const el = bodyRef.current;
+    if (!el) return undefined;
+    const onBeforeMatch = () => onToggleCollapse?.(section.id, false);
+    el.addEventListener("beforematch", onBeforeMatch);
+    return () => el.removeEventListener("beforematch", onBeforeMatch);
+  }, [onToggleCollapse, section.id]);
+
+  const handleToggleCollapse = () => {
+    // Folding a section you're *inside* pulls thousands of pixels out from
+    // under the viewport, leaving you somewhere arbitrary further down the
+    // lesson. If its header has already scrolled past, come back to it.
+    if (!collapsed) {
+      const rect = cardRef.current?.getBoundingClientRect();
+      if (rect && rect.top < 0) {
+        scrollToElement(cardRef.current, { smooth: false });
+      }
+    }
+    onToggleCollapse?.(section.id);
+  };
+
+  // What's inside, for the folded card — a section reduced to its name alone
+  // gives no sense of what it holds or how finished it is.
+  const counts = section.blocks.reduce((acc, b) => {
+    acc[b.type] = (acc[b.type] || 0) + 1;
+    return acc;
+  }, {});
+  const summary = ["text", "image", "spelling", "question"]
+    .filter((type) => counts[type])
+    .map((type) =>
+      t(`sectionCard.collapsedSummary.${type}`, { count: counts[type] }),
+    )
+    .join(" · ");
+
+  // Move/delete for the whole section. Rendered twice — once inside the sticky
+  // identity row for `sm` and up, once below it on a phone — with a breakpoint
+  // hiding whichever copy doesn't apply. See the header markup for why.
+  const sectionControls = (
+    <>
+      <IconActionButton
+        tooltip={t("sectionCard.moveUp")}
+        onClick={() => onMove(section.id, -1)}
+        disabled={isFirst}
+      >
+        <ArrowUpIcon />
+      </IconActionButton>
+      <IconActionButton
+        tooltip={t("sectionCard.moveDown")}
+        onClick={() => onMove(section.id, 1)}
+        disabled={isLast}
+      >
+        <ArrowDownIcon />
+      </IconActionButton>
+      <IconActionButton
+        tooltip={t("sectionCard.delete")}
+        onClick={() => onDelete(section.id)}
+        destructive
+      >
+        <Trash2Icon />
+      </IconActionButton>
+    </>
+  );
+
   return (
-    <div className="rounded-panel border border-border bg-card text-card-foreground shadow-(--shadow-panel)">
+    // data-section-id is how the editor page finds this card in the DOM — to
+    // scroll a newly added section into view, and to hold it still while it's
+    // being moved (see useScrollAnchor). scroll-mt keeps the card's top clear
+    // of the app bar when it's scrolled to.
+    <div
+      ref={cardRef}
+      data-section-id={section.id}
+      className="scroll-mt-(--header-h) rounded-panel border border-border bg-card text-card-foreground shadow-(--shadow-panel)"
+    >
       <div
         className="p-4"
         onDragOver={handleDragOver}
         onDrop={handleDrop}
         onDragLeave={handleDragLeave}
       >
-        <div className="mb-3 flex items-center gap-2">
+        {/* Sticky, pinned directly below the app bar. A section in a full
+            six-section lesson is ~6 screens tall on a desktop and ~9 on a
+            phone, so without this the only thing naming the section you're
+            editing scrolls away within the first flick and there is nothing on
+            screen telling you where you are for the next several thousand
+            pixels.
+
+            The negative margins bleed the row out to the card's edges so the
+            pinned background covers blocks passing underneath (the card's own
+            bg-card is translucent, hence the backdrop blur as well — same glass
+            treatment as AppHeader). z-30 stays below the app bar's z-40. The
+            border-b replaces what used to be a separate <hr>, so the divider
+            travels with the header and it reads as a bar rather than a row
+            floating over the content.
+
+            Only the *identity* — number, name, size — is in here. The move and
+            delete buttons wrap onto a second row on a phone (see below), and
+            pinning that row too made the sticky header 113px, 13% of a 844px
+            screen, on top of the app bar's own 64px. Knowing which section
+            you're in is worth permanent screen space; three buttons you go
+            looking for when you want them is not. */}
+        <div className="sticky top-(--header-h) z-30 -mx-4 -mt-4 mb-3 flex items-center gap-2 rounded-t-panel border-b border-border bg-card px-4 pt-4 pb-3 backdrop-blur-(--glass-blur)">
+          <IconActionButton
+            tooltip={
+              collapsed
+                ? t("sectionCard.expand")
+                : t("sectionCard.collapse", { name: section.name })
+            }
+            onClick={handleToggleCollapse}
+            aria-expanded={!collapsed}
+            aria-controls={bodyId}
+            className="-ml-1"
+          >
+            <ChevronDownIcon
+              className={cn(
+                "transition-transform duration-150",
+                collapsed && "-rotate-90",
+              )}
+            />
+          </IconActionButton>
           <div className="flex size-[30px] shrink-0 items-center justify-center rounded-full bg-primary text-sm font-bold text-primary-foreground">
             {index + 1}
           </div>
@@ -435,41 +688,34 @@ function SectionCard({
             value={section.name}
             onCommit={(name) => onChange(section.id, { ...section, name })}
             data-collab-field={`section:${section.id}:name`}
-            className="border-0 border-b border-transparent bg-transparent px-0 text-xl font-semibold shadow-none focus-visible:border-b-ring focus-visible:ring-0"
+            className="min-w-0 flex-1 border-0 border-b border-transparent bg-transparent px-0 text-xl font-semibold shadow-none focus-visible:border-b-ring focus-visible:ring-0"
           />
-          <IconActionButton
-            tooltip={t("sectionCard.moveUp")}
-            onClick={() => onMove(section.id, -1)}
-            disabled={isFirst}
-          >
-            <ArrowUpIcon />
-          </IconActionButton>
-          <IconActionButton
-            tooltip={t("sectionCard.moveDown")}
-            onClick={() => onMove(section.id, 1)}
-            disabled={isLast}
-          >
-            <ArrowDownIcon />
-          </IconActionButton>
-          <IconActionButton
-            tooltip={t("sectionCard.delete")}
-            onClick={() => onDelete(section.id)}
-            destructive
-          >
-            <Trash2Icon />
-          </IconActionButton>
+          {/* How much section is under you, so its length is at least a number
+              rather than only a scrollbar. Desktop only — on a phone the name
+              needs every pixel of this row. */}
+          <span className="hidden shrink-0 text-xs text-muted-foreground sm:inline">
+            {t("sectionCard.blockCount", { count: section.blocks.length })}
+          </span>
+          <div className="hidden shrink-0 items-center gap-1 sm:flex">
+            {sectionControls}
+          </div>
         </div>
 
-        <hr className="mb-3 border-border" />
+        {/* The same controls on a phone, where they don't fit on the identity
+            row (three 40px touch targets and the badge left ~130px of a 360px
+            screen for the section name). Out here they scroll away with the top
+            of the section instead of being pinned — one of these two copies is
+            always display:none, so only one is ever in the a11y tree. */}
+        <div className="mb-3 flex items-center gap-1 sm:hidden">
+          {sectionControls}
+        </div>
 
-        {section.blocks.length === 0 ? (
-          // An empty section has no row for the insertion line to sit against,
-          // so while a block is in flight the placeholder text becomes the drop
-          // zone itself — otherwise there'd be nothing telling the user that an
-          // empty section will happily take the block.
+        {/* What the folded card shows in place of its content: what's inside,
+            and — while a block is in flight — that dwelling here will open it.
+            The section's own name is already in the header above. */}
+        {collapsed && (
           <div
             className={cn(
-              "mb-3",
               dragBlockId &&
                 cn(
                   "rounded-md border-2 border-dashed p-4 transition-colors",
@@ -486,45 +732,84 @@ function SectionCard({
               )}
             >
               {dragBlockId
-                ? t("sectionCard.emptyDropHint")
-                : t("sectionCard.emptyState")}
+                ? t("sectionCard.collapsedDropHint")
+                : summary || t("sectionCard.emptyState")}
             </p>
-          </div>
-        ) : (
-          <div ref={listRef} className="mb-3 flex flex-col gap-3">
-            {section.blocks.map((block, i) => [
-              <BlockRow
-                key={block.id}
-                block={block}
-                isFirst={i === 0}
-                isLast={i === section.blocks.length - 1}
-                // Drag state is passed as plain booleans so a block that isn't
-                // involved in the current drag keeps identical props (and stays
-                // memoized) while another block is being dragged over.
-                isDragging={dragBlockId === block.id}
-                dropBefore={overId === block.id && overPos === "before"}
-                dropAfter={overId === block.id && overPos === "after"}
-                capitalizedWords={capitalizedWords}
-                onActivate={activateBlock}
-                onUpdate={updateBlock}
-                onDelete={deleteBlock}
-                onMove={moveBlock}
-                onReplaceImageFile={replaceImageFile}
-                onReplaceImageSearch={startReplaceSearch}
-                onDragStart={handleDragStart}
-                onDragEnd={onBlockDragEnd}
-              />,
-              // The toolbar sits directly beneath the block being edited.
-              i === activeIndex ? (
-                <div key={`${block.id}-toolbar`}>{addToolbar}</div>
-              ) : null,
-            ])}
           </div>
         )}
 
-        {/* When no block in this section is active, the toolbar stays at the
-            bottom (its original home). */}
-        {activeIndex === -1 && addToolbar}
+        {/* Folded away with hidden="until-found" rather than unmounted, so the
+            browser can still search it — see the effect that sets the
+            attribute, which is deliberately not done through JSX. */}
+        <div ref={bodyRef} id={bodyId}>
+          {section.blocks.length === 0 ? (
+            // An empty section has no row for the insertion line to sit against,
+            // so while a block is in flight the placeholder text becomes the drop
+            // zone itself — otherwise there'd be nothing telling the user that an
+            // empty section will happily take the block.
+            <div
+              className={cn(
+                "mb-3",
+                dragBlockId &&
+                  cn(
+                    "rounded-md border-2 border-dashed p-4 transition-colors",
+                    isDropSection
+                      ? "border-primary bg-accent"
+                      : "border-border bg-transparent",
+                  ),
+              )}
+            >
+              <p
+                className={cn(
+                  "text-sm",
+                  isDropSection ? "text-primary" : "text-muted-foreground",
+                )}
+              >
+                {dragBlockId
+                  ? t("sectionCard.emptyDropHint")
+                  : t("sectionCard.emptyState")}
+              </p>
+            </div>
+          ) : (
+            <div ref={listRef} className="mb-3 flex flex-col gap-3">
+              {section.blocks.map((block, i) => [
+                <BlockRow
+                  key={block.id}
+                  block={block}
+                  isFirst={i === 0}
+                  isLast={i === section.blocks.length - 1}
+                  // Drag state is passed as plain booleans so a block that isn't
+                  // involved in the current drag keeps identical props (and stays
+                  // memoized) while another block is being dragged over.
+                  isDragging={dragBlockId === block.id}
+                  dropBefore={overId === block.id && overPos === "before"}
+                  dropAfter={overId === block.id && overPos === "after"}
+                  // A plain number (null for non-questions), so it stays a stable
+                  // prop and only the blocks whose numbering actually shifted
+                  // re-render when a question is inserted mid-section.
+                  questionNumber={questionNumbers.get(block.id) ?? null}
+                  capitalizedWords={capitalizedWords}
+                  onActivate={activateBlock}
+                  onUpdate={updateBlock}
+                  onDelete={deleteBlock}
+                  onMove={moveBlock}
+                  onReplaceImageFile={replaceImageFile}
+                  onReplaceImageSearch={startReplaceSearch}
+                  onDragStart={handleDragStart}
+                  onDragEnd={onBlockDragEnd}
+                />,
+                // The toolbar sits directly beneath the block being edited.
+                i === activeIndex ? (
+                  <div key={`${block.id}-toolbar`}>{addToolbar}</div>
+                ) : null,
+              ])}
+            </div>
+          )}
+
+          {/* When no block in this section is active, the toolbar stays at the
+              bottom (its original home). */}
+          {activeIndex === -1 && addToolbar}
+        </div>
 
         <AiTextDialog
           open={aiOpen}
@@ -596,6 +881,7 @@ const BlockRow = memo(function BlockRow({
   isDragging,
   dropBefore,
   dropAfter,
+  questionNumber,
   capitalizedWords,
   onActivate,
   onUpdate,
@@ -640,10 +926,18 @@ const BlockRow = memo(function BlockRow({
         onReplaceImageSearch={() => onReplaceImageSearch(block.id)}
         isFirst={isFirst}
         isLast={isLast}
+        questionNumber={questionNumber}
         capitalizedWords={capitalizedWords}
         // The grab handle lives inside the block (in its controls row), so it
         // reads as part of the card rather than a bar above it. Drag must start
         // here so editing fields never drags by accident.
+        //
+        // Hidden on coarse pointers, because this is HTML5 drag-and-drop:
+        // Android Chrome never synthesises drag events from touch, and iOS
+        // Safari only does so for a long-press in some cases — so on a phone
+        // the handle was a control that mostly did nothing, and `touch-none`
+        // meant touching it swallowed the scroll gesture too. The move up/down
+        // buttons next to it reorder blocks without a drag, so nothing is lost.
         dragHandle={
           <Tooltip>
             <TooltipTrigger asChild>
@@ -653,7 +947,7 @@ const BlockRow = memo(function BlockRow({
                 onDragEnd={onDragEnd}
                 role="button"
                 aria-label={t("sectionCard.dragHandle.ariaLabel")}
-                className="inline-flex cursor-grab touch-none items-center justify-center rounded-md p-0.5 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground active:cursor-grabbing active:bg-accent"
+                className="inline-flex cursor-grab touch-none items-center justify-center rounded-md p-0.5 text-muted-foreground transition-colors pointer-coarse:hidden hover:bg-accent hover:text-foreground active:cursor-grabbing active:bg-accent"
               >
                 <GripVerticalIcon className="size-4" />
               </span>

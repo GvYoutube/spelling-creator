@@ -63,6 +63,15 @@ you can see where everyone is working. `useSelectionBroadcast`
 everyone else's via `collab.selections`, and `CollabCursors.jsx` renders the
 floating coloured carets/avatars over the editor.
 
+A caret is drawn only for a field that's actually on screen. Sections you have
+[collapsed](./navigating-large-lessons.md#collapsing-sections) are hidden with
+`content-visibility`, whose descendants still measure as full-size, so
+`CollabCursors` tests `Element.checkVisibility()` rather than geometry —
+otherwise a collaborator editing inside a folded section would have their avatar
+pinned over the collapsed card. Their edits still arrive as normal; only the
+marker is suppressed. Collapsed state is per-person and never leaves the
+browser, so nobody else's view is affected by what you fold away.
+
 **Live chat.** Once you're collaborating, a floating chat panel (`CollabChat.jsx`,
 pinned to the bottom-left) lets everyone in the session talk. It appears for the
 host as soon as a session is live and for a guest once the host has added them.

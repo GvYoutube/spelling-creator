@@ -11,8 +11,15 @@ import { Link as RouterLink } from "react-router-dom";
 // otherwise (e.g. ModerationPage's "Moderation" heading isn't a link).
 export default function AppHeader({ left, title, titleHref, children }) {
   return (
-    <header className="sticky top-0 z-40 bg-primary/88 text-primary-foreground shadow-[0_1px_3px_rgba(0,0,0,0.15)] backdrop-blur-(--glass-blur) backdrop-saturate-[1.4]">
-      <div className="mx-auto flex h-16 max-w-6xl items-center gap-1 px-4">
+    // pt-safe keeps the bar's contents clear of the iOS status bar when the app
+    // runs installed (standalone), where the page reaches the very top of the
+    // screen. It resolves to 0 in a browser tab — see globals.css.
+    <header className="sticky top-0 z-40 bg-primary/88 pt-safe text-primary-foreground shadow-[0_1px_3px_rgba(0,0,0,0.15)] backdrop-blur-(--glass-blur) backdrop-saturate-[1.4]">
+      {/* The bar's height is a theme token rather than a literal h-16 because
+          other things have to pin below it — the editor's sticky section
+          headers, and scroll-mt on anything scrolled to programmatically. See
+          --header-row-h / --header-h in globals.css. */}
+      <div className="mx-auto flex h-(--header-row-h) max-w-6xl items-center gap-1 px-4">
         {left}
         {titleHref ? (
           <RouterLink

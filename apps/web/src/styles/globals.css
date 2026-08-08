@@ -76,6 +76,34 @@
   }
 }
 
+/* Keeps a bottom-anchored floating element clear of the iOS home indicator.
+   The FAB, the collab chat and the first-lesson wizard all sit `bottom-4`
+   (1rem) off the edge, which puts their lower half inside the ~34px swipe
+   strip — the gesture wins, so the tap doesn't land.
+
+   Implemented as a margin rather than a `bottom-safe` replacement for
+   `bottom-*` so it composes with whatever offset an element already uses
+   (`bottom-4 sm:bottom-8` on the FAB) instead of having to restate it.
+   env() only resolves to something non-zero because the viewport meta sets
+   viewport-fit=cover — see index.html. */
+@utility mb-safe {
+  margin-bottom: env(safe-area-inset-bottom);
+}
+
+/* The top half of the same problem, and only for the installed PWA. iOS in
+   standalone mode draws the app's content under the status bar (that's what
+   `apple-mobile-web-app-status-bar-style: black-translucent` in index.html asks
+   for, so AppHeader's indigo bar fills the notch area rather than leaving a
+   mismatched strip above it) — which would put the header's title and buttons
+   behind the clock. Padding the header by the inset drops its contents back
+   below the status bar while the background still reaches the top edge.
+
+   Zero in a browser tab, where the browser's own chrome occupies that space, so
+   this changes nothing outside an installed app. See pwa-and-offline.md. */
+@utility pt-safe {
+  padding-top: env(safe-area-inset-top);
+}
+
 :root {
   /* Tells the browser to render native chrome (scrollbars, form controls) in
      the light palette — without this, native scrollbars stay light-themed
@@ -87,6 +115,18 @@
   --radius-panel: 1.25rem; /* 20px */
   --radius-tile: 0.5rem; /* 8px */
   --radius-pill: 999px;
+
+  /* AppHeader's height, published as a token so anything that has to sit clear
+     of the sticky bar references it instead of restating 64px.
+
+     --header-row-h is the bar itself (AppHeader applies it as h-(--header-row-h),
+     so this is the single source of truth). --header-h adds the iOS status-bar
+     inset the header pads itself by when the app runs installed — it's the real
+     distance from the top of the viewport to the first pixel of page content,
+     and it's what the editor's sticky section headers pin to and what
+     scroll-mt-(--header-h) offsets a scrolled-to element by. */
+  --header-row-h: 4rem;
+  --header-h: calc(var(--header-row-h) + env(safe-area-inset-top));
 
   --background: #dee3f3;
   --foreground: #1e2138;

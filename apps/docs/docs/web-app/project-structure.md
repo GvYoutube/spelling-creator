@@ -8,8 +8,8 @@ sidebar_position: 15
 ```
 src/
   App.jsx                 route table (editor / hub / lesson / profile / login / moderation)
-  main.jsx                React entry: ColorSchemeProvider + BrowserRouter + AuthProvider + DisplayNameGate + Toaster
-  styles/globals.css      Tailwind v4 + shadcn/ui design tokens (light/dark palettes, glass-surface shadows/blur)
+  main.jsx                React entry: ColorSchemeProvider + BrowserRouter + AuthProvider + DisplayNameGate + Toaster + ServiceWorkerPrompt
+  styles/globals.css      Tailwind v4 + shadcn/ui design tokens (light/dark palettes, glass-surface shadows/blur), plus the `mb-safe` utility (see mobile-layout.md)
   locales/en/*.json      one JSON file per i18next namespace (see internationalization.md)
   pages/
     EditorPage.jsx        the lesson builder (toolbar, section list, + button, publish, collaborate)
@@ -20,7 +20,8 @@ src/
     ModerationPage.jsx    moderator/admin queue for reported content
   components/
     AppHeader.jsx          shared sticky glass toolbar (title + left slot + children) every page mounts
-    NavActions.jsx        shared header nav: hub link + dark-mode toggle + account menu + notification bell
+    NavActions.jsx        shared header nav: hub link + install button + dark-mode toggle + account menu + notification bell
+    InstallAppButton.jsx  the "install app" header button; renders nothing unless the app is installable (see pwa-and-offline.md)
     NotificationBell.jsx  header bell that polls for and shows the user's notifications
     DisplayNameGate.jsx   makes a signed-in user pick a display name before using the app
     DisplayNameDialog.jsx pick / change your public display name
@@ -34,14 +35,15 @@ src/
     LessonView.jsx        read-only renderer for the lesson page (blocks straight to React, lazy images)
     LessonSummary.jsx     on-device AI summary card on the lesson page (hidden unless the browser supports it)
     SectionCard.jsx       a named section with its content blocks + add buttons; measures the pointer against its own rows during a block drag, but the drag itself is owned by EditorPage (blocks can move between sections)
-    ContentBlock.jsx      a single text, spelling, image, or question block
+    ContentBlock.jsx      a single text, spelling, image, or question block; owns BLOCK_LAYOUT, the responsive content/controls split (see mobile-layout.md)
+    IconActionButton.jsx  the icon + tooltip button behind every block/section control; the tooltip doubles as its aria-label
     AiTextDialog.jsx       Turnstile-verified "suggest text with AI" dialog
     AiQuestionDialog.jsx   Turnstile-verified "suggest a question with AI" dialog
     AiLessonIdeaDialog.jsx Turnstile-verified "suggest a whole lesson outline with AI" dialog
     ImageSearchDialog.jsx  Turnstile-verified "search Pixabay images" dialog
     CollaborateDialog.jsx  live-collaboration control panel (host/join, roster, trusted collaborators)
     CollabCursors.jsx      floating coloured carets showing collaborators' selections
-    CollabChat.jsx         floating in-session chat panel
+    CollabChat.jsx         in-session chat: a floating corner panel on desktop, a bottom sheet on mobile
     HistoryDialog.jsx      the lesson's version timeline: what each commit changed, per block, + restore
     MergeDialog.jsx        settle a merge with the lesson this one was forked from (mine / theirs / keep both)
     ui/                    shadcn/ui primitives (Button, Dialog, DropdownMenu, Select, Tooltip, Sonner Toaster, etc.) — Radix underneath, styled from the tokens in styles/globals.css
@@ -53,13 +55,21 @@ src/
     collab.js             useCollaboration hook (one WebSocket to the CollabRoom Durable Object; doc sync, cursors, chat)
     useSelectionBroadcast.js broadcasts the local editor selection to peers
     useDragAutoScroll.js  scrolls the page while a block drag hovers near a window edge (the browser only auto-scrolls a native drag while the pointer keeps moving)
+    useScrollAnchor.js    keeps a section/block still on screen while the move buttons reorder it, plus scrollToElement/idSelector (see navigating-large-lessons.md)
     git/                  what has to stay in the app — the rest is in core (see below)
       engine.js, load.js  the git engine, behind one dynamic import (keeps ~185 KB off the main bundle)
       useLessonGit.js     the editor's controller: setup, periodic commits, history, restore
     useImageSrc.js        resolves an image ref to a displayable src
     auth.jsx              AuthProvider + useAuth (session, magic link, sign out)
     seo.js                per-page document title + Open Graph / Twitter tags
+    pwa.jsx               registers the service worker; toasts when a new build is waiting
+    useInstallPrompt.js   captures beforeinstallprompt (or detects iOS Safari) behind the install button
 ```
+
+Outside `src/`, `public/icons/` holds the PWA icons and the two SVGs they're
+rasterised from, and the `VitePWA` block in `vite.config.js` holds the manifest
+and service-worker configuration — see
+[Installable app & offline use](./pwa-and-offline.md).
 
 ## Shared lesson logic
 
@@ -173,10 +183,11 @@ names for one predicate.
 
 `git/repo` and friends never open a filesystem themselves — they take one through
 `repoCtx`, which is why they port unchanged. What stays in the web app is
-everything that names a concrete runtime: `fs` (LightningFS over IndexedDB),
-`remote` (reads `import.meta.env.VITE_API_URL` at module scope), `engine` and
-`load` (the dynamic-import boundary and the `Buffer` polyfill browsers need), and
-`sync`, which composes the two halves.
+`engine` and `load` (the dynamic-import boundary and the `Buffer` polyfill
+browsers need) plus `useLessonGit`, the editor's own controller. `fs`
+(LightningFS over IndexedDB) and `sync` sit in core's browser tier, and `remote`
+is runtime-neutral now that it reads its base URL through
+[the config seam](#the-config-seam) rather than `import.meta.env`.
 
 That boundary is load-bearing for bundle size: isomorphic-git stays behind
 `load.js`'s dynamic import, in its own ~181 KB async chunk, rather than in the

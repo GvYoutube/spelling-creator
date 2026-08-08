@@ -505,7 +505,7 @@ export default function HomePage() {
   const signedIn = enabled && !!user;
 
   return (
-    <div className="min-h-screen bg-background pb-16 text-foreground">
+    <div className="min-h-dvh bg-background pb-16 text-foreground">
       <AppHeader
         title={
           <span className="inline-flex items-center gap-2">

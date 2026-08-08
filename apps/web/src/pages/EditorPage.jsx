@@ -7,6 +7,8 @@ import { Trans, useTranslation } from "react-i18next";
 import {
   BracesIcon,
   ChevronDownIcon,
+  ChevronsDownUpIcon,
+  ChevronsUpDownIcon,
   CircleHelpIcon,
   CloudIcon,
   CloudUploadIcon,
@@ -118,6 +120,43 @@ import { useAuth } from "../lib/auth.jsx";
 import { useCollaboration } from "../lib/collab.js";
 import { useSelectionBroadcast } from "../lib/useSelectionBroadcast.js";
 import { useDragAutoScroll } from "../lib/useDragAutoScroll.js";
+import {
+  idSelector,
+  scrollToElement,
+  useScrollAnchor,
+} from "../lib/useScrollAnchor.js";
+
+// Where the user was last editing, so re-entering the editor doesn't drop them
+// at the top of a document that runs to ~54 phone screens.
+//
+// sessionStorage rather than the IndexedDB draft store: this is per-tab and
+// should expire with the tab. Reopening a lesson tomorrow ought to start at the
+// beginning; coming back from the hub or a reload, five minutes later, ought
+// not to.
+const FOCUS_KEY = "s2c-lesson-maker:editor-focus";
+
+// Which sections are collapsed to their header. Same storage reasoning as
+// FOCUS_KEY: a view preference for this tab, not part of the lesson.
+const COLLAPSED_KEY = "s2c-lesson-maker:editor-collapsed";
+
+// How long a dragged block must hover a collapsed section before it springs
+// open. Long enough that dragging *past* a collapsed section on the way
+// somewhere else doesn't keep re-flowing the page under the pointer.
+const SPRING_OPEN_MS = 500;
+
+// The section the viewport is currently inside: the first one whose bottom edge
+// is still below the app bar. Used to keep the user's place across a
+// collapse-all / expand-all, which changes the page height by ~20x.
+function currentSectionEl() {
+  // Measured off the bar itself rather than read from --header-h, which is a
+  // calc() with an env() in it and doesn't resolve to a bare number.
+  const top =
+    document.querySelector("header")?.getBoundingClientRect().bottom ?? 0;
+  for (const el of document.querySelectorAll("[data-section-id]")) {
+    if (el.getBoundingClientRect().bottom > top) return el;
+  }
+  return null;
+}
 
 // The starter document a fresh editor opens with. Any persisted draft is loaded
 // asynchronously from IndexedDB on mount (see the hydration effect) and replaces
@@ -459,6 +498,116 @@ export default function EditorPage() {
     if (hydrated) saveForkedFrom(forkedFrom);
   }, [forkedFrom, hydrated]);
 
+  // Which sections are collapsed to their header.
+  //
+  // Local view state, deliberately *not* part of the document: it isn't content,
+  // it must never reach the exporters, and it's never broadcast to
+  // collaborators — the same reasoning as SectionCard's activeBlockId. What one
+  // person folds away to get some screen back is theirs, not everyone's.
+  //
+  // It lives here rather than in each card so "collapse all" is possible, and
+  // reaches each card as a plain boolean, so toggling one section doesn't
+  // re-render the others. Declared above the restore effect below, which reads
+  // it.
+  const [collapsedIds, setCollapsedIds] = useState(() => {
+    try {
+      const raw = sessionStorage.getItem(COLLAPSED_KEY);
+      return new Set(raw ? JSON.parse(raw) : []);
+    } catch {
+      return new Set();
+    }
+  });
+
+  useEffect(() => {
+    try {
+      sessionStorage.setItem(COLLAPSED_KEY, JSON.stringify([...collapsedIds]));
+    } catch {
+      // Private mode / quota — collapsing still works, it just won't survive a
+      // reload.
+    }
+  }, [collapsedIds]);
+
+  // `next` is optional: omitted it toggles, passed it forces a state (the
+  // find-in-page and drag spring-open paths both only ever want "expand").
+  const toggleCollapse = useCallback((id, next) => {
+    setCollapsedIds((prev) => {
+      const wanted = next ?? !prev.has(id);
+      if (wanted === prev.has(id)) return prev;
+      const out = new Set(prev);
+      if (wanted) out.add(id);
+      else out.delete(id);
+      return out;
+    });
+  }, []);
+
+  // Remember which block the user was last typing in.
+  //
+  // A block id, not a scroll offset: block heights change as the lesson is
+  // edited and as images load, so a pixel position points at something else by
+  // the time it's used, while an id still means the thing you were working on.
+  //
+  // A capture-free focusin listener writing straight to sessionStorage keeps
+  // this out of React entirely. Lifting SectionCard's activeBlockId up to this
+  // page would re-render every section on each focus change — the exact cost
+  // that keeping it local avoids on a 108-block document.
+  useEffect(() => {
+    const onFocusIn = (e) => {
+      const el = e.target?.closest?.("[data-block-id]");
+      if (!el) return;
+      try {
+        sessionStorage.setItem(FOCUS_KEY, el.dataset.blockId);
+      } catch {
+        // Private mode / quota. Position restore is a convenience, never fatal.
+      }
+    };
+    document.addEventListener("focusin", onFocusIn);
+    return () => document.removeEventListener("focusin", onFocusIn);
+  }, []);
+
+  // ...and go back there once the draft has hydrated and the sections exist.
+  // Once per mount only (restoredRef), so it can never yank the page out from
+  // under someone who has already started scrolling.
+  const restoredRef = useRef(false);
+  // collapsedIds is read inside the animation frame below, but must not be a
+  // dependency: a collapse landing between the effect and the frame would run
+  // the cleanup — cancelling the pending frame — and then bail on
+  // restoredRef, so the restore would be dropped and never rescheduled. A ref
+  // gets the current value without giving the effect a reason to re-run.
+  const collapsedIdsRef = useRef(collapsedIds);
+  useEffect(() => {
+    collapsedIdsRef.current = collapsedIds;
+  }, [collapsedIds]);
+  useEffect(() => {
+    if (!hydrated || restoredRef.current) return;
+    restoredRef.current = true;
+    let blockId = null;
+    try {
+      blockId = sessionStorage.getItem(FOCUS_KEY);
+    } catch {
+      return;
+    }
+    if (!blockId) return;
+    // One frame, so the sections that just rendered have been laid out.
+    const raf = requestAnimationFrame(() => {
+      const el = document.querySelector(idSelector("data-block-id", blockId));
+      if (!el) return;
+      // The block may be inside a section the user collapsed before they left.
+      // Go to that section's card rather than expanding it behind their back —
+      // a collapsed section is a decision, and the header still gets them to
+      // the right place.
+      const card = el.closest("[data-section-id]");
+      if (card && collapsedIdsRef.current.has(card.dataset.sectionId)) {
+        scrollToElement(card, { smooth: false });
+        return;
+      }
+      // `center`, not `start`: a block aligned to the top of the page would sit
+      // underneath its own section's sticky header. And not smooth — this is
+      // where you already were, so it shouldn't play as a journey.
+      scrollToElement(el, { block: "center", smooth: false });
+    });
+    return () => cancelAnimationFrame(raf);
+  }, [hydrated]);
+
   // Adopt a fetched lesson into the editor: replace the working doc (this is the
   // step that overwrites the auto-saved draft). For an edit, enter edit mode so
   // "Publish" becomes "Update" on the original row. For a fork, load it as a
@@ -642,6 +791,28 @@ export default function EditorPage() {
   const setTrustedCollaborators = (next) =>
     setDoc((d) => ({ ...d, trustedCollaborators: next }));
 
+  // Holds a section still on screen while it's being reordered past its
+  // (screenfuls-tall) neighbours — see moveSection.
+  const anchorScroll = useScrollAnchor();
+
+  const allCollapsed =
+    doc.sections.length > 0 &&
+    doc.sections.every((s) => collapsedIds.has(s.id));
+
+  // Collapsing or expanding everything changes the page height by ~20x, so
+  // whatever the user was looking at ends up somewhere arbitrary — or, when the
+  // document suddenly gets shorter, clamped to the bottom. Pin the section they
+  // were in to the top of the viewport instead, in both directions.
+  const toggleAllCollapsed = () => {
+    const el = currentSectionEl();
+    setCollapsedIds(
+      allCollapsed ? new Set() : new Set(doc.sections.map((s) => s.id)),
+    );
+    if (el) {
+      requestAnimationFrame(() => scrollToElement(el, { smooth: false }));
+    }
+  };
+
   // Section callbacks are passed to memoized <SectionCard>s, so they must keep a
   // stable identity across renders — otherwise every keystroke would hand each
   // card new props and re-render the whole tree. They take an id (not an array
@@ -666,17 +837,35 @@ export default function EditorPage() {
   );
 
   const moveSection = useCallback(
-    (id, dir) =>
+    (id, dir) => {
+      // Bounds-check before anchoring, the same order moveBlock uses: anchoring
+      // arms a scroll correction that the *next* commit consumes, so doing it
+      // ahead of a move that turns out to be a no-op leaves it primed to fire
+      // against an unrelated later render. Read through docRef so this stays
+      // dependency-free and every SectionCard keeps its memoized onMove.
+      const sections = docRef.current.sections;
+      const from = sections.findIndex((s) => s.id === id);
+      const to = from + dir;
+      if (from === -1 || to < 0 || to >= sections.length) return;
+      // Ride with the section being moved. Sections are ~6 screens tall on a
+      // desktop and ~9 on a phone, so reordering under a fixed scroll position
+      // dumped the user into the middle of a *different* section and left the
+      // button they'd just pressed thousands of pixels away.
+      anchorScroll(idSelector("data-section-id", id));
       setDoc((d) => {
-        const from = d.sections.findIndex((s) => s.id === id);
-        const to = from + dir;
-        if (from === -1 || to < 0 || to >= d.sections.length) return d;
-        const sections = [...d.sections];
-        const [moved] = sections.splice(from, 1);
-        sections.splice(to, 0, moved);
-        return { ...d, sections };
-      }),
-    [],
+        // Re-derived inside the updater rather than reusing the array above:
+        // the updater must be a pure function of `d`, which a concurrent edit
+        // may have moved on from since docRef was read.
+        const i = d.sections.findIndex((s) => s.id === id);
+        const j = i + dir;
+        if (i === -1 || j < 0 || j >= d.sections.length) return d;
+        const next = [...d.sections];
+        const [moved] = next.splice(i, 1);
+        next.splice(j, 0, moved);
+        return { ...d, sections: next };
+      });
+    },
+    [anchorScroll],
   );
 
   const handleSectionError = useCallback(
@@ -749,13 +938,34 @@ export default function EditorPage() {
     setDialogOpen(true);
   };
 
+  // A new section is appended to the end of the document, which in a six-section
+  // lesson is ~30,000px below wherever the user happens to be standing. The
+  // dialog closed and, as far as the screen showed, nothing happened. Hold the
+  // new id here and take the user to it once React has rendered it.
+  const pendingSectionRef = useRef(null);
+
+  useEffect(() => {
+    const id = pendingSectionRef.current;
+    if (!id) return;
+    pendingSectionRef.current = null;
+    const el = document.querySelector(idSelector("data-section-id", id));
+    if (!el) return;
+    scrollToElement(el);
+    // The card's own name field, ready to be renamed. preventScroll because
+    // focusing otherwise jumps the viewport there instantly and cancels the
+    // smooth scroll that just started.
+    el.querySelector("input")?.focus({ preventScroll: true });
+  }, [doc.sections]);
+
   const confirmAddSection = () => {
     const name =
       newSectionName.trim() ||
       t("newSectionDialog.defaultName", { n: doc.sections.length + 1 });
+    const id = newId();
+    pendingSectionRef.current = id;
     setDoc((d) => ({
       ...d,
-      sections: [...d.sections, { id: newId(), name, blocks: [] }],
+      sections: [...d.sections, { id, name, blocks: [] }],
     }));
     setDialogOpen(false);
   };
@@ -1328,7 +1538,7 @@ export default function EditorPage() {
   );
 
   return (
-    <div className="min-h-screen bg-background pb-24 text-foreground">
+    <div className="min-h-dvh bg-background pb-24 text-foreground">
       <AppHeader
         title={t("header.title")}
         left={
@@ -1671,12 +1881,35 @@ export default function EditorPage() {
               </TooltipContent>
             </Tooltip>
           </div>
-          <p className="mt-2 text-sm text-muted-foreground">
-            {t("stats.summary", {
-              sections: t("stats.sections", { count: sectionCount }),
-              blocks: t("stats.blocks", { count: blockCount }),
-            })}
-          </p>
+          <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1">
+            <p className="text-sm text-muted-foreground">
+              {t("stats.summary", {
+                sections: t("stats.sections", { count: sectionCount }),
+                blocks: t("stats.blocks", { count: blockCount }),
+              })}
+            </p>
+            {/* Folding every section away turns a ~37-screen document into a
+                two-screen list of its sections — the fastest way to see the
+                shape of a lesson, and to get to a section a long way from the
+                one you're in. */}
+            {sectionCount > 0 && (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={toggleAllCollapsed}
+                className="h-10 sm:h-8"
+              >
+                {allCollapsed ? (
+                  <ChevronsUpDownIcon data-icon="inline-start" />
+                ) : (
+                  <ChevronsDownUpIcon data-icon="inline-start" />
+                )}
+                {allCollapsed
+                  ? t("documentPanel.expandAll")
+                  : t("documentPanel.collapseAll")}
+              </Button>
+            )}
+          </div>
 
           {(editingId || git.ready) && (
             <div className="mt-3 flex flex-wrap items-center gap-2">
@@ -1840,6 +2073,11 @@ export default function EditorPage() {
                   isLast={i === sectionCount - 1}
                   onError={handleSectionError}
                   capitalizedWords={capitalizedWords}
+                  // A plain boolean, so collapsing one section leaves every
+                  // other card's props identical and it stays memoized.
+                  collapsed={collapsedIds.has(section.id)}
+                  onToggleCollapse={toggleCollapse}
+                  springOpenMs={SPRING_OPEN_MS}
                   // Drag state reaches each card as plain values scoped to that
                   // card, so hovering one section doesn't re-render the others.
                   dragBlockId={drag?.blockId ?? null}
@@ -1910,7 +2148,7 @@ export default function EditorPage() {
             size="icon-lg"
             onClick={openAddDialog}
             aria-label={t("addSectionFab.ariaLabel")}
-            className="fixed right-4 bottom-4 z-40 size-14 rounded-full shadow-[var(--shadow-panel)] sm:right-8 sm:bottom-8"
+            className="mb-safe fixed right-4 bottom-4 z-40 size-14 rounded-full shadow-[var(--shadow-panel)] sm:right-8 sm:bottom-8"
           >
             <PlusIcon className="size-6" />
           </Button>
@@ -1955,7 +2193,7 @@ export default function EditorPage() {
         open={Boolean(previewContent)}
         onOpenChange={(next) => !next && setPreviewContent(null)}
       >
-        <DialogContent className="flex max-h-[90vh] w-full flex-col sm:max-w-3xl">
+        <DialogContent className="flex max-h-[90dvh] w-full flex-col sm:max-w-3xl">
           <DialogHeader>
             <DialogTitle>{t("previewDialog.title")}</DialogTitle>
           </DialogHeader>
