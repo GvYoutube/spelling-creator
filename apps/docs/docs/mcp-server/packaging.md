@@ -7,7 +7,6 @@ sidebar_position: 8
 
 ```bash
 pnpm --filter @spelling-creator/mcp validate   # check manifest.json against the MCPB schema
-pnpm --filter @spelling-creator/mcp icon       # regenerate icon.png (only if you change it)
 pnpm --filter @spelling-creator/mcp pack       # build dist/spelling-creator-hub.mcpb
 ```
 

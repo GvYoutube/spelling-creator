@@ -38,9 +38,7 @@ for (const entry of INCLUDE) {
   const from = join(pkgRoot, entry);
   if (!existsSync(from)) {
     if (entry === "icon.png") {
-      throw new Error(
-        "icon.png missing — run `pnpm --filter @spelling-creator/mcp icon` first.",
-      );
+      throw new Error("icon.png missing!");
     }
     continue;
   }
