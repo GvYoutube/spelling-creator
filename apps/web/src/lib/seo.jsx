@@ -90,7 +90,7 @@ export function JsonLd({ data }) {
       type="application/ld+json"
       // JSON.stringify escapes nothing HTML-significant on its own, so close
       // the one hole that matters: a "</script>" inside any string value would
-      // otherwise end the block early. Escaping the slash keeps the JSON
+      // otherwise end the block early. Escaping every "<" keeps the JSON
       // identical to a parser while making the sequence inert to the HTML one.
       dangerouslySetInnerHTML={{
         __html: JSON.stringify(data).replace(/</g, "\\u003c"),

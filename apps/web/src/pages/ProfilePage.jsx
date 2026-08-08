@@ -129,9 +129,13 @@ export default function ProfilePage() {
           setProfile(user);
           setLessons(lessons);
         })
-        .catch((err) =>
-          setError(err.message || t("profilePage.profileLoadError")),
-        )
+        .catch((err) => {
+          // Same rule as LessonPage: a failed quiet re-fetch leaves the
+          // server-rendered profile alone rather than replacing correct public
+          // content with an error alert.
+          if (quiet) console.error("Profile re-fetch failed", err);
+          else setError(err.message || t("profilePage.profileLoadError"));
+        })
         .finally(() => setLoading(false));
     },
     [id, accessToken, t],

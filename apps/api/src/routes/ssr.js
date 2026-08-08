@@ -12,9 +12,11 @@
 // fill in when the client hydrates. That is the property that makes SSR
 // tractable here at all: every route worth rendering is a public read.
 //
-// Failure is always soft. Anything that goes wrong — the data fetch, the render,
-// a missing server bundle — falls through to the static SPA shell, which is
-// exactly what the app served before this route existed.
+// Failure at request time is always soft: a failed data fetch or a render error
+// falls through to the static SPA shell, which is exactly what the app served
+// before this route existed. A *missing* server bundle is not a runtime case at
+// all — the import below is static, so the Worker fails to bundle, which is why
+// every script that reaches wrangler builds it first.
 
 import { configureCore } from '@spelling-creator/core/config';
 import { fetchLesson, fetchPublishedLessons } from '@spelling-creator/core/lessons';
@@ -151,10 +153,16 @@ export async function serverRender(request, env, ctx, url) {
 		return null;
 	}
 
+	// Function replacements, not strings. In a *string* replacement `$&`, `` $` ``,
+	// `$'`, `$$` and `$1` are substitution syntax — and everything being spliced
+	// in here carries user text (a lesson title, an author name, a profile bio).
+	// A lesson titled `$'` would otherwise re-insert everything after the match,
+	// duplicating the rest of the shell into the response. A function replacement
+	// is taken literally.
 	const page = stripDefaultMetadata(html)
-		.replace('</head>', `${head}</head>`)
-		.replace('<div id="root"></div>', `<div id="root">${body}</div>`)
-		.replace('</body>', `${bootstrapScript(url.pathname, data)}</body>`);
+		.replace('</head>', () => `${head}</head>`)
+		.replace('<div id="root"></div>', () => `<div id="root">${body}</div>`)
+		.replace('</body>', () => `${bootstrapScript(url.pathname, data)}</body>`);
 
 	return new Response(page, {
 		status: 200,

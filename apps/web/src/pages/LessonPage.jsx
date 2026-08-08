@@ -181,7 +181,13 @@ export default function LessonPage() {
         // on here — the page shows as soon as the lesson JSON arrives.
         setLesson(full);
       } catch (err) {
-        if (!cancelled) setError(err.message || t("lessonPage.couldNotOpen"));
+        if (cancelled) return;
+        // A failed *quiet* re-fetch must not take the page down with it: the
+        // server-rendered lesson on screen is still correct public content, and
+        // `error` would replace it with an alert. All that's lost is the
+        // signed-in view of it, which is worth strictly less than the content.
+        if (hadServerLesson) console.error("Lesson re-fetch failed", err);
+        else setError(err.message || t("lessonPage.couldNotOpen"));
       } finally {
         if (!cancelled) setLoading(false);
       }

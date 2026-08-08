@@ -32,7 +32,7 @@ Both are dashboard content, so hydrating them is correct.
 
 ## How it fits together
 
-```
+```text
 apps/web/src/entry-server.jsx     the app, built for workerd (`pnpm build:ssr` -> dist-ssr/)
 apps/web/src/lib/ssr.jsx          the client/server handoff (SsrProvider, useServerData)
 apps/api/src/routes/ssr.js        the Worker route: match, fetch, render, splice

@@ -3,7 +3,7 @@
 	"version": "0.0.0",
 	"private": true,
 	"scripts": {
-		"deploy": "wrangler deploy",
+		"deploy": "pnpm --filter @spelling-creator/web build:ssr && wrangler deploy",
 		"dev": "pnpm --filter @spelling-creator/web build:ssr && wrangler dev",
 		"start": "pnpm --filter @spelling-creator/web build:ssr && wrangler dev",
 		"test": "vitest run"

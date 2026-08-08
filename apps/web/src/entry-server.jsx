@@ -34,9 +34,17 @@ import { SsrProvider } from "./lib/ssr.jsx";
 // a mutable singleton would let one request's language settings affect
 // another's. Only English ships today, which is also what the client's detector
 // resolves to, so the hydrated text matches.
+// `init()` returns a promise, but it is not awaited and does not need to be:
+// every namespace is compiled into the bundle (see lib/i18n.js), and with inline
+// resources and no backend i18next initialises synchronously — `isInitialized`
+// is already true when this returns. `initImmediate: false` pins that down, so
+// adding a backend later fails loudly here rather than silently rendering
+// missing-key fallbacks into the served HTML.
 function serverI18n() {
   const instance = createInstance();
-  instance.use(initReactI18next).init({ ...baseConfig, lng: "en" });
+  instance
+    .use(initReactI18next)
+    .init({ ...baseConfig, lng: "en", initImmediate: false });
   return instance;
 }
 
