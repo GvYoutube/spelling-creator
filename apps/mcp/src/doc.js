@@ -228,25 +228,8 @@ export function buildLessonFile(doc) {
   };
 }
 
-/**
- * Soft, non-blocking checks on a built doc. Returns human-readable warnings the
- * tools surface back in their result so the assistant can fix the lesson's shape
- * without the publish itself failing. Currently enforces the convention that
- * every section ends with a question about its own content (see tools.js).
- * @param {{ sections?: any[] }} doc
- * @returns {string[]}
- */
-export function lessonWarnings(doc) {
-  const warnings = [];
-  (doc?.sections || []).forEach((section, i) => {
-    const blocks = section.blocks || [];
-    const hasQuestion = blocks.some((b) => b.type === "question");
-    if (!hasQuestion) {
-      const label = section.name || `Section ${i + 1}`;
-      warnings.push(
-        `Section "${label}" has no question. Each section should end with at least one question about its content — add one, or move questions out of any separate quiz section.`,
-      );
-    }
-  });
-  return warnings;
-}
+// Checking a built doc against the authoring standard lives in validate.js —
+// buildDoc's job is only to reject input it cannot turn into a valid document at
+// all (a text block with no text, an unknown block type), which it does by
+// throwing. Everything that is well-formed but off-standard is decided there, so
+// that a single pass covers create, update and patch alike.

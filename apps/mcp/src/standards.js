@@ -13,6 +13,12 @@
 // than repeating this text. This file is the canonical copy of the standard —
 // when it changes, update the question counts echoed in tools.js's descriptions
 // and in apps/docs/docs/mcp-server/tools.md to match.
+//
+// This text carries the half of the standard that needs judgement. The half a
+// script can decide is enforced on write by validate.js, whose error messages are
+// written to be self-correcting on their own — so a client that shows the model
+// none of this still produces lessons that hold the line. Keep the two in step:
+// a rule stated here that validate.js also checks should describe the same thing.
 export const LESSON_STANDARDS = `LESSON AUTHORING STANDARDS (defaults — honour the user if they ask for something different)
 
 SHAPE: 6 sections. Each section = [image?] + 2 text paragraphs + 4 spelling words + 15 questions,
@@ -44,8 +50,14 @@ QUESTIONS per section, always in this exact order (15 total):
                                simple retrieval, not analysis: ask the speller to name concrete
                                nouns lifted straight from the prose ("Name a material used to build
                                the dam" -> CONCRETE, STEEL, ROCK; "Name a machine mentioned in the
-                               passage" -> CRANE, TRUCK, DRILL). NOT synonym questions ("give a
-                               synonym for X"), and NOT evidence/list answers phrased as long
+                               passage" -> CRANE, TRUCK, DRILL). Two traps to avoid, in order of how
+                               often they are hit: (a) do NOT ask a general-knowledge question in
+                               orange — "Name an ocean" expecting ATLANTIC pulls a word that is not
+                               in the text, and that is a blue background question, not an orange
+                               one; (b) do NOT paraphrase — if the passage says "superheated" and
+                               "dangerous", then HOT and DEADLY are wrong answers, because they
+                               aren't the words the passage uses. Also NOT synonym questions ("give
+                               a synonym for X"), and NOT evidence/list answers phrased as long
                                quotations — both ask the speller to hold too much in mind and to
                                spell long strings on a letterboard.
   8     background (blue)   — prior knowledge the passage deliberately does NOT contain; always
@@ -75,7 +87,16 @@ QUESTIONS per section, always in this exact order (15 total):
                                thinking." The very last question of the whole lesson should look
                                back across all sections, e.g. "Of the six parts of this lesson,
                                which idea did you find most astonishing? Defend your answer."
-  "open" questions carry no answer or example-answer field at all — just the "prompt".
+  "open" questions carry no answer, answers, or exampleAnswer field at all — just the "prompt".
+
+ONE ANSWER WORD, ONE QUESTION: no answer word may be used by more than one question anywhere in
+the lesson, at ANY length — not just across sections and not only for longer words. A word that is
+a green answer cannot also be an orange option (MAGMA as both); a word cannot be an orange option
+in two different questions (GAS appearing in three sections' orange lists); and a one-word green
+answer cannot reappear inside a longer answer elsewhere. Give every question its own distinct
+vocabulary. Theme words that unavoidably recur inside multi-word technical terms ("A SHIELD
+VOLCANO" and "A STRATOVOLCANO") are distinct whole answers and are fine. Numeric answers must all
+be distinct across the lesson too.
 
 MATH (number questions): scale difficulty to the audience — for a 14+ speller, "two more than
 five" is not acceptable. Use real mathematics: percentage increase and percentages to 1-2 decimal
@@ -86,7 +107,8 @@ rather than sitting beside the lesson. ALWAYS put the worked solution in the "st
 step per element, in order — never bake it into the prompt string, never give a bare answer. Good
 steps show the set-up, flag the common error where one exists (e.g. "divide by the ORIGINAL value,
 not the new one"), break hard arithmetic into pieces, and verify where verification is cheap. The
-plain fill-in-the-blank number question (item 4 above) doesn't need steps.
+plain fill-in-the-blank number question (item 4 above) doesn't need steps — and it is the absence
+of steps that marks it as the fill-in-the-blank one, whose answer must appear in the passage.
 
 IMAGES: source only from Wikimedia Commons via search_images (freely licensed: CC / CC0 / public
 domain); keep the attribution in the caption — if overriding it, append the original attribution
@@ -103,17 +125,34 @@ retrying the same large one.
 BRANDING: none. Do not add any brand name, byline, or footer to a generated lesson unless the
 user explicitly supplies one.
 
-VALIDATE BEFORE SAVING (each has caught a real defect):
-- every green/orange/purple-fill-in answer appears literally in its own section's passage
-- every blue answer does NOT appear in its own section's passage
-- every fact a math problem depends on appears in the passage
-- spelling words are 6-9 letters, unique across the lesson, and never a substring of any answer
-- no ALL-CAPS vocabulary word is also a spelling word
-- no answer word of 6+ letters repeats across sections (a few topic words may legitimately recur)
-- all numeric answers across the whole lesson are distinct
-- each section has exactly 3 single + 2 number + 2 multiple + 1 background + 4 tight-open +
-  3 extended-open = 15 questions, in the order given above
-- every orange accepted answer is a single word, with 2-4 answers per orange question
-- no pink question uses the retired "comes to mind" stem
-- tight opens are easy everyday recall — not abstract, not vocabulary puzzles, not
-  lesson-dependent`;
+VALIDATION ON SAVE: create_lesson, create_lesson_file, update_lesson and patch_lesson check the
+lesson before writing it, and REJECT the write when a rule below is broken. Each rejection names
+the section, the offending value, and the fix, so read it and resubmit — you do not have to guess.
+Rejected (errors):
+- a green (single) answer that does not appear, word for word, in its own section's passage
+- an orange (multiple) accepted answer that does not appear in its own section's passage — the
+  usual causes are paraphrase and general knowledge
+- a fill-in-the-blank purple answer (a number question with no steps) that is not in the passage
+- a blue (background) answer that DOES appear in its own section's passage, or a blue question
+  with no "background" field
+- a spelling word outside 6-9 letters, repeated in another section, or appearing inside any answer
+- the same answer word used by two different questions, anywhere, at any length
+- the same numeric answer given by two different questions
+- an open question carrying an answer, answers, or exampleAnswer
+- a pink question using the retired "...one word that comes to mind..." stem
+Flagged but allowed (warnings, returned with the saved lesson): a section count other than 6, a
+section whose 15 questions differ in type or order from the list above, pink questions that don't
+read as 4 tight + 3 extended, a multi-word orange answer, an orange question with fewer than 2 or
+more than 4 answers, a section without exactly 4 spelling words, a word problem with no steps, and
+a spelling word that is also ALL-CAPS vocabulary in the same section.
+
+If the user deliberately wants a lesson the standard forbids — a 3-section lesson, questions in a
+different order — pass "skipValidation": true, which turns the errors off. Don't reach for it to
+get around a defect you should just fix.
+
+CHECK BEFORE SAVING (things validation cannot decide for you):
+- every fact a math problem depends on is stated in the passage
+- tight opens are easy everyday recall — not abstract, not vocabulary puzzles, not lesson-dependent
+- the passage contains concrete single-word nouns for the orange questions to ask about
+- anything time-sensitive has been verified
+- the image agrees with the text it sits above`;

@@ -1,6 +1,11 @@
 // Smoke tests: the doc builder produces the canonical shapes the editor expects,
-// rejects bad input clearly, and the MCP server exposes the full tool set.
-// No network — handlers aren't invoked here.
+// rejects bad input clearly, the MCP server exposes the full tool set, and the
+// writing tools enforce the authoring standard at the tool boundary. No network —
+// the handlers that reach the API run against stubs.
+//
+// The standard's own rules are tested in validate.test.js; what's here is the
+// wiring around them — that a rejection stops the write, that skipValidation
+// doesn't, and that a patch is judged only on what it changed.
 
 import assert from "node:assert/strict";
 import { mkdtempSync, writeFileSync } from "node:fs";
@@ -13,9 +18,10 @@ import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 
 import { createAuth } from "../src/auth.js";
-import { buildDoc, lessonWarnings } from "../src/doc.js";
+import { buildDoc } from "../src/doc.js";
 import { applyPatch } from "../src/patch.js";
 import { registerTools, SERVER_INFO } from "../src/tools.js";
+import { validateLesson } from "../src/validate.js";
 
 test("buildDoc maps every block type to the stored shape with ids", () => {
   const doc = buildDoc({
@@ -132,7 +138,7 @@ test("buildDoc rejects bad input with actionable errors", () => {
   );
 });
 
-test("lessonWarnings flags sections that have no question, not ones that do", () => {
+test("validateLesson warns about sections that have no question, not ones that do", () => {
   const doc = buildDoc({
     title: "Mix",
     sections: [
@@ -144,7 +150,7 @@ test("lessonWarnings flags sections that have no question, not ones that do", ()
             type: "question",
             questionType: "single",
             prompt: "Q?",
-            answer: "a",
+            answer: "WORD",
           },
         ],
       },
@@ -155,10 +161,13 @@ test("lessonWarnings flags sections that have no question, not ones that do", ()
     ],
   });
 
-  const warnings = lessonWarnings(doc);
-  assert.equal(warnings.length, 1);
-  assert.match(warnings[0], /Just prose/);
-  assert.match(warnings[0], /no question/i);
+  const noQuestion = validateLesson(doc).warnings.filter(
+    (w) => w.code === "W_NO_QUESTION",
+  );
+  assert.equal(noQuestion.length, 1);
+  assert.equal(noQuestion[0].section, 2);
+  assert.match(noQuestion[0].message, /Just prose/);
+  assert.match(noQuestion[0].message, /no question/i);
 });
 
 test("applyPatch edits by id without touching the original doc", () => {
@@ -372,6 +381,188 @@ test("the MCP server exposes the full tool set", async () => {
   await server.close();
 });
 
+// A lesson whose green answer is nowhere in its own passage — the defect the
+// grounding check exists for.
+const UNGROUNDED_LESSON = {
+  title: "T",
+  sections: [
+    {
+      name: "Reading",
+      blocks: [
+        { type: "text", text: "A volcano ERUPTS." },
+        {
+          type: "question",
+          questionType: "single",
+          prompt: "What flows?",
+          answer: "obsidian",
+        },
+      ],
+    },
+  ],
+};
+
+test("create_lesson rejects a lesson that breaks the standard, and saves nothing", async () => {
+  const server = new McpServer(SERVER_INFO);
+  const api = {
+    async createLesson() {
+      throw new Error("must not reach the API when validation fails");
+    },
+  };
+  registerTools(server, { api, config: { apiUrl: "https://example.test" } });
+
+  const client = new Client({ name: "test", version: "0" });
+  const [clientT, serverT] = InMemoryTransport.createLinkedPair();
+  await Promise.all([server.connect(serverT), client.connect(clientT)]);
+
+  const res = await client.callTool({
+    name: "create_lesson",
+    arguments: UNGROUNDED_LESSON,
+  });
+
+  assert.equal(res.isError, true);
+  const message = res.content[0].text;
+  assert.match(message, /nothing was saved/);
+  assert.match(message, /E_GROUNDING_SINGLE/);
+  assert.match(message, /"obsidian"/);
+  assert.match(message, /skipValidation/);
+
+  await client.close();
+  await server.close();
+});
+
+test("skipValidation saves a lesson the standard would reject", async () => {
+  const server = new McpServer(SERVER_INFO);
+  let saved = null;
+  const api = {
+    async createLesson({ title }) {
+      saved = title;
+      return { id: "L9", title, sectionCount: 1, published: false };
+    },
+  };
+  registerTools(server, { api, config: { apiUrl: "https://example.test" } });
+
+  const client = new Client({ name: "test", version: "0" });
+  const [clientT, serverT] = InMemoryTransport.createLinkedPair();
+  await Promise.all([server.connect(serverT), client.connect(clientT)]);
+
+  const res = await client.callTool({
+    name: "create_lesson",
+    arguments: { ...UNGROUNDED_LESSON, skipValidation: true },
+  });
+
+  assert.equal(res.isError, undefined);
+  assert.equal(saved, "T");
+  const payload = JSON.parse(res.content[0].text);
+  assert.equal(payload.id, "L9");
+  // Skipping validation skips the warnings too — nothing was checked.
+  assert.equal(payload.warnings, undefined);
+
+  await client.close();
+  await server.close();
+});
+
+// Guards blockSchema's .passthrough(): zod strips unknown keys by default, which
+// would drop `exampleAnswer` before any handler saw it — the model would be told
+// nothing and would keep sending it.
+test("an unknown field on an open question survives the MCP round trip to validation", async () => {
+  const server = new McpServer(SERVER_INFO);
+  registerTools(server, {
+    api: {},
+    config: { apiUrl: "https://example.test" },
+  });
+
+  const client = new Client({ name: "test", version: "0" });
+  const [clientT, serverT] = InMemoryTransport.createLinkedPair();
+  await Promise.all([server.connect(serverT), client.connect(clientT)]);
+
+  const res = await client.callTool({
+    name: "create_lesson_file",
+    arguments: {
+      title: "T",
+      sections: [
+        {
+          name: "S",
+          blocks: [
+            { type: "text", text: "A river runs." },
+            {
+              type: "question",
+              questionType: "open",
+              prompt: "Name a color.",
+              exampleAnswer: "blue",
+            },
+          ],
+        },
+      ],
+    },
+  });
+
+  assert.equal(res.isError, true);
+  assert.match(res.content[0].text, /E_OPEN_HAS_ANSWER/);
+  assert.match(res.content[0].text, /exampleAnswer/);
+
+  await client.close();
+  await server.close();
+});
+
+test("patch_lesson only blocks on defects the patch introduced", async () => {
+  const server = new McpServer(SERVER_INFO);
+  // The stored lesson is already off-standard: a green answer that isn't in its
+  // passage. A patch that doesn't touch it must still go through.
+  const stored = buildDoc(UNGROUNDED_LESSON);
+  let put = null;
+  const api = {
+    async getLesson() {
+      return { id: "L2", title: "T", doc: stored };
+    },
+    async updateLesson(id, body) {
+      put = body;
+      return { id, title: body.title, sectionCount: 1, published: false };
+    },
+  };
+  registerTools(server, { api, config: { apiUrl: "https://example.test" } });
+
+  const client = new Client({ name: "test", version: "0" });
+  const [clientT, serverT] = InMemoryTransport.createLinkedPair();
+  await Promise.all([server.connect(serverT), client.connect(clientT)]);
+
+  const harmless = await client.callTool({
+    name: "patch_lesson",
+    arguments: {
+      id: "L2",
+      operations: [{ op: "set_title", title: "Renamed" }],
+    },
+  });
+  assert.equal(harmless.isError, undefined);
+  assert.equal(put.title, "Renamed");
+
+  // A patch that adds its own ungrounded answer is rejected, and reports only
+  // that one — not the defect it inherited.
+  const breaking = await client.callTool({
+    name: "patch_lesson",
+    arguments: {
+      id: "L2",
+      operations: [
+        {
+          op: "add_block",
+          sectionId: stored.sections[0].id,
+          block: {
+            type: "question",
+            questionType: "single",
+            prompt: "What else?",
+            answer: "pumice",
+          },
+        },
+      ],
+    },
+  });
+  assert.equal(breaking.isError, true);
+  assert.match(breaking.content[0].text, /"pumice"/);
+  assert.doesNotMatch(breaking.content[0].text, /obsidian/);
+
+  await client.close();
+  await server.close();
+});
+
 test("create_lesson surfaces soft warnings in its result", async () => {
   const server = new McpServer(SERVER_INFO);
   // Stub api: pretend the save succeeded so we can inspect the result payload.
@@ -402,9 +593,13 @@ test("create_lesson surfaces soft warnings in its result", async () => {
     },
   });
   const payload = JSON.parse(res.content[0].text);
-  assert.equal(res.isError, undefined); // saved fine — warning is non-blocking
-  assert.equal(payload.warnings.length, 1);
-  assert.match(payload.warnings[0], /Prose only/);
+  assert.equal(res.isError, undefined); // saved fine — warnings are non-blocking
+  const codes = payload.warnings.map((w) => w.code);
+  assert.ok(codes.includes("W_NO_QUESTION"));
+  assert.ok(codes.includes("W_SECTION_COUNT"));
+  const noQuestion = payload.warnings.find((w) => w.code === "W_NO_QUESTION");
+  assert.equal(noQuestion.section, 1);
+  assert.match(noQuestion.message, /Prose only/);
 
   await client.close();
   await server.close();

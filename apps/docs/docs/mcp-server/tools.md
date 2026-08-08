@@ -54,6 +54,12 @@ server fetches the lesson, applies the ops in order, and saves the result (the h
 itself only does full replaces, so the diff is applied server-side). Use `update_lesson`
 when you're rewriting the whole lesson anyway.
 
+There is a second reason to prefer patching. Both tools check the result against the
+authoring standard, but `patch_lesson` holds the caller only to the defects its edit
+introduced, whereas `update_lesson` replaces the whole document and so owns everything in
+it — including problems inherited from the lesson it fetched. See
+[Lesson validation](/mcp-server/lesson-validation).
+
 ## Lesson shape the assistant fills
 
 By default (unless you ask for something different), the assistant builds **6 sections**, each
@@ -65,6 +71,13 @@ server's MCP `instructions`, so most clients apply it automatically. Not every c
 server `instructions` to the model — notably claude.ai's connector UI doesn't — so the full
 standard is also embedded directly in `create_lesson`'s tool description (`create_lesson_file`
 just points to it, rather than repeating it) to make sure it reaches the model either way.
+
+The half of the standard a script can decide doesn't rely on the model having read anything:
+every tool that writes a lesson validates it first and **rejects** the write on a grounding,
+spelling-word or uniqueness failure, with a message naming the section, the value and the fix.
+Softer shape problems come back as a `warnings` array on the saved result. `skipValidation: true`
+turns the errors off for a user who deliberately wants something the standard forbids. See
+[Lesson validation](/mcp-server/lesson-validation) for every code.
 
 A lesson is **sections** of **blocks**. Block types:
 
