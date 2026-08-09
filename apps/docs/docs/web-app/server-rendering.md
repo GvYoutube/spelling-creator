@@ -1,6 +1,5 @@
 ---
 title: Server rendering
-sidebar_position: 2.5
 ---
 
 # Server rendering

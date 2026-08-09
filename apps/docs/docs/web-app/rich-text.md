@@ -1,6 +1,5 @@
 ---
 title: Rich text (comments & bios)
-sidebar_position: 9.5
 ---
 
 # Rich text (comments & bios)

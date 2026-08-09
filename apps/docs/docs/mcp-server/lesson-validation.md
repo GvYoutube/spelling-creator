@@ -1,6 +1,5 @@
 ---
 title: Lesson validation
-sidebar_position: 3
 ---
 
 # Lesson validation

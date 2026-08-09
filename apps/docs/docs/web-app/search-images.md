@@ -1,6 +1,5 @@
 ---
 title: Search images
-sidebar_position: 6
 ---
 
 # Search images

@@ -19,6 +19,6 @@
     "**/.wrangler/**",
 
     "apps/docs/doc_build/**",
-    "apps/docs/.rspress/**"
+    "apps/docs/docs/.vitepress/cache/**"
   ]
 }

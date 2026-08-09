@@ -1,6 +1,5 @@
 ---
 title: Packaging the bundle
-sidebar_position: 8
 ---
 
 # Packaging the bundle

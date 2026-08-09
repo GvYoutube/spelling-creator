@@ -1,6 +1,5 @@
 ---
 title: AI text suggestions
-sidebar_position: 4
 ---
 
 # AI text suggestions

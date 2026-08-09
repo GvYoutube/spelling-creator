@@ -1,6 +1,5 @@
 ---
 title: Overview
-sidebar_position: 1
 ---
 
 # `@spelling-creator/mcp`

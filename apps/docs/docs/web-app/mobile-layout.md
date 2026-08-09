@@ -1,6 +1,5 @@
 ---
 title: Mobile layout & touch targets
-sidebar_position: 15.5
 ---
 
 # Mobile layout & touch targets

@@ -1,6 +1,5 @@
 ---
 title: AI lesson ideas
-sidebar_position: 5.5
 ---
 
 # AI lesson ideas

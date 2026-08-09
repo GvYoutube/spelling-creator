@@ -1,6 +1,5 @@
 ---
 title: Question blocks
-sidebar_position: 3
 ---
 
 # Question blocks

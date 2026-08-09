@@ -144,12 +144,14 @@ ${entries
 }
 
 /**
- * GET /robots.txt — allow all crawlers and advertise the dynamic sitemap. The
- * Sitemap URL is built from the request's own origin so it stays correct on any
- * host (custom domain or workers.dev).
+ * GET /robots.txt — allow all crawlers and advertise both sitemaps: the dynamic
+ * one above for the app's own pages, and /docs/sitemap.xml, which VitePress
+ * generates at build time and ships inside the docs bundle. Sitemap URLs are
+ * built from the request's own origin so they stay correct on any host (custom
+ * domain or workers.dev).
  */
 export function handleRobots(request, env, url) {
-	const body = `User-agent: *\nAllow: /\n\nSitemap: ${url.origin}/sitemap.xml\nDisallow: /moderation\n`;
+	const body = `User-agent: *\nAllow: /\n\nSitemap: ${url.origin}/sitemap.xml\nSitemap: ${url.origin}/docs/sitemap.xml\nDisallow: /moderation\n`;
 	return new Response(body, {
 		status: 200,
 		headers: {

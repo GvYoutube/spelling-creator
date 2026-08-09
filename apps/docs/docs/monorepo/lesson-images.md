@@ -1,6 +1,5 @@
 ---
 title: Lesson images (binary, R2 + IndexedDB)
-sidebar_position: 3
 ---
 
 # Lesson images (binary, R2 + IndexedDB)

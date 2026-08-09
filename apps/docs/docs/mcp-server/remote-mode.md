@@ -1,6 +1,5 @@
 ---
 title: Remote (hosted) mode
-sidebar_position: 9
 ---
 
 # Remote (hosted) mode

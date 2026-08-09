@@ -1,6 +1,5 @@
 ---
 title: Install as a one-click bundle (.mcpb)
-sidebar_position: 4
 ---
 
 # Install as a one-click bundle (.mcpb) — easiest

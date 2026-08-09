@@ -1,6 +1,5 @@
 ---
 title: Pages & routing
-sidebar_position: 2
 ---
 
 # Pages & routing

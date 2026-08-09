@@ -1,6 +1,5 @@
 ---
 title: Getting started
-sidebar_position: 13
 ---
 
 # Getting started

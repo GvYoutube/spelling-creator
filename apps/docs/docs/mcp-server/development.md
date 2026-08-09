@@ -1,6 +1,5 @@
 ---
 title: Development
-sidebar_position: 7
 ---
 
 # Development

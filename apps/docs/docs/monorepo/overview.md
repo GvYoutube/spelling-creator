@@ -1,6 +1,5 @@
 ---
 title: Overview
-sidebar_position: 1
 ---
 
 # Spelling Creator (monorepo)
@@ -15,6 +14,7 @@ Worker API.
 | `apps/web`      | `@spelling-creator/web`  | Vite + React frontend (shadcn/ui + Tailwind, Supabase, react-router), installable as a PWA. Built into `apps/web/dist` and served by the Worker as static assets.                                                                                    |
 | `apps/api`      | `@spelling-creator/api`  | Cloudflare Worker backend (multi-provider AI suggestions — Gemini, OpenAI, Anthropic, Groq, Workers AI — profanity filter, KV rate limiting, R2 for lesson images and packed lesson histories).                                                      |
 | `apps/mcp`      | `@spelling-creator/mcp`  | MCP server — lets an AI assistant author and publish lessons to the hub.                                                                                                                                                                             |
+| `apps/docs`     | `@spelling-creator/docs` | This VitePress site. Built into `apps/web/dist/docs` and served by the Worker at `/docs/` (see [Getting started](./getting-started.md#documentation-site)).                                                                                          |
 | `packages/core` | `@spelling-creator/core` | Framework-agnostic lesson domain logic — question types, the spelling block, lesson-file import/export, hub search, Wikimedia Commons, the Yjs document, the portable half of version history, plus a browser tier for the IndexedDB/docx/pdf paths. |
 
 ## Shared code

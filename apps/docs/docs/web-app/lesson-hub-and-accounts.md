@@ -1,6 +1,5 @@
 ---
 title: Lesson hub & accounts
-sidebar_position: 9
 ---
 
 # Lesson hub & accounts

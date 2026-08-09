@@ -1,6 +1,5 @@
 ---
 title: How the export pipeline works
-sidebar_position: 14
 ---
 
 # How the export pipeline works

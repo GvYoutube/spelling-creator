@@ -1,6 +1,5 @@
 ---
 title: Interactive lesson mode
-sidebar_position: 5.8
 ---
 
 # Interactive lesson mode

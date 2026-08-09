@@ -1,6 +1,5 @@
 ---
 title: Frontend migration
-sidebar_position: 5
 ---
 
 # Frontend migration
@@ -296,9 +295,33 @@ Vitest 3: `@cloudflare/vitest-pool-workers` declares a `vitest 2.0.x - 3.2.x`
 peer, so a repo-wide bump breaks the Worker suite. Raise `apps/api` only when
 the pool package widens that range.
 
-`apps/docs` is still Rspress, so Rspack has not left the tree. Moving it would
-mean a different site generator and reworking every page — deliberately out of
-scope.
+**`apps/docs` moved to VitePress**, which is what finally took Rspack out of the
+tree — it was the last Rspress-shaped thing left. The pages themselves needed
+almost nothing: they were already plain Markdown with relative `.md` links, so
+the migration was a config rewrite plus dropping the `sidebar_position`
+frontmatter that a hand-maintained sidebar had already superseded. Two features
+that were bespoke config before are now off-the-shelf: `llms.txt` comes from
+[`vitepress-plugin-llms`](https://github.com/okineadev/vitepress-plugin-llms),
+and the docs sitemap from VitePress's built-in `sitemap` option.
+
+**It runs the 2.0 alpha deliberately, not the `latest` tag.** `vitepress@latest`
+still resolves to 1.6.4, published August 2025 — there has been no 1.x release
+since, because development moved wholesale to the 2.0 line, which ships regularly
+(alpha.19 is from August 2026). Taking `latest` here would mean installing the
+_older_ of the two live options.
+
+The version that settles it is Vite's. VitePress 1.6 pins **Vite 5**, so it would
+have added a second Vite major to a repo that builds `apps/web` on **Vite 8**;
+VitePress 2 depends on Vite `^8.2.0` and **deduplicates onto the same install**.
+The docs site therefore adds no bundler and no extra Vite major — the goal the
+Rsbuild→Vite move above was chasing, finished. (`vite@7` is still in the tree,
+but from `agents` and the Vitest 3 that `apps/api` and `packages/core` pin —
+nothing to do with the docs.)
+
+The alpha risk is bounded by what this app is: a static site rendered at build
+time, in CI, before anything deploys. A regression is a failed build on a pull
+request, not a broken page for a reader. Move the dependency to `^2.0.0` when 2.0
+goes final.
 
 ### Vite+ — evaluated, deferred
 

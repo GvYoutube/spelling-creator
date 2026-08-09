@@ -1,6 +1,5 @@
 ---
 title: Internationalization
-sidebar_position: 16
 ---
 
 # Internationalization
