@@ -33,7 +33,7 @@ src/
     RichTextToolbar.jsx   its shadcn ToggleGroup toolbar (bold/italic/underline/lists/link/etc.)
     RichText.jsx          renders a stored comment/bio: sanitized HTML, or plain text for pre-rich-text values
     LiveField.jsx          debounced LiveInput/LiveTextarea (commit ~200ms after typing pauses, hold off remote updates while focused)
-    LessonView.jsx        read-only renderer for the lesson page (blocks straight to React, lazy images)
+    LessonView.jsx        read-only renderer for the lesson page and the editor's preview dialog (blocks straight to React, lazy images, drawn in the app's theme)
     LessonSummary.jsx     on-device AI summary card on the lesson page (hidden unless the browser supports it)
     InteractiveLesson.jsx full-screen step-by-step walkthrough of a lesson, with a field per question and optional read-aloud (see interactive-mode.md)
     MyLessonAnswers.jsx   the reader's own saved answers on the lesson page — private to them, rendered for nobody else
@@ -63,7 +63,7 @@ src/
     git/                  what has to stay in the app — the rest is in core (see below)
       engine.js, load.js  the git engine, behind one dynamic import (keeps ~185 KB off the main bundle)
     exports/
-      engine.js, load.js  the docx/PDF/preview/import pipeline, behind one dynamic import (keeps ~390 KB gzipped off every page that never exports)
+      engine.js, load.js  the docx/PDF/import pipeline, behind one dynamic import (keeps ~390 KB gzipped off every page that never exports; preview doesn't need it)
       useLessonGit.js     the editor's controller: setup, periodic commits, history, restore
     useImageSrc.js        resolves an image ref to a displayable src
     useSpeech.js          Web Speech API text-to-speech for interactive mode (capability probe, voice/pace preferences, Chromium's utterance-length and cancel quirks)
@@ -150,7 +150,7 @@ apply the same rules. Each module is its own subpath export.
   lessonFile            the .json lesson-file envelope (shared with the importer + MCP)
   jsonImport            parse + validate a .json lesson file back into the lesson model
   image                 image sizing: selectable sizes, scale, fit-within
-  lessonLayout          the two presentation constants every lesson render shares (DOCX_MAX_IMAGE_WIDTH, PREVIEW_STYLES) — outside browser/ so the viewer and the server render can use them without pulling in docx + mammoth
+  lessonLayout          the presentation constant every lesson render shares (DOCX_MAX_IMAGE_WIDTH) — outside browser/ so the viewer and the server render can use it without pulling in docx + mammoth
   id                    id generation
   wikimedia             Commons action-API round-trip + attribution metadata
   lessons               list / fetch / publish hub lessons (+ the feed URL)
@@ -187,8 +187,7 @@ the MCP server cannot reach it by accident:
   storage               IndexedDB auto-save for the working lesson (+ the one-time localStorage migration)
   docxExport            build the .docx (text, images, questions)
   docxImport            best-effort import of a .docx back into the lesson model
-  htmlPreview           docx -> html (mammoth) for the preview dialog and the PDF path
-  pdfExport             docx -> html -> pdf (html2pdf.js)
+  pdfExport             docx -> html (mammoth) -> pdf (html2pdf.js) — the only non-Word use of the Word pipeline
   jsonExport            download a lesson as .json (the envelope itself is in lessonFile)
   feeds                 read the hub / user Atom feeds (DOMParser)
   supabase              the Supabase browser client (auth only), built on first use

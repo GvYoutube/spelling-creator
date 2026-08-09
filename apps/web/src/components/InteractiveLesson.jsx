@@ -11,13 +11,13 @@
 // question to answer, and a dialog floating over the page you just left keeps
 // that page in the corner of the eye competing for attention.
 //
-// The blocks are re-rendered here in the app's own theme rather than reusing
-// LessonView. LessonView reproduces the docx/PDF page — a white sheet, Roboto,
-// the export's blue section rules — which is exactly right for a page you are
-// about to print and exactly wrong for a full-screen reading and answering
-// surface that should look like the rest of the app, in light or dark mode. So
-// this file draws text, images and spelling words itself, from the same block
-// shapes; only the *presentation* differs, never the content.
+// The blocks are re-rendered here rather than reusing LessonView. LessonView
+// follows the theme too, but it keeps the export's document proportions — page
+// text sizes, the export's section rules — which is right for reading a lesson
+// as a page and wrong for a full-screen surface you read and answer on one step
+// at a time. So this file draws text, images and spelling words itself, at its
+// own scale, from the same block shapes; only the *presentation* differs, never
+// the content.
 //
 // What the learner types is theirs. It is held in memory while they work and
 // sent once, at the end, to their own account (see core/lessonResponses.js and

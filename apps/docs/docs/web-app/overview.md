@@ -66,7 +66,12 @@ PDF printing.
   same job (see [Mobile layout & touch targets](./mobile-layout.md)).
 - **Export DOCX** - downloads a formatted `.docx`.
 - **Print PDF** - builds the docx, converts it to HTML with mammoth, then renders
-  a PDF with html2pdf.js so the printout mirrors the Word document.
+  a PDF with html2pdf.js so the printout mirrors the Word document. Along with
+  the DOCX export (and the Drive upload, which is that same file), this is the
+  only place a Word document is built — **Preview** and the published lesson page
+  both render the lesson straight to React, in the app's light/dark theme, so a
+  preview opens instantly and shows exactly what a reader sees (see
+  [How the export pipeline works](./export-pipeline.md)).
 - **Save to Google Docs** - signs in with Google (OAuth2) and uploads the docx to
   the user's Drive, converting it to a native Google Doc (see [Save to Google Docs](./save-to-google-docs.md)).
 - **Lesson hub** - browse lessons other users have published, preview any of them,

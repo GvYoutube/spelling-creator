@@ -114,7 +114,6 @@
     "savedToGoogleDrive": "Saved to Google Drive as a Google Doc.",
     "couldNotSaveToGoogle": "Could not save to Google: {{error}}",
     "addSectionBeforePreviewing": "Add at least one section before previewing.",
-    "previewFailed": "Preview failed: {{error}}",
     "pleaseSignIn": "Please sign in to save your lesson to the cloud.",
     "needsMergeBeforeSave": "Someone else has changed this lesson since you last synced. Merge their changes, then save again — nothing has been overwritten.",
     "historyNotSaved": "the version history couldn't be saved",
