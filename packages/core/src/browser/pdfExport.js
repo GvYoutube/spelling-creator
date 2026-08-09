@@ -14,6 +14,16 @@ import { fitWithin, imageSizeScale } from "../image.js";
 import { DOCX_MAX_IMAGE_WIDTH } from "../lessonLayout.js";
 import { QUESTION_TYPES } from "../questions.js";
 
+// Text destined for an HTML string we build ourselves. The PDF container is
+// filled with innerHTML, so anything interpolated into it has to arrive as text.
+function escapeHtml(text) {
+  return String(text)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+
 // The image blocks of a lesson, in document order — the same order mammoth emits
 // their <img> tags, so we can match each tag to its block by position.
 function orderedImageBlocks(doc) {
@@ -34,15 +44,18 @@ function orderedImageBlocks(doc) {
 //     width), and the caption lives inside it, so the caption always tracks the
 //     image instead of floating left across the full width.
 //
-// Caption text comes from the <p> mammoth emits right after the image; buildDocument
-// only emits that paragraph when the block has a caption, so we consume the trailing
-// paragraph only then and leave following content untouched otherwise.
+// The caption is taken from the block itself and escaped, NOT copied out of
+// mammoth's HTML: the text is ours either way, and reading it from the model
+// means nothing that came back through the converter is re-inserted as markup.
+// buildDocument only emits a caption paragraph when the block has a caption, so
+// the trailing paragraph is consumed only then and following content is left
+// untouched otherwise.
 function layoutImageFigures(html, doc) {
   const imageBlocks = orderedImageBlocks(doc);
   let index = 0;
   return html.replace(
-    /<p>\s*(<img\b[^>]*>)\s*<\/p>(\s*<p>([\s\S]*?)<\/p>)?/g,
-    (match, imgTag, trailingParagraph, captionInner) => {
+    /<p>\s*(<img\b[^>]*>)\s*<\/p>(\s*<p>[\s\S]*?<\/p>)?/g,
+    (match, imgTag, trailingParagraph) => {
       const block = imageBlocks[index++];
       if (!block) return match;
 
@@ -65,7 +78,9 @@ function layoutImageFigures(html, doc) {
 
       const hasCaption = Boolean(block.caption);
       const caption = hasCaption
-        ? `<figcaption style="text-align:center;font-style:italic;color:#555;font-size:12px;margin-top:6px;">${captionInner}</figcaption>`
+        ? `<figcaption style="text-align:center;font-style:italic;color:#555;font-size:12px;margin-top:6px;">${escapeHtml(
+            block.caption,
+          )}</figcaption>`
         : "";
       const figure = `<figure style="display:block;width:${Math.round(
         width,

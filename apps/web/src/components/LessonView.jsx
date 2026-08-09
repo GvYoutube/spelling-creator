@@ -33,7 +33,21 @@ const BLANK = "____________";
 //
 // The question-type and spelling colours stay literal, as they are in the editor
 // and in interactive mode: they're content — the same colour coding the docx
-// carries — rather than chrome.
+// carries — rather than chrome. But they were picked to sit on white paper, and
+// measured against the themed card most of them miss the 4.5:1 AA floor for
+// 14px bold: ~2.9:1 (purple) to ~3.8:1 (teal) on the dark card, and 3.2–3.5:1
+// for green/orange/pink on the light one. So a label passes its own colour in as
+// `--s2c-label` and the theme adjusts its lightness — darker on light, lighter
+// on dark, hue untouched, so the colour coding still reads as itself. Measured
+// after the mix: 5.7–8.4:1 across both themes.
+//
+// The docx and PDF keep the raw colours: they land on real white paper, which is
+// what the palette was chosen for.
+//
+// Both the media query and the [data-theme] attribute are covered because both
+// select the dark palette: the attribute is authoritative once colorScheme.jsx
+// has run, the media query is what applies before that (and it must not fire
+// when the reader has explicitly chosen light).
 const LESSON_STYLES = `
   .s2c-lesson-root {
     color: var(--foreground);
@@ -66,6 +80,17 @@ const LESSON_STYLES = `
     color: var(--muted-foreground);
     font-size: 12px;
     margin-top: 6px;
+  }
+  .s2c-lesson-root .s2c-label {
+    color: color-mix(in oklab, var(--s2c-label) 78%, black);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) .s2c-lesson-root .s2c-label {
+      color: color-mix(in oklab, var(--s2c-label) 60%, white);
+    }
+  }
+  :root[data-theme="dark"] .s2c-lesson-root .s2c-label {
+    color: color-mix(in oklab, var(--s2c-label) 60%, white);
   }
 `;
 
@@ -142,7 +167,9 @@ function QuestionBlock({ block }) {
     <>
       <p>
         <strong>
-          <span style={{ color: meta.color }}>[{meta.label}]</span>{" "}
+          <span className="s2c-label" style={{ "--s2c-label": meta.color }}>
+            [{meta.label}]
+          </span>{" "}
           {block.prompt || t("lessonView.noQuestionText")}
         </strong>
       </p>
@@ -197,7 +224,7 @@ function SpellingBlock({ block }) {
   return (
     <>
       <p>
-        <strong style={{ color: SPELLING_COLOR }}>
+        <strong className="s2c-label" style={{ "--s2c-label": SPELLING_COLOR }}>
           {t("lessonView.spellingWordsLabel")}
         </strong>
       </p>
