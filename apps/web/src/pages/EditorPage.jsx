@@ -74,6 +74,9 @@ import FirstLessonWizard from "../components/FirstLessonWizard.jsx";
 import AiLessonIdeaDialog from "../components/AiLessonIdeaDialog.jsx";
 import HistoryDialog, { timeAgo } from "../components/HistoryDialog.jsx";
 import MergeDialog from "../components/MergeDialog.jsx";
+// The preview dialog renders the working doc with the very same read-only
+// renderer the public lesson page uses — no docx, no mammoth, nothing to fetch.
+import LessonView from "../components/LessonView.jsx";
 import { AGE_RANGES } from "@spelling-creator/core/ageRanges";
 import { newId } from "@spelling-creator/core/id";
 import { extractCapitalizedWords } from "@spelling-creator/core/spelling";
@@ -99,12 +102,11 @@ import {
 import { convertDocImages } from "@spelling-creator/core/browser/imageRef";
 import { ensureImagesUploaded } from "@spelling-creator/core/imagesClient";
 // exportJson is a Blob and an <a> — no heavy dependency, so it stays static.
-// The docx/PDF/preview/import pipeline is not: it loads on demand through
+// The docx/PDF/import pipeline is not: it loads on demand through
 // lib/exports/load.js. See the comment in lib/exports/engine.js.
 import { exportJson } from "@spelling-creator/core/browser/jsonExport";
 import { importJsonFile } from "@spelling-creator/core/jsonImport";
 import { loadExportEngine } from "../lib/exports/load.js";
-import { PREVIEW_STYLES } from "@spelling-creator/core/lessonLayout";
 import { hasGoogleDrive } from "@spelling-creator/core/config";
 import {
   publishLesson,
@@ -219,8 +221,8 @@ export default function EditorPage() {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [ideaDialogOpen, setIdeaDialogOpen] = useState(false);
   const [newSectionName, setNewSectionName] = useState("");
-  const [busy, setBusy] = useState(null); // 'docx' | 'pdf' | 'gdocs' | 'preview' | 'publish' | 'import' | null
-  const [previewContent, setPreviewContent] = useState(null); // HTML string | null
+  const [busy, setBusy] = useState(null); // 'docx' | 'pdf' | 'gdocs' | 'publish' | 'import' | null
+  const [previewOpen, setPreviewOpen] = useState(false);
   // Word-import flow. `importWarnOpen` shows the "import is best-effort" warning
   // before the file picker; `importError` holds the reason a chosen file was
   // rejected (shown in a dialog — the editor is left untouched). The hidden
@@ -1034,7 +1036,11 @@ export default function EditorPage() {
     }
   };
 
-  const handlePreview = async () => {
+  // Preview renders the working doc with <LessonView> — the same component the
+  // public lesson page uses. It is synchronous and free: no Word document is
+  // built, so the preview neither waits for the export chunk nor differs from
+  // what a reader will actually see once the lesson is published.
+  const handlePreview = () => {
     if (doc.sections.length === 0) {
       notify({
         severity: "warning",
@@ -1042,20 +1048,7 @@ export default function EditorPage() {
       });
       return;
     }
-    setBusy("preview");
-    try {
-      const { previewHtml } = await loadExportEngine();
-      const html = await previewHtml(doc);
-      setPreviewContent(html);
-    } catch (err) {
-      console.error(err);
-      notify({
-        severity: "error",
-        message: t("messages.previewFailed", { error: err.message || err }),
-      });
-    } finally {
-      setBusy(null);
-    }
+    setPreviewOpen(true);
   };
 
   // Save the working lesson to the cloud. `publish` chooses whether it lands on the
@@ -1723,11 +1716,7 @@ export default function EditorPage() {
             disabled={busy !== null}
             className={headerGhostButton}
           >
-            {busy === "preview" ? (
-              <Spinner data-icon="inline-start" />
-            ) : (
-              <EyeIcon data-icon="inline-start" />
-            )}
+            <EyeIcon data-icon="inline-start" />
             {t("header.preview")}
           </Button>
 
@@ -2192,22 +2181,18 @@ export default function EditorPage() {
         </DialogContent>
       </Dialog>
 
-      <Dialog
-        open={Boolean(previewContent)}
-        onOpenChange={(next) => !next && setPreviewContent(null)}
-      >
+      <Dialog open={previewOpen} onOpenChange={setPreviewOpen}>
         <DialogContent className="flex max-h-[90dvh] w-full flex-col sm:max-w-3xl">
           <DialogHeader>
             <DialogTitle>{t("previewDialog.title")}</DialogTitle>
           </DialogHeader>
-          <div
-            className="s2c-preview-root overflow-y-auto rounded-md border border-border bg-white p-4 text-[#1a1a1a]"
-            dangerouslySetInnerHTML={{
-              __html: `<style>${PREVIEW_STYLES}</style>${previewContent || ""}`,
-            }}
-          />
+          {/* LessonView draws the lesson in the current theme; the wrapper
+              supplies only the dialog's frame and scrolling. */}
+          <div className="overflow-y-auto rounded-md border border-border">
+            <LessonView doc={doc} />
+          </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setPreviewContent(null)}>
+            <Button variant="outline" onClick={() => setPreviewOpen(false)}>
               {t("previewDialog.close")}
             </Button>
           </DialogFooter>

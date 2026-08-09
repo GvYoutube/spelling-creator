@@ -1,28 +1,73 @@
-// Read-only renderer for a lesson document, used by the public lesson page.
+// Read-only renderer for a lesson document, used by the public lesson page and
+// by the editor's preview dialog.
 //
-// This replaces the old docx→mammoth preview pipeline on the viewer: instead of
-// building a full Word document in memory, fetching+transcoding every image up
-// front and re-inlining them as base64, we render each block directly as React
-// and let the browser lazy-load images natively (loading="lazy"). The page shows
-// as soon as the JSON is fetched; images stream in as they scroll into view.
+// This replaces the old docx→mammoth preview pipeline: instead of building a
+// full Word document in memory, fetching+transcoding every image up front and
+// re-inlining them as base64, we render each block directly as React and let the
+// browser lazy-load images natively (loading="lazy"). The page shows as soon as
+// the JSON is fetched; images stream in as they scroll into view. Previewing is
+// therefore instant, and a writer previews exactly what a reader will see.
 //
-// It reuses the same PREVIEW_STYLES CSS and the same image-sizing math the docx
-// export uses (fitWithin against DOCX_MAX_IMAGE_WIDTH × the picked scale), so the
-// published view is visually identical to the Word/PDF export. The export/PDF
-// buttons still use the docx pipeline (docxExport.js / pdfExport.js) unchanged.
+// It keeps the docx export's image-sizing math (fitWithin against
+// DOCX_MAX_IMAGE_WIDTH × the picked scale), so a lesson has the same proportions
+// here as in the Word/PDF export — but it is drawn in the app's own theme, light
+// or dark, exactly like interactive mode. A lesson is something you read on
+// screen far more often than you print it, and a white sheet glaring out of a
+// dark page is the wrong default for reading. The printout still looks like a
+// printout: that's what Export DOCX and Print PDF produce (docxExport.js /
+// pdfExport.js), the only two paths that build a Word file.
 
 import { useTranslation } from "react-i18next";
 import { Skeleton } from "./ui/skeleton.jsx";
 import { fitWithin, imageSizeScale } from "@spelling-creator/core/image";
-import {
-  DOCX_MAX_IMAGE_WIDTH,
-  PREVIEW_STYLES,
-} from "@spelling-creator/core/lessonLayout";
+import { DOCX_MAX_IMAGE_WIDTH } from "@spelling-creator/core/lessonLayout";
 import { useImageSrc } from "../lib/useImageSrc.js";
 import { questionMeta } from "@spelling-creator/core/questions";
 import { SPELLING_COLOR } from "@spelling-creator/core/spelling";
 
 const BLANK = "____________";
+
+// The document's own typography, in theme colours: same sizes and spacing the
+// docx uses, so the page keeps its shape, with the paper colours and the Word
+// typeface replaced by the theme's.
+//
+// The question-type and spelling colours stay literal, as they are in the editor
+// and in interactive mode: they're content — the same colour coding the docx
+// carries — rather than chrome.
+const LESSON_STYLES = `
+  .s2c-lesson-root {
+    color: var(--foreground);
+    line-height: 1.5;
+    font-size: 14px;
+  }
+  .s2c-lesson-root h1 {
+    text-align: center;
+    font-size: 26px;
+    margin: 0 0 24px;
+    color: var(--foreground);
+  }
+  .s2c-lesson-root h2 {
+    font-size: 19px;
+    color: var(--primary);
+    border-bottom: 2px solid var(--primary);
+    padding-bottom: 4px;
+    margin: 22px 0 12px;
+  }
+  .s2c-lesson-root p { margin: 0 0 10px; }
+  .s2c-lesson-root figure { margin: 0; }
+  .s2c-lesson-root img {
+    display: block;
+    width: 100%;
+    height: auto;
+  }
+  .s2c-lesson-root figcaption {
+    text-align: center;
+    font-style: italic;
+    color: var(--muted-foreground);
+    font-size: 12px;
+    margin-top: 6px;
+  }
+`;
 
 // Render a text block: each newline becomes its own paragraph, matching how the
 // docx export splits lines into separate paragraphs.
@@ -60,8 +105,8 @@ function ImageBlock({ block }) {
     >
       {src ? (
         // width/height attributes reserve the correct aspect-ratio box so the
-        // page doesn't shift as the lazily-loaded bytes arrive. The PREVIEW_STYLES
-        // `img` rule (width:100%;height:auto) makes it fill the figure.
+        // page doesn't shift as the lazily-loaded bytes arrive. The
+        // LESSON_STYLES `img` rule (width:100%;height:auto) fills the figure.
         <img
           src={src}
           alt={block.caption || t("lessonView.imageAlt")}
@@ -78,19 +123,9 @@ function ImageBlock({ block }) {
           style={{ aspectRatio: `${width} / ${height}` }}
         />
       )}
-      {block.caption ? (
-        <figcaption
-          style={{
-            textAlign: "center",
-            fontStyle: "italic",
-            color: "#555",
-            fontSize: "12px",
-            marginTop: "6px",
-          }}
-        >
-          {block.caption}
-        </figcaption>
-      ) : null}
+      {/* Styled by LESSON_STYLES, so the caption follows the theme with the
+          rest of the page. */}
+      {block.caption ? <figcaption>{block.caption}</figcaption> : null}
     </figure>
   );
 }
@@ -196,8 +231,8 @@ export default function LessonView({ doc }) {
   const { t } = useTranslation("lesson");
   const sections = doc?.sections || [];
   return (
-    <div className="s2c-preview-root bg-white p-4 text-[#1a1a1a] sm:p-6">
-      <style>{PREVIEW_STYLES}</style>
+    <div className="s2c-lesson-root p-4 text-foreground sm:p-6">
+      <style>{LESSON_STYLES}</style>
       <h1>{doc?.title || t("lessonView.untitledLesson")}</h1>
       {sections.map((section, si) => (
         <section key={section.id || si}>

@@ -168,11 +168,12 @@ From `sm` up every one of those is reverted and it's the original corner panel.
 
 ## Known gaps
 
-- **Initial JS payload.** There's no route-level code splitting, and the
-  export/import libraries (`docx`, `mammoth`, `html2pdf.js`) are static imports
-  in `EditorPage.jsx`, so they land in the initial vendor chunk that every
-  visitor downloads — including on the homepage. This is the largest remaining
-  mobile-performance item; see [How the export pipeline works](./export-pipeline.md).
+- **Initial JS payload.** Routes are code-split and the export/import libraries
+  (`docx`, `mammoth`, `html2pdf.js`) load on demand behind
+  `src/lib/exports/load.js`, so a phone that only reads lessons never downloads
+  them — previewing and viewing a lesson render through `LessonView` instead.
+  What's left to watch is the editor chunk itself; see
+  [How the export pipeline works](./export-pipeline.md).
 
 ## Installing to a Home Screen
 

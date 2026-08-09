@@ -728,12 +728,11 @@ export default function LessonPage() {
                 supports the Summarizer API. */}
             <LessonSummary doc={lesson.doc} />
 
-            {/* LessonView renders the same white "printed page" the docx/PDF
-                export produces (see the note on its own file) — the panel
-                frame around it is themed so that white sheet reads as a
-                deliberate page floating on the app's background, in both
-                light and dark mode, rather than an unstyled leftover. */}
-            <div className="overflow-hidden rounded-panel border border-border shadow-(--shadow-panel)">
+            {/* LessonView draws the lesson in the app's theme, light or dark,
+                the same way interactive mode does — the panel frame around it
+                makes it read as a page floating on the app's background. The
+                printout look lives in the docx/PDF export, not here. */}
+            <div className="overflow-hidden rounded-panel border border-border bg-card shadow-(--shadow-panel)">
               <LessonView doc={lesson.doc} />
             </div>
 

@@ -44,13 +44,13 @@ numbering (see [Navigating large lessons](./navigating-large-lessons.md#question
 ## What it looks like
 
 Interactive mode is **full-screen** and drawn in the app's own theme, light or
-dark. That's a deliberate departure from the lesson page below it, which renders
-the lesson as the white sheet the [DOCX/PDF export](./export-pipeline.md)
-produces. A page you're about to print should look like the printout; a surface
-you read and answer on for twenty minutes should look like the app. So the
-blocks are re-rendered here — prose at reading size, images framed in the app's
-border and radius, spelling words as cards you could read across a room. Only
-the presentation differs; the content is the same blocks.
+dark — as is the lesson page below it, which follows the theme too rather than
+reproducing the white sheet the [DOCX/PDF export](./export-pipeline.md)
+produces. What's different here is the _scale_: a surface you read and answer on
+for twenty minutes gets its own treatment, so the blocks are re-rendered — prose
+at reading size, images framed in the app's border and radius, spelling words as
+cards you could read across a room. Only the presentation differs; the content
+is the same blocks.
 
 A progress bar across the top counts the steps and how many questions you've
 answered so far.

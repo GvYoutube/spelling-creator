@@ -16,7 +16,6 @@
     "./browser/git/fs": "./src/browser/git/fs.js",
     "./browser/git/sync": "./src/browser/git/sync.js",
     "./browser/googleDrive": "./src/browser/googleDrive.js",
-    "./browser/htmlPreview": "./src/browser/htmlPreview.js",
     "./browser/imageFile": "./src/browser/imageFile.js",
     "./browser/imageRef": "./src/browser/imageRef.js",
     "./browser/imageStore": "./src/browser/imageStore.js",
