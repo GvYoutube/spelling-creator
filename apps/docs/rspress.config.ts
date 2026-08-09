@@ -79,6 +79,10 @@ export default defineConfig({
               text: "Lesson summaries (on-device AI)",
               link: "/web-app/lesson-summaries",
             },
+            {
+              text: "Interactive lesson mode",
+              link: "/web-app/interactive-mode",
+            },
             { text: "Search images", link: "/web-app/search-images" },
             {
               text: "Save to Google Docs",

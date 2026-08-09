@@ -33,6 +33,14 @@ PDF printing.
   AI, running entirely on the reader's own device (no server, no cost). Only
   appears on browsers that can actually run it (see
   [Lesson summaries](./lesson-summaries.md)).
+- **Interactive lesson mode** - work through any published lesson instead of
+  reading it: each section's material appears full-screen on its own, then its
+  questions one at a time with a field to type an answer into. Every lesson ever
+  published already works — the walkthrough is derived from the document itself.
+  What you type is saved **privately to your account** when you finish, readable
+  by you and nobody else (not even the lesson's author), and any step can be read
+  aloud by the browser's own speech synthesis (see
+  [Interactive lesson mode](./interactive-mode.md)).
 - **Navigating a long lesson** - a finished lesson runs to ~37 screens on a
   desktop and ~54 on a phone, so each section's header is sticky (pinned below
   the app bar, naming the section you're in for as long as you're in it), every

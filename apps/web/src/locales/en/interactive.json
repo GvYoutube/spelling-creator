@@ -1,0 +1,66 @@
+{
+  "title": "Interactive lesson",
+  "untitledLesson": "Untitled Lesson",
+  "untitledSection": "Untitled section",
+  "emptyLesson": "This lesson has nothing in it to work through yet.",
+  "close": "Close",
+  "speech": {
+    "turnOn": "Read aloud",
+    "turnOff": "Turn off reading aloud",
+    "stop": "Stop reading",
+    "readAgain": "Read this step again",
+    "settings": "Voice settings",
+    "voice": "Voice",
+    "defaultVoice": "Browser default",
+    "pace": "Pace",
+    "paceOption_one": "Normal speed",
+    "paceOption_other": "{{rate}} times normal speed"
+  },
+  "step": {
+    "noQuestionText": "(no question text)",
+    "yourAnswer": "Your answer",
+    "answerPlaceholder": "Type your answer…",
+    "imageAlt": "lesson image",
+    "spellingWords": "Spelling words",
+    "speakWord": "Read “{{word}}” aloud"
+  },
+  "progress": {
+    "finished": "Finished",
+    "stepCount": "Step {{current}} of {{total}}",
+    "questionsAnswered": "{{answered}}/{{total}} answered"
+  },
+  "nav": {
+    "back": "Back",
+    "next": "Next",
+    "finish": "Finish"
+  },
+  "quit": {
+    "title": "Leave without saving?",
+    "body": "Your answers haven’t been saved yet — they’re only stored once you finish the lesson. Leaving now discards them.",
+    "keepGoing": "Keep going",
+    "discard": "Discard answers"
+  },
+  "summary": {
+    "readThrough": "You worked through the whole lesson.",
+    "answered": "You answered {{answered}} of {{total}} questions.",
+    "skipped": "Skipped",
+    "saving": "Saving your answers…",
+    "saved": "Saved privately to your account.",
+    "couldNotSave": "Could not save your answers.",
+    "retry": "Retry",
+    "notConfigured": "The lesson hub is not configured, so your answers can’t be saved.",
+    "signInToSave": "Sign in before you start to have your answers saved privately to your account.",
+    "startAgain": "Start again",
+    "done": "Done"
+  },
+  "saved": {
+    "heading": "Your answers",
+    "privateNote": "Only you can see these. The lesson’s author can’t.",
+    "answeredCount": "{{answered}}/{{total}} answered",
+    "delete": "Delete these answers",
+    "deleted": "Answers deleted.",
+    "couldNotDelete": "Could not delete these answers.",
+    "couldNotLoad": "Could not load your answers.",
+    "retry": "Retry"
+  }
+}

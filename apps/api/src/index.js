@@ -9,6 +9,7 @@ import { handleImageGet, handleImagePut } from './routes/images.js';
 import { handleGit } from './routes/git.js';
 import { handleLessons } from './routes/lessons.js';
 import { handleComments, handleCommentEdit } from './routes/comments.js';
+import { handleLessonResponses, handleLessonResponseDelete } from './routes/lessonResponses.js';
 import { handleTextFeedback } from './routes/feedback.js';
 import { handleNotifications } from './routes/notifications.js';
 import { handleProfile } from './routes/profile.js';
@@ -63,6 +64,13 @@ app.all('/git/:id/:action', (c) => handleGit(req(c), c.env, c.req.param('id'), `
 // (author-only) is a deeper path under it, registered first for the same reason.
 app.all('/lessons/:id/comments/:commentId', (c) => handleCommentEdit(req(c), c.env, c.req.param('id'), c.req.param('commentId'), cors(c)));
 app.all('/lessons/:id/comments', (c) => handleComments(req(c), c.env, c.req.param('id'), cors(c)));
+// A learner's own answers from interactive mode. Private to the signed-in caller
+// — see the privacy note at the top of routes/lessonResponses.js. Registered
+// before the broader /lessons/* match for the same reason the comment routes are.
+app.all('/lessons/:id/responses/:responseId', (c) =>
+	handleLessonResponseDelete(req(c), c.env, c.req.param('id'), c.req.param('responseId'), cors(c)),
+);
+app.all('/lessons/:id/responses', (c) => handleLessonResponses(req(c), c.env, c.req.param('id'), cors(c)));
 app.all('/lessons', (c) => handleLessons(req(c), c.env, urlOf(c), cors(c)));
 app.all('/lessons/*', (c) => handleLessons(req(c), c.env, urlOf(c), cors(c)));
 
