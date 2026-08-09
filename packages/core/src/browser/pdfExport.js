@@ -50,11 +50,18 @@ function orderedImageBlocks(doc) {
 // buildDocument only emits a caption paragraph when the block has a caption, so
 // the trailing paragraph is consumed only then and following content is left
 // untouched otherwise.
+//
+// That optional trailing paragraph must not be an image paragraph. `replace`
+// resumes scanning after the whole match, so a swallowed `<p><img></p>` is
+// re-emitted verbatim and never matched again: with two images in a row the
+// second would keep mammoth's natural size, lose its alignment and caption, and
+// throw the block pairing off by one for every image after it. The lookahead
+// leaves an image paragraph for the next iteration to claim.
 function layoutImageFigures(html, doc) {
   const imageBlocks = orderedImageBlocks(doc);
   let index = 0;
   return html.replace(
-    /<p>\s*(<img\b[^>]*>)\s*<\/p>(\s*<p>[\s\S]*?<\/p>)?/g,
+    /<p>\s*(<img\b[^>]*>)\s*<\/p>(\s*<p>(?!\s*<img\b)[\s\S]*?<\/p>)?/g,
     (match, imgTag, trailingParagraph) => {
       const block = imageBlocks[index++];
       if (!block) return match;
