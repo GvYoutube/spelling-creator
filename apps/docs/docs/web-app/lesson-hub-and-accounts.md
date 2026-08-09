@@ -106,6 +106,7 @@ their own pages.)
 | `POST /lessons/:id/comments`             | `Bearer <Supabase JWT>` | `{ "comment": { id, ..., body, createdAt, editedAt }, "rating": { average, count } \| null }`                         |
 | `PATCH /lessons/:id/comments/:commentId` | `Bearer <Supabase JWT>` | `{ "comment": { ... } }` — edit your own comment (author only; else `403`)                                            |
 | `GET/POST /lessons/:id/responses`        | `Bearer <Supabase JWT>` | Your own saved answers from [interactive mode](./interactive-mode.md) — private to the caller; see that page          |
+| `DELETE /lessons/:id/responses/:rid`     | `Bearer <Supabase JWT>` | `{ "ok": true }` — deletes one of your own saved run-throughs; someone else's matches nothing and `404`s              |
 | `POST /ai-text/dislike`                  | `Bearer <Supabase JWT>` | `{ "ok": true }` — evicts the cached text for `{ subject, documentName }`                                             |
 
 \* A published lesson's `GET /lessons/:id` and `GET /lessons/:id/comments` need

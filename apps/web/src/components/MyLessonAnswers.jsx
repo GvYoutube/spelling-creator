@@ -9,7 +9,7 @@
 // signed out, and nothing when the reader has never worked through this lesson,
 // so it never advertises a feature by leaving an empty box on the page.
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import {
@@ -121,15 +121,26 @@ export default function MyLessonAnswers({ lessonId, refreshToken = 0 }) {
   const [error, setError] = useState("");
   const [deletingId, setDeletingId] = useState(null);
 
+  // Which fetch is the current one. The lesson page bumps `refreshToken` the
+  // moment a run-through is saved, so the refresh can start while the page's
+  // first load is still in flight — and if that older one lands last it would
+  // overwrite the list with the answers as they were *before* the save, losing
+  // the new run-through until a reload.
+  const request = useRef(0);
+
   const load = useCallback(async () => {
+    const mine = (request.current += 1);
     setLoading(true);
     setError("");
     try {
-      setResponses(await fetchMyLessonResponses(lessonId, accessToken));
+      const next = await fetchMyLessonResponses(lessonId, accessToken);
+      if (request.current !== mine) return;
+      setResponses(next);
     } catch (err) {
+      if (request.current !== mine) return;
       setError(err.message || t("saved.couldNotLoad"));
     } finally {
-      setLoading(false);
+      if (request.current === mine) setLoading(false);
     }
   }, [lessonId, accessToken, t]);
 

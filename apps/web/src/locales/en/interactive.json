@@ -13,7 +13,8 @@
     "voice": "Voice",
     "defaultVoice": "Browser default",
     "pace": "Pace",
-    "paceOption": "{{rate}} times normal speed"
+    "paceOption_one": "Normal speed",
+    "paceOption_other": "{{rate}} times normal speed"
   },
   "step": {
     "noQuestionText": "(no question text)",

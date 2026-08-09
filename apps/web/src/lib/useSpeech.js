@@ -154,7 +154,11 @@ export function useSpeech() {
       synth.removeEventListener("voiceschanged", readVoices);
       // Leaving the page mid-sentence should not leave a voice talking over
       // whatever the user does next: speechSynthesis is global to the tab and
-      // outlives this component.
+      // outlives this component. The generation bump is what makes the cancel
+      // stick — a `speak` still waiting out the tick it defers by would
+      // otherwise queue its utterances *after* this, and carry on talking into
+      // a page that no longer has any way to stop it.
+      generation.current += 1;
       synth.cancel();
     };
   }, []);

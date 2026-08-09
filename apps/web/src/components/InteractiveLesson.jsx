@@ -189,7 +189,12 @@ function SpeechControls({ speech, onReplay }) {
                       <ToggleGroupItem
                         key={rate}
                         value={String(rate)}
-                        aria-label={t("speech.paceOption", { rate })}
+                        // `count` picks the plural form, so 1× reads "Normal
+                        // speed" rather than "1 times normal speed".
+                        aria-label={t("speech.paceOption", {
+                          count: rate,
+                          rate,
+                        })}
                       >
                         {rate}×
                       </ToggleGroupItem>
@@ -479,6 +484,7 @@ export default function InteractiveLesson({
     setPhase("running");
     setSaveState("idle");
     setSaveError("");
+    savedFingerprint.current = null;
   }, [open]);
 
   // Read the current step aloud when speech is on. Keyed on which step was last
@@ -505,6 +511,14 @@ export default function InteractiveLesson({
     [steps, answers],
   );
 
+  // What has actually been stored, so finishing twice doesn't file the same
+  // run-through twice. Reaching the summary, going Back to fix nothing, and
+  // pressing Finish again is a normal thing to do, and it would otherwise spend
+  // the learner's saved-run-through allowance on duplicates. Written only on a
+  // successful save, so a failed or impossible one leaves the next Finish free
+  // to try again.
+  const savedFingerprint = useRef(null);
+
   // Store the finished run-through. Called on reaching the summary, and again by
   // the retry button. Requires a signed-in session and a configured hub; without
   // either, the summary says so rather than failing.
@@ -517,6 +531,7 @@ export default function InteractiveLesson({
     setSaveError("");
     try {
       await saveLessonResponses(lesson.id, payload, accessToken);
+      savedFingerprint.current = JSON.stringify(payload);
       setSaveState("saved");
       onSaved?.();
     } catch (err) {
@@ -529,8 +544,11 @@ export default function InteractiveLesson({
     speech.stop();
     spokenKey.current = null;
     setPhase("summary");
-    // A read-through of a lesson with no questions has nothing to store.
-    if (responses.length > 0) save(responses);
+    // A read-through of a lesson with no questions has nothing to store, and
+    // answers already stored unchanged have nothing to store again.
+    if (responses.length === 0) return;
+    if (savedFingerprint.current === JSON.stringify(responses)) return;
+    save(responses);
   };
 
   const goNext = () => {
@@ -554,6 +572,7 @@ export default function InteractiveLesson({
     setSaveState("idle");
     setSaveError("");
     spokenKey.current = null;
+    savedFingerprint.current = null;
   };
 
   const close = () => {

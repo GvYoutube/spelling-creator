@@ -15,8 +15,9 @@ it is saved **privately to your account**. Nobody else can read it, including th
 person who wrote the lesson. See [Privacy](#privacy-who-can-read-your-answers)
 below, which is the part of this feature worth being precise about.
 
-Answers can also be **read aloud** with the browser's built-in speech synthesis,
-on the reader's own device. See [Reading aloud](#reading-aloud-text-to-speech).
+The lesson can also be **read aloud** with the browser's built-in speech
+synthesis, on the reader's own device. See
+[Reading aloud](#reading-aloud-text-to-speech).
 
 ## Every existing lesson already works
 
@@ -97,8 +98,9 @@ The speaker button in the top bar turns on **read aloud**, using the browser's
 [Web Speech API](https://developer.mozilla.org/en-US/docs/Web/API/Web_Speech_API)
 (`speechSynthesis`). Like [lesson summaries](./lesson-summaries.md), this runs
 entirely on the reader's own device: no Worker call, no API key, no cost, and the
-lesson text never leaves the machine. Unlike summaries, it works in every current
-browser.
+lesson text never leaves the machine. Unlike summaries, it needs no special
+hardware and is supported across current browsers — but it's still probed for
+rather than assumed, and where it's missing the controls aren't rendered at all.
 
 With it on:
 
@@ -142,10 +144,13 @@ about 15 seconds (so text is split into sentence-sized chunks and queued), and
 - Skipped questions are stored as blank answers rather than dropped, so the set
   still says which questions were asked.
 - Limits (shared between browser and Worker in
-  `packages/core/src/interactive.js`): 5,000 characters per answer, 500 answers
-  per submission, and 20 saved run-throughs of any one lesson — past that, delete
-  an old one, which is rejected rather than silently pruned for the same reason
-  the [draft cap](./lesson-hub-and-accounts.md) is.
+  `packages/core/src/interactive.js`): 5,000 characters per answer and 500
+  answers per submission.
+- You may keep **20 saved run-throughs of any one lesson**. Past that a `POST` is
+  rejected with `409` and a message asking you to delete an older one — rejected
+  rather than silently pruning the oldest, for the same reason the
+  [draft cap](./lesson-hub-and-accounts.md) is: they're the user's own answers,
+  and quietly deleting them to make room isn't ours to decide.
 - `POST` also checks the lesson is one the caller could have read in the first
   place: published and not shadowbanned, or theirs / trusted / moderated.
 
