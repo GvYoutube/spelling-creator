@@ -320,8 +320,10 @@ nothing to do with the docs.)
 
 The alpha risk is bounded by what this app is: a static site rendered at build
 time, in CI, before anything deploys. A regression is a failed build on a pull
-request, not a broken page for a reader. Move the dependency to `^2.0.0` when 2.0
-goes final.
+request, not a broken page for a reader. That is why the range is a caret —
+`^2.0.0-alpha.19`, which admits later alphas and 2.x stable alike, with the
+lockfile holding the version that actually builds (`2.0.0-alpha.19` today). A
+refresh that moves it forward gets caught by the same CI build.
 
 ### Vite+ — evaluated, deferred
 

@@ -13,7 +13,7 @@ pnpm dev:docs           # run this documentation site (VitePress)
 
 pnpm build              # build the frontend
 pnpm build:docs         # build the docs into apps/web/dist/docs
-pnpm deploy             # deploy the Worker (wrangler deploy)
+pnpm deploy             # build both, then deploy the Worker (wrangler deploy)
 
 pnpm fmt                # format everything (oxfmt)
 pnpm lint               # check formatting, then lint (oxfmt --check + oxlint)
@@ -38,9 +38,11 @@ This site is [VitePress](https://vitepress.dev). Pages are plain Markdown under
 `.mts` extension matters, because `apps/docs/package.json` has no
 `"type": "module"` and VitePress is ESM-only.
 
-The dependency is pinned to the **2.0 alpha on purpose**: `vitepress@latest` is
-still 1.6.4 from August 2025, and it would drag in a second Vite major (5)
-alongside the Vite 8 that `apps/web` builds on. See
+The dependency tracks the **2.0 alpha on purpose**: `vitepress@latest` is still
+1.6.4 from August 2025, and it would drag in a second Vite major (5) alongside
+the Vite 8 that `apps/web` builds on. The range is `^2.0.0-alpha.19`, so the
+lockfile decides the exact version — today `2.0.0-alpha.19`, and a lockfile
+refresh can move it to a later alpha or to 2.x once that ships. See
 [Frontend migration](./frontend-migration.md) for the full reasoning.
 
 - **The sidebar is explicit.** A new page does not appear until it is listed in
@@ -51,7 +53,9 @@ alongside the Vite 8 that `apps/web` builds on. See
   build on a dead one.
 - **`base` is `/docs/`** and the output goes to `apps/docs/doc_build`, which
   `pnpm build:docs` then copies into `apps/web/dist/docs`. Run it **after** the
-  web build — Vite empties `apps/web/dist` each time. `cleanUrls` is on, and
+  web build — Vite empties `apps/web/dist` each time, so a `pnpm build` after
+  `pnpm build:docs` deletes the docs again. `pnpm deploy` and the deploy
+  workflow both run the two in that order for you. `cleanUrls` is on, and
   Cloudflare's default `auto-trailing-slash` asset handling resolves
   `/docs/intro` to `intro.html`.
 - **`llms.txt` and `llms-full.txt`** come from

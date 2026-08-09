@@ -11,9 +11,10 @@ export default defineConfig({
   // hosts the web SPA and this docs site from one assets bundle: the `build`
   // script renders here, then copies the static output into apps/web/dist/docs
   // so `wrangler deploy` ships the docs alongside the SPA, reached at /docs/.
-  // VitePress emits a purely static bundle (no server runtime), so we render to
-  // ./doc_build (relative to this config's project root, apps/docs/docs) and
-  // copy it into apps/web/dist/docs.
+  // VitePress emits a purely static bundle (no server runtime). outDir is
+  // resolved from this config's project root (apps/docs/docs), so ../doc_build
+  // renders to apps/docs/doc_build — the directory the `build` script copies
+  // into apps/web/dist/docs from.
   base: "/docs/",
   outDir: "../doc_build",
 
