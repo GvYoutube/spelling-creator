@@ -8,6 +8,13 @@
 // for the lesson's author, not for a moderator. It renders nothing at all when
 // signed out, and nothing when the reader has never worked through this lesson,
 // so it never advertises a feature by leaving an empty box on the page.
+//
+// The server guarantee only covers what arrives; what's already in hand is this
+// component's problem. A browser is a shared object — one reader signs out and
+// another signs in, with no reload in between — so the loaded answers are held
+// together with the id of the user they were fetched for, and what's rendered is
+// derived from that pairing rather than from arrival order alone. See the state
+// below.
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -116,10 +123,20 @@ export default function MyLessonAnswers({ lessonId, refreshToken = 0 }) {
   const { t } = useTranslation("interactive");
   const { user, accessToken, loading: authLoading } = useAuth();
 
-  const [responses, setResponses] = useState([]);
+  // The answers, tagged with the id of the user they were fetched for. Private
+  // data on a shared device has to be addressed by *whose* it is, not merely by
+  // when it arrived: a browser can go from one signed-in reader to another
+  // without a reload, and there is a render between the session changing and the
+  // refetch landing where the previous reader's answers are still in state and
+  // the new one is already `user`. Deriving what to show from this pairing means
+  // that frame shows nothing rather than someone else's work.
+  const [loaded, setLoaded] = useState({ userId: null, responses: [] });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [deletingId, setDeletingId] = useState(null);
+
+  const userId = user?.id ?? null;
+  const responses = userId && loaded.userId === userId ? loaded.responses : [];
 
   // Which fetch is the current one. The lesson page bumps `refreshToken` the
   // moment a run-through is saved, so the refresh can start while the page's
@@ -135,20 +152,26 @@ export default function MyLessonAnswers({ lessonId, refreshToken = 0 }) {
     try {
       const next = await fetchMyLessonResponses(lessonId, accessToken);
       if (request.current !== mine) return;
-      setResponses(next);
+      setLoaded({ userId, responses: next });
     } catch (err) {
       if (request.current !== mine) return;
       setError(err.message || t("saved.couldNotLoad"));
     } finally {
       if (request.current === mine) setLoading(false);
     }
-  }, [lessonId, accessToken, t]);
+  }, [lessonId, accessToken, userId, t]);
 
   useEffect(() => {
     // Wait for the session before deciding there's nothing to fetch, or a
     // signed-in reader's answers would be skipped on a cold page load.
     if (authLoading || !hasApi() || !accessToken || !lessonId) {
-      setResponses([]);
+      // Bumping the generation is what makes this stick. A fetch that started
+      // while signed in is still in flight at sign-out, and without the bump it
+      // passes its own guard and writes the answers straight back in after this
+      // has cleared them.
+      request.current += 1;
+      setLoaded({ userId: null, responses: [] });
+      setLoading(false);
       return;
     }
     load();
@@ -158,9 +181,15 @@ export default function MyLessonAnswers({ lessonId, refreshToken = 0 }) {
     setDeletingId(responseId);
     try {
       await deleteLessonResponse(lessonId, responseId, accessToken);
-      setResponses((current) =>
-        current.filter((response) => response.id !== responseId),
-      );
+      // Drop it from the set as it stands, keeping whose it is attached — a
+      // sign-out that raced this must not have the row put back under a null
+      // owner, where the next reader would inherit it.
+      setLoaded((current) => ({
+        ...current,
+        responses: current.responses.filter(
+          (response) => response.id !== responseId,
+        ),
+      }));
       toast(t("saved.deleted"));
     } catch (err) {
       toast(err.message || t("saved.couldNotDelete"));
