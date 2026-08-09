@@ -18,6 +18,7 @@ import {
   FileDownIcon,
   GitForkIcon,
   PencilIcon,
+  PlayIcon,
   PrinterIcon,
   ShieldIcon,
   Trash2Icon,
@@ -52,7 +53,9 @@ import {
   DropdownMenuSeparator,
 } from "../components/ui/dropdown-menu.jsx";
 import CommentsSection from "../components/CommentsSection.jsx";
+import InteractiveLesson from "../components/InteractiveLesson.jsx";
 import LessonSummary from "../components/LessonSummary.jsx";
+import MyLessonAnswers from "../components/MyLessonAnswers.jsx";
 import { LessonContentSkeleton } from "../components/Skeletons.jsx";
 import LessonView, { lessonPlainText } from "../components/LessonView.jsx";
 import {
@@ -61,6 +64,7 @@ import {
   EDIT_REQUEST_KEY,
   FORK_REQUEST_KEY,
 } from "@spelling-creator/core/lessons";
+import { isInteractivePlayable } from "@spelling-creator/core/interactive";
 import {
   setShadowban,
   banName,
@@ -116,6 +120,12 @@ export default function LessonPage() {
 
   // Which export is in flight ('docx' | 'pdf' | null).
   const [busy, setBusy] = useState(null);
+
+  // Interactive mode: the lesson presented a step at a time, with a field to
+  // type each answer into (see InteractiveLesson). Bumping `answersSaved` after
+  // a completed run-through re-fetches the reader's own saved answers below.
+  const [interactiveOpen, setInteractiveOpen] = useState(false);
+  const [answersSaved, setAnswersSaved] = useState(0);
 
   // Delete-confirmation dialog. The user must retype the lesson's title to
   // confirm, guarding against an accidental, irreversible delete. `deleteMode`
@@ -290,6 +300,12 @@ export default function LessonPage() {
   const isAuthor =
     Boolean(user) && lesson?.authorId && lesson.authorId === user.id;
 
+  // Whether interactive mode has anything to walk through. Every lesson the hub
+  // holds is compatible with it — the walkthrough is derived from the document
+  // itself (see core/interactive.js) — so this is only false for the degenerate
+  // case of a lesson whose sections are all empty.
+  const playable = isInteractivePlayable(lesson?.doc);
+
   // Open the type-the-title delete dialog in author or admin mode.
   const openDelete = (mode) => {
     setDeleteMode(mode);
@@ -428,6 +444,16 @@ export default function LessonPage() {
           <>
             {/* Desktop: the actions as their own buttons. */}
             <div className="hidden items-center gap-1 md:flex">
+              {playable && (
+                <Button
+                  variant="ghost"
+                  onClick={() => setInteractiveOpen(true)}
+                  className="text-primary-foreground hover:bg-primary-foreground/10 hover:text-primary-foreground"
+                >
+                  <PlayIcon data-icon="inline-start" />
+                  {t("lessonPage.startInteractive")}
+                </Button>
+              )}
               <Button
                 variant="ghost"
                 onClick={() => handleExport("pdf")}
@@ -502,6 +528,12 @@ export default function LessonPage() {
                 <TooltipContent>{t("lessonPage.lessonActions")}</TooltipContent>
               </Tooltip>
               <DropdownMenuContent align="end">
+                {playable && (
+                  <DropdownMenuItem onClick={() => setInteractiveOpen(true)}>
+                    <PlayIcon />
+                    {t("lessonPage.startInteractive")}
+                  </DropdownMenuItem>
+                )}
                 <DropdownMenuItem
                   onClick={() => handleExport("pdf")}
                   disabled={Boolean(busy)}
@@ -705,12 +737,35 @@ export default function LessonPage() {
               <LessonView doc={lesson.doc} />
             </div>
 
+            {/* The reader's own saved run-throughs of this lesson, visible to
+                nobody else — including the lesson's author. Renders nothing when
+                signed out or when there are none (see MyLessonAnswers). */}
+            <div className="mt-6">
+              <MyLessonAnswers
+                lessonId={lesson.id}
+                refreshToken={answersSaved}
+              />
+            </div>
+
             <div className="mt-6">
               <CommentsSection lessonId={lesson.id} onRated={handleRated} />
             </div>
           </>
         )}
       </div>
+
+      {/* Interactive mode. Mounted alongside the page rather than only while open:
+          a closed Radix dialog renders no DOM at all, and unmounting it on close
+          would cut its exit animation short. It costs one capability probe for
+          speech synthesis (see useSpeech) and nothing else until it's opened. */}
+      {lesson && playable && (
+        <InteractiveLesson
+          lesson={lesson}
+          open={interactiveOpen}
+          onOpenChange={setInteractiveOpen}
+          onSaved={() => setAnswersSaved((count) => count + 1)}
+        />
+      )}
 
       <Dialog open={deleteOpen} onOpenChange={(next) => !next && closeDelete()}>
         <DialogContent className="sm:max-w-sm">

@@ -15,6 +15,7 @@ import enEditorSections from "../locales/en/editorSections.json";
 import enEditorTools from "../locales/en/editorTools.json";
 import enHome from "../locales/en/home.json";
 import enHub from "../locales/en/hub.json";
+import enInteractive from "../locales/en/interactive.json";
 import enLesson from "../locales/en/lesson.json";
 import enLogin from "../locales/en/login.json";
 import enModeration from "../locales/en/moderation.json";
@@ -30,6 +31,7 @@ export const namespaces = [
   "common",
   "home",
   "hub",
+  "interactive",
   "lesson",
   "login",
   "moderation",
@@ -48,6 +50,7 @@ export const resources = {
     common: enCommon,
     home: enHome,
     hub: enHub,
+    interactive: enInteractive,
     lesson: enLesson,
     login: enLogin,
     moderation: enModeration,

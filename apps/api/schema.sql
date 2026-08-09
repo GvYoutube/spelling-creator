@@ -124,6 +124,44 @@ create policy "ratings are public to read"
 -- service-role Worker writes.)
 
 
+-- A learner's answers from one run-through of a lesson in interactive mode (see
+-- the web app's InteractiveLesson): the lesson is presented a step at a time and
+-- each question is typed into a text field, then the whole set is saved here once
+-- the run-through finishes.
+--
+-- These rows are PRIVATE to the user who wrote them. The Worker's
+-- /lessons/:id/responses endpoints scope every read and every delete to the
+-- verified caller's own user_id, and there is no endpoint — moderator, admin or
+-- otherwise — that returns anyone else's. The lesson's author cannot see who has
+-- worked through their lesson or what they wrote. Treat that as a load-bearing
+-- property of this table, not an oversight: a child's attempts at a spelling
+-- exercise are exactly the kind of thing that should not become a teacher-facing
+-- dashboard by accident.
+--
+-- `answers` is the array the browser builds in core/src/interactive.js: one entry
+-- per question, each carrying { blockId, sectionId, sectionName, questionType,
+-- prompt, answer }. The prompt is snapshotted deliberately — the lesson may be
+-- edited or re-ordered later, and a saved run-through has to stay readable.
+create table if not exists public.lesson_responses (
+  id           uuid primary key default gen_random_uuid(),
+  lesson_id    uuid not null references public.lessons (id) on delete cascade,
+  user_id      uuid not null references auth.users (id) on delete cascade,
+  answers      jsonb not null,
+  completed_at timestamptz not null default now()
+);
+
+-- The only query shape there is: "my run-throughs of this lesson, newest first".
+-- The user_id prefix is what makes the privacy scoping cheap as well as correct.
+create index if not exists lesson_responses_user_lesson_idx
+  on public.lesson_responses (user_id, lesson_id, completed_at desc);
+
+-- Same posture as notifications: only the service-role Worker reads/writes, so
+-- enable RLS with no anon/authenticated policies. Note there is deliberately NO
+-- public read policy here — unlike lessons, comments and ratings, this data is
+-- never public.
+alter table public.lesson_responses enable row level security;
+
+
 -- Notifications delivered to a user. A notification reaches its recipient by their
 -- auth user id (`user_id`, e.g. "someone commented on your lesson") or by their
 -- email (`recipient_email`, used by "send link to user" so a link can be sent

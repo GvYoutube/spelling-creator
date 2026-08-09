@@ -35,6 +35,8 @@ src/
     LiveField.jsx          debounced LiveInput/LiveTextarea (commit ~200ms after typing pauses, hold off remote updates while focused)
     LessonView.jsx        read-only renderer for the lesson page (blocks straight to React, lazy images)
     LessonSummary.jsx     on-device AI summary card on the lesson page (hidden unless the browser supports it)
+    InteractiveLesson.jsx full-screen step-by-step walkthrough of a lesson, with a field per question and optional read-aloud (see interactive-mode.md)
+    MyLessonAnswers.jsx   the reader's own saved answers on the lesson page — private to them, rendered for nobody else
     SectionCard.jsx       a named section with its content blocks + add buttons; measures the pointer against its own rows during a block drag, but the drag itself is owned by EditorPage (blocks can move between sections)
     ContentBlock.jsx      a single text, spelling, image, or question block; owns BLOCK_LAYOUT, the responsive content/controls split (see mobile-layout.md)
     IconActionButton.jsx  the icon + tooltip button behind every block/section control; the tooltip doubles as its aria-label
@@ -64,6 +66,7 @@ src/
       engine.js, load.js  the docx/PDF/preview/import pipeline, behind one dynamic import (keeps ~390 KB gzipped off every page that never exports)
       useLessonGit.js     the editor's controller: setup, periodic commits, history, restore
     useImageSrc.js        resolves an image ref to a displayable src
+    useSpeech.js          Web Speech API text-to-speech for interactive mode (capability probe, voice/pace preferences, Chromium's utterance-length and cancel quirks)
     auth.jsx              AuthProvider + useAuth (session, magic link, sign out)
     seo.jsx               <DocumentMeta> / <JsonLd> — React 19 hoists these into <head>, which is what makes them work under SSR
     ssr.jsx               the client/server handoff: SsrProvider, useServerData, useSiteOrigin

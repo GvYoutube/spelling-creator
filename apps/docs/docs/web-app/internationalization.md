@@ -34,6 +34,7 @@ area without wading through the whole app:
 | `home`           | `HomePage` (marketing splash + signed-in dashboard)                                                                                                 |
 | `hub`            | `HubPage`                                                                                                                                           |
 | `lesson`         | `LessonPage`, `LessonView`, `LessonSummary`, `CommentsSection`                                                                                      |
+| `interactive`    | `InteractiveLesson` (the full-screen walkthrough and its speech controls), `MyLessonAnswers`                                                        |
 | `login`          | `LoginPage`                                                                                                                                         |
 | `moderation`     | `ModerationPage`                                                                                                                                    |
 | `oauth`          | `OAuthAuthorizePage`                                                                                                                                |

@@ -105,6 +105,7 @@ their own pages.)
 | `GET /lessons/:id/comments`              | none, unless a draft\*  | `{ "comments": [{ id, parentId, authorId, author, body, createdAt, editedAt }] }` (oldest first)                      |
 | `POST /lessons/:id/comments`             | `Bearer <Supabase JWT>` | `{ "comment": { id, ..., body, createdAt, editedAt }, "rating": { average, count } \| null }`                         |
 | `PATCH /lessons/:id/comments/:commentId` | `Bearer <Supabase JWT>` | `{ "comment": { ... } }` — edit your own comment (author only; else `403`)                                            |
+| `GET/POST /lessons/:id/responses`        | `Bearer <Supabase JWT>` | Your own saved answers from [interactive mode](./interactive-mode.md) — private to the caller; see that page          |
 | `POST /ai-text/dislike`                  | `Bearer <Supabase JWT>` | `{ "ok": true }` — evicts the cached text for `{ subject, documentName }`                                             |
 
 \* A published lesson's `GET /lessons/:id` and `GET /lessons/:id/comments` need
@@ -174,8 +175,11 @@ tables shown below, that file also defines the `ratings` table (1–5 stars, one
 row per `(lesson_id, author_id)`), the `notifications` table (see
 [Notifications](./notifications.md)) and the moderation tables — `user_roles`,
 `banned_names`, `banned_ips`, and `lesson_delete_requests` — plus the
-`shadowbanned` / `author_ip` columns (see [Moderation](./moderation.md)). The two
-core tables, for reference:
+`shadowbanned` / `author_ip` columns (see [Moderation](./moderation.md)). It also
+defines `lesson_responses`, which is the one table in the file with **no public
+read policy**: it holds learners' own answers from
+[interactive mode](./interactive-mode.md) and is private to the user who wrote
+them. The two core tables, for reference:
 
 ```sql
 create table public.lessons (
