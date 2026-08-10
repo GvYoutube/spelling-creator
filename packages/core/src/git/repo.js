@@ -163,13 +163,21 @@ export async function commitDoc({ fs, gitdir, doc, author, message, parents }) {
 
 /**
  * The lesson's history, newest first.
+ *
+ * `ref` defaults to the local branch, which is what the editor wants: the
+ * repository it is committing to. A reader wants the *published* history
+ * instead, and those are not the same thing — a lesson open in the editor has
+ * local commits that were never pushed. So a caller may pass any ref or oid,
+ * and the public lesson page passes the published head (see LessonHistory.jsx).
+ *
  * @returns {Promise<Array<{ oid, message, summary, author, timestamp, parents, isMerge }>>}
  */
-export async function history({ fs, gitdir, depth = 100 }) {
-  const head = await headOid({ fs, gitdir });
-  if (!head) return [];
+export async function history({ fs, gitdir, depth = 100, ref = BRANCH_REF }) {
+  // Only the default branch needs the "is there anything here yet" guard: it
+  // reads HEAD, which says nothing about an explicit oid a caller handed us.
+  if (ref === BRANCH_REF && !(await headOid({ fs, gitdir }))) return [];
 
-  const commits = await git.log({ fs, gitdir, ref: BRANCH_REF, depth });
+  const commits = await git.log({ fs, gitdir, ref, depth });
   return commits.map(({ oid, commit }) => ({
     oid,
     message: commit.message,

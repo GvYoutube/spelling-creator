@@ -19,8 +19,12 @@ is served as the static SPA shell exactly as before.
 
 A lesson's tabs (`/hub/:id/practice`, `/discussion`, `/proposals`,
 `/proposals/:prId`, `/history` — see [Pages & routing](./pages-and-routing.md))
-are all the same lesson, so `LESSON_PATH` matches any single extra segment and
-one `fetchLesson` serves all of them; the tab decides what to draw with it.
+are all the same lesson, so one `fetchLesson` serves all of them and the tab
+decides what to draw with it. `LESSON_PATH` names those five forms rather than
+matching any extra segment, so it and the SPA's route table agree about what a
+lesson URL is: a wildcard let `/hub/:id/anything` through, costing a lesson
+fetch and a full render to produce a page the client redirects away from.
+Adding a tab means editing both.
 `LessonLayout` seeds its state from that payload and the tab reads it through
 `useLesson()`, so no tab fetches the lesson a second time.
 

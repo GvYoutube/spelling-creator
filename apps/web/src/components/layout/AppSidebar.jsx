@@ -15,7 +15,7 @@
 // first paint.
 
 import { hasApi } from "@spelling-creator/core/config";
-import { useCallback, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
   Link as RouterLink,
@@ -121,28 +121,42 @@ export default function AppSidebar() {
   // which is what the skeleton keys off.
   const [myLessons, setMyLessons] = useState(null);
 
-  const loadMine = useCallback(async () => {
+  // Guarded against its own staleness rather than left to resolve whenever.
+  // These are lesson titles, drafts included, and the request outlives the
+  // session that authorised it: sign out (or sign in as someone else) while one
+  // is in flight and the response would arrive to paint the previous user's
+  // private drafts into the new one's sidebar. The flag is captured per effect
+  // run, so only the newest run may write.
+  useEffect(() => {
     if (!hasApi() || !accessToken) {
       setMyLessons(null);
       return;
     }
-    try {
-      setMyLessons(await fetchMyLessons(accessToken));
-    } catch {
-      // Non-fatal: the group renders empty. Navigation still works, and the hub
-      // lists the same lessons.
-      setMyLessons([]);
-    }
+    let current = true;
+    setMyLessons(null);
+    fetchMyLessons(accessToken)
+      .then((lessons) => {
+        if (current) setMyLessons(lessons);
+      })
+      .catch(() => {
+        // Non-fatal: the group renders empty. Navigation still works, and the
+        // hub lists the same lessons.
+        if (current) setMyLessons([]);
+      });
+    return () => {
+      current = false;
+    };
   }, [accessToken]);
-
-  useEffect(() => {
-    loadMine();
-  }, [loadMine]);
 
   // On a phone the sidebar is a sheet *over* the page, so following a link has
   // to close it or you land on the new page with the sheet still covering it.
-  // On desktop it sits beside the page and stays put. Bound to the nav regions
-  // only — toggling the theme or opening the account menu isn't navigation.
+  // On desktop it sits beside the page and stays put.
+  //
+  // Bound to the nav regions rather than the whole sidebar, because the footer
+  // holds the theme toggle and the account menu and neither is navigation. The
+  // two things down there that *do* navigate call this themselves — the account
+  // menu's items especially, since Radix portals the menu outside the sidebar
+  // where no ancestor handler of ours would ever see the click.
   const closeOnMobile = () => {
     if (isMobile) setOpenMobile(false);
   };
@@ -350,7 +364,10 @@ export default function AppSidebar() {
                   </DropdownMenuLabel>
                   <DropdownMenuSeparator />
                   <DropdownMenuItem
-                    onClick={() => navigate(`/users/${user.id}`)}
+                    onClick={() => {
+                      closeOnMobile();
+                      navigate(`/users/${user.id}`);
+                    }}
                   >
                     <UserIcon />
                     {t("nav.myProfile")}
@@ -368,7 +385,11 @@ export default function AppSidebar() {
               </DropdownMenu>
             ) : (
               <SidebarMenuButton asChild tooltip={t("nav.signIn")}>
-                <RouterLink to="/login" className="no-underline">
+                <RouterLink
+                  to="/login"
+                  onClick={closeOnMobile}
+                  className="no-underline"
+                >
                   <CircleUserIcon />
                   <span>{t("nav.signIn")}</span>
                 </RouterLink>

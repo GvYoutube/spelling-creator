@@ -1,11 +1,6 @@
 import { hasApi } from "@spelling-creator/core/config";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import {
-  useLocation,
-  useNavigate,
-  useParams,
-  useSearchParams,
-} from "react-router-dom";
+import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { DocumentMeta } from "../lib/seo.jsx";
 import { toast } from "sonner";
 import { Trans, useTranslation } from "react-i18next";
@@ -313,16 +308,34 @@ export default function EditorPage() {
   // both live in the query string — `?join=<code>` for a collaboration invite
   // and `?pull=<id>&lesson=<id>` for a proposal to review — and dropping the
   // query on the way into a panel would break the very flow that opened it.
-  const { panel } = useParams();
   const location = useLocation();
+  // The first segment under /editor, or "" at /editor itself. Read from the
+  // path rather than a route param because the route is a splat — see
+  // EditorShell.jsx for why it has to be.
+  const panel = location.pathname.replace(/^\/editor\/?/, "").split("/")[0];
   const historyOpen = panel === "history";
   const collabOpen = panel === "collaborate";
+  //
+  // Opening pushes; closing *replaces*. Both pushing would leave the history as
+  // [/editor, /editor/history, /editor], so Back from a panel you had just
+  // closed would land on the panel's own URL and reopen it — the opposite of
+  // what pressing Back means. (Caught in review on #40.)
+  //
+  // Replacing costs one dead Back press: the panel's entry becomes a second
+  // /editor, so backing out of the editor afterwards takes two. That is the
+  // better of the two, and better than the alternative of replacing on open as
+  // well, which would make Back from an *open* panel leave the editor entirely
+  // rather than close the panel — the common case, and the one worth getting
+  // right.
   const openPanel = useCallback(
     (name) =>
-      navigate({
-        pathname: name ? `/editor/${name}` : "/editor",
-        search: location.search,
-      }),
+      navigate(
+        {
+          pathname: name ? `/editor/${name}` : "/editor",
+          search: location.search,
+        },
+        { replace: !name },
+      ),
     [navigate, location.search],
   );
 

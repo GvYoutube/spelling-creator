@@ -32,13 +32,13 @@ area without wading through the whole app:
 | `common`         | `PageBar`, `AppSidebar`, notification bell, display-name gate/dialog, the install prompt and service-worker update toast, shared `ui/` primitives |
 | `home`           | `HomePage` (marketing splash + signed-in dashboard)                                                                                               |
 | `hub`            | `HubPage`                                                                                                                                         |
-| `lesson`         | `LessonPage`, `LessonView`, `LessonSummary`, `CommentsSection`                                                                                    |
+| `lesson`         | The routed lesson page and its tabs (`pages/lesson/`), `LessonView`, `LessonSummary`, `CommentsSection`, `PullRequestsSection`                    |
 | `interactive`    | `InteractiveLesson` (the full-screen walkthrough and its speech controls), `MyLessonAnswers`                                                      |
 | `login`          | `LoginPage`                                                                                                                                       |
 | `moderation`     | `ModerationPage`                                                                                                                                  |
 | `oauth`          | `OAuthAuthorizePage`                                                                                                                              |
 | `profile`        | `ProfilePage`, `BioDialog`, `FollowListDialog`                                                                                                    |
-| `editor`         | `EditorPage`                                                                                                                                      |
+| `editor`         | `EditorPage`, `SectionOutline`                                                                                                                    |
 | `editorSections` | `SectionCard`, `ContentBlock`, `LiveField`                                                                                                        |
 | `editorTools`    | `HistoryDialog` (incl. its `timeAgo` helper), `MergeDialog`, `ImageSearchDialog`                                                                  |
 | `richText`       | `RichText`, `RichTextInput`, `RichTextToolbar`                                                                                                    |

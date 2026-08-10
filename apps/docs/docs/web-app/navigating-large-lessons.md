@@ -261,9 +261,9 @@ section's sticky header.
 
 ## The section outline
 
-`src/components/editor/SectionOutline.jsx`, `xl` and up: a numbered list of the
-lesson's sections down the left of the editor, with each section's block count
-beside it. Clicking one scrolls to it.
+`src/components/editor/SectionOutline.jsx`, from 52rem of page column: a
+numbered list of the lesson's sections down the left of the editor, with each
+section's block count beside it. Clicking one scrolls to it.
 
 Sticky headers answer _where am I_; this answers _where is everything else_. At
 37 screenfuls those are different questions, and the scrollbar — a 21px thumb —
@@ -305,11 +305,9 @@ further step the measurements point at, still not built:
   invasive change to how editing feels, which is why section collapse came
   first — that may well be enough.
 
-Also unbuilt, and worth considering only if collapsing turns out not to be
-enough: a jump-to-section control (an outline sidebar, or a dropdown on the
-sticky header). Collapse-all already answers most of what it would be for —
-it turns the lesson into a 1.5-screen list of its sections that you can click
-into.
+One further idea, worth considering only if the outline and collapse-all turn
+out not to be enough between them: a jump-to-section dropdown on the sticky
+header, for the widths where the outline isn't shown.
 
 Two approaches were considered and rejected: rendering one section at a time
 (`Tabs`) and virtualizing the block list. Both break cross-section

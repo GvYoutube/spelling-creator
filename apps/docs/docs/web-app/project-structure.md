@@ -33,7 +33,7 @@ src/
       PageBody.jsx        the content column, in two documented widths (wide / reading). Exports PAGE_WIDTHS for the two things that need the width but can't be the column
       EditorShell.jsx     the editor's nested routes behind one lazy import; mounts no chrome of its own
     editor/
-      SectionOutline.jsx  the editor's left-hand section list (xl+) — jump to a section, collapse them all
+      SectionOutline.jsx  the editor's left-hand section list (52rem+ of page column) — jump to a section, collapse them all
     InstallAppButton.jsx  the "install app" button in the sidebar footer; renders nothing unless the app is installable (see pwa-and-offline.md)
     NotificationBell.jsx  sidebar bell that polls for and shows the user's notifications
     DisplayNameGate.jsx   makes a signed-in user pick a display name before using the app

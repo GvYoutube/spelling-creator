@@ -21,19 +21,27 @@ import EditorPage from "../../pages/EditorPage.jsx";
 
 export default function EditorShell() {
   return (
-    // One route with an optional segment, deliberately — *not* a route per
+    // One route for every path under /editor, deliberately — *not* a route per
     // panel. The editor is a single working surface holding a document, a git
     // repository and possibly a live collaboration session; matching /editor
     // and /editor/history to two different <Route>s would put EditorPage in two
     // different places in the element tree and remount it on the way between
     // them, throwing all three away. The panel is a parameter of the page, so
-    // it is a parameter of the route.
+    // EditorPage reads it from the path rather than the route table.
     //
-    // An unrecognised segment is not redirected away either: EditorPage treats
+    // A splat rather than `:panel?` for the same reason, arrived at the hard
+    // way: `:panel?` matches /editor and /editor/history but *not*
+    // /editor/history/extra, and an unmatched nested <Routes> renders nothing —
+    // so a link one segment too long was a blank page. Adding a second
+    // <Route path="*"> beside it would fix the blank page and reintroduce the
+    // remount, since the two routes are two positions in the tree. One route
+    // matches everything and stays one position.
+    //
+    // An unrecognised segment is not redirected away: EditorPage treats
     // anything it doesn't know as "no panel open", which leaves a stale link
     // showing the editor rather than bouncing someone out of it.
     <Routes>
-      <Route path=":panel?" element={<EditorPage />} />
+      <Route path="*" element={<EditorPage />} />
     </Routes>
   );
 }

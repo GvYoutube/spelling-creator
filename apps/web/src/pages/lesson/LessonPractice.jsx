@@ -10,7 +10,7 @@
 // Closing navigates to the overview rather than calling history.back(), because
 // a deep link straight to /practice has no history to go back to.
 
-import { useNavigate } from "react-router-dom";
+import { Navigate, useNavigate } from "react-router-dom";
 import InteractiveLesson from "../../components/InteractiveLesson.jsx";
 import { useLesson } from "./LessonLayout.jsx";
 
@@ -18,7 +18,12 @@ export default function LessonPractice() {
   const navigate = useNavigate();
   const { lesson, playable, onAnswersSaved } = useLesson();
 
-  if (!playable) return null;
+  // A lesson whose sections are all empty has nothing to walk through, so
+  // LessonTabs hides this tab for it — but the route still matches, and a
+  // direct link used to render an empty body under the lesson's header. Send
+  // them to the lesson instead, replacing the entry so Back doesn't bounce
+  // straight back here.
+  if (!playable) return <Navigate to={`/hub/${lesson.id}`} replace />;
 
   return (
     <InteractiveLesson
