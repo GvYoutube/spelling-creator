@@ -14,6 +14,12 @@ app uses** (`/lessons`), authenticating as you with a Supabase token — so ever
 lesson goes through the existing validation, ban checks, and author attribution.
 Nothing here bypasses the normal API.
 
+It can also **fork** a lesson and open a **proposal** against it, rather than
+writing to it — the assistant edits a copy, and you read the diff and decide.
+That's the only route into a lesson somebody else wrote, and the one to use when
+you'd rather check the assistant's work before it goes live. See
+[Proposing changes instead of making them](./tools.md#proposing-changes-instead-of-making-them).
+
 Two ways to connect:
 
 - **[Remote (hosted) mode](./remote-mode.md)** (recommended) — point your

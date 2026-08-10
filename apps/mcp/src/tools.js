@@ -12,6 +12,7 @@
 
 import { z } from "zod";
 import { buildDoc, buildLessonFile, QUESTION_TYPES } from "./doc.js";
+import { forkLesson, proposeChanges } from "./git.js";
 import { applyPatch, findBlock } from "./patch.js";
 import { searchWikimediaImages, resolveWikimediaImage } from "./wikimedia.js";
 import { LESSON_STANDARDS } from "./standards.js";
@@ -302,6 +303,20 @@ function checkStandard({
 export function registerTools(server, ctx) {
   const { api, config } = ctx;
   const hubUrl = (id) => `${config.apiUrl}/hub/${id}`;
+  const proposalUrl = (lessonId, pullId) =>
+    `${hubUrl(lessonId)}/proposals/${pullId}`;
+
+  // Which MCP client is connected, by its own account of itself — recorded on a
+  // proposal so a reviewer can see the changes came from an assistant rather
+  // than from them (see proposalBody in git.js). Only known once the client has
+  // initialised, and not every client sends it, so this is best-effort.
+  const clientName = () => {
+    try {
+      return server.server.getClientVersion()?.name || "";
+    } catch {
+      return "";
+    }
+  };
 
   // Wrap a handler so thrown errors become a clean isError result the assistant
   // can read and recover from, rather than a transport-level failure.
@@ -538,6 +553,162 @@ export function registerTools(server, ctx) {
       const result = { ...lesson, url: hubUrl(lesson.id) };
       if (warnings.length) result.warnings = warnings;
       return text(result);
+    }),
+  );
+
+  server.registerTool(
+    "fork_lesson",
+    {
+      title: "Fork a lesson",
+      description:
+        "Copy a lesson into a new private draft of your own, keeping its version history and a link back to the " +
+        "original. This is the first step of the review flow:\n\n" +
+        "  1. fork_lesson(lessonId)      -> a draft fork you own\n" +
+        "  2. patch_lesson(fork.id, ...) -> edit THE FORK, not the original\n" +
+        "  3. propose_changes(...)       -> open a proposal for a human to read and merge\n\n" +
+        "USE THIS INSTEAD OF EDITING DIRECTLY when either applies:\n" +
+        "• The lesson was written by someone else. You cannot save over it at all — a proposal is the only route.\n" +
+        "• The user wants to look over your changes before they go live. Editing their lesson with patch_lesson " +
+        "  overwrites it immediately and there is nothing to review; forking leaves the lesson untouched until " +
+        "  they merge, and they can decline.\n\n" +
+        "Prefer editing directly (patch_lesson) for a small correction to the user's own lesson that they have " +
+        "asked for outright — a typo, a wrong answer — where a review step is just friction.\n\n" +
+        "Forks count against your private-draft limit; delete_lesson the fork once its proposal is merged or " +
+        "declined. Images are shared with the original rather than copied, so forking is cheap.",
+      inputSchema: {
+        lessonId: z.string().describe("The id of the lesson to fork."),
+        title: z
+          .string()
+          .optional()
+          .describe(
+            "Title for the fork. Defaults to the original's — usually right, since a proposal is a change to " +
+              "that lesson rather than a new one.",
+          ),
+      },
+    },
+    tool(async ({ lessonId, title }) => {
+      const { lesson, head, clonedHistory } = await forkLesson(api, {
+        lessonId,
+        title,
+      });
+      return text({
+        ...lesson,
+        url: hubUrl(lesson.id),
+        head,
+        note:
+          `Forked into a private draft (${lesson.id}). Edit THIS id, not ${lessonId}, then call propose_changes ` +
+          `with forkLessonId: "${lesson.id}".` +
+          (clonedHistory
+            ? ""
+            : " The original has no stored version history, so this fork shares no common ancestor with it — a " +
+              "reviewer will see the whole document as the change rather than a tidy diff."),
+      });
+    }),
+  );
+
+  server.registerTool(
+    "propose_changes",
+    {
+      title: "Propose a fork's changes",
+      description:
+        "Offer the changes you made to a fork back to the lesson it came from, as a proposal a human reviews. " +
+        "Call this after fork_lesson and after editing the fork.\n\n" +
+        "Nothing is written to the target lesson: the proposal is a snapshot of your fork, and the lesson's author " +
+        "(or a trusted collaborator) merges it from the web app, block by block, or declines it. Tell the user the " +
+        "returned `url` — that is the page where they read the diff and decide. Their answer is theirs to give: " +
+        "don't tell them it is done, and don't try to merge it yourself.\n\n" +
+        "The proposal carries ONE commit holding the fork as it now stands, so make all your edits before calling " +
+        "this. You may propose again after further edits; each proposal is a separate request (at most 5 open " +
+        "against one lesson).\n\n" +
+        "Write the title and body for the reviewer, not for the log: say what changed and why it is an improvement, " +
+        "so someone who has not read the diff can judge it.",
+      inputSchema: {
+        forkLessonId: z
+          .string()
+          .describe("The id of your fork — the lesson holding the changes."),
+        lessonId: z
+          .string()
+          .optional()
+          .describe(
+            "The lesson to propose to. Defaults to the one the fork was forked from, which is nearly always right.",
+          ),
+        // Non-empty: the hub requires a title, and it would otherwise reject the
+        // proposal only after the whole snapshot had been built and sent.
+        title: z
+          .string()
+          .min(1)
+          .describe(
+            "One line naming the change, e.g. 'Fix three ungrounded answers in section 4'.",
+          ),
+        body: z
+          .string()
+          .optional()
+          .describe(
+            "The case for the change, in plain text: what you altered, and why. A note recording that an AI " +
+              "assistant wrote it is appended automatically.",
+          ),
+      },
+    },
+    tool(async ({ forkLessonId, lessonId, title, body }) => {
+      const {
+        pull,
+        lessonId: target,
+        commit,
+        changes,
+        historyPushed,
+      } = await proposeChanges(api, {
+        forkLessonId,
+        lessonId,
+        title,
+        body,
+        client: clientName(),
+      });
+      return text({
+        proposalId: pull.id,
+        lessonId: target,
+        forkLessonId,
+        title: pull.title,
+        status: pull.status,
+        ready: pull.ready,
+        commit,
+        changes,
+        url: proposalUrl(target, pull.id),
+        note:
+          "Proposal opened. Nothing has changed in the lesson itself — give the user the `url` so they can read " +
+          "the diff and merge or decline it. Poll list_lesson_proposals if you need to know what they decided." +
+          // The proposal is complete either way — its changes are stored with it.
+          // This only means the fork's own history didn't catch up.
+          (historyPushed
+            ? ""
+            : " (The proposal is complete, but the fork's own version history could not be updated, so the fork's " +
+              "History tab won't show this change and a further proposal from it will re-send the same edits.)"),
+      });
+    }),
+  );
+
+  server.registerTool(
+    "list_lesson_proposals",
+    {
+      title: "List a lesson's proposals",
+      description:
+        "List the proposals against a lesson, newest first — use this to check whether one you opened has been " +
+        "merged, declined (status 'closed'), or is still waiting. `canReview` says whether you may merge them " +
+        "yourself; merging is done in the web app, not over MCP, because it is the human's decision.",
+      inputSchema: {
+        lessonId: z
+          .string()
+          .describe("The lesson whose proposals you want to see."),
+      },
+    },
+    tool(async ({ lessonId }) => {
+      const { pulls, canReview } = await api.listPulls(lessonId);
+      return text({
+        canReview,
+        proposals: pulls.map((pull) => ({
+          ...pull,
+          url: proposalUrl(lessonId, pull.id),
+        })),
+      });
     }),
   );
 
@@ -849,7 +1020,11 @@ export function registerTools(server, ctx) {
 }
 
 // The server's identifying metadata, shared by both transports.
+//
+// Keep `version` in step with apps/mcp/package.json and apps/mcp/manifest.json:
+// this is the one clients actually see, so a stale value misnames the server in
+// every client UI and bug report.
 export const SERVER_INFO = {
   name: "spelling-creator-hub",
-  version: "0.1.3",
+  version: "0.3.0",
 };

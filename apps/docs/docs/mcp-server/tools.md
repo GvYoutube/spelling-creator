@@ -4,19 +4,70 @@ title: Tools
 
 # Tools
 
-| Tool                   | What it does                                                                  |
-| ---------------------- | ----------------------------------------------------------------------------- |
-| `whoami`               | Confirm the session is valid and show the publishing display name.            |
-| `create_lesson`        | Build and save a new lesson (draft by default; `published: true` to share).   |
-| `patch_lesson`         | Edit a lesson with a small diff (id-addressed ops) instead of a full replace. |
-| `update_lesson`        | Replace a lesson's whole title/content (author only).                         |
-| `get_lesson`           | Fetch one lesson with its full content (read before editing / as a template). |
-| `list_my_lessons`      | List your own lessons (drafts + published).                                   |
-| `list_hub_lessons`     | Browse published lessons for inspiration / de-duplication.                    |
-| `set_lesson_published` | Toggle a lesson between public and private draft.                             |
-| `delete_lesson`        | Permanently delete one of your lessons.                                       |
-| `search_images`        | Search Wikimedia Commons for freely-licensed images to illustrate a lesson.   |
-| `add_image`            | Download a searched image and insert it as an image block in a lesson.        |
+| Tool                    | What it does                                                                  |
+| ----------------------- | ----------------------------------------------------------------------------- |
+| `whoami`                | Confirm the session is valid and show the publishing display name.            |
+| `create_lesson`         | Build and save a new lesson (draft by default; `published: true` to share).   |
+| `create_lesson_file`    | Build an importable lesson file offline, with no account or network.          |
+| `patch_lesson`          | Edit a lesson with a small diff (id-addressed ops) instead of a full replace. |
+| `update_lesson`         | Replace a lesson's whole title/content (author only).                         |
+| `fork_lesson`           | Copy a lesson into a private draft of your own, keeping its version history.  |
+| `propose_changes`       | Offer a fork's changes back to the original, for a human to review and merge. |
+| `list_lesson_proposals` | List the proposals against a lesson, and whether yours have been resolved.    |
+| `get_lesson`            | Fetch one lesson with its full content (read before editing / as a template). |
+| `list_my_lessons`       | List your own lessons (drafts + published).                                   |
+| `list_hub_lessons`      | Browse published lessons for inspiration / de-duplication.                    |
+| `set_lesson_published`  | Toggle a lesson between public and private draft.                             |
+| `delete_lesson`         | Permanently delete one of your lessons.                                       |
+| `search_images`         | Search Wikimedia Commons for freely-licensed images to illustrate a lesson.   |
+| `add_image`             | Download a searched image and insert it as an image block in a lesson.        |
+
+## Proposing changes instead of making them
+
+An assistant can change a lesson two ways, and which one it should use is a question
+about **who decides**, not about the size of the edit.
+
+`patch_lesson` writes straight to the lesson. It's right for a correction the user has
+asked for outright — a typo, a wrong answer — where a review step is only friction.
+
+**`fork_lesson` + `propose_changes`** leaves the lesson untouched and puts the changes in
+its [Proposals](/web-app/pull-requests) tab instead, where a person reads the diff and
+merges or declines it:
+
+```text
+fork_lesson({ lessonId })          -> a private draft fork you own
+patch_lesson({ id: fork.id, … })   -> edit THE FORK
+propose_changes({ forkLessonId })  -> a proposal, with a URL to review it
+```
+
+That's the only available route for a lesson somebody else wrote — nobody can save over
+another person's lesson — and it's the better route whenever the user wants to look over
+the assistant's work before it goes live. `propose_changes` returns the proposal's `url`;
+the assistant is expected to hand that over and stop, rather than report the change as
+done.
+
+Some mechanics worth knowing:
+
+- **A fork is a real clone.** It carries the original's git history, so the reviewer's
+  merge is a true three-way merge against the commit the two diverged from, block by
+  block. A lesson with no stored history can still be forked, but the fork shares no
+  ancestor with it, so the whole document reads as the change. `fork_lesson` says which
+  happened.
+- **A proposal is one commit**, made when it's opened, holding the fork as it then
+  stands. Intermediate `patch_lesson` calls aren't separate commits, so make all the
+  edits first. Proposing again after further edits opens a second, separate proposal
+  (at most 5 open against one lesson).
+- **Images aren't copied.** Blocks reference them by content hash and the bytes are
+  already stored, so forking is cheap.
+- **Forks are private drafts** and count against the draft cap, so `delete_lesson` the
+  fork once its proposal has been resolved.
+- **Merging is not an MCP tool.** It happens in the web app, under the reviewer's own
+  credentials, because it is theirs to decide. `list_lesson_proposals` is how the
+  assistant finds out what they decided.
+
+Because the assistant acts as the account it's signed in with, a proposal against your
+_own_ lesson is opened by _you_ — so its body carries a note saying an assistant wrote
+it, and the notification you get reads "Changes are waiting for your review".
 
 ## Editing a lesson: patch vs. replace
 

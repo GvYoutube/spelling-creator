@@ -296,6 +296,7 @@ in the browser, in Node and inside the Worker:
 | `repo`   | Commit, history, diff two commits, restore.                        |
 | `pack`   | Pack for upload; clone/fetch from a pack; merge base; ancestry.    |
 | `remote` | The `/git/:lessonId` Worker calls (incl. the 409 on a stale push). |
+| `memfs`  | An in-memory filesystem, for the hosts with no other.              |
 
 `remote` reads the API's base URL through `@spelling-creator/core/config` rather
 than the bundler's env, which is what lets it sit on this side of the line.
@@ -308,6 +309,13 @@ needs a real browser:
 | `fs`   | LightningFS — the IndexedDB filesystem the repos live on.    |
 | `sync` | Fork (clone), merge, push, and both sides of a pull request. |
 
+Server-side (`apps/mcp/src/git.js`) — the fork-and-propose flow for an AI
+assistant, which is `browser/git/sync`'s two outbound steps built on `memfs`
+instead of LightningFS. It keeps no repository between calls: a fork is a real
+hub lesson with its own stored pack, so each call clones that pack, does one
+thing to it and uploads the result. See
+[Pull requests](/web-app/pull-requests) and [MCP tools](/mcp-server/tools).
+
 App-bound (`apps/web/src/lib/git/`) — what cannot leave the bundle:
 
 | File                    | Purpose                                                    |
@@ -317,7 +325,7 @@ App-bound (`apps/web/src/lib/git/`) — what cannot leave the bundle:
 
 `repo` and friends take their filesystem through `repoCtx` rather than opening
 one, which is exactly what lets the same commit/merge/restore logic run against
-LightningFS in the browser and `node:fs` in tests.
+LightningFS in the browser, and `memfs` in Node, in the Worker and in tests.
 
 A repo tracks remotes in git's own vocabulary: `origin` (this lesson's own
 published history, which a trusted collaborator may have moved on without us),
