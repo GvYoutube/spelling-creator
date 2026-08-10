@@ -1,7 +1,7 @@
 {
   "meta": {
     "title": "Home",
-    "description": "Create, share and print Spelling (S2C) lessons with a focused editor, AI help, images and live collaboration."
+    "description": "Create, share and print Spelling lessons with a focused editor, AI help, images and live collaboration."
   },
   "header": {
     "title": "Spelling Creator",
@@ -10,7 +10,7 @@
   "marketing": {
     "hero": {
       "title": "Spelling lessons that stick",
-      "subtitle": "Build, share and print Spelling (S2C) lessons — with a focused editor, AI help, images and live collaboration.",
+      "subtitle": "Build, share and print Spelling lessons — with a focused editor, AI help, images and live collaboration.",
       "openEditor": "Open the editor",
       "browseHub": "Browse the hub"
     },

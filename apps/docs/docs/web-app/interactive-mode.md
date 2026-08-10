@@ -58,7 +58,7 @@ answered so far.
 
 **It doesn't mark your answers.** A question block carries the author's own
 answer, and interactive mode never shows it, never speaks it, and never compares
-it against what you typed. Spelling (S2C) is about the learner producing the
+it against what you typed. Spelling is about the learner producing the
 response; a right/wrong verdict from a string comparison would be wrong a lot of
 the time and the wrong shape of feedback even when it wasn't.
 
