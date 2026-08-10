@@ -9,17 +9,23 @@ The app is a single-page app with real-path client-side routes (served by
 which is what lets the Worker recognise a route it can [render server-side](./server-rendering.md),
 and it serves `index.html` for unknown paths so deep links resolve:
 
-| Route         | Page             | What it does                                                                                                                                                                                                                               |
-| ------------- | ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `/`           | **Home**         | Landing page. Signed out: a marketing splash (animated floating words + feature blurbs). Signed in: a dashboard (latest-lessons feed, your activity, activity from people you follow, notifications).                                      |
-| `/editor`     | **Editor**       | The lesson builder (the original app). The "Save to cloud" dropdown (publish or save as draft) lives here.                                                                                                                                 |
-| `/hub`        | **Lesson hub**   | Public gallery of published lessons (plus your own drafts), with search.                                                                                                                                                                   |
-| `/hub/:id`    | **Lesson page**  | A single published lesson's page: preview, an optional [on-device AI summary](./lesson-summaries.md), a **Start lesson** action that opens [interactive mode](./interactive-mode.md) full-screen over the page, comments, and author link. |
-| `/users/:id`  | **User profile** | A user's public profile — their bio, follower/following counts, a Follow button, and published lessons.                                                                                                                                    |
-| `/login`      | **Sign in**      | Magic-link sign-in / account status.                                                                                                                                                                                                       |
-| `/moderation` | **Moderation**   | Moderator/admin queue for reviewing reported content (gated to mods/admins).                                                                                                                                                               |
+| Route         | Page             | What it does                                                                                                                                                                                                                                                                       |
+| ------------- | ---------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `/`           | **Home**         | Landing page. Signed out: a marketing splash (animated floating words + feature blurbs). Signed in: a dashboard (latest-lessons feed, your activity, activity from people you follow, notifications).                                                                              |
+| `/editor`     | **Editor**       | The lesson builder (the original app). The "Save to cloud" dropdown (publish or save as draft) lives here.                                                                                                                                                                         |
+| `/hub`        | **Lesson hub**   | Public gallery of published lessons (plus your own drafts), with search.                                                                                                                                                                                                           |
+| `/hub/:id`    | **Lesson page**  | A single published lesson's page: preview, an optional [on-device AI summary](./lesson-summaries.md), a **Start lesson** action that opens [interactive mode](./interactive-mode.md) full-screen over the page, [proposed changes](./pull-requests.md), comments, and author link. |
+| `/users/:id`  | **User profile** | A user's public profile — their bio, follower/following counts, a Follow button, and published lessons.                                                                                                                                                                            |
+| `/login`      | **Sign in**      | Magic-link sign-in / account status.                                                                                                                                                                                                                                               |
+| `/moderation` | **Moderation**   | Moderator/admin queue for reviewing reported content (gated to mods/admins).                                                                                                                                                                                                       |
 
 Unknown paths redirect to the home page (`/`).
+
+Two query strings deep-link into the editor rather than being routes of their own:
+`?join=<code>` opens the [live-collaboration](./live-collaboration.md) dialog on
+that invite, and `?pull=<id>` opens a
+[proposed change](./pull-requests.md) for review once the lesson it targets has
+loaded. Both are consumed once and then simply sit in the URL.
 
 Once the PWA service worker is installed it resolves these routes itself, from
 the precached `index.html`, which is what lets a deep link open with no network.

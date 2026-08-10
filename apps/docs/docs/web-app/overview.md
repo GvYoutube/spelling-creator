@@ -102,6 +102,9 @@ PDF printing.
   block by block, with edits to different blocks (or different parts of the same
   block) merging automatically (see
   [Version history](/monorepo/version-history)).
+- **Pull requests** - propose your fork's changes back to the lesson it came from.
+  Nothing there changes until its author, or someone they trust with it, reviews
+  and merges your proposal (see [Pull requests](./pull-requests.md)).
 - **Auto-save** - your work is kept in IndexedDB between reloads (images as binary
   blobs, so large drafts aren't capped by `localStorage`'s ~5 MB quota).
 - **Installable, and works offline** - the app can be installed to a Home Screen

@@ -9,6 +9,7 @@ import { handleImageGet, handleImagePut } from './routes/images.js';
 import { handleGit } from './routes/git.js';
 import { handleLessons } from './routes/lessons.js';
 import { handleComments, handleCommentEdit } from './routes/comments.js';
+import { handlePulls } from './routes/pulls.js';
 import { handleLessonResponses, handleLessonResponseDelete } from './routes/lessonResponses.js';
 import { handleTextFeedback } from './routes/feedback.js';
 import { handleNotifications } from './routes/notifications.js';
@@ -71,6 +72,13 @@ app.all('/lessons/:id/responses/:responseId', (c) =>
 	handleLessonResponseDelete(req(c), c.env, c.req.param('id'), c.req.param('responseId'), cors(c)),
 );
 app.all('/lessons/:id/responses', (c) => handleLessonResponses(req(c), c.env, c.req.param('id'), cors(c)));
+// Pull requests against a lesson: someone proposing changes from their fork, for
+// the lesson's author or a trusted collaborator to review and merge. Deeper paths
+// first, for the same reason as the comment routes above.
+app.all('/lessons/:id/pulls/:pullId/:action', (c) =>
+	handlePulls(req(c), c.env, c.req.param('id'), c.req.param('pullId'), c.req.param('action'), cors(c)),
+);
+app.all('/lessons/:id/pulls', (c) => handlePulls(req(c), c.env, c.req.param('id'), '', '', cors(c)));
 app.all('/lessons', (c) => handleLessons(req(c), c.env, urlOf(c), cors(c)));
 app.all('/lessons/*', (c) => handleLessons(req(c), c.env, urlOf(c), cors(c)));
 

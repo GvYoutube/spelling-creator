@@ -10,8 +10,13 @@
 // One card per contested block, both values side by side, three ways out:
 //
 //   Mine        keep our value
-//   Theirs      take the original's
+//   Theirs      take the other side's
 //   Keep both   keep ours AND add theirs as a second block (nothing is lost)
+//
+// The same dialog settles both directions: pulling an original's changes into a
+// fork, and merging a pull request into the lesson it proposes to. Only the
+// framing differs — merging a proposal changes the published lesson for
+// everyone, so it says so.
 //
 // See lib/git/merge.js for the merge itself; this component only chooses.
 
@@ -167,8 +172,10 @@ function ConflictCard({ conflict, choice, onChoose, theirName }) {
 
 /**
  * @param {object}   props.prepared  The result of prepareMerge (doc, conflicts, auto).
- * @param {string}   props.theirName What to call the other side (usually the original's title).
- * @param {"pull"|"contribute"|"publish"} props.intent  What happens once it's settled.
+ * @param {string}   props.theirName What to call the other side — the original's
+ *                                   title when pulling, the proposal's when reviewing one.
+ * @param {string}   [props.proposerName] Who opened the proposal, when reviewing one.
+ * @param {"pull"|"pull-request"|"publish"} props.intent  What happens once it's settled.
  * @param {Function} props.onConfirm Called with the { blockId: choice } map.
  */
 export default function MergeDialog({
@@ -176,6 +183,7 @@ export default function MergeDialog({
   onClose,
   prepared,
   theirName,
+  proposerName,
   intent = "pull",
   onConfirm,
   busy,
@@ -190,15 +198,16 @@ export default function MergeDialog({
 
   const effectiveTheirName = theirName || t("mergeDialog.defaultTheirName");
 
-  // A contribution writes to *someone else's* lesson, so say so plainly rather
-  // than letting "Merge" imply it only touches your own copy.
-  const contributing = intent === "contribute";
+  // Merging a proposal changes the published lesson itself, for everyone reading
+  // it — so say that plainly rather than letting "Merge" imply it only touches
+  // the copy in front of us.
+  const reviewing = intent === "pull-request";
   const confirmLabel = busy
-    ? contributing
-      ? t("mergeDialog.confirm.mergingBack")
+    ? reviewing
+      ? t("mergeDialog.confirm.landing")
       : t("mergeDialog.confirm.merging")
-    : contributing
-      ? t("mergeDialog.confirm.mergeBackInto", { name: effectiveTheirName })
+    : reviewing
+      ? t("mergeDialog.confirm.mergeProposal")
       : t("mergeDialog.confirm.merge");
 
   const choiceFor = (blockId) => choices[blockId] || "ours";
@@ -223,8 +232,8 @@ export default function MergeDialog({
           <DialogTitle className="flex items-center gap-2">
             <GitMergeIcon className="size-4" />
             <span>
-              {contributing
-                ? t("mergeDialog.title.contribute", {
+              {reviewing
+                ? t("mergeDialog.title.pullRequest", {
                     name: effectiveTheirName,
                   })
                 : t("mergeDialog.title.pull", { name: effectiveTheirName })}
@@ -233,14 +242,16 @@ export default function MergeDialog({
         </DialogHeader>
 
         <div className="flex flex-col gap-4 overflow-y-auto border-t border-border pt-4">
-          {contributing && (
+          {reviewing && (
             <Alert className="border-focus/40 bg-focus/10 text-focus">
               <TriangleAlertIcon />
               <AlertDescription className="text-focus">
                 <Trans
-                  i18nKey="mergeDialog.contributingNotice"
+                  i18nKey="mergeDialog.reviewingNotice"
                   ns="editorTools"
-                  values={{ name: effectiveTheirName }}
+                  values={{
+                    name: proposerName || t("mergeDialog.someone"),
+                  }}
                   components={{ strong: <strong className="font-medium" /> }}
                 />
               </AlertDescription>

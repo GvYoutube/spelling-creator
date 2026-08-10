@@ -124,11 +124,13 @@ GET /git/:lessonId/pack   public*  -> the packfile (X-Git-Head names its tip)
 PUT /git/:lessonId/pack   Bearer   -> store it (the author, or a trusted collaborator)
 ```
 
-Stored as two R2 objects per lesson, in the `LESSON_GIT` bucket:
+Stored as two R2 objects per lesson, in the `LESSON_GIT` bucket — plus one per
+open [pull request](/web-app/pull-requests), which is a packfile too:
 
 ```
-git/<lessonId>/pack        the packfile bytes
-git/<lessonId>/refs.json   { head, size, updatedAt }
+git/<lessonId>/pack           the packfile bytes
+git/<lessonId>/refs.json      { head, size, updatedAt }
+git/pulls/<pullId>/pack       a proposal's snapshot (no refs.json: its tip is fixed)
 ```
 
 The pack carries its own tip in R2 `customMetadata`, echoed in the `X-Git-Head`
@@ -181,30 +183,34 @@ one to adjudicate, so a reorder on both sides resolves to ours.
 The result is committed with **two parents**, which genuinely joins the two
 histories — so the next merge can find _this_ commit as its base.
 
-## Merging a fork back in (trusted collaborators)
+## Merging a fork back in (pull requests)
 
-Anyone can fork a lesson and pull the original's later changes in. A **trusted
-collaborator** can also go the other way: merge their fork _back into the original
-lesson_, for everyone.
+Anyone can fork a lesson and pull the original's later changes in. Going the other
+way — landing your work in the original, for everyone — is a **pull request**: you
+propose your history, and the lesson's author (or a trusted collaborator) reviews
+and merges it. A fork never writes the lesson it came from.
 
-"Trusted" is not a new concept — it's the list the author already manages in the
-collaboration dialog (`doc.trustedCollaborators`, the same list that auto-admits
-someone to a live session). Being on it now also means: you may merge your fork
-back in.
+The mechanics are the ones on this page, pointed the other way. The proposal
+travels as a packfile, exactly as a fork does; the reviewer indexes it into the
+lesson's own repository, where its objects meet the commits the two already share;
+and the merge is the same three-way, block-by-block merge against their true merge
+base. What's different is only _who_ runs it and _when_ — in the reviewer's editor,
+after they've read it.
 
-The editor shows a **"Merge back into &lt;lesson&gt;"** button on a fork when the
-original's trusted list contains your email. The flow is deliberately ordered:
+The order the reviewer's side runs in is fixed:
 
-1. Commit whatever is outstanding.
-2. **Pull the original in first** — merge its current tip into your fork, block by
-   block, settling any conflicts in the usual dialog.
-3. **Push** your history to the original.
-4. **Then** write the original's document row, and notify its author.
+1. Merge the proposal into the lesson, settling any conflicts in the usual dialog.
+2. **Push** the merged history to the lesson.
+3. **Then** write the lesson's document row.
+4. **Then** record the proposal as merged — which the Worker will only accept if
+   the merge commit really is what the lesson's stored history now points at.
 
-Step 2 is what makes step 3 safe: after it, your head _contains_ the original's
-tip, so pushing it can only move the lesson forward. And step 4 is last on
-purpose — if the push is rejected, the original's document must be left exactly as
-it was.
+Step 3 is after step 2 on purpose: if the push is rejected, the lesson's document
+must be left exactly as it was. Step 4 is after both for the same reason — a
+proposal must never read as merged when its changes weren't landed.
+
+See [Pull requests](/web-app/pull-requests) for the endpoints, the permission
+rules, and what a proposal is made of.
 
 ### Nobody can overwrite anybody
 
@@ -214,19 +220,23 @@ history that never contained them. So **a push is a compare-and-swap**.
 
 The client sends `X-Git-Parent`: the head it believes the lesson is on. If that
 isn't the head the Worker holds, the push is rejected with **409**, and the client
-must fetch, merge, and retry. Combined with step 2 above, an accepted push always
-contains what it replaced.
+must fetch, merge, and retry. So an accepted push always contains what it replaced.
 
 This guards **both** writers, symmetrically:
 
-- A collaborator who forked, edited, and pushes without pulling first → 409. Their
-  push would have erased the author's newer commits.
-- The **author**, saving from a stale editor after a collaborator merged in → also 409. Their save would have erased the contribution.
+- A collaborator saving from an editor that hasn't caught up → 409. Their push
+  would have erased the author's newer commits.
+- The **author**, saving from a stale editor after a collaborator saved (or merged
+  a pull request in) → also 409. Their save would have erased that work.
 
 In both cases the editor responds the same way: it merges the other side in and
 asks the user to save again. Nothing is overwritten, and the merge is by block id
 as usual — so two people who touched different blocks (or different fields of the
 same block) never even see a dialog.
+
+The same rule is what makes a merged pull request safe: the reviewer's push is
+compare-and-swapped like any other, and the Worker won't record the proposal as
+merged unless that push actually landed.
 
 ### What a trusted collaborator may _not_ do
 
@@ -238,19 +248,39 @@ document and history**, and nothing else:
   row as it stands and ignores whatever the incoming document says.
 
 That last one matters: otherwise a trusted collaborator could add themselves to
-another lesson, or hand the privilege to someone else. A collaborator merging a
-fork back in cannot widen their own access.
+another lesson, or hand the privilege to someone else. Nobody can widen their own
+access, whether they're saving an edit or landing someone else's proposal.
 
 They also can't delete the lesson — `DELETE /lessons/:id` is still author-only.
 
-## What is deliberately not versioned
+And nobody _outside_ that pair writes a lesson at all. A forker with a hundred
+commits of improvements still can't push them: they open a
+[pull request](/web-app/pull-requests) and one of these two merges it.
+
+## What is deliberately not versioned — or shared at all
 
 `doc.trustedCollaborators` holds collaborator **email addresses** (see
-[Live collaboration](/web-app/live-collaboration)). A lesson's repository is
-packed and uploaded so other people can clone it, so anything committed is
-readable by anyone who forks the lesson. Emails must not travel with it: the
-field is excluded from the tree and carried across a restore or merge from the
-live document instead (`preserveLocalFields` in `@spelling-creator/core/git/doc`).
+[Live collaboration](/web-app/live-collaboration)), and it lives inside the
+lesson document, which otherwise goes everywhere. The rule is that the field
+never leaves the browser it was typed into, and it is enforced at each of the
+three places the document travels:
+
+| It travels as               | What stops the emails going with it                                                                                       |
+| --------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
+| a **git packfile**          | Excluded from the tree — a pack is uploaded so anyone can clone it                                                        |
+| the **collaboration Y.Doc** | Stripped before reconciling (`stripLocalFields`) — the room is mirrored to everyone the host admits, not only the trusted |
+| the **lesson API**          | Stripped by the Worker (`stripCollaborators`) — `GET /lessons/:id` is public, and server-rendered into the page           |
+
+It comes back from the live document on the way in: a restore, a merge, or a
+host adopting the room's document all run `preserveLocalFields`
+(`@spelling-creator/core/git/doc`), so the list survives round trips it was never
+part of. And because a document can now legitimately arrive without the field,
+`PUT /lessons/:id` treats **absent** as "leave the stored list alone" — only an
+explicit array replaces it, so an ordinary save can't quietly wipe it.
+
+The two callers who do get the list from the API are the lesson's author (who
+manages it) and the collaborators on it (whose browsers need it to auto-admit
+each other). Not the public, and not moderators.
 
 ## Where it lives
 
@@ -273,10 +303,10 @@ than the bundler's env, which is what lets it sit on this side of the line.
 Browser-bound (`@spelling-creator/core/browser/git/*`) — framework-agnostic, but
 needs a real browser:
 
-| Module | Purpose                                                       |
-| ------ | ------------------------------------------------------------- |
-| `fs`   | LightningFS — the IndexedDB filesystem the repos live on.     |
-| `sync` | Fork (clone), merge, and push — incl. the merge-back-in flow. |
+| Module | Purpose                                                      |
+| ------ | ------------------------------------------------------------ |
+| `fs`   | LightningFS — the IndexedDB filesystem the repos live on.    |
+| `sync` | Fork (clone), merge, push, and both sides of a pull request. |
 
 App-bound (`apps/web/src/lib/git/`) — what cannot leave the bundle:
 
@@ -289,12 +319,15 @@ App-bound (`apps/web/src/lib/git/`) — what cannot leave the bundle:
 one, which is exactly what lets the same commit/merge/restore logic run against
 LightningFS in the browser and `node:fs` in tests.
 
-A repo tracks two remotes, in git's own vocabulary: `origin` (this lesson's own
-published history, which a trusted collaborator may have moved on without us) and
-`upstream` (the lesson it was forked from).
+A repo tracks remotes in git's own vocabulary: `origin` (this lesson's own
+published history, which a trusted collaborator may have moved on without us),
+`upstream` (the lesson it was forked from), and, while one is being reviewed,
+`refs/remotes/pull/<id>` — one ref per proposal, so two open ones can't overwrite
+each other's tip.
 
-Worker: `apps/api/src/routes/git.js`, with the trusted-collaborator check in
-`apps/api/src/lib/lesson.js` (`isTrustedCollaborator`).
+Worker: `apps/api/src/routes/git.js` and `apps/api/src/routes/pulls.js`, with the
+trusted-collaborator check in `apps/api/src/lib/lesson.js`
+(`isTrustedCollaborator`).
 
 Repositories are **bare** — no working tree, no index. The editor's document
 lives in React state and IndexedDB, so checked-out files would be dead weight;

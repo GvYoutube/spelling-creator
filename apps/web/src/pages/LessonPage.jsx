@@ -53,6 +53,7 @@ import {
   DropdownMenuSeparator,
 } from "../components/ui/dropdown-menu.jsx";
 import CommentsSection from "../components/CommentsSection.jsx";
+import PullRequestsSection from "../components/PullRequestsSection.jsx";
 import InteractiveLesson from "../components/InteractiveLesson.jsx";
 import LessonSummary from "../components/LessonSummary.jsx";
 import MyLessonAnswers from "../components/MyLessonAnswers.jsx";
@@ -744,6 +745,13 @@ export default function LessonPage() {
                 lessonId={lesson.id}
                 refreshToken={answersSaved}
               />
+            </div>
+
+            {/* Changes other people have proposed to this lesson, and — for its
+                author or a trusted collaborator — the way in to reviewing them.
+                Renders nothing until someone has proposed something. */}
+            <div className="mt-6">
+              <PullRequestsSection lessonId={lesson.id} />
             </div>
 
             <div className="mt-6">

@@ -3,11 +3,11 @@
 // the privileged service-role key (see README "Lesson hub").
 
 import { supabaseHeaders, verifySupabaseUser } from '../lib/supabase.js';
-import { authorFromUser, clientIp, displayNameOf, isModeratorRole, verifyUserAndRole } from '../lib/auth.js';
+import { authorFromUser, bearerToken, clientIp, displayNameOf, isModeratorRole, verifyUserAndRole } from '../lib/auth.js';
 import { bannedResponse } from '../lib/bans.js';
 import { fetchLessonRow, isTrustedCollaborator, rowToLesson } from '../lib/lesson.js';
 import { fetchRatingStats } from '../lib/ratings.js';
-import { LESSON_ID_RE, deleteLessonGit } from '../lib/lessonGit.js';
+import { LESSON_ID_RE, deleteLessonGit, deleteLessonPullGit } from '../lib/lessonGit.js';
 import { createNotification } from './notifications.js';
 import { textResponse, jsonResponse } from '../lib/http.js';
 
@@ -84,7 +84,7 @@ export async function handleLessons(request, env, url, cors) {
 		}
 		if (!res.ok) return textResponse('Could not load your lessons.', 502, cors);
 		const rows = await res.json().catch(() => []);
-		const lessons = (Array.isArray(rows) ? rows : []).map((r) => rowToLesson(r, false));
+		const lessons = (Array.isArray(rows) ? rows : []).map((r) => rowToLesson(r));
 		return jsonResponse({ lessons }, 200, cors);
 	}
 
@@ -125,10 +125,38 @@ export async function handleLessons(request, env, url, cors) {
 				return textResponse('Lesson not found.', 404, cors);
 			}
 			// Moderators/admins get the author IP (for the "ban by IP" action); the
-			// author themselves does not.
-			return jsonResponse({ lesson: { ...rowToLesson(row, true, isModeratorRole(role)), avgRating, ratingCount } }, 200, cors);
+			// author themselves does not. The trusted list stays out of a moderator's
+			// copy — they moderate content, and those are other people's email
+			// addresses.
+			return jsonResponse(
+				{
+					lesson: {
+						...rowToLesson(row, {
+							withDoc: true,
+							includeMod: isModeratorRole(role),
+							includeCollaborators: Boolean(isOwner || isTrusted),
+						}),
+						avgRating,
+						ratingCount,
+					},
+				},
+				200,
+				cors,
+			);
 		}
-		return jsonResponse({ lesson: { ...rowToLesson(row, true), avgRating, ratingCount } }, 200, cors);
+
+		// A published lesson is public, and reading one verifies nothing — that's
+		// what keeps the common case token-free. But its document carries the
+		// trusted-collaborator list, which is *not* public, so that is attached only
+		// when the caller turns out to be someone it's for. Working that out needs a
+		// verified user, so it only happens when a token was actually sent.
+		let includeCollaborators = false;
+		const token = bearerToken(request);
+		if (token) {
+			const user = await verifySupabaseUser(env, token);
+			includeCollaborators = Boolean(user && (user.id === row.author_id || isTrustedCollaborator(row, user)));
+		}
+		return jsonResponse({ lesson: { ...rowToLesson(row, { withDoc: true, includeCollaborators }), avgRating, ratingCount } }, 200, cors);
 	}
 
 	// GET /lessons — public listing, newest first. Only published lessons appear;
@@ -146,7 +174,7 @@ export async function handleLessons(request, env, url, cors) {
 		}
 		if (!res.ok) return textResponse('Could not load lessons.', 502, cors);
 		const rows = await res.json().catch(() => []);
-		const lessons = (Array.isArray(rows) ? rows : []).map((r) => rowToLesson(r, false));
+		const lessons = (Array.isArray(rows) ? rows : []).map((r) => rowToLesson(r));
 		return jsonResponse({ lessons }, 200, cors);
 	}
 
@@ -230,15 +258,16 @@ export async function handleLessons(request, env, url, cors) {
 		if (!Array.isArray(rows) || rows.length === 0) {
 			return textResponse('Could not save the lesson.', 502, cors);
 		}
-		return jsonResponse({ lesson: rowToLesson(rows[0], false) }, 201, cors);
+		return jsonResponse({ lesson: rowToLesson(rows[0]) }, 201, cors);
 	}
 
 	// PUT /lessons/:id — update a lesson already saved to the cloud. Requires a
 	// valid Supabase session JWT. Two kinds of caller may write:
 	//
 	//   the author            — full control: title, doc, and the published flag
-	//   a trusted collaborator — title and doc only (this is how a fork is merged
-	//                            back into the lesson; see /monorepo/version-history)
+	//   a trusted collaborator — title and doc only (their own edits, and the
+	//                            result of any pull request they merge — see
+	//                            routes/pulls.js)
 	//
 	// A trusted collaborator is someone the author added to the lesson's own
 	// trusted list (`doc.trustedCollaborators`; the same list that auto-admits them
@@ -283,8 +312,18 @@ export async function handleLessons(request, env, url, cors) {
 
 		if (isAuthor) {
 			if (typeof body.published === 'boolean') patch.published = body.published;
+			// A document that simply doesn't carry the trusted-collaborator list isn't
+			// asking to clear it — it came from somewhere that never had it. The
+			// browser strips the field before the document travels anywhere (a live
+			// session's Y.Doc, a git commit) and the Worker strips it for everyone but
+			// this list's own members, so a perfectly ordinary save can arrive without
+			// it. Clearing the list is an explicit `[]`, which the collaboration dialog
+			// sends when the author removes the last person; absent means "leave it".
+			if (doc.trustedCollaborators === undefined && existing.doc?.trustedCollaborators !== undefined) {
+				patch.doc = { ...doc, trustedCollaborators: existing.doc.trustedCollaborators };
+			}
 		} else {
-			// A trusted collaborator's merge must not be able to change who else is
+			// A trusted collaborator's save must not be able to change who else is
 			// trusted, so the list is taken from the row as it stands, never from the
 			// document they sent. (Their local copy of it may also simply be stale.)
 			patch.doc = { ...doc, trustedCollaborators: existing.doc?.trustedCollaborators ?? [] };
@@ -330,19 +369,19 @@ export async function handleLessons(request, env, url, cors) {
 			return textResponse('Could not save the lesson.', 502, cors);
 		}
 
-		// Tell the author someone merged into their lesson — it changed under them,
-		// and they didn't do it. Best-effort: never fail the merge over a notification.
+		// Tell the author someone else saved their lesson — it changed under them,
+		// and they didn't do it. Best-effort: never fail the save over a notification.
 		if (isTrusted) {
 			await createNotification(env, base, {
 				userId: existing.author_id,
-				type: 'merge',
-				title: `${displayNameOf(user) || 'A collaborator'} merged changes into “${title}”`,
-				body: 'They are a trusted collaborator on this lesson. Open it to see the merged version.',
+				type: 'lesson_update',
+				title: `${displayNameOf(user) || 'A collaborator'} saved changes to “${title}”`,
+				body: 'They are a trusted collaborator on this lesson. Open it to see the current version.',
 				link: `/hub/${id}`,
 			}).catch(() => {});
 		}
 
-		return jsonResponse({ lesson: rowToLesson(rows[0], false) }, 200, cors);
+		return jsonResponse({ lesson: rowToLesson(rows[0]) }, 200, cors);
 	}
 
 	// DELETE /lessons/:id — remove a lesson the signed-in user published. Requires
@@ -382,6 +421,11 @@ export async function handleLessons(request, env, url, cors) {
 		if (!Array.isArray(ownRows) || ownRows.length === 0) {
 			return textResponse('You can only delete lessons you published.', 403, cors);
 		}
+
+		// (1b) Sweep the packs of any pull requests against this lesson. Their rows
+		// cascade away with the lesson, taking with them the ids we'd need to find
+		// the packs, so this has to happen while the lesson is still here.
+		await deleteLessonPullGit(env, base, id);
 
 		// (2) Clear the lesson's comments so the lesson delete can't be blocked by
 		// the FK on a non-cascading database.

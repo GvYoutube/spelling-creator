@@ -10,6 +10,10 @@
 //   GET /git/:lessonId/pack   public* -> the packfile (X-Git-Head names its tip)
 //   PUT /git/:lessonId/pack   Bearer   -> store it (the author, or a trusted collaborator)
 //
+// A pull request's proposed history is a packfile too, but it belongs to the
+// request rather than to the lesson and lives under its own routes — see
+// routes/pulls.js.
+//
 // *A private draft's (published = false) history is not public — only its
 //  author, a trusted collaborator, or a moderator/admin may read it, same as
 //  GET /lessons/:id.
@@ -29,11 +33,15 @@
 // ---- Who may push, and why it can't lose work -------------------------------
 //
 // Two people can write a lesson's history: its author, and anyone the author put
-// on the lesson's trusted-collaborator list (that's how a trusted collaborator
-// merges a fork back in — see /monorepo/version-history). The moment more than
-// one writer exists, a plain "last write wins" would silently destroy history:
-// whoever saved second would replace the other's commits with a pack that never
-// contained them.
+// on the lesson's trusted-collaborator list. Nobody else — a forker cannot push
+// into the lesson they forked, however much work they have done on it. What they
+// can do is open a pull request and have one of those two merge it (see
+// routes/pulls.js and /web-app/pull-requests); the merge commit is then pushed
+// here by the reviewer, under their own credentials.
+//
+// The moment more than one writer exists, a plain "last write wins" would
+// silently destroy history: whoever saved second would replace the other's
+// commits with a pack that never contained them.
 //
 // So a push is a **compare-and-swap**. The client sends `X-Git-Parent`: the head
 // it believes is current. If that isn't the head we hold, the push is rejected
@@ -41,23 +49,12 @@
 // pushes a history that already *contains* the head it merged, an accepted push
 // can only ever move the lesson forward.
 
-import { bearerToken, isModeratorRole, verifyUserAndRole } from '../lib/auth.js';
+import { bearerToken } from '../lib/auth.js';
 import { bannedResponse } from '../lib/bans.js';
-import { fetchLessonRow, isTrustedCollaborator } from '../lib/lesson.js';
-import { LESSON_ID_RE, packKey, refsKey } from '../lib/lessonGit.js';
+import { canReadLesson, fetchLessonRow, isTrustedCollaborator } from '../lib/lesson.js';
+import { LESSON_ID_RE, MAX_PACK_BYTES, OID_RE, isPackfile, packKey, refsKey } from '../lib/lessonGit.js';
 import { supabaseBase, supabaseConfigured, verifySupabaseUser } from '../lib/supabase.js';
 import { textResponse, jsonResponse } from '../lib/http.js';
-
-// A commit oid is a 40-char lowercase hex SHA-1.
-const OID_RE = /^[0-9a-f]{40}$/;
-
-// Cap one lesson's history. Packs hold only JSON (images are referenced by hash
-// and live in the images bucket, not in the repo), so even a long-lived lesson
-// with hundreds of commits stays well under this.
-const MAX_PACK_BYTES = 10 * 1024 * 1024;
-
-// Every packfile starts with the four bytes "PACK".
-const PACK_MAGIC = [0x50, 0x41, 0x43, 0x4b];
 
 /** The head we currently hold for a lesson, or null if it has no history yet. */
 async function storedHead(env, lessonId) {
@@ -68,22 +65,14 @@ async function storedHead(env, lessonId) {
 }
 
 /**
- * Whether a reader may see this lesson's history. Mirrors GET /lessons/:id: a
- * private draft (published = false) or a shadowbanned lesson is invisible to
- * the public but stays readable to its author (who must not realise a
- * shadowban is in effect), a trusted collaborator, and moderators.
+ * Whether a reader may see this lesson's history. The rule is the lesson's own
+ * (lib/lesson.js canReadLesson): a private draft or a shadowbanned lesson is
+ * invisible to the public but stays readable to its author (who must not realise
+ * a shadowban is in effect), a trusted collaborator, and moderators. Returns a
+ * 404 response to send back, or null when the read is allowed.
  */
 async function readable(request, env, base, row, cors) {
-	if (row.published && !row.shadowbanned) return null;
-	const { user, role } = await verifyUserAndRole(env, base, request);
-	const isOwner = user && user.id === row.author_id;
-	if (isOwner || isModeratorRole(role)) return null;
-	// The trusted list lives on the lesson's doc, which `row` doesn't carry (the
-	// callers below fetch without it) — pull it only for this less-common path.
-	if (user) {
-		const full = await fetchLessonRow(env, base, row.id, { withDoc: true });
-		if (full && isTrustedCollaborator(full, user)) return null;
-	}
+	if (await canReadLesson(env, base, request, row)) return null;
 	return textResponse('Lesson not found.', 404, cors);
 }
 
@@ -159,8 +148,10 @@ export async function handleGit(request, env, lessonId, rest, cors) {
 		const row = await fetchLessonRow(env, base, lessonId, { withDoc: true });
 		if (!row) return textResponse('Lesson not found.', 404, cors);
 
-		// The author, or someone the author trusts (who is merging a fork back in).
-		// Don't reveal which of "missing" or "not yours" it was.
+		// The author, or someone the author trusts — the two people who may write
+		// this lesson, whether they are saving their own edit or pushing a pull
+		// request they have just merged. Don't reveal which of "missing" or "not
+		// yours" it was.
 		const isAuthor = row.author_id === user.id;
 		if (!isAuthor && !isTrustedCollaborator(row, user)) {
 			return textResponse('You can only save history for lessons you published, or lessons you are a trusted collaborator on.', 403, cors);
@@ -203,7 +194,7 @@ export async function handleGit(request, env, lessonId, rest, cors) {
 		}
 		// Reject anything that isn't a packfile outright, so the bucket can't be used
 		// as general-purpose storage by an authenticated caller.
-		if (!PACK_MAGIC.every((b, i) => bytes[i] === b)) {
+		if (!isPackfile(bytes)) {
 			return textResponse('That is not a packfile.', 400, cors);
 		}
 

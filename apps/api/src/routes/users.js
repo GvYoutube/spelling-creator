@@ -69,7 +69,7 @@ export async function handleUsers(request, env, url, cors) {
 		const res = await fetch(`${base}/rest/v1/lessons?${query}`, { headers: supabaseHeaders(env) });
 		if (res.ok) {
 			const rows = await res.json().catch(() => []);
-			lessons = (Array.isArray(rows) ? rows : []).map((r) => rowToLesson(r, false));
+			lessons = (Array.isArray(rows) ? rows : []).map((r) => rowToLesson(r));
 		}
 	} catch (e) {
 		// Profile still loads without the lesson list; show what we have.

@@ -51,6 +51,7 @@
     "./notifications": "./src/notifications.js",
     "./pixabay": "./src/pixabay.js",
     "./profile": "./src/profile.js",
+    "./pulls": "./src/pulls.js",
     "./questions": "./src/questions.js",
     "./richText": "./src/richText.js",
     "./spelling": "./src/spelling.js",

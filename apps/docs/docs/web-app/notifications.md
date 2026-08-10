@@ -26,6 +26,15 @@ queries the table directly — everything goes through the Worker's
   follow handler (`POST /profiles/:id/follow`) when a _new_ follow edge is added;
   re-following is a no-op and doesn't re-notify. Its link opens the follower's
   profile. See [Following](./profiles-and-display-names.md#following).
+- **`pull_request`** — someone proposed changes to a lesson you published, or the
+  proposal _you_ made was merged or closed. The three are one type because they're
+  one conversation; the title says which happened and the link opens the lesson.
+  Nothing is sent until a proposal actually has changes in it (an upload that
+  never finished notifies nobody), and withdrawing your own never notifies you.
+  See [Pull requests](./pull-requests.md).
+- **`lesson_update`** — a trusted collaborator saved a lesson you published. It
+  changed under you and you didn't do it, so you're told. (Merging a proposal into
+  your lesson also lands as one of these, from whoever merged it.)
 
 ## How it's stored
 
