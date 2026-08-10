@@ -281,7 +281,7 @@ Three deliberate limits:
   — the same helpers the move buttons use — and relies on `SectionCard`'s own
   `scroll-mt-(--header-h)` to land clear of the bar, rather than computing an
   offset of its own.
-- **It appears at 52rem of *page column*, not of viewport.** The measurement is
+- **It appears at 52rem of _page column_, not of viewport.** The measurement is
   against `AppShell`'s `@container/page`, so collapsing the sidebar can bring
   the outline in without the window changing size — see
   [Laying out against the container](./pages-and-routing.md#laying-out-against-the-container).

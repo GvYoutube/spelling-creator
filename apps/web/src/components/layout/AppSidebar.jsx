@@ -164,7 +164,12 @@ export default function AppSidebar() {
                 <div className="flex aspect-square size-8 shrink-0 items-center justify-center rounded-md bg-primary text-primary-foreground">
                   <SpellCheckIcon className="size-4" />
                 </div>
-                <div className="grid flex-1 text-left leading-tight">
+                {/* Explicitly hidden in the rail. The sidebar's own icon-mode CSS only
+                    truncates a *span* child, and clips the rest with overflow-hidden —
+                    which is enough when the icon fills the 32px button, and isn't here:
+                    a size-4 icon leaves room for the first letter of each line to show
+                    through the 48px rail. */}
+                <div className="grid flex-1 text-left leading-tight group-data-[collapsible=icon]:hidden">
                   <span className="truncate font-serif font-semibold">
                     {t("nav.appName")}
                   </span>
@@ -322,7 +327,9 @@ export default function AppSidebar() {
                     tooltip={displayName || t("nav.account")}
                   >
                     <CircleUserIcon />
-                    <div className="grid flex-1 text-left leading-tight">
+                    {/* Hidden in the rail for the same reason as the header's —
+                        see the comment there. */}
+                    <div className="grid flex-1 text-left leading-tight group-data-[collapsible=icon]:hidden">
                       <span className="truncate text-sm font-medium">
                         {displayName || t("nav.signedIn")}
                       </span>
