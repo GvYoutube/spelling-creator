@@ -51,16 +51,17 @@
     "deletedByThem": "You edited this block; {{name}} deleted it. Keeping it preserves your edit.",
     "deletedByYou": "You deleted this block; {{name}} edited it. Keeping it restores their version.",
     "confirm": {
-      "mergingBack": "Merging back...",
+      "landing": "Merging it in...",
       "merging": "Merging...",
-      "mergeBackInto": "Merge back into {{name}}",
+      "mergeProposal": "Merge these changes in",
       "merge": "Merge"
     },
     "title": {
-      "contribute": "Merge your changes back into {{name}}",
+      "pullRequest": "Review the proposal: {{name}}",
       "pull": "Merge changes from {{name}}"
     },
-    "contributingNotice": "This updates <strong>{{name}}</strong> itself, for everyone — you are a trusted collaborator on it. Its latest changes are merged in first, so nothing its author has done since you forked is lost, and they'll be notified.",
+    "someone": "someone",
+    "reviewingNotice": "Merging this updates <strong>the published lesson</strong> itself, for everyone reading it. Nothing is written until you confirm, and {{name}} will be told either way.",
     "auto": {
       "heading": "Merged automatically:",
       "newBlocks_one": "{{count}} new block from {{name}}",
@@ -76,6 +77,21 @@
     "conflictsIntro_one": "{{count}} block was edited on both sides in the same place. Choose which to keep.",
     "conflictsIntro_other": "{{count}} blocks were edited on both sides in the same place. Choose which to keep.",
     "cancel": "Cancel"
+  },
+  "proposeDialog": {
+    "defaultLessonName": "the original lesson",
+    "title": "Propose changes to {{name}}",
+    "description": "Send your version of this lesson to {{name}} as a proposal.",
+    "notice": "Nothing in <strong>{{name}}</strong> changes yet. Its author — or someone they trust with it — reviews your changes and decides whether to merge them. Everyone can see what you propose.",
+    "titleLabel": "What does this change?",
+    "titlePlaceholder": "e.g. Add five more spelling words to section 2",
+    "titleHint": "One line, so the author can tell at a glance what you're offering.",
+    "bodyLabel": "Anything else to say? (optional)",
+    "bodyPlaceholder": "Why these changes help, anything you weren't sure about...",
+    "bodyHint": "Plain text. This is a note to the author, not part of the lesson.",
+    "cancel": "Cancel",
+    "submit": "Propose these changes",
+    "submitting": "Sending..."
   },
   "imageSearch": {
     "providers": {

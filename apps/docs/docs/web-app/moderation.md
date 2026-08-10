@@ -22,8 +22,9 @@ route; see the registration comment in `apps/api/src/index.js`.)
 Roles live in the `user_roles` table (`apps/api/schema.sql`). A normal signed-in
 user is a plain author who can only touch their own content. Above that:
 
-- **Moderator** — delete any comment, **shadowban** a lesson, ban users by name,
-  and **request** that a lesson be fully deleted.
+- **Moderator** — delete any comment, close any
+  [proposed change](./pull-requests.md), **shadowban** a lesson, ban users by
+  name, and **request** that a lesson be fully deleted.
 - **Admin** — everything a moderator can do, plus: add moderators, approve a
   moderator's lesson-deletion request, fully delete a lesson, and ban users by IP.
 
@@ -31,6 +32,11 @@ Note what is _not_ on either list: **editing** someone else's comment. A comment
 only be edited by the person who wrote it (see [Rich text](./rich-text.md)) — a
 moderator's power over a bad comment is to delete it, not to rewrite it under its
 author's name.
+
+For the same reason, a moderator can **close** a proposed change but never
+**merge** one. Merging writes a lesson under its author's name, which is
+authorship, not moderation; only that author and the collaborators they trust can
+do it.
 
 There is deliberately **no in-app way to create an admin** — admins are seeded by
 hand in the Supabase SQL editor (see the snippet at the bottom of `schema.sql`).

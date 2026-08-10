@@ -100,6 +100,25 @@
     "copySummary": "Copy summary",
     "idleNotice": "The first summary downloads your browser’s on-device model, which can take a while. Nothing is sent to a server."
   },
+  "pulls": {
+    "heading_one": "Proposed changes ({{count}} open)",
+    "heading_other": "Proposed changes ({{count}} open)",
+    "status": {
+      "open": "Open",
+      "merged": "Merged",
+      "closed": "Closed"
+    },
+    "notUploaded": "Not finished uploading",
+    "anonymous": "Anonymous",
+    "viewFork": "See their version",
+    "review": "Review & merge",
+    "withdraw": "Withdraw",
+    "close": "Close",
+    "withdrawn": "Proposal withdrawn.",
+    "closedToast": "Proposal closed. Whoever proposed it has been notified.",
+    "closeError": "Could not close the proposal.",
+    "loadError": "Could not load the proposed changes."
+  },
   "comments": {
     "couldNotLoad": "Could not load comments.",
     "couldNotPost": "Could not post your comment.",

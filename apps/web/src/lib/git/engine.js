@@ -57,6 +57,7 @@ export {
   headOid,
   history,
   pendingOps,
+  pullRef,
   readDocAt,
   readHeadDoc,
   restoreCommit,
@@ -77,7 +78,8 @@ export {
   forkLessonRepo,
   forkLocalRepo,
   prepareMerge,
+  preparePullMerge,
   pushHistory,
-  pushToUpstream,
   remoteStatus,
+  submitPullRequest,
 } from "@spelling-creator/core/browser/git/sync";

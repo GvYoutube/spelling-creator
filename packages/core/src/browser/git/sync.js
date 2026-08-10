@@ -5,20 +5,27 @@
 // are the flows that make the version control worth having, and they're all a
 // handful of calls over the primitives in repo.js / pack.js / merge.js.
 //
-// Two things to understand here.
+// Three things to understand here.
 //
 // 1. A fork keeps a *pointer home*. The hub row records `forkedFrom`, and the
 //    fork's repo keeps the original's tip at refs/remotes/upstream/main. Together
 //    those let the fork ask "what has the original changed since I left?" and get
 //    a real answer — the merge base — rather than having to guess.
 //
-// 2. A lesson can have more than one writer. Its author can save it, and so can a
-//    trusted collaborator merging a fork back in. So *nobody pushes blind*: before
-//    sending a history we compare it with what the hub actually holds
-//    (remoteStatus), and we only push a history that already contains that. If the
-//    lesson has moved on beneath us, the push is refused (by us here, and by the
-//    Worker's compare-and-swap regardless) and the changes are merged first.
-//    Without that, whoever saved second would quietly erase the other's work.
+// 2. Work only ever travels *back* to a lesson through a pull request. A forker
+//    cannot push into the lesson they forked, however much they've done to their
+//    copy: they submit their history as a proposal (submitPullRequest), and the
+//    lesson's author or a trusted collaborator merges it (preparePullMerge +
+//    completeMerge) from their own editor. The merge, and the push that follows
+//    it, are the reviewer's, under the reviewer's credentials.
+//
+// 3. A lesson can still have more than one writer — its author and the trusted
+//    collaborators they named. So *nobody pushes blind*: before sending a history
+//    we compare it with what the hub actually holds (remoteStatus), and we only
+//    push a history that already contains that. If the lesson has moved on
+//    beneath us, the push is refused (by us here, and by the Worker's
+//    compare-and-swap regardless) and the changes are merged first. Without that,
+//    whoever saved second would quietly erase the other's work.
 
 import * as git from "isomorphic-git";
 import { newId } from "../../id.js";
@@ -32,12 +39,19 @@ import {
   mergeBase,
   packRepo,
 } from "../../git/pack.js";
-import { fetchPack, pushPack } from "../../git/remote.js";
+import { fetchPack, fetchRefs, pushPack } from "../../git/remote.js";
+import {
+  closePullRequest,
+  createPullRequest,
+  fetchPullPack,
+  uploadPullPack,
+} from "../../pulls.js";
 import {
   ORIGIN_REF,
   UPSTREAM_REF,
   commitDoc,
   headOid,
+  pullRef,
   readDocAt,
 } from "../../git/repo.js";
 
@@ -118,10 +132,21 @@ export async function prepareMerge({
   doc,
   ref = UPSTREAM_REF,
 }) {
-  const ctx = repoCtx(repoId);
-
   const pack = await fetchPack(lessonId).catch(() => null);
   if (!pack) return null;
+  return mergeAgainstPack({ repoId, pack, doc, ref });
+}
+
+/**
+ * Merge a *downloaded* history into ours — the shared core of prepareMerge and
+ * preparePullMerge, which differ only in where the pack comes from (a lesson's
+ * own published history, or a pull request's snapshot of someone's fork).
+ *
+ * The objects land in our own store, so the commits the two sides share are
+ * literally the same objects and the merge base below is a real answer.
+ */
+async function mergeAgainstPack({ repoId, pack, doc, ref }) {
+  const ctx = repoCtx(repoId);
 
   await fetchRemotePack({ ...ctx, ...pack, ref });
 
@@ -249,41 +274,96 @@ export async function pushHistory({ repoId, lessonId, doc, accessToken }) {
 }
 
 /**
- * Merge this fork back into the lesson it came from — the trusted-collaborator
- * contribution.
+ * Offer this fork's work back to the lesson it came from, as a pull request.
  *
- * By the time this runs, the original's history has already been merged into ours
- * (prepareMerge + completeMerge, or `ahead` because we were already on top of it),
- * so our head *contains* the original's tip. Pushing it therefore only ever moves
- * the original forward — it can't erase the author's commits.
+ * This is the *only* way changes travel from a fork into a lesson. Nothing is
+ * written to that lesson here — not its document, not its history. What we send
+ * is a snapshot of our repository, which its author or a trusted collaborator
+ * can then review and merge (or not) from their own editor.
  *
- * The Worker enforces this independently: it checks we're a trusted collaborator,
- * and compare-and-swaps on `parent`. If the original moved between our merge and
- * this push, the push is rejected and the caller re-runs the flow.
+ * Snapshotting is what makes the request stable: we carry on editing our fork
+ * afterwards, and what the reviewer is looking at doesn't move under them.
  *
- * Only the *history* is pushed here. The lesson's document row is written by the
- * caller (lib/lessons.js updateLesson), because that's the hub's business, not
- * git's — and it must happen after this succeeds, never before.
+ * Opening it is two steps — the request, then its pack — because the pack is
+ * uploaded against the request's id. If the upload fails, the empty request is
+ * withdrawn rather than left in the author's queue with nothing in it.
+ *
+ * @returns {Promise<object>} The open pull request.
  */
-export async function pushToUpstream({
+export async function submitPullRequest({
   repoId,
-  upstreamLessonId,
-  expectedHead,
+  lessonId,
+  title,
+  body,
+  sourceLessonId = null,
   accessToken,
 }) {
   const packed = await packRepo(repoCtx(repoId));
-  if (!packed) throw new Error("There is nothing to merge back yet.");
+  if (!packed) {
+    throw new Error("There is nothing to propose yet — make an edit first.");
+  }
 
-  await pushPack(
-    upstreamLessonId,
+  // The lesson's tip as it stands, recorded on the request so a reviewer can see
+  // what it was built against. Purely informational: the merge finds its own base
+  // from the shared ancestry, which is real, because a fork is a genuine clone.
+  const refs = await fetchRefs(lessonId).catch(() => null);
+
+  const pull = await createPullRequest(
+    lessonId,
     {
-      packfile: packed.packfile,
+      title,
+      body,
       head: packed.head,
-      parent: expectedHead,
+      base: refs?.head || null,
+      sourceLessonId,
     },
     accessToken,
   );
-  return packed.head;
+
+  try {
+    const ready = await uploadPullPack(
+      lessonId,
+      pull.id,
+      { packfile: packed.packfile, head: packed.head },
+      accessToken,
+    );
+    return ready || pull;
+  } catch (err) {
+    await closePullRequest(lessonId, pull.id, accessToken).catch(() => {});
+    throw err;
+  }
+}
+
+/**
+ * Merge a pull request's proposed changes into this lesson — the reviewer's side
+ * of the flow, and the mirror of prepareMerge.
+ *
+ * The proposal's pack is indexed into the lesson's own repository, where its
+ * objects meet the commits the two histories already share, so this is a true
+ * three-way merge against the commit they diverged from — the same block-by-block
+ * merge as pulling an original's changes into a fork, in the other direction.
+ *
+ * Nothing is committed: any conflicts go to the user first. Feed the result to
+ * completeMerge(), then push the lesson (pushHistory) and only then mark the
+ * request merged — the Worker checks that the merge really landed before it will
+ * accept that.
+ *
+ * @returns {Promise<null | object>} null when the proposal's changes are no
+ *          longer stored (it was resolved while we were looking at it). Anything
+ *          else — signed out, offline, a failing server — throws, because those
+ *          are not the same answer: reporting a proposal as gone when the
+ *          network dropped sends the reviewer looking for the wrong problem.
+ */
+export async function preparePullMerge({
+  repoId,
+  lessonId,
+  pullId,
+  doc,
+  accessToken,
+}) {
+  const pack = await fetchPullPack(lessonId, pullId, accessToken);
+  if (!pack) return null;
+  return mergeAgainstPack({ repoId, pack, doc, ref: pullRef(pullId) });
 }
 
 /**

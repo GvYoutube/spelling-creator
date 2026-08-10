@@ -50,14 +50,19 @@ later **pull the original's changes in**: the two histories are merged against t
 commit they diverged from, block by block. See
 [Version history](/monorepo/version-history).
 
-**Merging a fork back in.** A **trusted collaborator** — someone the author added
-to the lesson's collaboration list — can also merge their fork _back into_ the
-original lesson. That makes them the one kind of non-author who may write a
-lesson: its title, document and history, but never its published/draft state, the
-trusted list itself, or its existence (no delete). Pushes are compare-and-swapped
-on the history's head, so neither the author nor a collaborator can overwrite work
-they haven't seen — whoever is stale is told to merge and try again. The author is
-notified when a collaborator merges into their lesson.
+**Proposing changes back.** Work travels from a fork into the original as a **pull
+request**: you propose your version, and the lesson's author — or a **trusted
+collaborator**, someone they added to the lesson's collaboration list — reviews it
+and merges it. Nobody writes a lesson they don't own or aren't trusted with, so a
+lesson only ever changes because someone with authority over it chose to. See
+[Pull requests](./pull-requests.md).
+
+Those trusted collaborators are the one kind of non-author who may write a lesson
+directly: its title, document and history, but never its published/draft state,
+the trusted list itself, or its existence (no delete). Pushes are
+compare-and-swapped on the history's head, so neither the author nor a
+collaborator can overwrite work they haven't seen — whoever is stale is told to
+merge and try again. The author is notified when someone else saves their lesson.
 
 **Where the data lives.** Lessons are stored in **Supabase Postgres**, but — like
 the AI and Pixabay features — the browser never talks to the database directly.
@@ -94,19 +99,22 @@ API base URL. (The Worker
 also exposes the profile, notification, and moderation endpoints documented on
 their own pages.)
 
-| Method & path                            | Auth                    | Response                                                                                                              |
-| ---------------------------------------- | ----------------------- | --------------------------------------------------------------------------------------------------------------------- |
-| `GET /lessons`                           | none (public)           | `{ "lessons": [{ id, authorId, title, author, sectionCount, published, createdAt }] }` (published only, newest first) |
-| `GET /lessons/mine`                      | `Bearer <Supabase JWT>` | `{ "lessons": [{ id, authorId, title, author, sectionCount, published, createdAt }] }` (caller's own, incl. drafts)   |
-| `GET /lessons/:id`                       | none, unless a draft\*  | `{ "lesson": { id, authorId, title, author, sectionCount, published, createdAt, doc, avgRating, ratingCount } }`      |
-| `POST /lessons`                          | `Bearer <Supabase JWT>` | `{ "lesson": { id, authorId, title, author, sectionCount, published, createdAt } }`                                   |
-| `PUT /lessons/:id`                       | `Bearer <Supabase JWT>` | `{ "lesson": { id, authorId, title, author, sectionCount, published, createdAt } }` (author only; else `403`)         |
-| `GET /lessons/:id/comments`              | none, unless a draft\*  | `{ "comments": [{ id, parentId, authorId, author, body, createdAt, editedAt }] }` (oldest first)                      |
-| `POST /lessons/:id/comments`             | `Bearer <Supabase JWT>` | `{ "comment": { id, ..., body, createdAt, editedAt }, "rating": { average, count } \| null }`                         |
-| `PATCH /lessons/:id/comments/:commentId` | `Bearer <Supabase JWT>` | `{ "comment": { ... } }` — edit your own comment (author only; else `403`)                                            |
-| `GET/POST /lessons/:id/responses`        | `Bearer <Supabase JWT>` | Your own saved answers from [interactive mode](./interactive-mode.md) — private to the caller; see that page          |
-| `DELETE /lessons/:id/responses/:rid`     | `Bearer <Supabase JWT>` | `{ "ok": true }` — deletes one of your own saved run-throughs; someone else's matches nothing and `404`s              |
-| `POST /ai-text/dislike`                  | `Bearer <Supabase JWT>` | `{ "ok": true }` — evicts the cached text for `{ subject, documentName }`                                             |
+| Method & path                                 | Auth                    | Response                                                                                                              |
+| --------------------------------------------- | ----------------------- | --------------------------------------------------------------------------------------------------------------------- |
+| `GET /lessons`                                | none (public)           | `{ "lessons": [{ id, authorId, title, author, sectionCount, published, createdAt }] }` (published only, newest first) |
+| `GET /lessons/mine`                           | `Bearer <Supabase JWT>` | `{ "lessons": [{ id, authorId, title, author, sectionCount, published, createdAt }] }` (caller's own, incl. drafts)   |
+| `GET /lessons/:id`                            | none, unless a draft\*  | `{ "lesson": { id, authorId, title, author, sectionCount, published, createdAt, doc, avgRating, ratingCount } }`      |
+| `POST /lessons`                               | `Bearer <Supabase JWT>` | `{ "lesson": { id, authorId, title, author, sectionCount, published, createdAt } }`                                   |
+| `PUT /lessons/:id`                            | `Bearer <Supabase JWT>` | `{ "lesson": { ... } }` — the author, or a trusted collaborator (title + doc only); anyone else `403`                 |
+| `GET /lessons/:id/comments`                   | none, unless a draft\*  | `{ "comments": [{ id, parentId, authorId, author, body, createdAt, editedAt }] }` (oldest first)                      |
+| `POST /lessons/:id/comments`                  | `Bearer <Supabase JWT>` | `{ "comment": { id, ..., body, createdAt, editedAt }, "rating": { average, count } \| null }`                         |
+| `PATCH /lessons/:id/comments/:commentId`      | `Bearer <Supabase JWT>` | `{ "comment": { ... } }` — edit your own comment (author only; else `403`)                                            |
+| `GET /lessons/:id/pulls`                      | none, unless a draft\*  | `{ "pulls": [...], "canReview": bool }` — changes people have proposed to this lesson                                 |
+| `POST /lessons/:id/pulls`                     | `Bearer <Supabase JWT>` | `{ "pull": { ... } }` — propose changes; anyone but the lesson's own author                                           |
+| `/lessons/:id/pulls/:prId/{pack,merge,close}` | `Bearer`, except `GET`  | A proposal's packfile, and resolving it; see [Pull requests](./pull-requests.md) for who may do which                 |
+| `GET/POST /lessons/:id/responses`             | `Bearer <Supabase JWT>` | Your own saved answers from [interactive mode](./interactive-mode.md) — private to the caller; see that page          |
+| `DELETE /lessons/:id/responses/:rid`          | `Bearer <Supabase JWT>` | `{ "ok": true }` — deletes one of your own saved run-throughs; someone else's matches nothing and `404`s              |
+| `POST /ai-text/dislike`                       | `Bearer <Supabase JWT>` | `{ "ok": true }` — evicts the cached text for `{ subject, documentName }`                                             |
 
 \* A published lesson's `GET /lessons/:id` and `GET /lessons/:id/comments` need
 no auth. A **draft** (`published: false`) is private — having the id/URL is not
@@ -117,6 +125,16 @@ or a moderator/admin. The frontend (`@spelling-creator/core/lessons`'s `fetchLes
 when one is available, so this is transparent to an author viewing or editing
 their own draft.
 
+- `doc.trustedCollaborators` is **not** part of what a lesson read returns. It
+  holds collaborator email addresses, and `GET /lessons/:id` is public (and
+  server-rendered into the page), so the Worker strips the field on the way out
+  for everyone except the lesson's author and the collaborators on the list
+  itself — not the public, and not moderators. A published lesson is still read
+  without verifying anything; a token is only checked when one was actually sent.
+  Since a document can therefore arrive back without the field, `PUT` treats an
+  absent list as "leave the stored one alone" — only an explicit array replaces
+  it. See
+  [Version history](/monorepo/version-history#what-is-deliberately-not-versioned-or-shared-at-all).
 - `doc` is the editor document shape used throughout the app:
   `{ title, sections: [{ id, name, blocks: [...] }] }`. Store it as `jsonb`.
 - `POST /lessons` body is `{ title, doc, published }`. The Worker should

@@ -106,7 +106,7 @@ export async function handleModeration(request, env, url, cors) {
 		}
 		if (!res.ok) return textResponse('Could not load lessons.', 502, cors);
 		const rows = await res.json().catch(() => []);
-		const lessons = (Array.isArray(rows) ? rows : []).map((r) => rowToLesson(r, false));
+		const lessons = (Array.isArray(rows) ? rows : []).map((r) => rowToLesson(r));
 		return jsonResponse({ lessons }, 200, cors);
 	}
 
@@ -134,7 +134,7 @@ export async function handleModeration(request, env, url, cors) {
 		if (!res.ok) return textResponse('Could not update the lesson.', 502, cors);
 		const rows = await res.json().catch(() => []);
 		if (!Array.isArray(rows) || rows.length === 0) return textResponse('Lesson not found.', 404, cors);
-		return jsonResponse({ lesson: rowToLesson(rows[0], false, true) }, 200, cors);
+		return jsonResponse({ lesson: rowToLesson(rows[0], { includeMod: true }) }, 200, cors);
 	}
 
 	// POST /mod/lessons/:id/delete-request — a moderator asks an admin to

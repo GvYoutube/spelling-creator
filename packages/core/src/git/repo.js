@@ -25,12 +25,20 @@ export const BRANCH_REF = `refs/heads/${BRANCH}`;
 // The two remotes a lesson can have, in git's own vocabulary.
 //
 //   origin    this lesson's own published history — what the hub holds for it.
-//             It can be *ahead of us* now that a trusted collaborator may merge
-//             their fork into it, so we check it before pushing.
+//             It can be *ahead of us*, since a trusted collaborator may have
+//             saved it (or merged a pull request into it) since we last looked,
+//             so we check it before pushing.
 //   upstream  the lesson this one was forked FROM, for pulling its later changes
-//             in (and, if we're trusted, for merging ours back into it).
+//             in — and for opening a pull request against it.
 export const ORIGIN_REF = "refs/remotes/origin/main";
 export const UPSTREAM_REF = "refs/remotes/upstream/main";
+
+/**
+ * The ref a pull request's proposed history is fetched into while it's being
+ * reviewed. One per request, so two open proposals on the same lesson never
+ * overwrite each other's tip.
+ */
+export const pullRef = (pullId) => `refs/remotes/pull/${pullId}`;
 
 const DEFAULT_AUTHOR = { name: "Spelling Creator", email: "lessons@local" };
 

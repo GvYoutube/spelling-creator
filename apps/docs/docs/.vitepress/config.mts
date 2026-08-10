@@ -110,6 +110,10 @@ export default defineConfig({
           { text: "Save to Google Docs", link: "/web-app/save-to-google-docs" },
           { text: "Live collaboration", link: "/web-app/live-collaboration" },
           {
+            text: "Pull requests (proposing changes)",
+            link: "/web-app/pull-requests",
+          },
+          {
             text: "Lesson hub & accounts",
             link: "/web-app/lesson-hub-and-accounts",
           },

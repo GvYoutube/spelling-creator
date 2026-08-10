@@ -33,7 +33,13 @@ export function corsHeaders(request, allowed) {
 			headers.set('Access-Control-Allow-Origin', origin);
 			headers.set('Vary', 'Origin');
 			headers.set('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
-			headers.set('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+			// X-Git-Head and X-Git-Parent carry a pushed history's tip and the head it
+			// expects to replace (the compare-and-swap in routes/git.js), and the same
+			// tip when a pull request's pack is uploaded. Neither is a safelisted
+			// header, so without naming them here the browser's preflight refuses the
+			// upload — invisibly, whenever the app is served from a different origin
+			// than the API. Same-origin deploys never preflight and so never noticed.
+			headers.set('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Git-Head, X-Git-Parent');
 			headers.set('Access-Control-Max-Age', '86400');
 		}
 	}

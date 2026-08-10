@@ -47,7 +47,9 @@ src/
     CollabCursors.jsx      floating coloured carets showing collaborators' selections
     CollabChat.jsx         in-session chat: a floating corner panel on desktop, a bottom sheet on mobile
     HistoryDialog.jsx      the lesson's version timeline: what each commit changed, per block, + restore
-    MergeDialog.jsx        settle a merge with the lesson this one was forked from (mine / theirs / keep both)
+    MergeDialog.jsx        settle a merge — a fork's original, or a pull request being reviewed (mine / theirs / keep both)
+    ProposeChangesDialog.jsx  open a pull request against the lesson this fork came from (see pull-requests.md)
+    PullRequestsSection.jsx   proposed changes on a lesson's page, with review/merge and close for whoever may
     ui/                    shadcn/ui primitives (Button, Dialog, DropdownMenu, Select, Tooltip, Sonner Toaster, etc.) — Radix underneath, styled from the tokens in styles/globals.css
     ui/textarea.jsx        Textarea, which grows to fit its text (see "Auto-growing text fields"); hence `resize-none`, and never a scrollbar
   lib/

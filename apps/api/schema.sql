@@ -172,7 +172,7 @@ create table if not exists public.notifications (
   id              uuid primary key default gen_random_uuid(),
   user_id         uuid references auth.users (id) on delete cascade,
   recipient_email text,
-  type            text not null,            -- 'comment' | 'link' | 'follow'
+  type            text not null,            -- 'comment' | 'link' | 'follow' | 'lesson_update' | 'pull_request'
   title           text not null,
   body            text,
   link            text,
@@ -213,6 +213,74 @@ create index if not exists follows_following_id_idx on public.follows (following
 -- Same posture as notifications: only the service-role Worker reads/writes, so
 -- enable RLS with no anon/authenticated policies.
 alter table public.follows enable row level security;
+
+
+-- Pull requests: "please make this change to your lesson".
+--
+-- Anyone may fork a lesson, but nobody may write someone else's lesson from
+-- their fork. To offer work back, a forker opens a pull request against the
+-- lesson; its author — or one of the trusted collaborators they named — reviews
+-- it and merges it in. That review step is the whole point: an unreviewed write
+-- into another person's published lesson is exactly what this replaces.
+--
+-- What a pull request actually *contains* is a git packfile, stored in R2 beside
+-- the lessons' own packs (see lib/lessonGit.js):
+--
+--   git/pulls/<pullRequestId>/pack
+--
+-- The pack is a snapshot of the proposer's repository at the moment they opened
+-- the request, which is what makes a pull request stable: the proposer can carry
+-- on editing their fork afterwards and what the reviewer is looking at does not
+-- move under them. `head` names the commit that pack points at; `base` is the
+-- lesson's tip when it was opened (informational — the merge finds its own base
+-- from the shared ancestry, which is real, because a fork is a genuine clone).
+create table if not exists public.lesson_pull_requests (
+  id            uuid primary key default gen_random_uuid(),
+  -- The lesson being proposed to.
+  lesson_id     uuid not null references public.lessons (id) on delete cascade,
+  -- The fork the proposal came from, when it is itself a saved lesson. Nullable
+  -- and `on delete set null`: a proposal may be opened from an unsaved local
+  -- fork, and deleting the fork afterwards must not delete the proposal — the
+  -- packfile is what carries the changes, not the row this points at.
+  source_lesson_id uuid references public.lessons (id) on delete set null,
+  author_id     uuid not null references auth.users (id) on delete cascade,
+  author        text,                       -- display name, denormalised for listing
+  title         text not null,
+  body          text,                       -- plain text; profanity-checked like a comment
+  head          text not null,              -- the commit the stored pack points at
+  base          text,                       -- the lesson's tip when this was opened
+  -- False until the packfile has actually landed in R2 (opening a request is two
+  -- steps: insert the row, then upload the pack against its id). A request that
+  -- never became ready has nothing to review, so it is shown only to the person
+  -- who opened it, who can withdraw and try again.
+  ready         boolean not null default false,
+  status        text not null default 'open' check (status in ('open','merged','closed')),
+  -- The merge commit in the lesson's own history, once merged. Two parents: the
+  -- lesson's tip and this request's head.
+  merge_commit  text,
+  resolved_by   uuid references auth.users (id) on delete set null,
+  resolved_at   timestamptz,
+  -- Recorded so an admin can later ban the address, as for lessons and comments.
+  author_ip     text,
+  created_at    timestamptz not null default now()
+);
+
+-- The lesson page and the editor both ask "the open proposals on this lesson,
+-- newest first"; index the filter + sort key.
+create index if not exists lesson_pull_requests_lesson_idx
+  on public.lesson_pull_requests (lesson_id, status, created_at desc);
+
+-- "The proposals I have opened", for the author's own view of them.
+create index if not exists lesson_pull_requests_author_idx
+  on public.lesson_pull_requests (author_id, created_at desc);
+
+-- Same posture as notifications and lesson_responses: only the service-role
+-- Worker reads and writes this table, so RLS is enabled with no anon or
+-- authenticated policies at all. The browser reaches proposals exclusively
+-- through the Worker's /lessons/:id/pulls endpoints, which is what applies the
+-- "may this person merge?" rule — Postgres has no way to know who is trusted,
+-- since the trusted list lives inside the lesson's document.
+alter table public.lesson_pull_requests enable row level security;
 
 
 -- ============================================================================

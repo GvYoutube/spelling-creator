@@ -74,6 +74,7 @@ import FirstLessonWizard from "../components/FirstLessonWizard.jsx";
 import AiLessonIdeaDialog from "../components/AiLessonIdeaDialog.jsx";
 import HistoryDialog, { timeAgo } from "../components/HistoryDialog.jsx";
 import MergeDialog from "../components/MergeDialog.jsx";
+import ProposeChangesDialog from "../components/ProposeChangesDialog.jsx";
 // The preview dialog renders the working doc with the very same read-only
 // renderer the public lesson page uses — no docx, no mammoth, nothing to fetch.
 import LessonView from "../components/LessonView.jsx";
@@ -115,6 +116,10 @@ import {
   EDIT_REQUEST_KEY,
   FORK_REQUEST_KEY,
 } from "@spelling-creator/core/lessons";
+import {
+  fetchPullRequests,
+  mergePullRequest,
+} from "@spelling-creator/core/pulls";
 import { useAuth } from "../lib/auth.jsx";
 import { useCollaboration } from "../lib/collab.js";
 import { useSelectionBroadcast } from "../lib/useSelectionBroadcast.js";
@@ -260,19 +265,27 @@ export default function EditorPage() {
   // histories against the commit they diverged from. Persisted with the draft.
   const [forkedFrom, setForkedFrom] = useState(null);
   const [forkedFromTitle, setForkedFromTitle] = useState("");
-  // Whether the original's author trusts us — i.e. our email is on ITS
-  // trusted-collaborator list. Only then may we merge this fork back into it.
-  // The Worker enforces the same check; this only decides whether to offer it.
-  const [canContribute, setCanContribute] = useState(false);
+  // Whether this fork's work can be offered back to the original at all — which
+  // it can, by anyone but the original's own author, since a proposal writes
+  // nothing until someone with the authority to merge it says so.
+  const [canPropose, setCanPropose] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
+  // The "propose changes to the original" dialog, and whether a submission is in
+  // flight (it packs the repository and uploads it, so it isn't instant).
+  const [proposeOpen, setProposeOpen] = useState(false);
+  const [proposing, setProposing] = useState(false);
+  // A pull request being reviewed, once fetched: the editor is opened with
+  // ?pull=<id> from the lesson page's proposals list (see PullRequestsSection).
+  const [reviewPull, setReviewPull] = useState(null);
   // A merge the user is being asked to settle: the result of prepareMerge, held
   // until they've chosen how to resolve any conflicts (see MergeDialog).
   const [merge, setMerge] = useState(null);
   const [merging, setMerging] = useState(false);
   // What to do once the merge is settled:
-  //   "pull"       just take the original's changes into this fork
-  //   "contribute" ...then push the result back into the original (trusted only)
-  //   "publish"    a save found the hub ahead of us; merge, then save again
+  //   "pull"          just take the original's changes into this fork
+  //   "pull-request"  ...then land it in the lesson we're reviewing a proposal
+  //                   for (author / trusted collaborator only, server-enforced)
+  //   "publish"       a save found the hub ahead of us; merge, then save again
   const [mergeIntent, setMergeIntent] = useState("pull");
 
   const {
@@ -377,14 +390,13 @@ export default function EditorPage() {
     };
   }, []);
 
-  // The lesson this one was forked from: its name (for the sync/merge-back buttons
-  // and the merge dialog), and whether its author trusts us enough to let us merge
-  // back into it. Fetched lazily; a failure just leaves the generic wording and no
-  // merge-back offer.
+  // The lesson this one was forked from: its name (for the sync and propose
+  // buttons and the merge dialog), and whether offering work back to it makes
+  // sense at all. Fetched lazily; a failure just leaves the generic wording.
   useEffect(() => {
     if (!forkedFrom) {
       setForkedFromTitle("");
-      setCanContribute(false);
+      setCanPropose(false);
       return;
     }
     let cancelled = false;
@@ -392,23 +404,11 @@ export default function EditorPage() {
       .then((lesson) => {
         if (cancelled) return;
         setForkedFromTitle(lesson.title || "");
-
-        // The trusted list lives on the original's own document — the same list
-        // its author manages in the collaboration dialog. Being on it is what
-        // makes this fork mergeable back into the original. The Worker re-checks
-        // it on every write, so this is only about whether to show the button.
-        const trusted = lesson.doc?.trustedCollaborators;
-        const mine = (user?.email || "").trim().toLowerCase();
-        setCanContribute(
-          Boolean(mine) &&
-            Array.isArray(trusted) &&
-            trusted.some(
-              (t) => (t?.email || "").trim().toLowerCase() === mine,
-            ) &&
-            // The author doesn't need to "contribute" to their own lesson —
-            // they'd just save it.
-            lesson.authorId !== user?.id,
-        );
+        // Anyone signed in may propose changes to a lesson — a proposal writes
+        // nothing until its author (or a trusted collaborator) merges it. The one
+        // person it makes no sense for is the original's own author: they'd just
+        // save it. The Worker refuses that case too.
+        setCanPropose(Boolean(user) && lesson.authorId !== user?.id);
       })
       .catch(() => {
         /* the original may have been deleted — the sync will report it */
@@ -1261,62 +1261,109 @@ export default function EditorPage() {
     }
   };
 
-  // Merge this fork BACK into the lesson it was forked from — the trusted
-  // collaborator's contribution.
+  // Offer this fork's work back to the lesson it came from — as a proposal, not
+  // a write.
   //
-  // Only offered when the original's author put us on its trusted-collaborator
-  // list (the same list that auto-admits us to a live session). The Worker checks
-  // that independently; this is just the UI gate.
-  //
-  // The order matters. We first pull the original in, so our history *contains*
-  // its current tip — a push can then only move it forward, never erase the
-  // author's commits. If that pull raises conflicts, they're settled in the merge
-  // dialog first, and the contribution is finished by confirmMerge below.
-  const handleContribute = async () => {
-    if (!forkedFrom || !canContribute) return;
-    setBusy("contribute");
+  // Nothing in the original changes here. What we send is a snapshot of this
+  // lesson's repository, which the original's author (or one of the trusted
+  // collaborators they named) reviews and merges from their own editor. That
+  // review step is deliberate: a fork can no longer push itself into someone
+  // else's published lesson, however trusted its owner is.
+  const handleProposeChanges = async ({ title, body }) => {
+    if (!forkedFrom) return;
+    setProposing(true);
     try {
+      // Commit what's outstanding first: the proposal is the committed history,
+      // so anything still only in the editor would simply not be in it.
       await git.commitNow();
 
       const engine = await loadGitEngine();
-      const prepared = await engine.prepareMerge({
+      await engine.submitPullRequest({
         repoId: git.repoId,
         lessonId: forkedFrom,
-        doc,
-        ref: engine.UPSTREAM_REF,
+        title,
+        body,
+        // Recorded (and verified server-side) only when this fork is itself a
+        // saved lesson, so a reviewer can see the proposal in its full context.
+        sourceLessonId: editingId,
+        accessToken,
       });
 
+      setProposeOpen(false);
+      notify({
+        severity: "success",
+        message: t("messages.proposalOpened", {
+          name: forkedFromTitle || t("labels.theOriginalLesson"),
+        }),
+        route: { to: `/hub/${forkedFrom}`, label: t("labels.viewLesson") },
+      });
+    } catch (err) {
+      console.error(err);
+      notify({
+        severity: "error",
+        message: t("messages.couldNotPropose", { error: err.message || err }),
+      });
+    } finally {
+      setProposing(false);
+    }
+  };
+
+  // Review a proposal against the lesson currently open for editing — the other
+  // side of the flow above, reached from the lesson page's proposals list, which
+  // sends us here with ?pull=<id>.
+  //
+  // The proposal's history is indexed into this lesson's own repository, where it
+  // meets the commits the two already share, and merged block by block against
+  // the commit they diverged from. Only genuine clashes reach the dialog; the
+  // merge is landed by finishPullMerge once they're settled.
+  const reviewPullRequest = async (pullId) => {
+    if (!editingId) return;
+    setBusy("review");
+    try {
+      await git.commitNow();
+
+      // The list is where a proposal's title and author live, and it's also how
+      // we find out whether it is still open at all.
+      const { pulls } = await fetchPullRequests(editingId, accessToken);
+      const pull = pulls.find((p) => p.id === pullId);
+      if (!pull) {
+        notify({ severity: "error", message: t("messages.proposalGone") });
+        return;
+      }
+      if (pull.status !== "open") {
+        notify({ severity: "info", message: t("messages.proposalResolved") });
+        return;
+      }
+
+      const engine = await loadGitEngine();
+      const prepared = await engine.preparePullMerge({
+        repoId: git.repoId,
+        lessonId: editingId,
+        pullId,
+        doc,
+        accessToken,
+      });
       if (!prepared) {
-        notify({
-          severity: "info",
-          message: t("messages.noSharedHistoryToContribute"),
-        });
-        return;
-      }
-      if (prepared.identical) {
-        notify({
-          severity: "info",
-          message: t("messages.identicalCopy", {
-            name: forkedFromTitle || t("labels.theOriginal"),
-          }),
-        });
+        notify({ severity: "error", message: t("messages.proposalGone") });
         return;
       }
 
-      // Already sitting on top of the original: nothing to pull, so push straight
-      // away. Otherwise settle the merge first (confirmMerge finishes the push).
-      if (prepared.ahead) {
-        await contributeUpstream(prepared, doc);
+      setReviewPull(pull);
+
+      // We already contain everything it proposes (it was merged some other way,
+      // or it never diverged): there is nothing to settle, so land it as it is.
+      if (prepared.upToDate) {
+        await finishPullMerge(pull, doc);
         return;
       }
 
-      setMergeIntent("contribute");
+      setMergeIntent("pull-request");
       setMerge(prepared);
     } catch (err) {
       console.error(err);
       notify({
         severity: "error",
-        message: t("messages.couldNotMergeBack", {
+        message: t("messages.couldNotReviewProposal", {
           error: err.message || err,
         }),
       });
@@ -1325,29 +1372,43 @@ export default function EditorPage() {
     }
   };
 
-  // Push our (already-merged) history and document into the original lesson.
-  // `prepared.theirs` is the original's tip we merged, and doubles as the
-  // compare-and-swap: if the original moved on in the meantime, the Worker
-  // rejects the push rather than dropping whatever landed there.
-  const contributeUpstream = async (prepared, mergedDoc) => {
+  // Land a reviewed proposal: push the merged history, save the lesson's
+  // document, then record the merge — strictly in that order.
+  //
+  // The Worker refuses to mark a proposal merged unless the merge commit really
+  // is what the lesson's stored history points at, so this order isn't a
+  // convention, it's the only one that works. If the lesson has moved on beneath
+  // us in the meantime the push is refused rather than overwriting it, and the
+  // proposal simply stays open while that's merged first.
+  const finishPullMerge = async (pull, mergedDoc) => {
     const engine = await loadGitEngine();
 
-    // History first, document second. If the push is rejected, the original's doc
-    // row must be left exactly as it was.
-    await engine.pushToUpstream({
+    const result = await engine.pushHistory({
       repoId: git.repoId,
-      upstreamLessonId: forkedFrom,
-      expectedHead: prepared.theirs,
+      lessonId: editingId,
+      doc: mergedDoc,
       accessToken,
     });
-    await updateLesson(forkedFrom, mergedDoc, accessToken);
+    if (result.needsMerge) {
+      setMergeIntent("publish");
+      setMerge(result.prepared);
+      notify({
+        severity: "warning",
+        message: t("messages.needsMergeBeforeSave"),
+      });
+      return;
+    }
+
+    await updateLesson(editingId, mergedDoc, accessToken);
+
+    const head = await engine.headOid(engine.repoCtx(git.repoId));
+    await mergePullRequest(editingId, pull.id, head, accessToken);
+    setReviewPull(null);
 
     notify({
       severity: "success",
-      message: t("messages.mergedIntoUpstream", {
-        name: forkedFromTitle || t("labels.theOriginalLesson"),
-      }),
-      route: { to: `/hub/${forkedFrom}`, label: t("labels.viewLesson") },
+      message: t("messages.proposalMerged", { title: pull.title }),
+      route: { to: `/hub/${editingId}`, label: t("labels.viewLesson") },
     });
   };
 
@@ -1361,18 +1422,30 @@ export default function EditorPage() {
         prepared: merge,
         choices,
         author: identity,
-        theirName: mergeIntent === "publish" ? doc.title : forkedFromTitle,
+        theirName:
+          mergeIntent === "publish"
+            ? doc.title
+            : mergeIntent === "pull-request"
+              ? reviewPull?.title || t("labels.theProposal")
+              : forkedFromTitle,
         currentDoc: doc,
       });
       setDoc(merged);
       const intent = mergeIntent;
       setMerge(null);
 
-      if (intent === "contribute") {
-        await contributeUpstream(merge, merged);
+      if (intent === "pull-request") {
+        if (reviewPull) await finishPullMerge(reviewPull, merged);
         return;
       }
       if (intent === "publish") {
+        // This was a proposal whose push found the lesson had moved on. Now that
+        // we contain what it moved to, the push will go through — so carry on
+        // landing it rather than making the reviewer start the review again.
+        if (reviewPull) {
+          await finishPullMerge(reviewPull, merged);
+          return;
+        }
         // The merge is committed locally; the save that triggered it was aborted
         // before it could overwrite anything, so the user re-runs it.
         notify({
@@ -1399,6 +1472,36 @@ export default function EditorPage() {
       setMerging(false);
     }
   };
+
+  // Arriving to review a proposal: the lesson page's proposals list sends us here
+  // as /editor?pull=<id>&lesson=<lessonId>, having also asked the editor to load
+  // that lesson.
+  //
+  // We can't act the moment we land, and "some lesson is open" isn't good enough
+  // either. The reviewer may already have had a *different* lesson open, whose id
+  // is restored from storage and whose repository goes ready long before the
+  // requested one has been fetched — or confirmed, if there was in-progress work
+  // to replace. Reviewing against that lesson would look for a proposal that
+  // isn't on it and report it missing, and the one-shot guard below would stop us
+  // trying again once the right lesson arrived. So we wait for the lesson the
+  // link actually named.
+  //
+  // Reading the handler through a ref keeps the effect from re-firing every time
+  // the doc changes underneath it.
+  const pullParam = searchParams.get("pull") || "";
+  const pullLessonParam = searchParams.get("lesson") || "";
+  const reviewPullRef = useRef(reviewPullRequest);
+  const pullHandledRef = useRef("");
+  useEffect(() => {
+    reviewPullRef.current = reviewPullRequest;
+  });
+  useEffect(() => {
+    if (!pullParam || !pullLessonParam || !git.ready || !accessToken) return;
+    if (editingId !== pullLessonParam) return;
+    if (pullHandledRef.current === pullParam) return;
+    pullHandledRef.current = pullParam;
+    reviewPullRef.current(pullParam);
+  }, [pullParam, pullLessonParam, editingId, git.ready, accessToken]);
 
   // Word import. We warn first (the conversion is lossy and can fail), then open
   // the file picker; the chosen file is parsed and validated by importDocxFile,
@@ -2009,27 +2112,25 @@ export default function EditorPage() {
                 </Tooltip>
               )}
 
-              {/* We're a trusted collaborator on the lesson this was forked from,
-                  so we can merge our work back INTO it — the contribution flow.
-                  Anyone else can fork and sync, but only push their own copy. */}
-              {forkedFrom && canContribute && hasApi() && (
+              {/* Offer this fork's work back to the lesson it came from. It goes
+                  as a proposal for that lesson's author (or a trusted
+                  collaborator) to review — a fork never writes the original. */}
+              {forkedFrom && canPropose && hasApi() && (
                 <Tooltip>
                   <TooltipTrigger asChild>
                     <Button
                       size="sm"
-                      onClick={handleContribute}
-                      disabled={busy !== null}
+                      onClick={() => setProposeOpen(true)}
+                      disabled={busy !== null || proposing}
                     >
                       <GitPullRequestIcon data-icon="inline-start" />
-                      {busy === "contribute"
-                        ? t("documentPanel.contributeMerging")
-                        : t("documentPanel.contributeButton", {
-                            name: forkedFromTitle || t("labels.theOriginal"),
-                          })}
+                      {t("documentPanel.proposeButton", {
+                        name: forkedFromTitle || t("labels.theOriginal"),
+                      })}
                     </Button>
                   </TooltipTrigger>
                   <TooltipContent className="max-w-xs">
-                    {t("documentPanel.contributeTooltip", {
+                    {t("documentPanel.proposeTooltip", {
                       name: forkedFromTitle || t("labels.theOriginalLesson"),
                     })}
                   </TooltipContent>
@@ -2361,19 +2462,36 @@ export default function EditorPage() {
       {/* Settling a merge with the lesson this one was forked from. Only blocks
           both sides changed in the same place reach the user; everything else has
           already merged by the time this opens. */}
+      <ProposeChangesDialog
+        open={proposeOpen}
+        lessonTitle={forkedFromTitle}
+        busy={proposing}
+        onClose={() => setProposeOpen(false)}
+        onSubmit={handleProposeChanges}
+      />
+
       <MergeDialog
         // Keyed on the merge's own commits, so each merge opens with a fresh set
         // of choices rather than inheriting the last one's.
         key={merge ? `${merge.ours}-${merge.theirs}` : "no-merge"}
         open={Boolean(merge)}
-        onClose={() => setMerge(null)}
+        // Backing out of a merge abandons the review it belonged to as well —
+        // otherwise a later, unrelated merge would find a proposal still waiting
+        // to be landed and land it.
+        onClose={() => {
+          setMerge(null);
+          setReviewPull(null);
+        }}
         prepared={merge}
         intent={mergeIntent}
         theirName={
           mergeIntent === "publish"
             ? t("labels.theSavedLesson")
-            : forkedFromTitle || t("labels.theOriginal")
+            : mergeIntent === "pull-request"
+              ? reviewPull?.title || t("labels.theProposal")
+              : forkedFromTitle || t("labels.theOriginal")
         }
+        proposerName={reviewPull?.author || ""}
         onConfirm={confirmMerge}
         busy={merging}
       />
