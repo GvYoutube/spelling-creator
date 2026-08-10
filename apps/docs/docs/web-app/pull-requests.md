@@ -34,8 +34,10 @@ lesson ───────▶ your copy ────────────�
 5. That opens the lesson in _their_ editor (`?pull=<id>&lesson=<lessonId>` — the
    link names both, so the review waits for the lesson it belongs to rather than
    running against whatever the reviewer already had open) and runs the usual
-   block-by-block merge. Only genuine clashes reach a dialog. Nothing is written
-   until they confirm.
+   block-by-block merge. The merge dialog opens with a summary of everything that
+   settled on its own, and a choice to make for each genuine clash — often none.
+   Nothing is written until they confirm. A proposal the lesson already contains
+   skips all this and is simply recorded as merged.
 6. On confirm: the merge is pushed to the lesson's history, the lesson's document
    is saved, and the proposal is marked merged. You get a notification.
 

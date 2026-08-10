@@ -69,8 +69,12 @@ export default function PullRequestsSection({ lessonId }) {
   const [canReview, setCanReview] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-  // The proposal a close is in flight for, so only its own button spins.
-  const [closingId, setClosingId] = useState(null);
+  // The proposals a close is in flight for, so each button spins for its own
+  // request and no other. A set rather than one id: closing a second before the
+  // first has come back is an ordinary thing to do when clearing a queue, and
+  // with a single id the first to finish would clear the other's spinner, put a
+  // live button back under the pointer, and invite a duplicate close.
+  const [closingIds, setClosingIds] = useState(() => new Set());
 
   const load = useCallback(() => {
     let cancelled = false;
@@ -118,7 +122,7 @@ export default function PullRequestsSection({ lessonId }) {
   };
 
   const close = async (pull) => {
-    setClosingId(pull.id);
+    setClosingIds((prev) => new Set(prev).add(pull.id));
     try {
       const updated = await closePullRequest(lessonId, pull.id, accessToken);
       setPulls((prev) =>
@@ -132,7 +136,12 @@ export default function PullRequestsSection({ lessonId }) {
     } catch (err) {
       toast.error(err.message || t("pulls.closeError"));
     } finally {
-      setClosingId(null);
+      // Only this one — another close may still be in flight.
+      setClosingIds((prev) => {
+        const next = new Set(prev);
+        next.delete(pull.id);
+        return next;
+      });
     }
   };
 
@@ -150,7 +159,7 @@ export default function PullRequestsSection({ lessonId }) {
     const mine = pull.authorId && pull.authorId === user?.id;
     const isOpen = pull.status === "open";
     const canClose = isOpen && (mine || canReview || isModerator);
-    const closing = closingId === pull.id;
+    const closing = closingIds.has(pull.id);
 
     return (
       <div key={pull.id} className="flex items-start gap-3 py-3">
@@ -219,12 +228,21 @@ export default function PullRequestsSection({ lessonId }) {
 
           {(canClose || (isOpen && pull.ready && canReview)) && (
             <div className="mt-2 flex flex-wrap gap-2">
-              {isOpen && pull.ready && canReview && (
-                <Button size="sm" onClick={() => review(pull)}>
-                  <GitMergeIcon data-icon="inline-start" />
-                  {t("pulls.review")}
-                </Button>
-              )}
+              {isOpen &&
+                pull.ready &&
+                canReview && (
+                  // Not while it's being closed: leaving for the editor mid-close
+                  // would send the reviewer to merge something that is about to
+                  // stop being open.
+                  <Button
+                    size="sm"
+                    onClick={() => review(pull)}
+                    disabled={closing}
+                  >
+                    <GitMergeIcon data-icon="inline-start" />
+                    {t("pulls.review")}
+                  </Button>
+                )}
               {canClose && (
                 <Button
                   size="sm"
