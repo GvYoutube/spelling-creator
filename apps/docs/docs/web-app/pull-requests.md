@@ -31,9 +31,11 @@ lesson ───────▶ your copy ────────────�
    uploads it with a title and an optional note. Nothing in the original changes.
 4. The lesson's author sees it under **Proposed changes** on the lesson page, and
    gets a notification. They (or a trusted collaborator) hit **Review & merge**.
-5. That opens the lesson in _their_ editor and runs the usual block-by-block
-   merge. Only genuine clashes reach a dialog. Nothing is written until they
-   confirm.
+5. That opens the lesson in _their_ editor (`?pull=<id>&lesson=<lessonId>` — the
+   link names both, so the review waits for the lesson it belongs to rather than
+   running against whatever the reviewer already had open) and runs the usual
+   block-by-block merge. Only genuine clashes reach a dialog. Nothing is written
+   until they confirm.
 6. On confirm: the merge is pushed to the lesson's history, the lesson's document
    is saved, and the proposal is marked merged. You get a notification.
 
@@ -102,9 +104,24 @@ request marked merged.
 
 The merge endpoint doesn't take the client's word for that. `mergeCommit` must be
 the commit the lesson's stored history now actually points at, or the request is
-refused with a 409 telling the reviewer to save first. So a proposal can't be
-recorded as merged while its changes are quietly discarded — the record and the
-history agree by construction.
+refused with a 409 telling the reviewer to save first — and a lesson with no
+stored history at all can't have been merged into, so that's refused too. A
+proposal therefore can't be recorded as merged while its changes are quietly
+dropped, which is the failure that matters: a lesson whose record of what
+happened to it is fiction.
+
+What the endpoint **can't** check is that the commit it's given descends from
+_this_ proposal. That means walking the commit graph, and the Worker holds a
+lesson's history as an opaque packfile — it has no filesystem to index one into,
+so the ancestry isn't readable there. A reviewer could merge proposal A and
+record proposal B against it.
+
+That gap is bounded by who can reach it. Only the lesson's author and the
+collaborators they trust can call it, and they can already rewrite the lesson
+however they like, or simply close a proposal they don't want — so the exposure
+is a mislabelled record, not a way in. And nothing is destroyed by it: a merged
+proposal keeps its packfile, so a merge recorded in error can be read back and
+settled properly.
 
 The order is therefore fixed, and it's the only one that works:
 
@@ -168,9 +185,12 @@ frontend can surface `res.text()` directly.
 | `@spelling-creator/core/browser/git/sync`          | `submitPullRequest` (propose) and `preparePullMerge` (review)       |
 | `apps/web/src/components/ProposeChangesDialog.jsx` | The submission form                                                 |
 | `apps/web/src/components/PullRequestsSection.jsx`  | The list on a lesson's page                                         |
-| `apps/web/src/pages/EditorPage.jsx`                | `?pull=<id>` — the review + merge flow                              |
+| `apps/web/src/pages/EditorPage.jsx`                | `?pull=<id>&lesson=<id>` — the review + merge flow                  |
 | `apps/web/src/components/MergeDialog.jsx`          | Settling conflicts, shared with the fork-sync direction             |
 
-The packs are swept when a proposal is merged or closed (its objects live in the
-lesson's history by then, or aren't wanted), and when a lesson is deleted — before
-the row goes, since the cascade would take the ids with it.
+A pack is swept when its proposal is **closed** — nothing there will ever be
+merged — and when the lesson is deleted, before the row goes, since the cascade
+would take the ids with it. A **merged** proposal keeps its pack. Its objects are
+in the lesson's history by then and so redundant, but only if the merge really
+did contain them, which is the one thing the endpoint can't check; deleting it
+would make a mistake unrecoverable to save a few KB.

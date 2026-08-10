@@ -23,9 +23,11 @@ Unknown paths redirect to the home page (`/`).
 
 Two query strings deep-link into the editor rather than being routes of their own:
 `?join=<code>` opens the [live-collaboration](./live-collaboration.md) dialog on
-that invite, and `?pull=<id>` opens a
-[proposed change](./pull-requests.md) for review once the lesson it targets has
-loaded. Both are consumed once and then simply sit in the URL.
+that invite, and `?pull=<id>&lesson=<lessonId>` opens a
+[proposed change](./pull-requests.md) for review once the lesson it names has
+loaded — the lesson id is part of the link precisely so the review waits for the
+right one, rather than acting on whatever the editor already had open. Both are
+consumed once and then simply sit in the URL.
 
 Once the PWA service worker is installed it resolves these routes itself, from
 the precached `index.html`, which is what lets a deep link open with no network.

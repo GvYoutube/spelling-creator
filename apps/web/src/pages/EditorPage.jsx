@@ -1474,26 +1474,34 @@ export default function EditorPage() {
   };
 
   // Arriving to review a proposal: the lesson page's proposals list sends us here
-  // as /editor?pull=<id>, having asked the editor to load that lesson.
+  // as /editor?pull=<id>&lesson=<lessonId>, having also asked the editor to load
+  // that lesson.
   //
-  // We can't act the moment we land. The lesson has to actually be open (it may
-  // still be fetching, or waiting for the user to confirm replacing their
-  // in-progress work) and its repository has to be ready, because the merge is
-  // computed against it. So this waits for both, then runs once per proposal id.
+  // We can't act the moment we land, and "some lesson is open" isn't good enough
+  // either. The reviewer may already have had a *different* lesson open, whose id
+  // is restored from storage and whose repository goes ready long before the
+  // requested one has been fetched — or confirmed, if there was in-progress work
+  // to replace. Reviewing against that lesson would look for a proposal that
+  // isn't on it and report it missing, and the one-shot guard below would stop us
+  // trying again once the right lesson arrived. So we wait for the lesson the
+  // link actually named.
+  //
   // Reading the handler through a ref keeps the effect from re-firing every time
   // the doc changes underneath it.
   const pullParam = searchParams.get("pull") || "";
+  const pullLessonParam = searchParams.get("lesson") || "";
   const reviewPullRef = useRef(reviewPullRequest);
   const pullHandledRef = useRef("");
   useEffect(() => {
     reviewPullRef.current = reviewPullRequest;
   });
   useEffect(() => {
-    if (!pullParam || !editingId || !git.ready || !accessToken) return;
+    if (!pullParam || !pullLessonParam || !git.ready || !accessToken) return;
+    if (editingId !== pullLessonParam) return;
     if (pullHandledRef.current === pullParam) return;
     pullHandledRef.current = pullParam;
     reviewPullRef.current(pullParam);
-  }, [pullParam, editingId, git.ready, accessToken]);
+  }, [pullParam, pullLessonParam, editingId, git.ready, accessToken]);
 
   // Word import. We warn first (the conversion is lossy and can fail), then open
   // the file picker; the chosen file is parsed and validated by importDocxFile,

@@ -99,13 +99,22 @@ export default function PullRequestsSection({ lessonId }) {
   // consumes the lesson id from sessionStorage exactly as the "Edit" action does
   // (warning first if there's in-progress work to protect), and picks the
   // proposal up from the query string once the lesson is loaded.
+  //
+  // The lesson id goes in the query string too, and not only into sessionStorage.
+  // The editor may already have a *different* lesson open and its repository
+  // ready when we arrive — the one the reviewer was working on — and a proposal
+  // is only meaningful against the lesson it was opened on. Naming the target
+  // here is what lets the editor wait for the right one instead of reviewing
+  // against whatever happened to be loaded (see EditorPage's review effect).
   const review = (pull) => {
     try {
       sessionStorage.setItem(EDIT_REQUEST_KEY, lessonId);
     } catch {
       /* ignore — the editor just won't preload if storage is unavailable */
     }
-    navigate(`/editor?pull=${encodeURIComponent(pull.id)}`);
+    navigate(
+      `/editor?pull=${encodeURIComponent(pull.id)}&lesson=${encodeURIComponent(lessonId)}`,
+    );
   };
 
   const close = async (pull) => {

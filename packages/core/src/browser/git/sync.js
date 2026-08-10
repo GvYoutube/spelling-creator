@@ -349,7 +349,10 @@ export async function submitPullRequest({
  * accept that.
  *
  * @returns {Promise<null | object>} null when the proposal's changes are no
- *          longer stored (it was resolved while we were looking at it).
+ *          longer stored (it was resolved while we were looking at it). Anything
+ *          else — signed out, offline, a failing server — throws, because those
+ *          are not the same answer: reporting a proposal as gone when the
+ *          network dropped sends the reviewer looking for the wrong problem.
  */
 export async function preparePullMerge({
   repoId,
@@ -358,9 +361,7 @@ export async function preparePullMerge({
   doc,
   accessToken,
 }) {
-  const pack = await fetchPullPack(lessonId, pullId, accessToken).catch(
-    () => null,
-  );
+  const pack = await fetchPullPack(lessonId, pullId, accessToken);
   if (!pack) return null;
   return mergeAgainstPack({ repoId, pack, doc, ref: pullRef(pullId) });
 }

@@ -8,7 +8,7 @@
 //
 //   GET  /lessons/:id/pulls                 public* -> { pulls: PullRequest[] }
 //   POST /lessons/:id/pulls                 Bearer  -> { pull }            (anyone but the author)
-//   PUT  /lessons/:id/pulls/:prId/pack      Bearer  -> { ok, head }        (the proposer; the packfile)
+//   PUT  /lessons/:id/pulls/:prId/pack      Bearer  -> { pull }           (the proposer; the packfile)
 //   GET  /lessons/:id/pulls/:prId/pack      public* -> the packfile        (X-Git-Head names its tip)
 //   POST /lessons/:id/pulls/:prId/merge     Bearer  -> { pull }            (author or trusted collaborator)
 //   POST /lessons/:id/pulls/:prId/close     Bearer  -> { pull }            (proposer, author, trusted, moderator)
@@ -108,11 +108,27 @@ async function fetchPull(env, base, lessonId, pullId) {
 	return Array.isArray(rows) && rows.length > 0 ? rows[0] : null;
 }
 
-/** Apply a patch to one pull request and return the updated row. */
-async function patchPull(env, base, pullId, patch) {
+/**
+ * Apply a patch to one pull request and return the updated row, or null.
+ *
+ * `expect` names the state the caller believed the row was in — `{ status }`,
+ * `{ ready }`, or both — and is folded into the PATCH's own filter rather than
+ * checked beforehand. Every caller here reads the row, decides, and then writes,
+ * and those two steps are not one operation: two people resolving the same
+ * proposal at the same moment would both find it open and both write, and a
+ * close landing after a merge would leave a row that is `closed` with a merge
+ * commit on it while the changes are in the lesson. Making the transition
+ * conditional means the second writer matches no row and gets null back, which
+ * callers report as "already resolved" — the outcome that's actually true.
+ */
+async function patchPull(env, base, pullId, patch, expect = {}) {
+	const filters = [`id=eq.${encodeURIComponent(pullId)}`];
+	for (const [column, value] of Object.entries(expect)) {
+		filters.push(`${column}=eq.${encodeURIComponent(value)}`);
+	}
 	let res;
 	try {
-		res = await fetch(`${base}/rest/v1/lesson_pull_requests?id=eq.${encodeURIComponent(pullId)}&select=${PULL_COLUMNS}`, {
+		res = await fetch(`${base}/rest/v1/lesson_pull_requests?${filters.join('&')}&select=${PULL_COLUMNS}`, {
 			method: 'PATCH',
 			headers: { ...supabaseHeaders(env), 'Content-Type': 'application/json', Prefer: 'return=representation' },
 			body: JSON.stringify(patch),
@@ -400,8 +416,18 @@ async function putPullPack(request, env, base, lessonId, pullId, cors) {
 
 	// The pack is stored before the row is flipped: `ready` means "there is
 	// something to review", so it must never be true ahead of the bytes.
-	const updated = await patchPull(env, base, pullId, { ready: true });
-	if (!updated) return textResponse('Could not finish opening the proposal.', 502, cors);
+	//
+	// Conditional on the request still being open and still unready. The status
+	// was checked above, but the row can be closed between that read and this
+	// write — and a close deletes the pack, so an unconditional flip would leave
+	// a resolved proposal advertising bytes that were just swept, or bytes we
+	// wrote back after the sweep. When the transition doesn't take, the pack we
+	// just stored is ours to clean up.
+	const updated = await patchPull(env, base, pullId, { ready: true }, { status: 'open', ready: false });
+	if (!updated) {
+		await deletePullGit(env, pullId);
+		return textResponse('This proposal is no longer open.', 409, cors);
+	}
 
 	// Now there is something to look at, tell the lesson's author. Best-effort —
 	// never fail a proposal that has landed over a notification that hasn't.
@@ -460,10 +486,29 @@ async function getPullPack(request, env, base, lessonId, pullId, cors) {
  *
  * The lesson's author or a trusted collaborator only. The merge itself happened
  * in their editor and was pushed to the lesson's history before this call, so
- * what's left is to mark the request resolved — and to check that the merge
- * really did land: `mergeCommit` must be the commit the lesson's stored history
- * now points at. Otherwise a client could close proposals as "merged" while
- * quietly discarding them.
+ * what's left is to mark the request resolved.
+ *
+ * ---- What this actually proves, and what it doesn't ------------------------
+ *
+ * `mergeCommit` must be the commit the lesson's stored history now points at.
+ * That is checked rather than believed, and it rules out the failure that
+ * matters in practice: a client marking proposals merged while dropping them on
+ * the floor, leaving a lesson whose record of what happened to it is fiction.
+ * A lesson with no stored history at all can't have been merged into, so that's
+ * refused too — the reviewer's own push is what puts the history there.
+ *
+ * What it does *not* prove is that the commit it names descends from this
+ * particular proposal. Establishing that means walking the commit graph, and the
+ * Worker holds the history as an opaque packfile — it has no filesystem to index
+ * one into, so it cannot read the ancestry. A reviewer could therefore merge
+ * proposal A and record proposal B against it.
+ *
+ * That gap is bounded by who can reach it: only the lesson's author and the
+ * collaborators they trust, who can already rewrite the lesson however they
+ * like, and who can simply close a proposal they don't want. So the exposure is
+ * a mislabelled record, not a way in. And nothing is destroyed by it — the
+ * proposal's pack is kept (see below), so a merge recorded in error can be read
+ * back and settled properly.
  */
 async function mergePull(request, env, base, lessonId, pullId, cors) {
 	const user = await verifySupabaseUser(env, bearerToken(request));
@@ -494,10 +539,11 @@ async function mergePull(request, env, base, lessonId, pullId, cors) {
 	if (!pull.ready) return textResponse('This proposal has no changes to merge yet.', 409, cors);
 
 	// The merge has to be in the lesson's published history before we call it
-	// merged. A lesson with no stored history at all predates version control, so
-	// there is nothing to check it against and we take the client's word.
+	// merged. No stored history means no push landed, which means no merge — the
+	// reviewer has to save first, and saying so is far better than recording a
+	// merge that didn't happen.
 	const head = await storedLessonHead(env, lessonId);
-	if (head && head !== mergeCommit) {
+	if (!head || head !== mergeCommit) {
 		return textResponse(
 			'Save the merged lesson before marking this proposal merged — its history doesn’t contain the merge yet.',
 			409,
@@ -505,17 +551,28 @@ async function mergePull(request, env, base, lessonId, pullId, cors) {
 		);
 	}
 
-	const updated = await patchPull(env, base, pullId, {
-		status: 'merged',
-		merge_commit: mergeCommit,
-		resolved_by: user.id,
-		resolved_at: new Date().toISOString(),
-	});
-	if (!updated) return textResponse('Could not record the merge.', 502, cors);
+	// Conditional on the proposal still being open: this is the write that races
+	// with a concurrent close (see patchPull). Losing the race means somebody
+	// resolved it first, which is a 409, not a store failure.
+	const updated = await patchPull(
+		env,
+		base,
+		pullId,
+		{
+			status: 'merged',
+			merge_commit: mergeCommit,
+			resolved_by: user.id,
+			resolved_at: new Date().toISOString(),
+		},
+		{ status: 'open' },
+	);
+	if (!updated) return textResponse('This proposal has already been resolved.', 409, cors);
 
-	// The proposal's own pack has served its purpose: its objects now live in the
-	// lesson's history, reachable from the merge commit. Best-effort.
-	await deletePullGit(env, pullId);
+	// The pack is deliberately kept. Its objects are in the lesson's history now,
+	// reachable from the merge commit, so it is redundant — but only if the merge
+	// really did contain them, and that is the one thing this endpoint can't
+	// check (see the note above). Deleting it would make a mistake unrecoverable
+	// to save a few KB. It goes when the lesson does.
 
 	if (pull.author_id !== user.id) {
 		await createNotification(env, base, {
@@ -554,13 +611,24 @@ async function closePull(request, env, base, lessonId, pullId, cors) {
 		return textResponse('You can’t close this proposal.', 403, cors);
 	}
 
-	const updated = await patchPull(env, base, pullId, {
-		status: 'closed',
-		resolved_by: user.id,
-		resolved_at: new Date().toISOString(),
-	});
-	if (!updated) return textResponse('Could not close the proposal.', 502, cors);
+	// Conditional, like the merge: whoever resolves it first wins, and the loser
+	// is told it's already resolved rather than closing a merged proposal out from
+	// under the merge (which would leave a `closed` row carrying a merge commit).
+	const updated = await patchPull(
+		env,
+		base,
+		pullId,
+		{
+			status: 'closed',
+			resolved_by: user.id,
+			resolved_at: new Date().toISOString(),
+		},
+		{ status: 'open' },
+	);
+	if (!updated) return textResponse('This proposal has already been resolved.', 409, cors);
 
+	// Nothing here will ever be merged, so the changes go. (A merged proposal
+	// keeps its pack — see mergePull.)
 	await deletePullGit(env, pullId);
 
 	// Tell the proposer their work was declined — but not when they withdrew it

@@ -105,12 +105,13 @@ their own pages.)
 | `GET /lessons/mine`                           | `Bearer <Supabase JWT>` | `{ "lessons": [{ id, authorId, title, author, sectionCount, published, createdAt }] }` (caller's own, incl. drafts)   |
 | `GET /lessons/:id`                            | none, unless a draft\*  | `{ "lesson": { id, authorId, title, author, sectionCount, published, createdAt, doc, avgRating, ratingCount } }`      |
 | `POST /lessons`                               | `Bearer <Supabase JWT>` | `{ "lesson": { id, authorId, title, author, sectionCount, published, createdAt } }`                                   |
-| `PUT /lessons/:id`                            | `Bearer <Supabase JWT>` | `{ "lesson": { id, authorId, title, author, sectionCount, published, createdAt } }` (author only; else `403`)         |
+| `PUT /lessons/:id`                            | `Bearer <Supabase JWT>` | `{ "lesson": { ... } }` — the author, or a trusted collaborator (title + doc only); anyone else `403`                 |
 | `GET /lessons/:id/comments`                   | none, unless a draft\*  | `{ "comments": [{ id, parentId, authorId, author, body, createdAt, editedAt }] }` (oldest first)                      |
 | `POST /lessons/:id/comments`                  | `Bearer <Supabase JWT>` | `{ "comment": { id, ..., body, createdAt, editedAt }, "rating": { average, count } \| null }`                         |
 | `PATCH /lessons/:id/comments/:commentId`      | `Bearer <Supabase JWT>` | `{ "comment": { ... } }` — edit your own comment (author only; else `403`)                                            |
-| `GET/POST /lessons/:id/pulls`                 | none, unless a draft\*  | Changes people have proposed to this lesson, and opening one — see [Pull requests](./pull-requests.md)                |
-| `/lessons/:id/pulls/:prId/{pack,merge,close}` | mostly `Bearer`         | A proposal's packfile, and resolving it; see [Pull requests](./pull-requests.md) for who may do which                 |
+| `GET /lessons/:id/pulls`                      | none, unless a draft\*  | `{ "pulls": [...], "canReview": bool }` — changes people have proposed to this lesson                                 |
+| `POST /lessons/:id/pulls`                     | `Bearer <Supabase JWT>` | `{ "pull": { ... } }` — propose changes; anyone but the lesson's own author                                           |
+| `/lessons/:id/pulls/:prId/{pack,merge,close}` | `Bearer`, except `GET`  | A proposal's packfile, and resolving it; see [Pull requests](./pull-requests.md) for who may do which                 |
 | `GET/POST /lessons/:id/responses`             | `Bearer <Supabase JWT>` | Your own saved answers from [interactive mode](./interactive-mode.md) — private to the caller; see that page          |
 | `DELETE /lessons/:id/responses/:rid`          | `Bearer <Supabase JWT>` | `{ "ok": true }` — deletes one of your own saved run-throughs; someone else's matches nothing and `404`s              |
 | `POST /ai-text/dislike`                       | `Bearer <Supabase JWT>` | `{ "ok": true }` — evicts the cached text for `{ subject, documentName }`                                             |
