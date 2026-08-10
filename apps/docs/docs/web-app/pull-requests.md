@@ -79,12 +79,32 @@ author's queue.
 | -------------------------- | ---- | ----- | -------------------------- |
 | Anyone signed in           | ✅   | ❌    | ❌                         |
 | The person who opened it   | ✅   | ❌    | ✅ (withdraw)              |
-| The lesson's author        | ❌\* | ✅    | ✅ (decline)               |
+| The lesson's author        | ✅\* | ✅    | ✅ (decline)               |
 | A **trusted collaborator** | ✅   | ✅    | ✅                         |
 | A moderator/admin          | ✅   | ❌    | ✅ (as with any user text) |
 
-\* The author has nothing to propose to themselves — they can just save. The
-Worker refuses that case rather than creating a request nobody needs.
+\* Only from a fork they own — see below.
+
+### Proposing to your own lesson
+
+Out of nowhere, this is a mistake: you can just save, so the Worker refuses a
+proposal against your own lesson rather than creating a request nobody needs.
+
+It's allowed when it **carries a fork you own** (`sourceLessonId` resolves to
+another of your lessons), because then it means something specific: _here is a
+copy with changes in it, let me read the diff before it lands._ Two things use
+that:
+
+- An **AI assistant over MCP** acts as the account it's signed in with, so
+  changes it proposes to your lesson arrive from your own id. Holding them in the
+  review queue is the entire point — the lesson is untouched until you read the
+  diff and merge it. See [MCP tools](/mcp-server/tools).
+- **"Fork into a new lesson"** in the editor gives a human the same route for
+  work they want to look over before committing to it.
+
+You can then merge it yourself, since you're the author. The notification you get
+reads "Changes are waiting for your review" rather than naming a proposer, because
+the account is yours; the proposal's body says what opened it.
 
 "Trusted collaborator" is not a new concept: it's the email list the author
 already manages in the collaboration dialog (`doc.trustedCollaborators`, the same
@@ -166,7 +186,7 @@ which is why the submission dialog says so plainly before you send it.
 | Method & path                         | Auth                    | What it does                                                                                   |
 | ------------------------------------- | ----------------------- | ---------------------------------------------------------------------------------------------- |
 | `GET /lessons/:id/pulls`              | none, unless a draft\*  | `{ "pulls": [...], "canReview": bool }` — newest first; unready rows only for their own author |
-| `POST /lessons/:id/pulls`             | `Bearer <Supabase JWT>` | Opens a proposal (`{ title, body, head, base, sourceLessonId }`); anyone but the author        |
+| `POST /lessons/:id/pulls`             | `Bearer <Supabase JWT>` | Opens a proposal (`{ title, body, head, base, sourceLessonId }`); the author only from a fork  |
 | `PUT /lessons/:id/pulls/:prId/pack`   | `Bearer <Supabase JWT>` | Uploads its packfile (`X-Git-Head` must match). The proposer's, once                           |
 | `GET /lessons/:id/pulls/:prId/pack`   | none, unless a draft\*  | The packfile; `X-Git-Head` names its tip                                                       |
 | `POST /lessons/:id/pulls/:prId/merge` | `Bearer <Supabase JWT>` | Records the merge (`{ mergeCommit }`); author or trusted collaborator only                     |
@@ -188,6 +208,7 @@ frontend can surface `res.text()` directly.
 | `apps/api/src/lib/lessonGit.js`                    | R2 key layout (`git/pulls/<id>/pack`) and the sweeps that delete it |
 | `@spelling-creator/core/pulls`                     | The browser client, and the shared length limits                    |
 | `@spelling-creator/core/browser/git/sync`          | `submitPullRequest` (propose) and `preparePullMerge` (review)       |
+| `apps/mcp/src/git.js`                              | The same two steps for an AI assistant — fork, then propose         |
 | `apps/web/src/components/ProposeChangesDialog.jsx` | The submission form                                                 |
 | `apps/web/src/pages/lesson/LessonProposals.jsx`    | The Proposals tab                                                   |
 | `apps/web/src/pages/lesson/LessonProposal.jsx`     | One proposal, read-only, with the hand-off into the editor          |

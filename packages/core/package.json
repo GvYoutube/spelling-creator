@@ -31,6 +31,7 @@
     "./config": "./src/config.js",
     "./git/doc": "./src/git/doc.js",
     "./git/layout": "./src/git/layout.js",
+    "./git/memfs": "./src/git/memfs.js",
     "./git/merge": "./src/git/merge.js",
     "./git/ops": "./src/git/ops.js",
     "./git/pack": "./src/git/pack.js",

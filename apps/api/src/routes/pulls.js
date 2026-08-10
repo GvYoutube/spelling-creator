@@ -300,7 +300,31 @@ async function openPull(request, env, base, lessonId, cors) {
 	if (!(await canReadLesson(env, base, request, lesson))) {
 		return textResponse('Lesson not found.', 404, cors);
 	}
-	if (lesson.author_id === user.id) {
+	// The fork this came from, when it is itself a saved lesson. Only recorded if
+	// it really is the caller's: it becomes a link shown next to their name, and
+	// nobody should be able to point that at a lesson they don't own. A bad value
+	// is dropped rather than rejected — the pack is what carries the changes.
+	//
+	// Resolved before the own-lesson check below, which turns on it.
+	let sourceLessonId = null;
+	const claimed = typeof body.sourceLessonId === 'string' ? body.sourceLessonId.trim() : '';
+	if (LESSON_ID_RE.test(claimed) && claimed !== lessonId) {
+		const source = await fetchLessonRow(env, base, claimed);
+		if (source && source.author_id === user.id) sourceLessonId = claimed;
+	}
+
+	// Proposing to your own lesson is refused when there is nothing behind it: you
+	// can simply save, and a request to yourself out of nowhere is a mistake.
+	//
+	// It is allowed when it carries a fork you own, because then it means something
+	// specific and useful — "here is a copy with changes in it, let me read the diff
+	// before it lands". That is the shape of an AI assistant's work: over MCP the
+	// assistant acts as the account it is signed in with, so changes it proposes to
+	// the user's own lesson arrive from the user's own id (see apps/mcp/src/git.js).
+	// Holding them in the review queue is the whole point — the lesson is untouched
+	// until a person reads the diff and merges it. A human gets the same route via
+	// "fork into a new lesson" in the editor.
+	if (lesson.author_id === user.id && !sourceLessonId) {
 		return textResponse('This is your own lesson — save your changes to it directly instead.', 400, cors);
 	}
 
@@ -324,17 +348,6 @@ async function openPull(request, env, base, lessonId, cors) {
 			409,
 			cors,
 		);
-	}
-
-	// The fork this came from, when it is itself a saved lesson. Only recorded if
-	// it really is the caller's: it becomes a link shown next to their name, and
-	// nobody should be able to point that at a lesson they don't own. A bad value
-	// is dropped rather than rejected — the pack is what carries the changes.
-	let sourceLessonId = null;
-	const claimed = typeof body.sourceLessonId === 'string' ? body.sourceLessonId.trim() : '';
-	if (LESSON_ID_RE.test(claimed) && claimed !== lessonId) {
-		const source = await fetchLessonRow(env, base, claimed);
-		if (source && source.author_id === user.id) sourceLessonId = claimed;
 	}
 
 	const insert = {
@@ -431,14 +444,22 @@ async function putPullPack(request, env, base, lessonId, pullId, cors) {
 
 	// Now there is something to look at, tell the lesson's author. Best-effort —
 	// never fail a proposal that has landed over a notification that hasn't.
+	//
+	// A proposal from the author's own account is notified too, and is the case
+	// that needs it most: it is how an AI assistant working over MCP offers changes
+	// (see openPull above), and the notification is the only thing that tells the
+	// author there is something waiting. The wording doesn't claim someone else
+	// wrote it, because the account says otherwise; the proposal's own body records
+	// what opened it.
 	const lesson = await fetchLessonRow(env, base, lessonId);
-	if (lesson && lesson.author_id !== user.id) {
+	if (lesson) {
+		const own = lesson.author_id === user.id;
 		await createNotification(env, base, {
 			userId: lesson.author_id,
 			type: 'pull_request',
-			title: `${authorFromUser(user)} proposed changes to your lesson`,
+			title: own ? 'Changes are waiting for your review' : `${authorFromUser(user)} proposed changes to your lesson`,
 			body: pull.title,
-			link: `/hub/${lessonId}`,
+			link: `/hub/${lessonId}/proposals/${pullId}`,
 		}).catch(() => {});
 	}
 

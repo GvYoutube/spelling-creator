@@ -15,22 +15,32 @@ import { sha256Hex, extFromMime } from "./images.js";
  */
 export function createApi(config, auth) {
   const lessonsUrl = (path = "") => `${config.apiUrl}/lessons${path}`;
+  const gitUrl = (lessonId, path) =>
+    `${config.apiUrl}/git/${encodeURIComponent(lessonId)}${path}`;
+  const pullsUrl = (lessonId, path = "") =>
+    `${lessonsUrl(`/${encodeURIComponent(lessonId)}`)}/pulls${path}`;
 
-  // Fetch a Worker endpoint with a Bearer token, refreshing + retrying once if
-  // the token is rejected. `needsAuth: false` is for the public reads.
-  async function call(url, { method = "GET", body, needsAuth = true } = {}) {
+  /**
+   * One request to the Worker with a Bearer token, refreshed and retried once if
+   * the token is rejected — so a long-lived server survives its access token
+   * expiring between calls. Returns the raw Response; the callers below decide
+   * what a non-ok status means, because for some of them a 404 is an answer
+   * ("this lesson has no history") rather than a failure.
+   *
+   * `body` is passed through untouched, so this carries JSON and packfile bytes
+   * alike; JSON callers go through `call` below, which serialises for them.
+   */
+  async function request(
+    url,
+    { method = "GET", headers, body, needsAuth = true } = {},
+  ) {
     const send = async (token) => {
-      const headers = {};
-      if (body !== undefined) headers["Content-Type"] = "application/json";
-      if (token) headers.Authorization = `Bearer ${token}`;
-      return fetch(url, {
-        method,
-        headers,
-        body: body === undefined ? undefined : JSON.stringify(body),
-      });
+      const sent = { ...headers };
+      if (token) sent.Authorization = `Bearer ${token}`;
+      return fetch(url, { method, headers: sent, body });
     };
 
-    let token = needsAuth ? await auth.getAccessToken() : "";
+    const token = needsAuth ? await auth.getAccessToken() : "";
     let res;
     try {
       res = await send(token);
@@ -50,14 +60,63 @@ export function createApi(config, auth) {
         }
       }
     }
+    return res;
+  }
 
-    if (!res.ok) {
-      // The Worker returns a short plain-text reason for 4xx/5xx; surface it.
-      const detail = await res.text().catch(() => "");
-      throw new Error(detail || `Request failed (${res.status}).`);
-    }
+  /** The Worker returns a short plain-text reason for 4xx/5xx; surface it. */
+  async function readError(res, fallback) {
+    const detail = await res.text().catch(() => "");
+    return new Error(detail || fallback || `Request failed (${res.status}).`);
+  }
+
+  // A JSON call: serialise the body, throw on a bad status, return the parsed
+  // response. `needsAuth: false` is for the public reads.
+  async function call(url, { method = "GET", body, needsAuth = true } = {}) {
+    const res = await request(url, {
+      method,
+      needsAuth,
+      headers: body === undefined ? {} : { "Content-Type": "application/json" },
+      body: body === undefined ? undefined : JSON.stringify(body),
+    });
+    if (!res.ok) throw await readError(res);
     // DELETE returns a tiny JSON; everything else returns JSON too.
     return res.json().catch(() => ({}));
+  }
+
+  /**
+   * Upload a packfile — a lesson's history, or a proposal's snapshot of one. The
+   * tip travels in X-Git-Head so the bytes and the ref they belong to can never
+   * be paired from two different moments (see core/git/remote.js).
+   */
+  async function putPack(url, { packfile, head, parent }, badStatusMessage) {
+    const headers = {
+      "Content-Type": "application/x-git-packfile",
+      "X-Git-Head": head,
+    };
+    // The compare-and-swap: the head we believe the lesson points at. Omitted
+    // when it has no history yet.
+    if (parent) headers["X-Git-Parent"] = parent;
+
+    const res = await request(url, { method: "PUT", headers, body: packfile });
+    if (!res.ok) throw await readError(res, badStatusMessage);
+    return res.json().catch(() => ({}));
+  }
+
+  /**
+   * Download a packfile, with its tip from the same response. Returns null when
+   * there is no history stored (404) rather than throwing: for a lesson that
+   * predates version history, "no repo" is a normal answer a fork has to handle.
+   */
+  async function getPack(url) {
+    const res = await request(url);
+    if (res.status === 404) return null;
+    if (!res.ok) throw await readError(res, "Could not download the history.");
+
+    const head = res.headers.get("X-Git-Head");
+    if (!head) return null; // a pack with no tip is unusable
+    const packfile = new Uint8Array(await res.arrayBuffer());
+    if (packfile.byteLength === 0) return null;
+    return { packfile, head };
   }
 
   return {
@@ -113,11 +172,21 @@ export function createApi(config, auth) {
       return data.lesson;
     },
 
-    /** Create a lesson. `doc` is the canonical editor document. */
-    async createLesson({ title, doc, published }) {
+    /**
+     * Create a lesson. `doc` is the canonical editor document. `forkedFrom` is
+     * the lesson this one was forked from, which the hub records as the fork's
+     * pointer home — it's what lets the fork later pull the original's changes
+     * in, and what a proposal links back to.
+     */
+    async createLesson({ title, doc, published, forkedFrom }) {
       const data = await call(lessonsUrl(), {
         method: "POST",
-        body: { title, doc, published },
+        body: {
+          title,
+          doc,
+          published,
+          ...(forkedFrom ? { forkedFrom } : {}),
+        },
       });
       return data.lesson || {};
     },
@@ -141,6 +210,92 @@ export function createApi(config, auth) {
       return { ok: true };
     },
 
+    // ---- Version history and proposals -------------------------------------
+    //
+    // A lesson's history is a git repository, and it travels as a packfile (see
+    // packages/core/src/git/). These four are what forking and proposing need:
+    // read a lesson's history, write a fork's, and open a proposal carrying it.
+    // Unlike the browser's equivalents (core/git/remote.js, core/pulls.js) these
+    // always send the caller's token — a fork starts life as a private draft, so
+    // its own history is not a public read.
+
+    /**
+     * Download a lesson's packed history, or null when it has none (an older
+     * lesson from before version history, or one never pushed).
+     */
+    async fetchLessonPack(lessonId) {
+      return getPack(gitUrl(lessonId, "/pack"));
+    },
+
+    /** The tip of a lesson's published history, or null when it has none. */
+    async fetchLessonHead(lessonId) {
+      const res = await request(gitUrl(lessonId, "/refs"));
+      if (!res.ok) return null;
+      const data = await res.json().catch(() => null);
+      return data?.head || null;
+    },
+
+    /**
+     * Upload a lesson's history. `parent` is the head we believe it points at —
+     * the Worker refuses the push if the lesson has moved on since, which is
+     * what stops two writers erasing each other.
+     */
+    async pushLessonPack(lessonId, { packfile, head, parent }) {
+      return putPack(
+        gitUrl(lessonId, "/pack"),
+        { packfile, head, parent },
+        "Could not save the lesson history.",
+      );
+    },
+
+    /** The proposals open against a lesson, and whether we may review them. */
+    async listPulls(lessonId) {
+      const data = await call(pullsUrl(lessonId));
+      return {
+        pulls: Array.isArray(data.pulls) ? data.pulls : [],
+        canReview: Boolean(data.canReview),
+      };
+    },
+
+    /**
+     * Open a proposal against a lesson. This creates the request but not its
+     * contents — the changes follow as a packfile (uploadPullPack), and until
+     * that lands the request is unready and nobody but its author sees it.
+     */
+    async createPull(lessonId, { title, body, head, base, sourceLessonId }) {
+      const data = await call(pullsUrl(lessonId), {
+        method: "POST",
+        body: {
+          title,
+          body,
+          head,
+          ...(base ? { base } : {}),
+          ...(sourceLessonId ? { sourceLessonId } : {}),
+        },
+      });
+      if (!data.pull) throw new Error("Could not open the proposal.");
+      return data.pull;
+    },
+
+    /** Upload a proposal's packfile — the changes themselves. */
+    async uploadPullPack(lessonId, pullId, { packfile, head }) {
+      const data = await putPack(
+        pullsUrl(lessonId, `/${encodeURIComponent(pullId)}/pack`),
+        { packfile, head },
+        "Could not upload the proposed changes.",
+      );
+      return data.pull || null;
+    },
+
+    /** Withdraw a proposal (used to clean up one whose pack never landed). */
+    async closePull(lessonId, pullId) {
+      const data = await call(
+        pullsUrl(lessonId, `/${encodeURIComponent(pullId)}/close`),
+        { method: "POST" },
+      );
+      return data.pull || null;
+    },
+
     /**
      * Upload raw image bytes to R2 by their content hash and return the image
      * ref to put on an image block ({ hash, mime, ext }). PUT /images/:hash is
@@ -152,39 +307,13 @@ export function createApi(config, auth) {
      */
     async uploadImage(bytes, mime) {
       const hash = await sha256Hex(bytes);
-      const url = `${config.apiUrl}/images/${hash}`;
-      const send = (token) =>
-        fetch(url, {
-          method: "PUT",
-          headers: {
-            "Content-Type": mime || "application/octet-stream",
-            Authorization: `Bearer ${token}`,
-          },
-          body: bytes,
-        });
-
-      let token = await auth.getAccessToken();
-      let res;
-      try {
-        res = await send(token);
-      } catch {
-        throw new Error(`Could not reach the lesson hub at ${config.apiUrl}.`);
-      }
-      if (res.status === 401) {
-        const refreshed = await auth.forceRefresh();
-        if (refreshed) {
-          try {
-            res = await send(refreshed);
-          } catch {
-            throw new Error(
-              `Could not reach the lesson hub at ${config.apiUrl}.`,
-            );
-          }
-        }
-      }
+      const res = await request(`${config.apiUrl}/images/${hash}`, {
+        method: "PUT",
+        headers: { "Content-Type": mime || "application/octet-stream" },
+        body: bytes,
+      });
       if (!res.ok) {
-        const detail = await res.text().catch(() => "");
-        throw new Error(detail || `Image upload failed (${res.status}).`);
+        throw await readError(res, `Image upload failed (${res.status}).`);
       }
       return {
         hash,
