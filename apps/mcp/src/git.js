@@ -62,11 +62,17 @@ async function commitAuthor(api) {
 /** Trim to a limit on a word boundary where there is one nearby. */
 function clamp(value, limit) {
   const text = (value || "").trim();
+  if (limit <= 0) return ""; // no room at all; slicing by a negative would cut from the end
   if (text.length <= limit) return text;
   const cut = text.slice(0, limit - 1);
   const space = cut.lastIndexOf(" ");
   return `${(space > limit * 0.8 ? cut.slice(0, space) : cut).trimEnd()}…`;
 }
+
+// A client's self-reported name is used in the proposal's provenance note, so it
+// is bounded before it gets there: it is arbitrary text from the connecting
+// client, and an absurd one must not crowd out the body it is annotating.
+const CLIENT_NAME_MAX = 80;
 
 /**
  * The proposal's body, with a note saying which assistant wrote it.
@@ -78,8 +84,9 @@ function clamp(value, limit) {
  * honest answer available — we know what connected, not what model it drove.
  */
 export function proposalBody(body, client) {
-  const note = client
-    ? `Proposed by an AI assistant via ${client} (Spelling Creator MCP).`
+  const named = clamp(client, CLIENT_NAME_MAX);
+  const note = named
+    ? `Proposed by an AI assistant via ${named} (Spelling Creator MCP).`
     : "Proposed by an AI assistant via the Spelling Creator MCP server.";
   const text = (body || "").trim();
   if (!text) return note;
@@ -115,12 +122,21 @@ async function cloneRepo(pack) {
  * @returns {Promise<{ lesson: object, head: string, clonedHistory: boolean }>}
  */
 export async function forkLesson(api, { lessonId, title }) {
+  // Read the history *before* the document, which is the safe order rather than
+  // the obvious one. A lesson being saved in the browser at this moment pushes
+  // its history first and its document row second (see the ordering note in
+  // apps/web/src/pages/EditorPage.jsx), so a document read after a pack is never
+  // older than that pack. Read the other way round and we could pair yesterday's
+  // document with today's history — and the reconciliation commit below would
+  // then commit stale content on top of newer commits, quietly reverting the save
+  // it raced. This way that pairing can't arise: at worst the document is newer,
+  // which the reconciliation commit simply carries forward.
+  const pack = await api.fetchLessonPack(lessonId);
+
   const source = await api.getLesson(lessonId);
   if (!source.doc?.sections?.length) {
     throw new Error("That lesson has no content to fork.");
   }
-
-  const pack = await api.fetchLessonPack(lessonId);
 
   // The fork's document. Local-only fields never travel (see core/git/doc.js):
   // the trusted-collaborator list belongs to the lesson it was named on, not to
@@ -202,7 +218,10 @@ export async function forkLesson(api, { lessonId, title }) {
  * uploaded against the request's id. If the upload fails the empty request is
  * withdrawn, rather than left in a review queue with nothing in it.
  *
- * @returns {Promise<{ pull: object, lessonId: string, commit: string, ops: object[] }>}
+ * The fork's own history is pushed *last*, deliberately: see below.
+ *
+ * @returns {Promise<{ pull: object, lessonId: string, commit: string,
+ *          changes: string[], historyPushed: boolean }>}
  */
 export async function proposeChanges(
   api,
@@ -255,17 +274,18 @@ export async function proposeChanges(
     author,
     message: `${clamp(title, PULL_TITLE_MAX)}\n\n${ops.map(describeOp).join("\n")}\n`,
   });
+  // `ops` says the documents differ; commitDoc says the *trees* do, which is the
+  // stricter question (a field git doesn't store can differ without changing the
+  // tree). Nothing has been sent yet, so bail here rather than dereferencing a
+  // null commit further down, once the proposal is already live.
+  if (!commit) {
+    throw new Error(
+      "This fork's document is already committed, so there is nothing to propose. " +
+        "Edit the fork first (patch_lesson on the fork's id), then try again.",
+    );
+  }
 
   const packed = await packRepo(ctx);
-
-  // Push the fork's own history before proposing, so the fork's History tab and
-  // the proposal agree, and so re-proposing later builds on this commit rather
-  // than re-making it.
-  await api.pushLessonPack(forkLessonId, {
-    packfile: packed.packfile,
-    head: packed.head,
-    parent: forkPack.head,
-  });
 
   // The target's tip as it stands, recorded on the request so a reviewer can see
   // what it was built against. Informational: the merge finds its own base from
@@ -280,19 +300,43 @@ export async function proposeChanges(
     sourceLessonId: forkLessonId,
   });
 
+  let ready;
   try {
-    const ready = await api.uploadPullPack(target, pull.id, {
+    ready = await api.uploadPullPack(target, pull.id, {
       packfile: packed.packfile,
       head: packed.head,
     });
-    return {
-      pull: ready || pull,
-      lessonId: target,
-      commit: commit.oid,
-      changes: ops.map(describeOp),
-    };
   } catch (err) {
     await api.closePull(target, pull.id).catch(() => {});
     throw err;
   }
+
+  // Only now advance the fork's own stored history, and don't let it fail the
+  // call. The proposal does not depend on it — its pack is stored separately, and
+  // that is what a reviewer merges — so this is bookkeeping: it keeps the fork's
+  // History tab honest and gives the next proposal this commit to build on.
+  //
+  // The order matters. Pushing first would mean a failure anywhere below left the
+  // fork's document equal to its own history, so the retry would find no pending
+  // operations and refuse — the changes safe but unproposable without making a
+  // further edit. Pushing last, a failed proposal leaves the fork exactly as it
+  // was and the retry simply works.
+  let historyPushed = true;
+  try {
+    await api.pushLessonPack(forkLessonId, {
+      packfile: packed.packfile,
+      head: packed.head,
+      parent: forkPack.head,
+    });
+  } catch {
+    historyPushed = false;
+  }
+
+  return {
+    pull: ready || pull,
+    lessonId: target,
+    commit: commit.oid,
+    changes: ops.map(describeOp),
+    historyPushed,
+  };
 }

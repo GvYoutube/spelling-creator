@@ -90,10 +90,11 @@ author's queue.
 Out of nowhere, this is a mistake: you can just save, so the Worker refuses a
 proposal against your own lesson rather than creating a request nobody needs.
 
-It's allowed when it **carries a fork you own** (`sourceLessonId` resolves to
-another of your lessons), because then it means something specific: _here is a
-copy with changes in it, let me read the diff before it lands._ Two things use
-that:
+It's allowed when it **carries a fork of that lesson which you own** — that is,
+`sourceLessonId` names one of your lessons whose `forked_from` is this one.
+Ownership alone isn't enough, since any other lesson of yours would satisfy it and
+turn the rule off entirely. Then it means something specific: _here is a copy with
+changes in it, let me read the diff before it lands._ Two things use that:
 
 - An **AI assistant over MCP** acts as the account it's signed in with, so
   changes it proposes to your lesson arrive from your own id. Holding them in the

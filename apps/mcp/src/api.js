@@ -227,10 +227,19 @@ export function createApi(config, auth) {
       return getPack(gitUrl(lessonId, "/pack"));
     },
 
-    /** The tip of a lesson's published history, or null when it has none. */
+    /**
+     * The tip of a lesson's published history, or null when it has none.
+     *
+     * Only a 404 means "none" — every other bad status is a genuine failure and
+     * throws, rather than being flattened into the same answer. A caller that
+     * would rather not know (the proposal's informational `base`) can catch it;
+     * one that needs the real head must not be told there isn't one.
+     */
     async fetchLessonHead(lessonId) {
       const res = await request(gitUrl(lessonId, "/refs"));
-      if (!res.ok) return null;
+      if (res.status === 404) return null;
+      if (!res.ok)
+        throw await readError(res, "Could not read the lesson history.");
       const data = await res.json().catch(() => null);
       return data?.head || null;
     },

@@ -28,7 +28,10 @@ queries the table directly — everything goes through the Worker's
   profile. See [Following](./profiles-and-display-names.md#following).
 - **`pull_request`** — someone proposed changes to a lesson you published, or the
   proposal _you_ made was merged or closed. The three are one type because they're
-  one conversation; the title says which happened and the link opens the proposal.
+  one conversation, and the title says which happened. The link follows what you'd
+  want next: a proposal to review opens that proposal, while a merged or closed one
+  opens the lesson, since the decision has already been made and what matters is
+  where your changes ended up.
   Nothing is sent until a proposal actually has changes in it (an upload that
   never finished notifies nobody), and withdrawing your own never notifies you.
   A proposal opened from your own account — which is how an AI assistant working

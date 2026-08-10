@@ -52,7 +52,10 @@ export function isTrustedCollaborator(row, user) {
  * callers treat both as "no".
  */
 export async function fetchLessonRow(env, base, lessonId, { withDoc = false } = {}) {
-	const columns = withDoc ? 'id,author_id,published,shadowbanned,doc' : 'id,author_id,published,shadowbanned';
+	// `forked_from` rides along because it is a permission input, not just display:
+	// opening a proposal against your own lesson is allowed only from a fork *of
+	// that lesson* (see openPull in routes/pulls.js).
+	const columns = withDoc ? 'id,author_id,published,shadowbanned,forked_from,doc' : 'id,author_id,published,shadowbanned,forked_from';
 	const query = `id=eq.${encodeURIComponent(lessonId)}&select=${columns}&limit=1`;
 	let res;
 	try {

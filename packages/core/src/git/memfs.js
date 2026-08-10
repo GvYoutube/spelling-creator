@@ -18,6 +18,14 @@
 // on construction, with POSIX error codes, because isomorphic-git reads `.code`
 // to tell "not there" from "broken" (a missing file must be ENOENT, or a first
 // commit looks like a failure rather than an empty repo).
+//
+// One departure from a real filesystem: file contents are stored and returned by
+// reference, not copied. A real fs copies through the kernel, so a caller may
+// safely mutate a buffer it wrote or one it read back. Here that would alias.
+// Nothing does it — the git engine treats both as immutable — and a packfile runs
+// to megabytes, so copying every blob and pack twice per operation would be a
+// real cost against a hypothetical caller. Anything else sharing this module must
+// keep to the same rule.
 
 /** File mode for a regular file, as git and node:fs report it. */
 const FILE_MODE = 0o100644;
@@ -97,8 +105,16 @@ export function memFs() {
 
   const now = () => Date.now();
 
+  // Overwriting keeps the inode: on a real filesystem rewriting a file in place
+  // doesn't make it a different file, and isomorphic-git's index caching reads
+  // stat data to decide what it can trust.
   function put(path, node) {
-    nodes.set(path, { ino: nextIno++, mtimeMs: now(), ...node });
+    const existing = nodes.get(path);
+    nodes.set(path, {
+      ino: existing ? existing.ino : nextIno++,
+      mtimeMs: now(),
+      ...node,
+    });
   }
 
   put("/", { type: "dir", mode: DIR_MODE });

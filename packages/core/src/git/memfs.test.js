@@ -38,9 +38,21 @@ describe("memFs", () => {
       "lstat",
       "readlink",
       "symlink",
+      "chmod",
     ]) {
       expect(typeof fs.promises[method]).toBe("function");
     }
+  });
+
+  it("keeps a file's inode when it is rewritten", async () => {
+    const fs = memFs();
+    await fs.promises.writeFile("/a", "one");
+    const before = await fs.promises.stat("/a");
+    await fs.promises.writeFile("/a", "two");
+    const after = await fs.promises.stat("/a");
+
+    expect(after.ino).toBe(before.ino);
+    expect(after.size).toBe(3);
   });
 
   it("reports a missing file as ENOENT", async () => {
@@ -150,7 +162,10 @@ describe("the git engine on an in-memory repo", () => {
   it("keeps two in-memory repos out of each other's way", async () => {
     const a = memRepo();
     const b = memRepo();
-    await commitDoc({ ...a, doc: doc("A", "a"), author });
+    // Assert both halves: that a's commit landed, so this proves isolation
+    // rather than that nothing happened anywhere.
+    const committed = await commitDoc({ ...a, doc: doc("A", "a"), author });
+    expect(await headOid(a)).toBe(committed.oid);
     expect(await headOid(b)).toBeNull();
   });
 });

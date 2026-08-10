@@ -632,8 +632,11 @@ export function registerTools(server, ctx) {
           .describe(
             "The lesson to propose to. Defaults to the one the fork was forked from, which is nearly always right.",
           ),
+        // Non-empty: the hub requires a title, and it would otherwise reject the
+        // proposal only after the whole snapshot had been built and sent.
         title: z
           .string()
+          .min(1)
           .describe(
             "One line naming the change, e.g. 'Fix three ungrounded answers in section 4'.",
           ),
@@ -652,6 +655,7 @@ export function registerTools(server, ctx) {
         lessonId: target,
         commit,
         changes,
+        historyPushed,
       } = await proposeChanges(api, {
         forkLessonId,
         lessonId,
@@ -671,7 +675,13 @@ export function registerTools(server, ctx) {
         url: proposalUrl(target, pull.id),
         note:
           "Proposal opened. Nothing has changed in the lesson itself — give the user the `url` so they can read " +
-          "the diff and merge or decline it. Poll list_lesson_proposals if you need to know what they decided.",
+          "the diff and merge or decline it. Poll list_lesson_proposals if you need to know what they decided." +
+          // The proposal is complete either way — its changes are stored with it.
+          // This only means the fork's own history didn't catch up.
+          (historyPushed
+            ? ""
+            : " (The proposal is complete, but the fork's own version history could not be updated, so the fork's " +
+              "History tab won't show this change and a further proposal from it will re-send the same edits.)"),
       });
     }),
   );
@@ -1010,7 +1020,11 @@ export function registerTools(server, ctx) {
 }
 
 // The server's identifying metadata, shared by both transports.
+//
+// Keep `version` in step with apps/mcp/package.json and apps/mcp/manifest.json:
+// this is the one clients actually see, so a stale value misnames the server in
+// every client UI and bug report.
 export const SERVER_INFO = {
   name: "spelling-creator-hub",
-  version: "0.2.0",
+  version: "0.3.0",
 };

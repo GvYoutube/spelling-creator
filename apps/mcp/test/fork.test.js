@@ -18,6 +18,7 @@ import {
   cloneFromPack,
   contains,
   mergeBase,
+  packRepo,
 } from "@spelling-creator/core/git/pack";
 import { commitDoc, headOid, readDocAt } from "@spelling-creator/core/git/repo";
 
@@ -149,7 +150,6 @@ async function seedLesson(hub, { id = "original", title, text }) {
 
   const ctx = memRepo("seed");
   const first = await commitDoc({ ...ctx, doc, author: AUTHOR });
-  const { packRepo } = await import("@spelling-creator/core/git/pack");
   const packed = await packRepo(ctx);
   hub.packs.set(id, { packfile: packed.packfile, head: packed.head });
   return { id, doc, head: first.oid };
@@ -185,6 +185,57 @@ test("forking clones the lesson's history under a new private draft", async () =
     (await readDocAt({ ...ctx, oid: source.head })).sections[0].blocks[0].text,
     "A volcano ERUPTS.",
   );
+});
+
+test("a fork whose history can't be stored says so, and keeps the draft", async () => {
+  const hub = fakeHub();
+  const source = await seedLesson(hub, {
+    title: "Volcanoes",
+    text: "A volcano ERUPTS.",
+  });
+  hub.api.pushLessonPack = async () => {
+    throw new Error("R2 is having a moment.");
+  };
+
+  // The row is created before the history is pushed, so a failed push leaves a
+  // fork that nothing can be proposed from. Say that, rather than letting it be
+  // rediscovered at propose time.
+  await assert.rejects(
+    forkLesson(hub.api, { lessonId: source.id }),
+    /could not be stored.*Delete it and fork again/s,
+  );
+
+  // The draft itself is a real copy of the document and the user's to keep or
+  // remove, so it is not deleted behind their back.
+  assert.equal(hub.lessons.size, 2, "the fork's row is still there");
+  const fork = [...hub.lessons.values()].find((l) => l.id !== source.id);
+  assert.equal(fork.forkedFrom, source.id);
+  assert.equal(hub.packs.has(fork.id), false, "and it has no history");
+});
+
+test("forking reads the history before the document", async () => {
+  // A lesson being saved in the browser pushes its history first and its document
+  // second, so reading the document first could pair an old document with a new
+  // pack — and the reconciliation commit would then revert the save it raced.
+  const hub = fakeHub();
+  const source = await seedLesson(hub, {
+    title: "Volcanoes",
+    text: "A volcano ERUPTS.",
+  });
+
+  const calls = [];
+  const { fetchLessonPack, getLesson } = hub.api;
+  hub.api.fetchLessonPack = async (id) => {
+    calls.push("pack");
+    return fetchLessonPack(id);
+  };
+  hub.api.getLesson = async (id) => {
+    calls.push("doc");
+    return getLesson(id);
+  };
+
+  await forkLesson(hub.api, { lessonId: source.id });
+  assert.deepEqual(calls.slice(0, 2), ["pack", "doc"]);
 });
 
 test("forking a lesson with no stored history seeds one from its document", async () => {
@@ -268,6 +319,12 @@ test("proposing sends a pack that shares ancestry with the target lesson", async
   );
   assert.equal(result.pull.head, result.commit);
   assert.deepEqual(result.changes, ["- edit text block b1 (text)"]);
+
+  // The provenance reaches the proposal a reviewer actually reads: on a
+  // self-proposal it is the only thing saying they didn't write this.
+  assert.match(result.pull.body, /Claude Desktop/);
+  assert.match(result.pull.body, /AI assistant/);
+  assert.match(result.pull.body, /without giving its cause/);
 
   // Nothing was written to the lesson itself — the whole guarantee of the flow.
   assert.equal(hub.packs.get(source.id).head, source.head);
@@ -372,6 +429,73 @@ test("a proposal whose pack fails to upload is withdrawn, not left empty", async
     "closed",
     "an unreviewable request must not sit in someone's queue",
   );
+});
+
+test("a failed proposal can be retried without editing the fork again", async () => {
+  // The fork's history is pushed only after the proposal has landed. Pushing it
+  // first would leave the fork's document equal to its own history, so the retry
+  // would find nothing pending and refuse — the changes safe but unproposable.
+  const hub = fakeHub();
+  const source = await seedLesson(hub, {
+    title: "Volcanoes",
+    text: "A volcano ERUPTS.",
+  });
+  const { lesson: fork } = await forkLesson(hub.api, { lessonId: source.id });
+  const forkHead = hub.packs.get(fork.id).head;
+  hub.lessons.get(fork.id).doc.sections[0].blocks[0].text = "Revised.";
+
+  // First attempt: the proposal itself fails.
+  const { createPull } = hub.api;
+  hub.api.createPull = async () => {
+    throw new Error("The hub is having a moment.");
+  };
+  await assert.rejects(
+    proposeChanges(hub.api, { forkLessonId: fork.id, title: "Revise" }),
+    /The hub is having a moment/,
+  );
+  assert.equal(
+    hub.packs.get(fork.id).head,
+    forkHead,
+    "the fork's history did not move, so the edit is still pending",
+  );
+
+  // Second attempt: it works, with no further edit to the fork.
+  hub.api.createPull = createPull;
+  const result = await proposeChanges(hub.api, {
+    forkLessonId: fork.id,
+    title: "Revise",
+  });
+  assert.equal(result.pull.ready, true);
+  assert.equal(result.historyPushed, true);
+
+  const ctx = memRepo("review");
+  await cloneFromPack({ ...ctx, ...hub.pullPacks.get(result.pull.id) });
+  const proposed = await readDocAt({ ...ctx, oid: result.commit });
+  assert.match(proposed.sections[0].blocks[0].text, /Revised/);
+});
+
+test("a proposal still stands when the fork's own history can't be updated", async () => {
+  const hub = fakeHub();
+  const source = await seedLesson(hub, {
+    title: "Volcanoes",
+    text: "A volcano ERUPTS.",
+  });
+  const { lesson: fork } = await forkLesson(hub.api, { lessonId: source.id });
+  hub.lessons.get(fork.id).doc.sections[0].blocks[0].text = "Revised.";
+
+  hub.api.pushLessonPack = async () => {
+    throw new Error("R2 is having a moment.");
+  };
+
+  // The proposal's changes are stored with the proposal, so it is complete and
+  // reviewable regardless — this is bookkeeping, and must not fail the call.
+  const result = await proposeChanges(hub.api, {
+    forkLessonId: fork.id,
+    title: "Revise",
+  });
+  assert.equal(result.pull.ready, true);
+  assert.equal(result.historyPushed, false, "reported, not thrown");
+  assert.ok(hub.pullPacks.get(result.pull.id));
 });
 
 test("proposing from a lesson that is not a fork says so", async () => {

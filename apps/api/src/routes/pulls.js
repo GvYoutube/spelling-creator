@@ -307,24 +307,34 @@ async function openPull(request, env, base, lessonId, cors) {
 	//
 	// Resolved before the own-lesson check below, which turns on it.
 	let sourceLessonId = null;
+	// Whether that source is a fork *of this lesson*, which is a stricter thing and
+	// the only one that may unlock a self-proposal below.
+	let sourceForkedFromThis = false;
 	const claimed = typeof body.sourceLessonId === 'string' ? body.sourceLessonId.trim() : '';
 	if (LESSON_ID_RE.test(claimed) && claimed !== lessonId) {
 		const source = await fetchLessonRow(env, base, claimed);
-		if (source && source.author_id === user.id) sourceLessonId = claimed;
+		if (source && source.author_id === user.id) {
+			sourceLessonId = claimed;
+			sourceForkedFromThis = source.forked_from === lessonId;
+		}
 	}
 
 	// Proposing to your own lesson is refused when there is nothing behind it: you
 	// can simply save, and a request to yourself out of nowhere is a mistake.
 	//
-	// It is allowed when it carries a fork you own, because then it means something
-	// specific and useful — "here is a copy with changes in it, let me read the diff
-	// before it lands". That is the shape of an AI assistant's work: over MCP the
-	// assistant acts as the account it is signed in with, so changes it proposes to
-	// the user's own lesson arrive from the user's own id (see apps/mcp/src/git.js).
-	// Holding them in the review queue is the whole point — the lesson is untouched
-	// until a person reads the diff and merges it. A human gets the same route via
-	// "fork into a new lesson" in the editor.
-	if (lesson.author_id === user.id && !sourceLessonId) {
+	// It is allowed when it carries a fork *of this lesson* that you own, because
+	// then it means something specific and useful — "here is a copy with changes in
+	// it, let me read the diff before it lands". That is the shape of an AI
+	// assistant's work: over MCP the assistant acts as the account it is signed in
+	// with, so changes it proposes to the user's own lesson arrive from the user's
+	// own id (see apps/mcp/src/git.js). Holding them in the review queue is the
+	// whole point — the lesson is untouched until a person reads the diff and merges
+	// it. A human gets the same route via "fork into a new lesson" in the editor.
+	//
+	// Ownership of the source alone is deliberately not enough: any other lesson of
+	// theirs would satisfy that, which would turn the rule off entirely and attach a
+	// fork link to something that isn't one.
+	if (lesson.author_id === user.id && !sourceForkedFromThis) {
 		return textResponse('This is your own lesson — save your changes to it directly instead.', 400, cors);
 	}
 

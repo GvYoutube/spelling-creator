@@ -8,6 +8,7 @@ title: Tools
 | ----------------------- | ----------------------------------------------------------------------------- |
 | `whoami`                | Confirm the session is valid and show the publishing display name.            |
 | `create_lesson`         | Build and save a new lesson (draft by default; `published: true` to share).   |
+| `create_lesson_file`    | Build an importable lesson file offline, with no account or network.          |
 | `patch_lesson`          | Edit a lesson with a small diff (id-addressed ops) instead of a full replace. |
 | `update_lesson`         | Replace a lesson's whole title/content (author only).                         |
 | `fork_lesson`           | Copy a lesson into a private draft of your own, keeping its version history.  |
