@@ -28,11 +28,13 @@ guest the moment they're added.
    collaborators** (an email list saved on the lesson) skip the waiting room and
    are admitted automatically.
 
-   That trusted list carries one further privilege, outside the live session: a
-   trusted collaborator may **merge a fork back into the lesson** — the only way a
-   non-author can write to one. See
-   [Version history](/monorepo/version-history#merging-a-fork-back-in-trusted-collaborators)
-   for what that does and does not let them do.
+   That trusted list carries further privileges outside the live session: a
+   trusted collaborator may **save the lesson** — the only non-author who can —
+   and may **merge a pull request** into it, deciding alongside the author which
+   proposed changes land. See
+   [Version history](/monorepo/version-history#what-a-trusted-collaborator-may-not-do)
+   for what that does and does not let them do, and
+   [Pull requests](./pull-requests.md) for the review flow.
 
 4. Once added, edits sync **both ways**: the room merges each change into the
    session's document, re-broadcasts it to the other admitted collaborators, and a
@@ -48,6 +50,16 @@ document mirroring the lesson, the room holds the authoritative copy, and only t
 The one deliberate limit: text is merged **per field**, not per character. If two
 people type into the **same** field at the same time, one of them still wins (both
 sides agree on which). Editing different blocks — the normal case — always merges.
+
+**What the room never carries.** The trusted list itself is stripped out of the
+document before it is reconciled into the Y.Doc, and so never reaches the room or
+anyone in it. Those are email addresses, and the host admits people who aren't on
+the list — there is no reason for a guest to receive everyone else's address to
+edit a lesson. Nobody in the session needs it: only the host reads it, to
+auto-admit trusted guests, from their own copy. The host puts it back on each
+document they adopt from the room; a guest doesn't, because their local copy
+belongs to whatever lesson they had open before joining, not to this one. See
+[Version history](/monorepo/version-history#what-is-deliberately-not-versioned-or-shared-at-all).
 
 **Binary wire protocol.** Messages are sent as **binary WebSocket frames** for
 speed: a one-byte type tag followed by the payload. Cursor and chat payloads are

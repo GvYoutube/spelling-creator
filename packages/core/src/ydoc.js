@@ -49,7 +49,11 @@ function isYType(v) {
  * Sections, blocks, spelling words and question answers all already carry a
  * unique `id`, which is what lets us match items across edits (rather than by
  * position, which would make every insert look like a rewrite of the tail).
- * Trusted collaborators have no id — they're identified by email.
+ * Entries with no id are matched by email instead — this module stays generic
+ * about what it is handed. (The app does not in fact send it the lesson's
+ * trusted-collaborator list: those are email addresses, and the room is mirrored
+ * to everyone the host admits, so lib/collab.js strips the field before
+ * reconciling. See stripLocalFields in git/doc.js.)
  */
 export function keyOf(item) {
   if (!isPlainObject(item)) return null;

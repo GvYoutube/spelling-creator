@@ -47,6 +47,10 @@ import {
   docFromY,
   reconcile,
 } from "@spelling-creator/core/ydoc";
+import {
+  preserveLocalFields,
+  stripLocalFields,
+} from "@spelling-creator/core/git/doc";
 
 // Message type bytes — must match T in apps/api/src/collab-room.js.
 const T = {
@@ -193,11 +197,38 @@ export function useCollaboration({ doc, onRemoteDoc, identity, accessToken }) {
   }, []);
 
   // Merge an update from the room, then hand the resulting document to the editor.
+  //
+  // The room never carries the trusted-collaborator list (see pushLocal below), so
+  // what comes back out has none — and for the **host** that would wipe theirs, so
+  // it's put back from the doc they're holding, exactly as a git restore does.
+  //
+  // Deliberately not for a guest. A guest's local document is whatever lesson they
+  // had open before joining, which may be an entirely different one, so its list
+  // is not this lesson's to graft on. They adopt the document without the field,
+  // which is the honest answer — it was never theirs to hold. Saving is
+  // unaffected: the Worker keeps the stored list when the field is absent.
   const mergeRemote = useCallback((bytes) => {
     const ydoc = ydocRef.current;
     if (!ydoc || bytes.length === 0) return;
     applyRemote(ydoc, bytes);
-    onRemoteDocRef.current?.(docFromY(ydoc));
+    const next = docFromY(ydoc);
+    onRemoteDocRef.current?.(
+      roleRef.current === "host"
+        ? preserveLocalFields(next, docRef.current)
+        : next,
+    );
+  }, []);
+
+  // Push our document into the Y.Doc — and so, through its update handler, to the
+  // room — **without** the trusted-collaborator list.
+  //
+  // That list is email addresses, and the Y.Doc is mirrored to everyone the host
+  // admits, who are not necessarily on it. Nobody in a session needs it either:
+  // only the host reads it (to auto-admit trusted guests), from their own copy,
+  // and the Worker ignores whatever a non-author's save claims it should be.
+  const pushLocal = useCallback((next) => {
+    if (ydocRef.current)
+      reconcile(ydocRef.current, stripLocalFields(next), LOCAL);
   }, []);
 
   // Start pushing local edits into the Y.Doc.
@@ -280,7 +311,7 @@ export function useCollaboration({ doc, onRemoteDoc, identity, accessToken }) {
             // Seed the room with our lesson: reconciling it into our fresh Y.Doc
             // emits one update carrying the whole document, which the Y.Doc's
             // update handler sends for us.
-            reconcile(ydocRef.current, docRef.current, LOCAL);
+            pushLocal(docRef.current);
             startSyncing();
           } else {
             setStatus("joined");
@@ -427,7 +458,15 @@ export function useCollaboration({ doc, onRemoteDoc, identity, accessToken }) {
           break;
       }
     },
-    [mergeRemote, startSyncing, applyCursor, addMessage, admit, isTrustedEmail],
+    [
+      mergeRemote,
+      pushLocal,
+      startSyncing,
+      applyCursor,
+      addMessage,
+      admit,
+      isTrustedEmail,
+    ],
   );
 
   // Open a WebSocket to the room and wire its lifecycle. Shared by host and guest.
@@ -628,11 +667,9 @@ export function useCollaboration({ doc, onRemoteDoc, identity, accessToken }) {
   // the round-trip ends there. No echo suppression needed.
   useEffect(() => {
     if (!synced || !ydocRef.current) return;
-    const id = setTimeout(() => {
-      if (ydocRef.current) reconcile(ydocRef.current, doc, LOCAL);
-    }, SYNC_DEBOUNCE_MS);
+    const id = setTimeout(() => pushLocal(doc), SYNC_DEBOUNCE_MS);
     return () => clearTimeout(id);
-  }, [doc, synced]);
+  }, [doc, synced, pushLocal]);
 
   const active =
     status === "hosting" || status === "joined" || status === "connecting";

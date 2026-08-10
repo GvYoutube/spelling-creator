@@ -59,27 +59,52 @@ export function docBlocks(doc) {
 }
 
 /**
- * Top-level doc fields that are deliberately NOT versioned.
+ * Top-level doc fields that never leave this browser.
  *
  * `trustedCollaborators` holds collaborator *email addresses* (see lib/collab.js).
- * A lesson's repo is packed and uploaded so other people can fork (clone) it, so
- * anything committed would be readable by anyone who forks the lesson. Emails
- * must not travel with it. They're carried across a restore/merge from the live
- * doc instead — see preserveLocalFields().
+ * The lesson document travels in three ways, and the field must not go with it in
+ * any of them:
+ *
+ *   - **the git repo** — packed and uploaded so other people can fork (clone) it,
+ *     so anything committed is readable by anyone who forks the lesson;
+ *   - **the live-collaboration Y.Doc** — mirrored to everyone the host admits to
+ *     the session, who are not necessarily on the list;
+ *   - **the lesson API** — `GET /lessons/:id` is public, so the Worker strips the
+ *     field on the way out for everyone but the people it's for (see
+ *     `stripCollaborators` in apps/api/src/lib/lesson.js).
+ *
+ * The first two are handled here: strip it before the doc goes anywhere
+ * (stripLocalFields), and put it back from the live document when one comes back
+ * (preserveLocalFields).
  */
-const UNVERSIONED_FIELDS = ["trustedCollaborators"];
+const LOCAL_ONLY_FIELDS = ["trustedCollaborators"];
 
 /**
- * Carry the unversioned fields from the doc the user is editing onto a doc that
- * came out of git. Restoring an old version or merging a fork must not wipe the
- * lesson's trusted-collaborator list, which git never saw.
+ * Carry the local-only fields from the doc the user is editing onto a doc that
+ * came from somewhere else. Restoring an old version, merging a fork, or
+ * adopting a document from a live session must not wipe the lesson's
+ * trusted-collaborator list, which none of those ever saw.
  */
 export function preserveLocalFields(restored, current) {
   const doc = { ...restored };
-  for (const field of UNVERSIONED_FIELDS) {
+  for (const field of LOCAL_ONLY_FIELDS) {
     if (current && current[field] !== undefined) doc[field] = current[field];
   }
   return doc;
+}
+
+/**
+ * The document without its local-only fields — what may actually be sent.
+ *
+ * The git layout drops them implicitly (the tree is built from the manifest and
+ * the blocks, and neither includes them). Anything that copies the document
+ * wholesale, like the collaboration Y.Doc, has to drop them explicitly.
+ */
+export function stripLocalFields(doc) {
+  if (!doc || typeof doc !== "object") return doc;
+  const out = { ...doc };
+  for (const field of LOCAL_ONLY_FIELDS) delete out[field];
+  return out;
 }
 
 /** The repo id used before a lesson has been saved to the hub. */
