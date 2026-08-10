@@ -1,6 +1,5 @@
 ---
 title: Installable app & offline use
-sidebar_position: 15.7
 ---
 
 # Installable app & offline use
@@ -51,7 +50,7 @@ deliberately left out:
   are marketing images; they aren't worth an install-time download, so a runtime
   `StaleWhileRevalidate` rule picks them up the first time someone actually
   looks at the homepage.
-- **`dist/docs/`**, this documentation site. `pnpm build:docs` copies the Rspress
+- **`dist/docs/`**, this documentation site. `pnpm build:docs` copies the VitePress
   output in _after_ the web build, and it has its own hashed assets and its own
   pages — none of which belong in the app's precache.
 

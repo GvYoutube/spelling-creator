@@ -1,6 +1,5 @@
 ---
 title: Profiles & display names
-sidebar_position: 10
 ---
 
 # Profiles & display names

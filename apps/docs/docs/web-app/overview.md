@@ -1,6 +1,5 @@
 ---
 title: Overview & features
-sidebar_position: 1
 ---
 
 # Spelling Lesson Maker

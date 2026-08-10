@@ -1,6 +1,5 @@
 ---
 title: Live collaboration
-sidebar_position: 8
 ---
 
 # Live collaboration

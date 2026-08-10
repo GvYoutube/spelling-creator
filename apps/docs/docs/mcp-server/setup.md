@@ -1,6 +1,5 @@
 ---
 title: Setup (manual / for development)
-sidebar_position: 5
 ---
 
 # Setup (manual / for development)

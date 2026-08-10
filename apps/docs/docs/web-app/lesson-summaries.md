@@ -1,6 +1,5 @@
 ---
 title: Lesson summaries (on-device AI)
-sidebar_position: 5.7
 ---
 
 # Lesson summaries (on-device AI)

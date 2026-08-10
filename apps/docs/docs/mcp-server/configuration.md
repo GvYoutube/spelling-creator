@@ -1,6 +1,5 @@
 ---
 title: Configuration
-sidebar_position: 6
 ---
 
 # Configuration

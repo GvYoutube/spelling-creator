@@ -5,7 +5,8 @@
 /doc_build
 
 # Generated files
-.rspress
+docs/.vitepress/cache
+docs/.vitepress/dist
 
 # Misc
 .DS_Store

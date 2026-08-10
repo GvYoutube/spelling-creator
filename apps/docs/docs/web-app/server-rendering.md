@@ -1,6 +1,5 @@
 ---
 title: Server rendering
-sidebar_position: 2.5
 ---
 
 # Server rendering
@@ -110,7 +109,7 @@ Worker is bundled:
 
 ```bash
 pnpm build     # client -> apps/web/dist, server -> apps/web/dist-ssr
-pnpm deploy    # runs the above first
+pnpm deploy    # runs the above, then build:docs, then wrangler deploy
 ```
 
 `pnpm --filter @spelling-creator/api dev` builds the server bundle itself before

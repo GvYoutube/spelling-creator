@@ -12,7 +12,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 // resolve a navigation to them from the precached SPA shell. `run_worker_first`
 // means the Worker sees every request before the static assets do (see
 // apps/api/wrangler.jsonc), and these are the paths it doesn't hand back to
-// env.ASSETS — /docs is the statically-built Rspress site copied into dist/docs
+// env.ASSETS — /docs is the statically-built VitePress site copied into dist/docs
 // after this build, the rest are Worker routes (apps/api/src/index.js). Anything
 // not listed here is assumed to be a client-side route in src/App.jsx.
 //
@@ -161,7 +161,7 @@ export default defineConfig(({ isSsrBuild }) => ({
         // worth an install-time download; the runtime rule below picks them up
         // the first time someone actually sees the homepage.
         globPatterns: ["**/*.{html,js,css,woff2,svg,png,ico}"],
-        // dist/docs is the Rspress site, copied in by `pnpm build:docs` after
+        // dist/docs is the VitePress site, copied in by `pnpm build:docs` after
         // this build. It has its own hashed assets and its own pages; nothing
         // there belongs in the app's precache. (`pnpm build` empties dist first,
         // so this normally matches nothing — it's a guard against a rebuild that

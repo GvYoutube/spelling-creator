@@ -1,6 +1,5 @@
 ---
 title: AI question suggestions
-sidebar_position: 5
 ---
 
 # AI question suggestions

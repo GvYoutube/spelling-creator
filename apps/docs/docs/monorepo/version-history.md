@@ -1,6 +1,5 @@
 ---
 title: Version history (git, by content block)
-sidebar_position: 4
 ---
 
 # Version history (git, by content block)

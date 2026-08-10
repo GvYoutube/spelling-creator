@@ -1,6 +1,5 @@
 ---
 title: Getting started
-sidebar_position: 2
 ---
 
 # Getting started
@@ -10,9 +9,11 @@ pnpm install            # install all workspace deps
 
 pnpm dev:web            # run the frontend (Vite)
 pnpm dev:api            # run the Worker locally (wrangler dev)
+pnpm dev:docs           # run this documentation site (VitePress)
 
 pnpm build              # build the frontend
-pnpm deploy             # deploy the Worker (wrangler deploy)
+pnpm build:docs         # build the docs into apps/web/dist/docs
+pnpm deploy             # build both, then deploy the Worker (wrangler deploy)
 
 pnpm fmt                # format everything (oxfmt)
 pnpm lint               # check formatting, then lint (oxfmt --check + oxlint)
@@ -29,6 +30,40 @@ Each app keeps its own environment file:
   provider is unset or fails.
 
 Both are gitignored.
+
+## Documentation site
+
+This site is [VitePress](https://vitepress.dev). Pages are plain Markdown under
+`apps/docs/docs`, and the config is `apps/docs/docs/.vitepress/config.mts` — the
+`.mts` extension matters, because `apps/docs/package.json` has no
+`"type": "module"` and VitePress is ESM-only.
+
+The dependency tracks the **2.0 alpha on purpose**: `vitepress@latest` is still
+1.6.4 from August 2025, and it would drag in a second Vite major (5) alongside
+the Vite 8 that `apps/web` builds on. The range is `^2.0.0-alpha.19`, so the
+lockfile decides the exact version — today `2.0.0-alpha.19`, and a lockfile
+refresh can move it to a later alpha or to 2.x once that ships. See
+[Frontend migration](./frontend-migration.md) for the full reasoning.
+
+- **The sidebar is explicit.** A new page does not appear until it is listed in
+  `themeConfig.sidebar`. That order is also the order of the sections in
+  `llms.txt`.
+- **Links between pages are relative and keep their `.md` extension**
+  (`./search-images.md`), which is what lets VitePress rewrite them and fail the
+  build on a dead one.
+- **`base` is `/docs/`** and the output goes to `apps/docs/doc_build`, which
+  `pnpm build:docs` then copies into `apps/web/dist/docs`. Run it **after** the
+  web build — Vite empties `apps/web/dist` each time, so a `pnpm build` after
+  `pnpm build:docs` deletes the docs again. `pnpm deploy` and the deploy
+  workflow both run the two in that order for you. `cleanUrls` is on, and
+  Cloudflare's default `auto-trailing-slash` asset handling resolves
+  `/docs/intro` to `intro.html`.
+- **`llms.txt` and `llms-full.txt`** come from
+  [`vitepress-plugin-llms`](https://github.com/okineadev/vitepress-plugin-llms),
+  which also emits a Markdown twin of every page next to its HTML.
+- **`/docs/sitemap.xml`** is VitePress's built-in sitemap, with `<lastmod>` taken
+  from git. It is separate from the Worker's dynamic `/sitemap.xml` (which covers
+  the app's own pages and every published lesson); `robots.txt` advertises both.
 
 ## Code quality
 

@@ -1,6 +1,5 @@
 ---
 title: Save to Google Docs
-sidebar_position: 7
 ---
 
 # Save to Google Docs

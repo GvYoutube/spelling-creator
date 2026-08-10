@@ -2,7 +2,7 @@ name: Deploy to Cloudflare
 
 # The Worker now hosts the SPA: it serves the built web app as static assets and
 # prerenders pages for crawlers with Browser Rendering. So a deploy builds the
-# web app and the Rspress docs (into apps/web/dist/docs), then `wrangler
+# web app and the VitePress docs (into apps/web/dist/docs), then `wrangler
 # deploy` uploads the Worker together with apps/web/dist.
 on:
   push:
@@ -71,7 +71,7 @@ jobs:
       - name: Build web app
         run: pnpm --filter @spelling-creator/web build
 
-      # Build the Rspress docs and copy them into apps/web/dist/docs so they
+      # Build the VitePress docs and copy them into apps/web/dist/docs so they
       # ship in the same assets bundle and are served at /docs. Runs AFTER the
       # web build because Vite empties apps/web/dist on each build.
       - name: Build docs

@@ -5,16 +5,17 @@
   "license": "AGPL-3.0-only",
   "author": "playforge-coding",
   "scripts": {
-    "dev": "rspress dev",
-    "start": "rspress dev",
-    "build": "rspress build && node -e \"const fs=require('fs');fs.rmSync('../web/dist/docs',{recursive:true,force:true});fs.cpSync('doc_build','../web/dist/docs',{recursive:true})\"",
-    "preview": "rspress preview"
+    "dev": "vitepress dev docs",
+    "start": "vitepress dev docs",
+    "build": "vitepress build docs && node -e \"const fs=require('fs');fs.rmSync('../web/dist/docs',{recursive:true,force:true});fs.cpSync('doc_build','../web/dist/docs',{recursive:true})\"",
+    "preview": "vitepress preview docs"
   },
-  "dependencies": {
-    "@rspress/core": "^2.0.14"
+  "devDependencies": {
+    "vitepress": "^2.0.0-alpha.19",
+    "vitepress-plugin-llms": "^1.13.4"
   },
   "engines": {
-    "node": ">=20.0"
+    "node": "^20.19.0 || >=22.12.0"
   },
   "packageManager": "pnpm@11.1.3"
 }

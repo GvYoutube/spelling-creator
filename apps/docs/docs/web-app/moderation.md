@@ -1,6 +1,5 @@
 ---
 title: Moderation
-sidebar_position: 12
 ---
 
 # Moderation

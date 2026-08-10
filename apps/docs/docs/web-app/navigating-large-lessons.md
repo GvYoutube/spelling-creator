@@ -1,6 +1,5 @@
 ---
 title: Navigating large lessons
-sidebar_position: 15.6
 ---
 
 # Navigating large lessons
