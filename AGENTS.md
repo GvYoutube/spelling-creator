@@ -4,6 +4,8 @@
 
 This is a React + `shadcn` project for making Spelling lessons.
 
+It also has an MCP server; and its `package.json` and `manifest.json` version should be bumped on changes.
+
 ## Verifying in a Browser
 
 If you have it installed, use the Playwright MCP for this. If not, use the Playwright CLI instead (see `playwright-cli --help`).
