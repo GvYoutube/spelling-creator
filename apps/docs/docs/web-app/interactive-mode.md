@@ -5,9 +5,17 @@ title: Interactive lesson mode
 # Interactive lesson mode
 
 Any lesson on the hub can be **worked through** instead of read. Press **Start
-lesson** on a lesson page and the lesson takes over the screen: a section's
-material appears on its own, one step at a time, then that section's questions
-appear one after another, each with a field to type an answer into.
+lesson** on a lesson page — or open `/hub/:id/practice` directly — and the lesson
+takes over the screen: a section's material appears on its own, one step at a
+time, then that section's questions appear one after another, each with a field
+to type an answer into.
+
+It has its own URL (it is a tab of the lesson — see
+[Pages & routing](./pages-and-routing.md)), so a teacher can send a class
+straight into the walkthrough rather than to the lesson with an instruction to
+press a button. Closing it returns to the lesson. The component itself is still
+a dialog, deliberately: it is a focus mode with its own bottom bars and its own
+idea of the viewport, and the route only decides when it is open.
 
 At the end you get a summary of everything you wrote, and — if you're signed in —
 it is saved **privately to your account**. Nobody else can read it, including the

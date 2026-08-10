@@ -136,11 +136,32 @@ doesn't land.
 [installed app](./pwa-and-offline.md). iOS in standalone mode draws the page
 under the status bar — which is what
 `apple-mobile-web-app-status-bar-style: black-translucent` asks for, so that
-`AppHeader`'s indigo bar fills the notch area instead of leaving a mismatched
+the app bar fills the notch area instead of leaving a mismatched
 strip above it. Without padding, the header's title and buttons would sit behind
-the clock. It's a **padding** on `AppHeader` rather than a margin so the
+the clock. It's a **padding** on `PageBar` rather than a margin so the
 background still reaches the top edge while its contents drop below the status
 bar. In a browser tab the inset is zero, so nothing changes there.
+
+## The sidebar is a sheet below `md`
+
+`AppSidebar` docks beside the page on desktop and becomes a `Sheet` over it on a
+phone, opened from `PageBar`'s toggle. Two consequences worth knowing:
+
+- **Following a link has to close it.** A docked sidebar sits beside the page
+  and can stay put; a sheet covers the page you just navigated to. `AppSidebar`
+  binds that to its header and content regions only — toggling the theme or
+  opening the account menu isn't navigation and shouldn't dismiss the panel.
+- **The sheet carries the glass treatment; the docked sidebar doesn't need it.**
+  `--sidebar` is translucent, which is right beside the page (only the
+  background is behind it) and unreadable over it. The mobile branch of
+  `ui/sidebar.jsx` adds `backdrop-blur-(--glass-blur)` and the panel shadow, the
+  same as `Dialog`, `Popover` and `DropdownMenu`.
+
+This also retired a duplication that used to run through every page: the old
+header couldn't fit text buttons on a narrow screen, so most controls existed
+twice — an icon-only copy under `md:hidden` and a labelled copy under
+`hidden md:inline-flex` — and the lesson page kept a whole second copy of its
+actions in an overflow menu. The sidebar holds one copy at any width.
 
 ## `dvh`, not `vh`
 

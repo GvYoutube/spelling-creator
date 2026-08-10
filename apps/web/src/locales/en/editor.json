@@ -43,7 +43,8 @@
     "proposeButton": "Propose changes to {{name}}",
     "proposeTooltip": "Offer your work back to {{name}}. Nothing there changes: your version is sent as a proposal, and its author — or someone they trust — decides whether to merge it in.",
     "collapseAll": "Collapse all",
-    "expandAll": "Expand all"
+    "expandAll": "Expand all",
+    "untitledCrumb": "Untitled lesson"
   },
   "stats": {
     "sections_one": "{{count}} section",
@@ -162,5 +163,11 @@
   },
   "defaultDoc": {
     "title": "Put your topic here..."
+  },
+  "outline": {
+    "heading": "Sections",
+    "empty": "No sections yet.",
+    "untitledSection": "Section {{n}}",
+    "collapsed": "hidden"
   }
 }

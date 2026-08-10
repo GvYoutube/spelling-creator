@@ -29,7 +29,18 @@ import { fetchUserProfile } from '@spelling-creator/core/users';
 import { render } from '../../../web/dist-ssr/entry-server.js';
 
 const HUB_PATH = /^\/hub\/?$/;
-const LESSON_PATH = /^\/hub\/([^/]+)\/?$/;
+// A lesson and any of its tabs: /hub/:id, /hub/:id/history,
+// /hub/:id/proposals/:prId. They are all views of one lesson, and one fetch
+// serves every one of them — the tab decides what to draw with it.
+//
+// Matching the tabs is not optional. The service worker's navigateFallback
+// denylist excludes the whole of /hub/* from the precached shell (WORKER_PATHS
+// in apps/web/vite.config.js), on the grounds that the Worker answers those
+// paths itself. If this regex stopped at /hub/:id, a tab would be excluded from
+// the shell *and* unmatched here: online it would fall through to the SPA
+// shell and still work, but offline — where there is no Worker to fall through
+// to — it would fail outright. The two lists have to agree.
+const LESSON_PATH = /^\/hub\/([^/]+)(?:\/[^/]+)*\/?$/;
 const PROFILE_PATH = /^\/users\/([^/]+)\/?$/;
 
 /**

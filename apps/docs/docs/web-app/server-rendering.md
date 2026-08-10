@@ -7,14 +7,35 @@ title: Server rendering
 Three routes are rendered on the Cloudflare Worker before the browser runs any
 JavaScript, and then hydrated in place:
 
-| Route        | Data the server fetches   | Rendered for |
-| ------------ | ------------------------- | ------------ |
-| `/hub`       | `fetchPublishedLessons()` | Everyone     |
-| `/hub/:id`   | `fetchLesson(id)`         | Everyone     |
-| `/users/:id` | `fetchUserProfile(id)`    | Everyone     |
+| Route            | Data the server fetches   | Rendered for |
+| ---------------- | ------------------------- | ------------ |
+| `/hub`           | `fetchPublishedLessons()` | Everyone     |
+| `/hub/:id`       | `fetchLesson(id)`         | Everyone     |
+| `/hub/:id/<tab>` | `fetchLesson(id)`         | Everyone     |
+| `/users/:id`     | `fetchUserProfile(id)`    | Everyone     |
 
 Everything else — `/`, `/editor`, `/login`, `/oauth/authorize`, `/moderation` —
 is served as the static SPA shell exactly as before.
+
+A lesson's tabs (`/hub/:id/practice`, `/discussion`, `/proposals`,
+`/proposals/:prId`, `/history` — see [Pages & routing](./pages-and-routing.md))
+are all the same lesson, so `LESSON_PATH` matches any single extra segment and
+one `fetchLesson` serves all of them; the tab decides what to draw with it.
+`LessonLayout` seeds its state from that payload and the tab reads it through
+`useLesson()`, so no tab fetches the lesson a second time.
+
+Matching the tabs is **not** optional. The service worker's `navigateFallback`
+denylist excludes the whole of `/hub/*` from the precached shell (`WORKER_PATHS`
+in `apps/web/vite.config.js`) precisely because the Worker answers those paths
+itself. A tab that this route failed to match would be excluded from the shell
+_and_ left unrendered: online it falls through to the SPA shell and still works,
+offline there is nothing to fall through to and it fails outright. The two lists
+have to stay in step, and both say so in a comment.
+
+The bootstrap payload is keyed by the exact `url.pathname` the Worker rendered,
+and `useServerData` only hands it to a page still on that path — so following a
+tab link releases it and the layout keeps serving its own state, which is the
+behaviour you want.
 
 ## Why only these three
 

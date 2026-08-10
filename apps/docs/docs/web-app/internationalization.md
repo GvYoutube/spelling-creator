@@ -27,23 +27,23 @@ Strings are split into namespaces roughly by page or feature area, not lumped in
 one file — keeps each JSON file a manageable size and lets a translator work on one
 area without wading through the whole app:
 
-| Namespace        | Covers                                                                                                                                              |
-| ---------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `common`         | `AppHeader`, `NavActions`, notification bell, display-name gate/dialog, the install prompt and service-worker update toast, shared `ui/` primitives |
-| `home`           | `HomePage` (marketing splash + signed-in dashboard)                                                                                                 |
-| `hub`            | `HubPage`                                                                                                                                           |
-| `lesson`         | `LessonPage`, `LessonView`, `LessonSummary`, `CommentsSection`                                                                                      |
-| `interactive`    | `InteractiveLesson` (the full-screen walkthrough and its speech controls), `MyLessonAnswers`                                                        |
-| `login`          | `LoginPage`                                                                                                                                         |
-| `moderation`     | `ModerationPage`                                                                                                                                    |
-| `oauth`          | `OAuthAuthorizePage`                                                                                                                                |
-| `profile`        | `ProfilePage`, `BioDialog`, `FollowListDialog`                                                                                                      |
-| `editor`         | `EditorPage`                                                                                                                                        |
-| `editorSections` | `SectionCard`, `ContentBlock`, `LiveField`                                                                                                          |
-| `editorTools`    | `HistoryDialog` (incl. its `timeAgo` helper), `MergeDialog`, `ImageSearchDialog`                                                                    |
-| `richText`       | `RichText`, `RichTextInput`, `RichTextToolbar`                                                                                                      |
-| `collab`         | `CollaborateDialog`, `CollabChat`, `CollabCursors`                                                                                                  |
-| `aiDialogs`      | `FirstLessonWizard`, `AiLessonIdeaDialog`, `AiQuestionDialog`, `AiTextDialog`                                                                       |
+| Namespace        | Covers                                                                                                                                            |
+| ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `common`         | `PageBar`, `AppSidebar`, notification bell, display-name gate/dialog, the install prompt and service-worker update toast, shared `ui/` primitives |
+| `home`           | `HomePage` (marketing splash + signed-in dashboard)                                                                                               |
+| `hub`            | `HubPage`                                                                                                                                         |
+| `lesson`         | `LessonPage`, `LessonView`, `LessonSummary`, `CommentsSection`                                                                                    |
+| `interactive`    | `InteractiveLesson` (the full-screen walkthrough and its speech controls), `MyLessonAnswers`                                                      |
+| `login`          | `LoginPage`                                                                                                                                       |
+| `moderation`     | `ModerationPage`                                                                                                                                  |
+| `oauth`          | `OAuthAuthorizePage`                                                                                                                              |
+| `profile`        | `ProfilePage`, `BioDialog`, `FollowListDialog`                                                                                                    |
+| `editor`         | `EditorPage`                                                                                                                                      |
+| `editorSections` | `SectionCard`, `ContentBlock`, `LiveField`                                                                                                        |
+| `editorTools`    | `HistoryDialog` (incl. its `timeAgo` helper), `MergeDialog`, `ImageSearchDialog`                                                                  |
+| `richText`       | `RichText`, `RichTextInput`, `RichTextToolbar`                                                                                                    |
+| `collab`         | `CollaborateDialog`, `CollabChat`, `CollabCursors`                                                                                                |
+| `aiDialogs`      | `FirstLessonWizard`, `AiLessonIdeaDialog`, `AiQuestionDialog`, `AiTextDialog`                                                                     |
 
 ## Usage in a component
 

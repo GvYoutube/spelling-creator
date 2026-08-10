@@ -14,15 +14,28 @@ src/
   pages/
     EditorPage.jsx        the lesson builder (toolbar, section list, + button, publish, collaborate)
     HubPage.jsx           public gallery of published lessons + client-side search
-    LessonPage.jsx        a single published lesson: renders via LessonView, plus comments + author link
     ProfilePage.jsx       a user's public profile: bio + their published lessons
     LoginPage.jsx         magic-link sign-in / account status
     ModerationPage.jsx    moderator/admin queue for reported content
+    lesson/               one lesson (/hub/:id) and its tabs — see pages-and-routing.md
+      LessonLayout.jsx    owns the fetch, the identity header and every whole-lesson action; tabs read it via useLesson()
+      LessonTabs.jsx      the tab bar — NavLinks to real routes, not a Tabs widget
+      LessonOverview.jsx  the document itself + the "About" rail (author, ages, fork lineage, print/Word/fork)
+      LessonPractice.jsx  interactive mode, given a URL
+      LessonDiscussion.jsx  comments + the star rating
+      LessonProposals.jsx / LessonProposal.jsx  proposals from other people's forks; the detail view hands merging to the editor
+      LessonHistory.jsx   the published commit timeline, read out of the lesson's packfile (lazy — it loads the git engine)
   components/
-    AppHeader.jsx          shared sticky glass toolbar (title + left slot + children) every page mounts
-    NavActions.jsx        shared header nav: hub link + install button + dark-mode toggle + account menu + notification bell
-    InstallAppButton.jsx  the "install app" header button; renders nothing unless the app is installable (see pwa-and-offline.md)
-    NotificationBell.jsx  header bell that polls for and shows the user's notifications
+    layout/
+      AppShell.jsx        the one layout route every page sits in: SidebarProvider + AppSidebar + the page. Takes no configuration — one sidebar, one width, one persisted state. Publishes @container/page
+      AppSidebar.jsx      the app's navigation, the account/theme/notification cluster, and your own lessons
+      PageBar.jsx         the slim sticky bar: sidebar toggle + breadcrumb + the page's own actions
+      PageBody.jsx        the content column, in two documented widths (wide / reading). Exports PAGE_WIDTHS for the two things that need the width but can't be the column
+      EditorShell.jsx     the editor's nested routes behind one lazy import; mounts no chrome of its own
+    editor/
+      SectionOutline.jsx  the editor's left-hand section list (xl+) — jump to a section, collapse them all
+    InstallAppButton.jsx  the "install app" button in the sidebar footer; renders nothing unless the app is installable (see pwa-and-offline.md)
+    NotificationBell.jsx  sidebar bell that polls for and shows the user's notifications
     DisplayNameGate.jsx   makes a signed-in user pick a display name before using the app
     DisplayNameDialog.jsx pick / change your public display name
     BioDialog.jsx         edit your public profile bio (rich text)
@@ -121,17 +134,14 @@ way a new hand-rolled button gets it without anyone remembering.
 Two surfaces override the color, because `--ring` _is_ `--primary` and would
 disappear into them:
 
-- **`AppHeader`** — `header :focus-visible` switches the ring to
-  `--primary-foreground`, the same token everything else on that bar is drawn
-  from (see the note at the top of `NavActions.jsx`).
 - **HomePage's hero** — a fixed gradient that doesn't follow the theme, so its
   two call-to-action links carry `focus-visible:outline-white` themselves.
 
-Controls that sit on the header surface should use the exported
-`headerIconTrigger` / `headerTextTrigger` from `NavActions.jsx` rather than
-restating them. Pages assemble their own header contents, and HomePage's
-"Editor" link had drifted into a hand-written copy carrying a border no other
-control on the bar has.
+There used to be a second: `header :focus-visible` switched the ring to
+`--primary-foreground`, because the app bar was a block of `--primary` and the
+ordinary ring vanished into it. `PageBar` draws on the page background, so the
+ordinary ring is correct again — and the override had become actively wrong, a
+near-white ring on a light surface. It is gone.
 
 ## Shared lesson logic
 

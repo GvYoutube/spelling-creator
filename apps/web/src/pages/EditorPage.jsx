@@ -1,6 +1,11 @@
 import { hasApi } from "@spelling-creator/core/config";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useNavigate, useSearchParams } from "react-router-dom";
+import {
+  useLocation,
+  useNavigate,
+  useParams,
+  useSearchParams,
+} from "react-router-dom";
 import { DocumentMeta } from "../lib/seo.jsx";
 import { toast } from "sonner";
 import { Trans, useTranslation } from "react-i18next";
@@ -30,7 +35,8 @@ import {
   TriangleAlertIcon,
   UsersIcon,
 } from "lucide-react";
-import AppHeader from "../components/AppHeader.jsx";
+import PageBar from "../components/layout/PageBar.jsx";
+import SectionOutline from "../components/editor/SectionOutline.jsx";
 import { Button } from "../components/ui/button.jsx";
 import { Badge } from "../components/ui/badge.jsx";
 import { Field, FieldLabel } from "../components/ui/field.jsx";
@@ -66,7 +72,6 @@ import { cn } from "../lib/utils.js";
 import SectionCard from "../components/SectionCard.jsx";
 import { SectionsSkeleton } from "../components/Skeletons.jsx";
 import { LiveInput } from "../components/LiveField.jsx";
-import NavActions from "../components/NavActions.jsx";
 import CollaborateDialog from "../components/CollaborateDialog.jsx";
 import CollabCursors from "../components/CollabCursors.jsx";
 import CollabChat from "../components/CollabChat.jsx";
@@ -269,7 +274,6 @@ export default function EditorPage() {
   // it can, by anyone but the original's own author, since a proposal writes
   // nothing until someone with the authority to merge it says so.
   const [canPropose, setCanPropose] = useState(false);
-  const [historyOpen, setHistoryOpen] = useState(false);
   // The "propose changes to the original" dialog, and whether a submission is in
   // flight (it packs the repository and uploads it, so it isn't instant).
   const [proposeOpen, setProposeOpen] = useState(false);
@@ -297,6 +301,30 @@ export default function EditorPage() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const showPublish = hasApi() && authEnabled;
+
+  // The editor's two big panels are addressed by URL — /editor/history and
+  // /editor/collaborate — rather than held as component state. They were the
+  // largest things in the app with no address at all: 300 and 800 lines of UI
+  // that the back button did nothing to, and that nobody could link a
+  // collaborator to. `panel` comes from the route (see EditorShell.jsx), and an
+  // unrecognised value simply opens nothing.
+  //
+  // Navigation carries `location.search` forward. The editor's two deep links
+  // both live in the query string — `?join=<code>` for a collaboration invite
+  // and `?pull=<id>&lesson=<id>` for a proposal to review — and dropping the
+  // query on the way into a panel would break the very flow that opened it.
+  const { panel } = useParams();
+  const location = useLocation();
+  const historyOpen = panel === "history";
+  const collabOpen = panel === "collaborate";
+  const openPanel = useCallback(
+    (name) =>
+      navigate({
+        pathname: name ? `/editor/${name}` : "/editor",
+        search: location.search,
+      }),
+    [navigate, location.search],
+  );
 
   // A thin shim over sonner's toast() that keeps every call site below
   // exactly as it was under the old { severity, message, link?, route? }
@@ -346,7 +374,6 @@ export default function EditorPage() {
     identity,
     accessToken,
   });
-  const [collabOpen, setCollabOpen] = useState(false);
 
   // Editor state hydrates from IndexedDB (below), and `hydrated` gates this so
   // version control never commits the empty starter doc over a real draft's
@@ -439,9 +466,9 @@ export default function EditorPage() {
   useEffect(() => {
     if (joinCode && !joinHandledRef.current) {
       joinHandledRef.current = true;
-      setCollabOpen(true);
+      openPanel("collaborate");
     }
-  }, [joinCode]);
+  }, [joinCode, openPanel]);
 
   // Refs mirror the latest doc/editingId so the one-shot "load for editing"
   // effect below can read current values without re-subscribing to every edit.
@@ -1616,14 +1643,14 @@ export default function EditorPage() {
   const exportBusy =
     busy === "docx" || busy === "json" || busy === "pdf" || busy === "gdocs";
 
-  // Header icon-only triggers (help, the logo/import menu, the mobile
-  // overflow menu) sit on AppHeader's --primary surface, so they use
-  // --primary-foreground rather than the usual tokens — see the note at the
-  // top of NavActions.jsx, whose iconTrigger this mirrors.
+  // Header icon-only triggers (help, the import menu, the mobile overflow
+  // menu). These used to be drawn from --primary-foreground because the app bar
+  // was a block of --primary; PageBar sits on the page background, so they take
+  // the ordinary tokens now. bg-transparent and border-0 stay explicit so a
+  // <button> doesn't pick up the browser's default chrome.
   const headerIconTrigger =
-    "relative inline-flex size-10 shrink-0 cursor-pointer items-center justify-center rounded-full border-0 bg-transparent text-primary-foreground no-underline transition-colors hover:bg-primary-foreground/10";
-  const headerGhostButton =
-    "text-primary-foreground hover:bg-primary-foreground/10 hover:text-primary-foreground";
+    "relative inline-flex size-10 shrink-0 cursor-pointer items-center justify-center rounded-md border-0 bg-transparent text-foreground no-underline transition-colors hover:bg-accent hover:text-accent-foreground";
+  const headerGhostButton = "";
 
   // The small "N collaborators online" dot, overlaid on whichever trigger
   // shows it (the mobile overflow menu, the desktop Collaborate button).
@@ -1635,58 +1662,63 @@ export default function EditorPage() {
   );
 
   return (
-    <div className="min-h-dvh bg-background pb-24 text-foreground">
+    <>
       {/* No page-specific title: the editor is the app default. */}
       <DocumentMeta />
-      <AppHeader
-        title={t("header.title")}
-        left={
-          <DropdownMenu>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <DropdownMenuTrigger asChild>
-                  <button
-                    type="button"
-                    aria-label={t("header.menuAriaLabel")}
-                    className={cn(headerIconTrigger, "mr-1")}
-                  >
-                    <SpellCheckIcon />
-                  </button>
-                </DropdownMenuTrigger>
-              </TooltipTrigger>
-              <TooltipContent>{t("header.menuTooltip")}</TooltipContent>
-            </Tooltip>
-            <DropdownMenuContent align="start">
-              <DropdownMenuItem
-                onClick={openImportWarning}
-                disabled={busy !== null}
-              >
-                <FileUpIcon />
-                {t("header.importWord")}
-              </DropdownMenuItem>
-              <DropdownMenuItem
-                onClick={triggerJsonImportPicker}
-                disabled={busy !== null}
-              >
-                <BracesIcon />
-                {t("header.importJson")}
-              </DropdownMenuItem>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem
-                onClick={() =>
-                  window.open(
-                    "https://github.com/playforge-coding/spelling-creator",
-                    "_blank",
-                  )
-                }
-              >
-                <CodeIcon />
-                {t("header.github")}
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
-        }
+      {/* The trail names the lesson being edited, not "Editor" — on the one
+          page where you're deep inside a single document, which document it is
+          is the useful fact. */}
+      <PageBar
+        crumbs={[
+          { label: t("header.title"), to: "/hub" },
+          { label: doc.title || t("documentPanel.untitledCrumb") },
+        ]}
       >
+        <DropdownMenu>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <DropdownMenuTrigger asChild>
+                <button
+                  type="button"
+                  aria-label={t("header.menuAriaLabel")}
+                  className={headerIconTrigger}
+                >
+                  <SpellCheckIcon />
+                </button>
+              </DropdownMenuTrigger>
+            </TooltipTrigger>
+            <TooltipContent>{t("header.menuTooltip")}</TooltipContent>
+          </Tooltip>
+          <DropdownMenuContent align="end">
+            <DropdownMenuItem
+              onClick={openImportWarning}
+              disabled={busy !== null}
+            >
+              <FileUpIcon />
+              {t("header.importWord")}
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              onClick={triggerJsonImportPicker}
+              disabled={busy !== null}
+            >
+              <BracesIcon />
+              {t("header.importJson")}
+            </DropdownMenuItem>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem
+              onClick={() =>
+                window.open(
+                  "https://github.com/playforge-coding/spelling-creator",
+                  "_blank",
+                )
+              }
+            >
+              <CodeIcon />
+              {t("header.github")}
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+
         {/* Mobile: help + one overflow menu covering every other action. */}
         <Tooltip>
           <TooltipTrigger asChild>
@@ -1787,7 +1819,7 @@ export default function EditorPage() {
               </DropdownMenuItem>
             )}
             <DropdownMenuSeparator />
-            <DropdownMenuItem onClick={() => setCollabOpen(true)}>
+            <DropdownMenuItem onClick={() => openPanel("collaborate")}>
               <UsersIcon />
               {collab.active
                 ? t("header.collaborating", {
@@ -1911,7 +1943,7 @@ export default function EditorPage() {
               <span className="relative inline-flex">
                 <Button
                   variant={collab.active ? "default" : "ghost"}
-                  onClick={() => setCollabOpen(true)}
+                  onClick={() => openPanel("collaborate")}
                   className={collab.active ? undefined : headerGhostButton}
                 >
                   <UsersIcon data-icon="inline-start" />
@@ -1923,316 +1955,361 @@ export default function EditorPage() {
             <TooltipContent>{t("header.collaborateTooltip")}</TooltipContent>
           </Tooltip>
         </div>
+      </PageBar>
 
-        <NavActions current="editor" />
-      </AppHeader>
+      {/* Three panes: the section outline, the document, and a live preview.
+          Each appears once there is room for it, and drops away when there
+          isn't — the panes are extra room to spend, not a layout the editor
+          depends on.
+          
+          "Room" is measured against AppShell's @container/page, not the
+          viewport, and that distinction is what lets the editor use the same
+          sidebar as every other page. The sidebar is 16rem open and 3rem
+          collapsed, so the space the editor actually has is not a function of
+          the window's width; keyed off the container, collapsing the sidebar
+          hands the panes its 13rem the instant you do it. The editor used to
+          get its own permanently-collapsed sidebar to dodge this, which bought
+          the room at the price of the app having two different sidebars.
 
-      <div className="mx-auto max-w-3xl px-4 pt-6">
-        <div className="rounded-panel border border-border bg-card p-4 text-card-foreground shadow-(--shadow-panel) sm:p-6">
-          <p className="text-xs font-semibold tracking-wide text-muted-foreground uppercase">
-            {t("documentPanel.titleLabel")}
-          </p>
-          <LiveInput
-            value={doc.title}
-            onCommit={setTitle}
-            placeholder={t("documentPanel.titlePlaceholder")}
-            data-collab-field="doc:title"
-            className="h-auto rounded-none border-0 border-b-2 border-transparent bg-transparent px-0 py-1 text-2xl font-bold shadow-none focus-visible:border-b-primary focus-visible:ring-0"
-          />
-          <div className="mt-3 flex flex-wrap items-center gap-3">
-            <Select
-              value={doc.ageRange || "any"}
-              onValueChange={(v) => setAgeRange(v === "any" ? "" : v)}
-            >
-              <SelectTrigger
-                size="sm"
-                className="w-[160px]"
-                aria-label={t("documentPanel.ageRangeAriaLabel")}
-              >
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="any">{t("documentPanel.anyAge")}</SelectItem>
-                {AGE_RANGES.map((range) => (
-                  <SelectItem key={range} value={range}>
-                    {range}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={() => setIdeaDialogOpen(true)}
-                >
-                  <SparklesIcon data-icon="inline-start" />
-                  {t("documentPanel.suggestIdeas")}
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent>
-                {t("documentPanel.suggestIdeasTooltip")}
-              </TooltipContent>
-            </Tooltip>
-          </div>
-          <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1">
-            <p className="text-sm text-muted-foreground">
-              {t("stats.summary", {
-                sections: t("stats.sections", { count: sectionCount }),
-                blocks: t("stats.blocks", { count: blockCount }),
-              })}
+          `items-start` so each pane scrolls with the page and the sticky
+          columns inside them can pin. */}
+      <div className="mx-auto flex w-full max-w-[110rem] items-start gap-6 px-4 pt-6 pb-16">
+        <SectionOutline
+          sections={doc.sections}
+          collapsedIds={collapsedIds}
+          allCollapsed={allCollapsed}
+          onToggleAll={toggleAllCollapsed}
+          onAddSection={openAddDialog}
+        />
+
+        {/* min-w-0 is load-bearing: without it this flex item is sized by its
+            widest child, and one long unbroken word in a lesson would push the
+            preview pane off screen instead of wrapping. */}
+        <div className="mx-auto min-w-0 max-w-3xl flex-1 @min-[52rem]/page:mx-0">
+          <div className="rounded-panel border border-border bg-card p-4 text-card-foreground shadow-(--shadow-panel) sm:p-6">
+            <p className="text-xs font-semibold tracking-wide text-muted-foreground uppercase">
+              {t("documentPanel.titleLabel")}
             </p>
-            {/* Folding every section away turns a ~37-screen document into a
+            <LiveInput
+              value={doc.title}
+              onCommit={setTitle}
+              placeholder={t("documentPanel.titlePlaceholder")}
+              data-collab-field="doc:title"
+              className="h-auto rounded-none border-0 border-b-2 border-transparent bg-transparent px-0 py-1 text-2xl font-bold shadow-none focus-visible:border-b-primary focus-visible:ring-0"
+            />
+            <div className="mt-3 flex flex-wrap items-center gap-3">
+              <Select
+                value={doc.ageRange || "any"}
+                onValueChange={(v) => setAgeRange(v === "any" ? "" : v)}
+              >
+                <SelectTrigger
+                  size="sm"
+                  className="w-[160px]"
+                  aria-label={t("documentPanel.ageRangeAriaLabel")}
+                >
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="any">
+                    {t("documentPanel.anyAge")}
+                  </SelectItem>
+                  {AGE_RANGES.map((range) => (
+                    <SelectItem key={range} value={range}>
+                      {range}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => setIdeaDialogOpen(true)}
+                  >
+                    <SparklesIcon data-icon="inline-start" />
+                    {t("documentPanel.suggestIdeas")}
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>
+                  {t("documentPanel.suggestIdeasTooltip")}
+                </TooltipContent>
+              </Tooltip>
+            </div>
+            <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1">
+              <p className="text-sm text-muted-foreground">
+                {t("stats.summary", {
+                  sections: t("stats.sections", { count: sectionCount }),
+                  blocks: t("stats.blocks", { count: blockCount }),
+                })}
+              </p>
+              {/* Folding every section away turns a ~37-screen document into a
                 two-screen list of its sections — the fastest way to see the
                 shape of a lesson, and to get to a section a long way from the
                 one you're in. */}
-            {sectionCount > 0 && (
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={toggleAllCollapsed}
-                className="h-10 sm:h-8"
-              >
-                {allCollapsed ? (
-                  <ChevronsUpDownIcon data-icon="inline-start" />
-                ) : (
-                  <ChevronsDownUpIcon data-icon="inline-start" />
-                )}
-                {allCollapsed
-                  ? t("documentPanel.expandAll")
-                  : t("documentPanel.collapseAll")}
-              </Button>
-            )}
-          </div>
-
-          {(editingId || git.ready) && (
-            <div className="mt-3 flex flex-wrap items-center gap-2">
-              {editingId && (
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Badge
-                      variant="outline"
-                      className={cn(
-                        "gap-1",
-                        editingPublished
-                          ? "border-primary/40 bg-primary/10 text-primary"
-                          : "border-border bg-transparent text-muted-foreground",
-                      )}
-                    >
-                      {editingPublished ? <CloudUploadIcon /> : <CloudIcon />}
-                      {editingPublished
-                        ? t("documentPanel.editingPublished")
-                        : t("documentPanel.editingDraft")}
-                    </Badge>
-                  </TooltipTrigger>
-                  <TooltipContent className="max-w-xs">
-                    {editingPublished
-                      ? t("documentPanel.editingPublishedTooltip")
-                      : t("documentPanel.editingDraftTooltip")}
-                  </TooltipContent>
-                </Tooltip>
+              {sectionCount > 0 && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={toggleAllCollapsed}
+                  className="h-10 sm:h-8"
+                >
+                  {allCollapsed ? (
+                    <ChevronsUpDownIcon data-icon="inline-start" />
+                  ) : (
+                    <ChevronsDownUpIcon data-icon="inline-start" />
+                  )}
+                  {allCollapsed
+                    ? t("documentPanel.expandAll")
+                    : t("documentPanel.collapseAll")}
+                </Button>
               )}
+            </div>
 
-              {/* Version history. Every edit is committed to the lesson's own git
-                  repository when you pause; this is the way in to that timeline. */}
-              {git.ready && (
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <button
-                      type="button"
-                      onClick={() => setHistoryOpen(true)}
-                      className="cursor-pointer border-0 bg-transparent p-0"
-                    >
+            {(editingId || git.ready) && (
+              <div className="mt-3 flex flex-wrap items-center gap-2">
+                {editingId && (
+                  <Tooltip>
+                    <TooltipTrigger asChild>
                       <Badge
                         variant="outline"
                         className={cn(
                           "gap-1",
-                          git.pending > 0
-                            ? "border-border bg-transparent text-muted-foreground"
-                            : "border-success/40 bg-success/10 text-success",
+                          editingPublished
+                            ? "border-primary/40 bg-primary/10 text-primary"
+                            : "border-border bg-transparent text-muted-foreground",
                         )}
                       >
-                        <HistoryIcon />
-                        {git.pending > 0
-                          ? t("history.unsavedChanges", { count: git.pending })
-                          : git.lastCommit
-                            ? t("history.versionSaved", {
-                                time: timeAgo(git.lastCommit.at),
-                              })
-                            : t("history.label")}
+                        {editingPublished ? <CloudUploadIcon /> : <CloudIcon />}
+                        {editingPublished
+                          ? t("documentPanel.editingPublished")
+                          : t("documentPanel.editingDraft")}
                       </Badge>
-                    </button>
-                  </TooltipTrigger>
-                  <TooltipContent className="max-w-xs">
-                    {t("history.tooltip")}
-                  </TooltipContent>
-                </Tooltip>
-              )}
+                    </TooltipTrigger>
+                    <TooltipContent className="max-w-xs">
+                      {editingPublished
+                        ? t("documentPanel.editingPublishedTooltip")
+                        : t("documentPanel.editingDraftTooltip")}
+                    </TooltipContent>
+                  </Tooltip>
+                )}
 
-              {editingId && (
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Button variant="ghost" size="sm" onClick={handleFork}>
-                      <GitForkIcon data-icon="inline-start" />
-                      {t("documentPanel.forkButton")}
-                    </Button>
-                  </TooltipTrigger>
-                  <TooltipContent className="max-w-xs">
-                    {t("documentPanel.forkTooltip")}
-                  </TooltipContent>
-                </Tooltip>
-              )}
+                {/* Version history. Every edit is committed to the lesson's own git
+                  repository when you pause; this is the way in to that timeline. */}
+                {git.ready && (
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <button
+                        type="button"
+                        onClick={() => openPanel("history")}
+                        className="cursor-pointer border-0 bg-transparent p-0"
+                      >
+                        <Badge
+                          variant="outline"
+                          className={cn(
+                            "gap-1",
+                            git.pending > 0
+                              ? "border-border bg-transparent text-muted-foreground"
+                              : "border-success/40 bg-success/10 text-success",
+                          )}
+                        >
+                          <HistoryIcon />
+                          {git.pending > 0
+                            ? t("history.unsavedChanges", {
+                                count: git.pending,
+                              })
+                            : git.lastCommit
+                              ? t("history.versionSaved", {
+                                  time: timeAgo(git.lastCommit.at),
+                                })
+                              : t("history.label")}
+                        </Badge>
+                      </button>
+                    </TooltipTrigger>
+                    <TooltipContent className="max-w-xs">
+                      {t("history.tooltip")}
+                    </TooltipContent>
+                  </Tooltip>
+                )}
 
-              {/* This lesson is a fork. Offer to pull in whatever the original
+                {editingId && (
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button variant="ghost" size="sm" onClick={handleFork}>
+                        <GitForkIcon data-icon="inline-start" />
+                        {t("documentPanel.forkButton")}
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent className="max-w-xs">
+                      {t("documentPanel.forkTooltip")}
+                    </TooltipContent>
+                  </Tooltip>
+                )}
+
+                {/* This lesson is a fork. Offer to pull in whatever the original
                   has changed since — merged block by block. */}
-              {forkedFrom && hasApi() && (
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={handleSyncUpstream}
-                      disabled={busy !== null}
-                      className="text-primary hover:bg-primary/10 hover:text-primary"
-                    >
-                      <GitMergeIcon data-icon="inline-start" />
-                      {busy === "merge"
-                        ? t("documentPanel.syncChecking")
-                        : t("documentPanel.syncWith", {
-                            name: forkedFromTitle || t("labels.theOriginal"),
-                          })}
-                    </Button>
-                  </TooltipTrigger>
-                  <TooltipContent className="max-w-xs">
-                    {t("documentPanel.syncTooltip", {
-                      name: forkedFromTitle || t("labels.theOriginalLesson"),
-                    })}
-                  </TooltipContent>
-                </Tooltip>
-              )}
+                {forkedFrom && hasApi() && (
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={handleSyncUpstream}
+                        disabled={busy !== null}
+                        className="text-primary hover:bg-primary/10 hover:text-primary"
+                      >
+                        <GitMergeIcon data-icon="inline-start" />
+                        {busy === "merge"
+                          ? t("documentPanel.syncChecking")
+                          : t("documentPanel.syncWith", {
+                              name: forkedFromTitle || t("labels.theOriginal"),
+                            })}
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent className="max-w-xs">
+                      {t("documentPanel.syncTooltip", {
+                        name: forkedFromTitle || t("labels.theOriginalLesson"),
+                      })}
+                    </TooltipContent>
+                  </Tooltip>
+                )}
 
-              {/* Offer this fork's work back to the lesson it came from. It goes
+                {/* Offer this fork's work back to the lesson it came from. It goes
                   as a proposal for that lesson's author (or a trusted
                   collaborator) to review — a fork never writes the original. */}
-              {forkedFrom && canPropose && hasApi() && (
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Button
-                      size="sm"
-                      onClick={() => setProposeOpen(true)}
-                      disabled={busy !== null || proposing}
-                    >
-                      <GitPullRequestIcon data-icon="inline-start" />
-                      {t("documentPanel.proposeButton", {
-                        name: forkedFromTitle || t("labels.theOriginal"),
+                {forkedFrom && canPropose && hasApi() && (
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button
+                        size="sm"
+                        onClick={() => setProposeOpen(true)}
+                        disabled={busy !== null || proposing}
+                      >
+                        <GitPullRequestIcon data-icon="inline-start" />
+                        {t("documentPanel.proposeButton", {
+                          name: forkedFromTitle || t("labels.theOriginal"),
+                        })}
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent className="max-w-xs">
+                      {t("documentPanel.proposeTooltip", {
+                        name: forkedFromTitle || t("labels.theOriginalLesson"),
                       })}
-                    </Button>
-                  </TooltipTrigger>
-                  <TooltipContent className="max-w-xs">
-                    {t("documentPanel.proposeTooltip", {
-                      name: forkedFromTitle || t("labels.theOriginalLesson"),
-                    })}
-                  </TooltipContent>
-                </Tooltip>
-              )}
-            </div>
-          )}
-        </div>
+                    </TooltipContent>
+                  </Tooltip>
+                )}
+              </div>
+            )}
+          </div>
 
-        {/* Until the saved draft has hydrated from storage, show section
+          {/* Until the saved draft has hydrated from storage, show section
             placeholders rather than the doc's empty starter state — otherwise the
             "No sections yet" panel flashes for a beat before the real sections pop
             in. The same applies while a hub lesson is being fetched into an as-yet
             empty editor (sectionCount === 0 && editLoading). */}
-        {!hydrated ? (
-          <div className="mt-4">
-            <SectionsSkeleton />
-          </div>
-        ) : (
-          <>
-            <div className="mt-4 flex flex-col gap-4">
-              {/* eslint-disable-next-line react-hooks/refs -- capitalizedWords is a stable cached array, safe to read here */}
-              {doc.sections.map((section, i) => (
-                <SectionCard
-                  key={section.id}
-                  section={section}
-                  documentName={doc.title}
-                  index={i}
-                  onChange={updateSection}
-                  onDelete={deleteSection}
-                  onMove={moveSection}
-                  isFirst={i === 0}
-                  isLast={i === sectionCount - 1}
-                  onError={handleSectionError}
-                  capitalizedWords={capitalizedWords}
-                  // A plain boolean, so collapsing one section leaves every
-                  // other card's props identical and it stays memoized.
-                  collapsed={collapsedIds.has(section.id)}
-                  onToggleCollapse={toggleCollapse}
-                  springOpenMs={SPRING_OPEN_MS}
-                  // Drag state reaches each card as plain values scoped to that
-                  // card, so hovering one section doesn't re-render the others.
-                  dragBlockId={drag?.blockId ?? null}
-                  overId={
-                    drag?.overSectionId === section.id ? drag.overId : null
-                  }
-                  overPos={
-                    drag?.overSectionId === section.id ? drag.overPos : null
-                  }
-                  isDropSection={drag?.overSectionId === section.id}
-                  onBlockDragStart={startBlockDrag}
-                  onBlockDragOver={hoverBlockDrag}
-                  onBlockDragLeave={leaveBlockDrag}
-                  onBlockDrop={dropBlockDrag}
-                  onBlockDragEnd={endBlockDrag}
-                />
-              ))}
+          {!hydrated ? (
+            <div className="mt-4">
+              <SectionsSkeleton />
             </div>
+          ) : (
+            <>
+              <div className="mt-4 flex flex-col gap-4">
+                {/* eslint-disable-next-line react-hooks/refs -- capitalizedWords is a stable cached array, safe to read here */}
+                {doc.sections.map((section, i) => (
+                  <SectionCard
+                    key={section.id}
+                    section={section}
+                    documentName={doc.title}
+                    index={i}
+                    onChange={updateSection}
+                    onDelete={deleteSection}
+                    onMove={moveSection}
+                    isFirst={i === 0}
+                    isLast={i === sectionCount - 1}
+                    onError={handleSectionError}
+                    capitalizedWords={capitalizedWords}
+                    // A plain boolean, so collapsing one section leaves every
+                    // other card's props identical and it stays memoized.
+                    collapsed={collapsedIds.has(section.id)}
+                    onToggleCollapse={toggleCollapse}
+                    springOpenMs={SPRING_OPEN_MS}
+                    // Drag state reaches each card as plain values scoped to that
+                    // card, so hovering one section doesn't re-render the others.
+                    dragBlockId={drag?.blockId ?? null}
+                    overId={
+                      drag?.overSectionId === section.id ? drag.overId : null
+                    }
+                    overPos={
+                      drag?.overSectionId === section.id ? drag.overPos : null
+                    }
+                    isDropSection={drag?.overSectionId === section.id}
+                    onBlockDragStart={startBlockDrag}
+                    onBlockDragOver={hoverBlockDrag}
+                    onBlockDragLeave={leaveBlockDrag}
+                    onBlockDrop={dropBlockDrag}
+                    onBlockDragEnd={endBlockDrag}
+                  />
+                ))}
+              </div>
 
-            {sectionCount === 0 &&
-              (editLoading ? (
-                <div className="mt-4">
-                  <SectionsSkeleton />
-                </div>
-              ) : (
-                <div className="mt-4 rounded-md border border-dashed border-border p-12 text-center">
-                  <p className="mb-1 text-lg font-semibold">
-                    {t("emptyState.heading")}
-                  </p>
-                  <p className="mb-4 text-sm text-muted-foreground">
-                    <Trans
-                      i18nKey="emptyState.instruction"
-                      ns="editor"
-                      components={{ strong: <strong /> }}
-                    />
-                  </p>
-                  <div className="flex flex-col justify-center gap-3 sm:flex-row">
-                    <Button onClick={openAddDialog}>
-                      <PlusIcon data-icon="inline-start" />
-                      {t("emptyState.addSection")}
-                    </Button>
-                    <Button
-                      variant="outline"
-                      onClick={openImportWarning}
-                      disabled={busy !== null}
-                    >
-                      <FileUpIcon data-icon="inline-start" />
-                      {t("header.importWord")}
-                    </Button>
-                    <Button
-                      variant="outline"
-                      onClick={triggerJsonImportPicker}
-                      disabled={busy !== null}
-                    >
-                      <BracesIcon data-icon="inline-start" />
-                      {t("header.importJson")}
-                    </Button>
+              {sectionCount === 0 &&
+                (editLoading ? (
+                  <div className="mt-4">
+                    <SectionsSkeleton />
                   </div>
-                </div>
-              ))}
-          </>
-        )}
+                ) : (
+                  <div className="mt-4 rounded-md border border-dashed border-border p-12 text-center">
+                    <p className="mb-1 text-lg font-semibold">
+                      {t("emptyState.heading")}
+                    </p>
+                    <p className="mb-4 text-sm text-muted-foreground">
+                      <Trans
+                        i18nKey="emptyState.instruction"
+                        ns="editor"
+                        components={{ strong: <strong /> }}
+                      />
+                    </p>
+                    <div className="flex flex-col justify-center gap-3 sm:flex-row">
+                      <Button onClick={openAddDialog}>
+                        <PlusIcon data-icon="inline-start" />
+                        {t("emptyState.addSection")}
+                      </Button>
+                      <Button
+                        variant="outline"
+                        onClick={openImportWarning}
+                        disabled={busy !== null}
+                      >
+                        <FileUpIcon data-icon="inline-start" />
+                        {t("header.importWord")}
+                      </Button>
+                      <Button
+                        variant="outline"
+                        onClick={triggerJsonImportPicker}
+                        disabled={busy !== null}
+                      >
+                        <BracesIcon data-icon="inline-start" />
+                        {t("header.importJson")}
+                      </Button>
+                    </div>
+                  </div>
+                ))}
+            </>
+          )}
+        </div>
+
+        {/* The third pane. LessonView is the very same renderer the public
+            lesson page uses, so this costs nothing to build and nothing to keep
+            true — it re-renders from `doc` like everything else. The preview
+            dialog is still there for narrower screens; this is the same view
+            without the interruption. */}
+        <aside className="sticky top-[calc(var(--header-h)+1.5rem)] hidden w-[22rem] shrink-0 @min-[70rem]/page:block">
+          <p className="mb-2 text-xs font-semibold tracking-wide text-muted-foreground uppercase">
+            {t("previewDialog.title")}
+          </p>
+          <div className="max-h-[calc(100dvh-var(--header-h)-6rem)] overflow-y-auto rounded-panel border border-border bg-card shadow-(--shadow-panel)">
+            <LessonView doc={doc} />
+          </div>
+        </aside>
       </div>
 
       <Tooltip>
@@ -2444,7 +2521,7 @@ export default function EditorPage() {
 
       <CollaborateDialog
         open={collabOpen}
-        onClose={() => setCollabOpen(false)}
+        onClose={() => openPanel(null)}
         collab={collab}
         initialJoinCode={joinCode}
         trusted={doc.trustedCollaborators || []}
@@ -2454,7 +2531,7 @@ export default function EditorPage() {
       {/* The lesson's own version history, read out of its git repository. */}
       <HistoryDialog
         open={historyOpen}
-        onClose={() => setHistoryOpen(false)}
+        onClose={() => openPanel(null)}
         git={git}
         onRestore={setDoc}
       />
@@ -2507,6 +2584,6 @@ export default function EditorPage() {
           <Spinner className="size-10 text-white" />
         </div>
       )}
-    </div>
+    </>
   );
 }

@@ -20,7 +20,15 @@
     "moderation": "Moderation",
     "signOut": "Sign out",
     "signedOut": "Signed out",
-    "signIn": "Sign in"
+    "signIn": "Sign in",
+    "appName": "Spelling Creator",
+    "appTagline": "Make and share lessons",
+    "home": "Home",
+    "newLesson": "New lesson",
+    "yourLessons": "Your lessons",
+    "noLessonsYet": "No lessons yet.",
+    "untitledLesson": "Untitled lesson",
+    "seeAllLessons": "See all {{count}}"
   },
   "install": {
     "ariaLabel": "install app",

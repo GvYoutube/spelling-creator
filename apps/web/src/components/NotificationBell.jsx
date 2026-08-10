@@ -1,9 +1,11 @@
-// Notification bell for the AppBar, shown to signed-in users. It polls the
-// notification API, shows an unread count as a badge, and opens a menu listing
-// notifications (newest first). Opening the menu marks everything read.
+// Notification bell, shown to signed-in users in the sidebar footer. It polls
+// the notification API, shows an unread count as a badge, and opens a menu
+// listing notifications (newest first). Opening the menu marks everything read.
 //
-// Styled to match NavActions.jsx's interim AppBar-inherit trigger — see the
-// comment at the top of that file for why.
+// The trigger takes its styling from the caller (`className`) because it used
+// to sit on the header's --primary surface and now sits on the sidebar's — the
+// two need different foreground tokens, and the bell shouldn't have to know
+// which. The fallback below is the sidebar's.
 
 import { useCallback, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -40,7 +42,7 @@ function formatDateTime(value) {
   });
 }
 
-export default function NotificationBell() {
+export default function NotificationBell({ className }) {
   const { t } = useTranslation("common");
   const { enabled, user, accessToken } = useAuth();
   const navigate = useNavigate();
@@ -114,10 +116,13 @@ export default function NotificationBell() {
                   ? t("notificationBell.ariaLabelUnread", { count: unread })
                   : t("notificationBell.ariaLabel")
               }
-              // Interim AppBar-inherit styling, matching NavActions.jsx —
-              // bg-transparent is explicit since Tailwind preflight is off
-              // for now (see the memory note on this).
-              className="relative inline-flex size-10 cursor-pointer items-center justify-center rounded-full border-0 bg-transparent text-white transition-colors hover:bg-white/10"
+              // `relative` is the bell's own (the unread badge is absolutely
+              // positioned against it); everything else is the caller's.
+              className={cn(
+                "relative",
+                className ||
+                  "inline-flex size-9 cursor-pointer items-center justify-center rounded-md border-0 bg-transparent text-sidebar-foreground transition-colors hover:bg-sidebar-accent",
+              )}
             >
               <BellIcon />
               {unread > 0 && (
