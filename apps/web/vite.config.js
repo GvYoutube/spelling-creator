@@ -26,6 +26,13 @@ const WORKER_PATHS = [
   // and the Worker is never asked — which silently turns SSR off for every
   // returning visitor, the exact people whose browsers have the shell cached.
   // Nothing is lost offline: all three need the network for their data anyway.
+  //
+  // Note how broad this first one is: it denies the *whole* of /hub/*, which
+  // now includes a lesson's tabs (/hub/:id/history, /hub/:id/proposals/:prId,
+  // …). That is only safe because ssr.js's LESSON_PATH matches them too. A path
+  // denied here and unmatched there is denied the precached shell and gets no
+  // server render either — which online falls through to the SPA shell and
+  // works, and offline simply fails. Keep the two in step.
   /^\/hub(\/|$)/,
   /^\/users\//,
   /^\/docs(\/|$)/,
@@ -53,6 +60,13 @@ const WORKER_PATHS = [
 // bindings for the stub to fail to provide.
 const SSR_UNREACHABLE = [
   "src/lib/exports/engine.js",
+  // isomorphic-git + LightningFS, ~474 kB. It used to be unreachable from the
+  // server graph for free, because only the editor asked for it and the editor
+  // is stubbed below. The lesson page's History tab now asks for it too — also
+  // through a dynamic import, and also only in a browser (it indexes a packfile
+  // into IndexedDB), so it still cannot run here. Without this line the Worker
+  // carries the whole git implementation to the edge to sit unused.
+  "src/lib/git/engine.js",
   "src/pages/EditorPage.jsx",
   "src/pages/ModerationPage.jsx",
   "src/pages/LoginPage.jsx",
@@ -129,10 +143,12 @@ export default defineConfig(({ isSsrBuild }) => ({
         lang: "en",
         dir: "ltr",
         categories: ["education", "productivity"],
-        // Matches AppHeader's --primary bar and the page --background in
-        // src/styles/globals.css, so the OS chrome and the splash screen are
-        // continuous with the app's own light theme.
-        theme_color: "#4f5fd9",
+        // Both match the light --background in src/styles/globals.css, so the
+        // OS chrome and the splash screen are continuous with the page. This
+        // used to be the app bar's indigo, which was right while the bar was a
+        // block of --primary at the top of every screen; PageBar draws on the
+        // background, so the background is what the OS should tint to.
+        theme_color: "#dee3f3",
         background_color: "#dee3f3",
         icons: [
           // "any" icons are drawn as-is (they carry their own rounded corners);

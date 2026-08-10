@@ -43,7 +43,7 @@ any sticky list does.
 Two details make it work:
 
 - **It pins to `--header-h`, not to `0`.** `globals.css` publishes the app bar's
-  height as a pair of tokens: `--header-row-h` (the bar itself — `AppHeader`
+  height as a pair of tokens: `--header-row-h` (the bar itself — `PageBar`
   applies it as `h-(--header-row-h)`, so it's the single source of truth) and
   `--header-h`, which adds `env(safe-area-inset-top)` for the
   [installed app](./pwa-and-offline.md), where the header pads itself by the iOS
@@ -55,7 +55,7 @@ Two details make it work:
   `p-4`, so it carries `-mx-4 -mt-4 px-4 pt-4` to reach the card's edges;
   otherwise blocks would scroll visibly through the gap beside it. `bg-card` is
   translucent by design, so it also takes `backdrop-blur-(--glass-blur)` — the
-  same glass treatment as `AppHeader`, for the same reason. `z-30` keeps it
+  same glass treatment as `PageBar`, for the same reason. `z-30` keeps it
   under the app bar's `z-40`.
 
 Nothing between the header and `<body>` sets `overflow` to anything but
@@ -259,9 +259,44 @@ Scroll targets align with `block: "center"` when the target is a block —
 aligning a block to the top of the page would put it underneath its own
 section's sticky header.
 
+## The section outline
+
+`src/components/editor/SectionOutline.jsx`, from 52rem of page column: a
+numbered list of the lesson's sections down the left of the editor, with each
+section's block count beside it. Clicking one scrolls to it.
+
+Sticky headers answer _where am I_; this answers _where is everything else_. At
+37 screenfuls those are different questions, and the scrollbar — a 21px thumb —
+answers neither. Getting to section 5 from section 1 was a scroll of roughly
+20,000px or a collapse-all followed by a hunt; it is now one click.
+
+Three deliberate limits:
+
+- **It navigates, and does not reorder.** Moving sections stays on the cards,
+  where the move buttons and drag targets already are — and where the scroll
+  anchor (see [Position is preserved across edits](#position-is-preserved-across-edits)) keeps the page still
+  through the move. An outline you could also drag would be a second, subtly
+  different way to do the same thing.
+- **It scrolls via `scrollToElement`/`idSelector`** from `lib/useScrollAnchor.js`
+  — the same helpers the move buttons use — and relies on `SectionCard`'s own
+  `scroll-mt-(--header-h)` to land clear of the bar, rather than computing an
+  offset of its own.
+- **It appears at 52rem of _page column_, not of viewport.** The measurement is
+  against `AppShell`'s `@container/page`, so collapsing the sidebar can bring
+  the outline in without the window changing size — see
+  [Laying out against the container](./pages-and-routing.md#laying-out-against-the-container).
+  Below that threshold the editor is a single column and the outline would be
+  spending width the document needs. **Collapse all**, which is the cheap way to
+  see a lesson's shape on any screen, therefore stays on the document panel as
+  well as in the outline header.
+
+A collapsed section shows "hidden" instead of its block count: folded away in
+the document, the outline is the only place it appears at all.
+
 ## What isn't solved yet
 
-One further step the measurements point at, not built:
+The section outline above was one of the answers this page called for. One
+further step the measurements point at, still not built:
 
 - **Collapsing inactive question blocks** to a single line, expanding on focus.
   This is where the 77% lives: measured at **10,354px** (−65%) _with every
@@ -270,11 +305,9 @@ One further step the measurements point at, not built:
   invasive change to how editing feels, which is why section collapse came
   first — that may well be enough.
 
-Also unbuilt, and worth considering only if collapsing turns out not to be
-enough: a jump-to-section control (an outline sidebar, or a dropdown on the
-sticky header). Collapse-all already answers most of what it would be for —
-it turns the lesson into a 1.5-screen list of its sections that you can click
-into.
+One further idea, worth considering only if the outline and collapse-all turn
+out not to be enough between them: a jump-to-section dropdown on the sticky
+header, for the widths where the outline isn't shown.
 
 Two approaches were considered and rejected: rendering one section at a time
 (`Tabs`) and virtualizing the block list. Both break cross-section

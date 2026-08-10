@@ -23,12 +23,11 @@ import {
   PencilIcon,
   RssIcon,
   SparklesIcon,
-  SpellCheckIcon,
   Users2Icon,
   UsersIcon,
 } from "lucide-react";
-import AppHeader from "../components/AppHeader.jsx";
-import NavActions, { headerTextTrigger } from "../components/NavActions.jsx";
+import PageBar from "../components/layout/PageBar.jsx";
+import PageBody from "../components/layout/PageBody.jsx";
 import FloatingWords from "../components/FloatingWords.jsx";
 import { FeedListSkeleton } from "../components/Skeletons.jsx";
 import { Button } from "../components/ui/button.jsx";
@@ -218,7 +217,7 @@ function LandingView() {
       </div>
 
       {/* Calm feature run. */}
-      <div className="mx-auto max-w-6xl px-4 py-12 md:py-20">
+      <PageBody flush className="py-12 md:py-20">
         <div className="mb-10 text-center md:mb-16">
           <p className="text-sm font-semibold tracking-wide text-primary uppercase">
             {t("marketing.features.eyebrow")}
@@ -255,7 +254,7 @@ function LandingView() {
             </RouterLink>
           </Button>
         </div>
-      </div>
+      </PageBody>
     </>
   );
 }
@@ -344,7 +343,7 @@ function DashboardView() {
   }, [load]);
 
   return (
-    <div className="mx-auto max-w-5xl px-4 py-6 md:py-10">
+    <PageBody className="md:pt-10">
       <div className="mb-6 flex flex-col items-start justify-between gap-4 sm:flex-row sm:items-center">
         <div>
           <h1 className="text-2xl font-bold md:text-3xl">
@@ -489,7 +488,7 @@ function DashboardView() {
           )}
         </DashboardPanel>
       </div>
-    </div>
+    </PageBody>
   );
 }
 
@@ -503,36 +502,20 @@ export default function HomePage() {
   const signedIn = enabled && !!user;
 
   return (
-    <div className="min-h-dvh bg-background pb-16 text-foreground">
+    <>
       <DocumentMeta
         title={t("meta.title")}
         description={t("meta.description")}
       />
-      <AppHeader
-        title={
-          <span className="inline-flex items-center gap-2">
-            <SpellCheckIcon className="size-5 shrink-0" />
-            {t("header.title")}
-          </span>
-        }
-        titleHref="/"
-      >
-        {/* headerTextTrigger, not a hand-written copy of it: this link is a
-            sibling of the hub link NavActions renders half a centimetre to its
-            right, and the two have to read as the same control. */}
-        <RouterLink
-          to="/editor"
-          className={cn(
-            headerTextTrigger,
-            "mr-1 hidden shrink-0 md:inline-flex",
-          )}
-        >
-          <PencilIcon data-icon="inline-start" />
-          {t("header.editor")}
-        </RouterLink>
-        <NavActions current="home" />
-      </AppHeader>
+      <PageBar crumbs={[{ label: t("header.title") }]} />
 
+      {/* Both faces of "/" sit in the same shell. They used not to: the splash
+          had a header of its own on the grounds that a visitor who has never
+          used the app doesn't need navigation. That was a defensible thing to
+          say about the splash on its own and the wrong thing to do to the app —
+          it meant one URL rendered two different chromes depending on who you
+          were, and that signing in changed the furniture rather than the page.
+          The splash is a page of this app; it gets this app's chrome. */}
       {deciding ? (
         <div className="flex justify-center py-24">
           <Spinner className="size-8" />
@@ -542,17 +525,17 @@ export default function HomePage() {
       ) : (
         <>
           {!enabled && (
-            <div className="mx-auto max-w-6xl px-4 pt-4">
+            <PageBody flush className="pt-4 pb-0">
               <Alert className="border-primary/40 bg-primary/10 text-primary">
                 <AlertDescription className="text-primary">
                   {t("marketing.accountsDisabled")}
                 </AlertDescription>
               </Alert>
-            </div>
+            </PageBody>
           )}
           <LandingView />
         </>
       )}
-    </div>
+    </>
   );
 }

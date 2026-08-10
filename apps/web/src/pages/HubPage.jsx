@@ -17,8 +17,8 @@ import {
   Trash2Icon,
   XIcon,
 } from "lucide-react";
-import AppHeader from "../components/AppHeader.jsx";
-import NavActions from "../components/NavActions.jsx";
+import PageBar from "../components/layout/PageBar.jsx";
+import PageBody from "../components/layout/PageBody.jsx";
 import IconActionButton from "../components/IconActionButton.jsx";
 import { Button } from "../components/ui/button.jsx";
 import { Badge } from "../components/ui/badge.jsx";
@@ -26,11 +26,6 @@ import { Alert, AlertDescription } from "../components/ui/alert.jsx";
 import { Field, FieldLabel } from "../components/ui/field.jsx";
 import { Input } from "../components/ui/input.jsx";
 import { Spinner } from "../components/ui/spinner.jsx";
-import {
-  Tooltip,
-  TooltipTrigger,
-  TooltipContent,
-} from "../components/ui/tooltip.jsx";
 import {
   Dialog,
   DialogContent,
@@ -330,38 +325,17 @@ export default function HubPage() {
   };
 
   return (
-    <div className="min-h-dvh bg-background pb-16 text-foreground">
+    <>
       <DocumentMeta
         title={t("meta.title")}
         description={t("meta.description")}
       />
       <JsonLd data={listSchema} />
-      <AppHeader
-        title={t("header.title")}
-        left={
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <RouterLink
-                to="/editor"
-                aria-label={t("header.editorAria")}
-                className="mr-1 inline-flex shrink-0 items-center gap-2 rounded-md border-0 bg-transparent px-2.5 py-2 text-sm font-medium text-primary-foreground no-underline transition-colors hover:bg-primary-foreground/10 md:px-4"
-              >
-                <PencilIcon data-icon="inline-start" />
-                <span className="hidden md:inline">
-                  {t("header.editorLabel")}
-                </span>
-              </RouterLink>
-            </TooltipTrigger>
-            <TooltipContent className="md:hidden">
-              {t("header.editorLabel")}
-            </TooltipContent>
-          </Tooltip>
-        }
-      >
-        <NavActions current="hub" />
-      </AppHeader>
+      {/* The "Editor" link that used to sit on the left of this bar is now the
+          sidebar's "New lesson" action, which every page has. */}
+      <PageBar crumbs={[{ label: t("header.title") }]} />
 
-      <div className="mx-auto max-w-5xl px-4 pt-6">
+      <PageBody>
         <div className="mb-4 flex items-center justify-between gap-2">
           <p className="text-sm text-muted-foreground">
             {t("toolbar.description")}
@@ -514,7 +488,7 @@ export default function HubPage() {
             ))}
           </div>
         )}
-      </div>
+      </PageBody>
 
       <Dialog
         open={Boolean(deleting)}
@@ -574,6 +548,6 @@ export default function HubPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </div>
+    </>
   );
 }

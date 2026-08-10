@@ -53,7 +53,7 @@ text — below that the summary would be about as long as the lesson.
 ## How it works
 
 ```
-LessonPage.jsx
+pages/lesson/LessonOverview.jsx
   └── LessonSummary.jsx      the card: probe, controls, progress, streamed output
         └── core/browser/summarizer  the API wrapper (no React, fails closed)
 ```

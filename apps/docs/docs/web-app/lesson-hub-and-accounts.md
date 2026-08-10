@@ -14,8 +14,12 @@ back to a draft; both go through the same `POST`/`PUT` with a `published` flag.
 Signed-in users see an **Edit** action on lessons they published — it
 opens the lesson back in the editor (warning first before it replaces any
 in-progress work), and saving sends a `PUT` that the Worker accepts only from the
-lesson's author. Clicking a lesson opens its own page at `/hub/:id`, where
-**comments** (including threaded replies) appear beneath it. Comments are
+lesson's author. Clicking a lesson opens its own page at `/hub/:id`, which is
+organised as tabs — the lesson, practice, discussion, proposals and history (see
+[Pages & routing](./pages-and-routing.md)). **Comments** (including threaded
+replies) live on the **Discussion** tab; the lesson's own tab keeps the rating
+summary in its "About" rail, so the social proof is still on the page people
+land on. Comments are
 **moderated server-side**: a comment containing profanity (detected with
 [`glin-profanity`](https://www.npmjs.com/package/glin-profanity)) is blocked
 entirely by the Worker — it is never stored, and the user is shown why. Posting a

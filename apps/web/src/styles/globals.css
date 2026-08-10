@@ -56,6 +56,21 @@
      them, not as editorial copy. */
   --font-sans: "Public Sans", ui-sans-serif, system-ui, sans-serif;
   --font-serif: "Fraunces", ui-serif, Georgia, serif;
+
+  /* The app sidebar's own colour family (ui/sidebar.jsx draws from these and
+     nothing else). It's a separate family from --card because the sidebar is
+     chrome, not content: it sits beside the scrolling page rather than on it,
+     so it can be more opaque than a card without the page's own surfaces
+     losing their glass. The values are defined alongside every other token in
+     the four theme blocks below. */
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-ring: var(--sidebar-ring);
 }
 
 /* This app's only addition to Tailwind's preflight: the default border-color
@@ -96,13 +111,12 @@
     outline-offset: 2px;
   }
 
-  /* --ring *is* --primary, so the ring above is invisible against the app
-     bar's own --primary surface. Everything up there is drawn from
-     --primary-foreground (see NavActions.jsx); its focus ring is too. The
-     header element is AppHeader and nothing else. */
-  header :focus-visible {
-    outline-color: var(--primary-foreground);
-  }
+  /* There used to be a `header :focus-visible` override here, because the app
+     bar was a block of --primary and --ring *is* --primary, so the ring was
+     invisible against it. PageBar.jsx replaced that bar with one drawn on the
+     page background, so the ordinary ring is correct again — and the override
+     is not merely redundant now but wrong, since it would paint a near-white
+     ring on a light background. */
 }
 
 /* Keeps a bottom-anchored floating element clear of the iOS home indicator.
@@ -190,6 +204,15 @@
     0 24px 48px -24px rgba(30, 34, 70, 0.32), 0 2px 8px rgba(30, 34, 70, 0.06);
   --shadow-tile:
     inset 0 1px 0 rgba(255, 255, 255, 0.7), 0 1px 2px rgba(30, 34, 70, 0.14);
+
+  --sidebar: rgba(255, 255, 255, 0.62);
+  --sidebar-foreground: #1e2138;
+  --sidebar-primary: #4f5fd9;
+  --sidebar-primary-foreground: #f2f3ff;
+  --sidebar-accent: rgba(79, 95, 217, 0.12);
+  --sidebar-accent-foreground: #4f5fd9;
+  --sidebar-border: rgba(30, 33, 56, 0.09);
+  --sidebar-ring: #4f5fd9;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -228,6 +251,15 @@
       0 28px 60px -22px rgba(0, 0, 0, 0.65), 0 2px 10px rgba(0, 0, 0, 0.4);
     --shadow-tile:
       inset 0 1px 0 rgba(255, 255, 255, 0.08), 0 1px 3px rgba(0, 0, 0, 0.4);
+
+    --sidebar: rgba(35, 38, 61, 0.58);
+    --sidebar-foreground: #eef0fb;
+    --sidebar-primary: #5b64dd;
+    --sidebar-primary-foreground: #f4f5ff;
+    --sidebar-accent: rgba(91, 100, 221, 0.16);
+    --sidebar-accent-foreground: #8891f2;
+    --sidebar-border: rgba(255, 255, 255, 0.1);
+    --sidebar-ring: #5b64dd;
   }
 }
 
@@ -266,6 +298,15 @@
     0 28px 60px -22px rgba(0, 0, 0, 0.65), 0 2px 10px rgba(0, 0, 0, 0.4);
   --shadow-tile:
     inset 0 1px 0 rgba(255, 255, 255, 0.08), 0 1px 3px rgba(0, 0, 0, 0.4);
+
+  --sidebar: rgba(35, 38, 61, 0.58);
+  --sidebar-foreground: #eef0fb;
+  --sidebar-primary: #5b64dd;
+  --sidebar-primary-foreground: #f4f5ff;
+  --sidebar-accent: rgba(91, 100, 221, 0.16);
+  --sidebar-accent-foreground: #8891f2;
+  --sidebar-border: rgba(255, 255, 255, 0.1);
+  --sidebar-ring: #5b64dd;
 }
 
 :root[data-theme="light"] {
@@ -304,6 +345,15 @@
     0 24px 48px -24px rgba(30, 34, 70, 0.32), 0 2px 8px rgba(30, 34, 70, 0.06);
   --shadow-tile:
     inset 0 1px 0 rgba(255, 255, 255, 0.7), 0 1px 2px rgba(30, 34, 70, 0.14);
+
+  --sidebar: rgba(255, 255, 255, 0.62);
+  --sidebar-foreground: #1e2138;
+  --sidebar-primary: #4f5fd9;
+  --sidebar-primary-foreground: #f2f3ff;
+  --sidebar-accent: rgba(79, 95, 217, 0.12);
+  --sidebar-accent-foreground: #4f5fd9;
+  --sidebar-border: rgba(30, 33, 56, 0.09);
+  --sidebar-ring: #4f5fd9;
 }
 
 /* Shared spacing for rendered rich text — both the live tiptap editor

@@ -13,14 +13,9 @@ import { useEffect, useState } from "react";
 import { Link as RouterLink } from "react-router-dom";
 import { toast } from "sonner";
 import { useTranslation } from "react-i18next";
-import {
-  ArrowLeftIcon,
-  Trash2Icon,
-  XIcon,
-  TriangleAlertIcon,
-} from "lucide-react";
-import AppHeader from "../components/AppHeader.jsx";
-import NavActions from "../components/NavActions.jsx";
+import { Trash2Icon, XIcon, TriangleAlertIcon } from "lucide-react";
+import PageBar from "../components/layout/PageBar.jsx";
+import PageBody from "../components/layout/PageBody.jsx";
 import { Button } from "../components/ui/button.jsx";
 import { Badge } from "../components/ui/badge.jsx";
 import { Field, FieldLabel } from "../components/ui/field.jsx";
@@ -544,23 +539,15 @@ export default function ModerationPage() {
   const showAccessNotice = !resolvingAuth && user && !isModerator;
 
   return (
-    <div className="min-h-dvh bg-background pb-16">
-      <AppHeader
-        title={t("page.title")}
-        left={
-          <RouterLink
-            to="/hub"
-            className="mr-1 inline-flex shrink-0 items-center gap-2 rounded-md border-0 bg-transparent px-4 py-2 text-sm font-medium text-primary-foreground no-underline transition-colors hover:bg-primary-foreground/10"
-          >
-            <ArrowLeftIcon data-icon="inline-start" />
-            {t("page.lessonHub")}
-          </RouterLink>
-        }
-      >
-        <NavActions current="moderation" />
-      </AppHeader>
+    <>
+      <PageBar
+        crumbs={[
+          { label: t("page.lessonHub"), to: "/hub" },
+          { label: t("page.title") },
+        ]}
+      />
 
-      <div className="mx-auto max-w-3xl px-4 pt-6">
+      <PageBody width="reading">
         {resolvingAuth ? (
           <div className="flex justify-center py-16">
             <Spinner className="size-8" />
@@ -609,7 +596,7 @@ export default function ModerationPage() {
             </div>
           )
         )}
-      </div>
-    </div>
+      </PageBody>
+    </>
   );
 }

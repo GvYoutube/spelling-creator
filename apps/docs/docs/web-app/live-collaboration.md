@@ -109,7 +109,12 @@ to the sender.
 `src/lib/collab.js` is a `useCollaboration` hook that owns the WebSocket, the
 Yjs document, the slot → identity roster, the admission state and the chat
 transcript. `src/components/CollaborateDialog.jsx` is the control panel (host/join
-landing, invite sharing, the waiting-to-join admission list, and the roster).
+landing, invite sharing, the waiting-to-join admission list, and the roster). It
+is addressed by URL rather than by component state: `/editor/collaborate` opens
+it and leaving the panel closes it, so the back button works and a host can send
+someone a link to it. Navigating in or out preserves the query string — an
+invite arrives as `?join=<code>`, and dropping it on the way into the panel
+would break the very flow that opened it.
 `EditorPage` wires the hook's `onRemoteDoc` to its `setDoc`, passes the access
 token, and watches `doc` so local edits broadcast automatically.
 

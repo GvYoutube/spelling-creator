@@ -117,7 +117,11 @@
     "withdrawn": "Proposal withdrawn.",
     "closedToast": "Proposal closed. Whoever proposed it has been notified.",
     "closeError": "Could not close the proposal.",
-    "loadError": "Could not load the proposed changes."
+    "loadError": "Could not load the proposed changes.",
+    "emptyState": "Nobody has proposed changes to this lesson yet. Fork it, make your changes, and offer them back.",
+    "notFound": "That proposal no longer exists.",
+    "backToProposals": "All proposals",
+    "reviewHint": "Opens this lesson in the editor with the proposal in hand. Nothing is written until you confirm the merge."
   },
   "comments": {
     "couldNotLoad": "Could not load comments.",
@@ -160,5 +164,26 @@
     "signInToJoin": "Sign in to join the conversation.",
     "signIn": "Sign in",
     "dismiss": "Dismiss"
+  },
+  "tabs": {
+    "overview": "Lesson",
+    "practice": "Practice",
+    "discussion": "Discussion",
+    "proposals": "Proposals",
+    "history": "History"
+  },
+  "about": {
+    "heading": "About",
+    "author": "By",
+    "sections": "Sections:",
+    "ageRange": "Ages:",
+    "published": "Published",
+    "forkedFrom": "Forked from",
+    "theOriginal": "the original"
+  },
+  "history": {
+    "empty": "This lesson has no published history yet. Histories are stored the first time an author saves changes from the editor.",
+    "noMessage": "(no message)",
+    "loadError": "Could not load this lesson's history."
   }
 }

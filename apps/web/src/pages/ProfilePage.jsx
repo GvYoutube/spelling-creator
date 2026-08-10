@@ -18,8 +18,8 @@ import {
   UserPlusIcon,
   XIcon,
 } from "lucide-react";
-import AppHeader from "../components/AppHeader.jsx";
-import NavActions from "../components/NavActions.jsx";
+import PageBar from "../components/layout/PageBar.jsx";
+import PageBody from "../components/layout/PageBody.jsx";
 import BioDialog from "../components/BioDialog.jsx";
 import FollowListDialog from "../components/FollowListDialog.jsx";
 import RichText from "../components/RichText.jsx";
@@ -192,7 +192,7 @@ export default function ProfilePage() {
   const feedUrl = userFeedUrl(id);
 
   return (
-    <div className="min-h-dvh bg-background pb-16 text-foreground">
+    <>
       <DocumentMeta
         title={profile ? displayName : t("profilePage.documentTitle")}
         // The bio is rich-text HTML, but a meta/OG description is plain text — raw
@@ -205,21 +205,16 @@ export default function ProfilePage() {
             : undefined
         }
       />
-      <AppHeader
-        title={t("profilePage.headerTitle")}
-        left={
-          <RouterLink
-            to="/hub"
-            className="mr-1 inline-flex shrink-0 items-center gap-2 rounded-md border-0 bg-transparent px-4 py-2 text-sm font-medium text-primary-foreground no-underline transition-colors hover:bg-primary-foreground/10"
-          >
-            {t("profilePage.lessonHubLink")}
-          </RouterLink>
-        }
-      >
-        <NavActions current="profile" />
-      </AppHeader>
+      {/* The trail names the person rather than repeating "Profile", which the
+          old bar did — the page is already obviously a profile. */}
+      <PageBar
+        crumbs={[
+          { label: t("profilePage.lessonHubLink"), to: "/hub" },
+          { label: displayName || t("profilePage.headerTitle") },
+        ]}
+      />
 
-      <div className="mx-auto max-w-5xl px-4 pt-6">
+      <PageBody>
         {loading ? (
           <>
             {/* Header placeholder: avatar + name/bio lines, then the lessons grid. */}
@@ -466,7 +461,7 @@ export default function ProfilePage() {
             )}
           </>
         )}
-      </div>
+      </PageBody>
 
       {isOwner && (
         <BioDialog
@@ -484,6 +479,6 @@ export default function ProfilePage() {
         initialTab={followListTab || "followers"}
         onClose={() => setFollowListTab(null)}
       />
-    </div>
+    </>
   );
 }

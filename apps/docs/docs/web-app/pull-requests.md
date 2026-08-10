@@ -29,8 +29,11 @@ lesson ───────▶ your copy ────────────�
 2. **Edit** your copy. It's yours; publish it, keep it as a draft, whatever.
 3. **Propose changes to _lesson_** in the editor. This packs your repository and
    uploads it with a title and an optional note. Nothing in the original changes.
-4. The lesson's author sees it under **Proposed changes** on the lesson page, and
-   gets a notification. They (or a trusted collaborator) hit **Review & merge**.
+4. The lesson's author sees it on the lesson's **Proposals** tab
+   (`/hub/:id/proposals`), and gets a notification. Each proposal also has a page
+   of its own at `/hub/:id/proposals/:prId` — read-only, because merging needs
+   the git objects and those live in the editor. They (or a trusted collaborator)
+   hit **Review & merge**.
 5. That opens the lesson in _their_ editor (`?pull=<id>&lesson=<lessonId>` — the
    link names both, so the review waits for the lesson it belongs to rather than
    running against whatever the reviewer already had open) and runs the usual
@@ -186,6 +189,8 @@ frontend can surface `res.text()` directly.
 | `@spelling-creator/core/pulls`                     | The browser client, and the shared length limits                    |
 | `@spelling-creator/core/browser/git/sync`          | `submitPullRequest` (propose) and `preparePullMerge` (review)       |
 | `apps/web/src/components/ProposeChangesDialog.jsx` | The submission form                                                 |
+| `apps/web/src/pages/lesson/LessonProposals.jsx`    | The Proposals tab                                                   |
+| `apps/web/src/pages/lesson/LessonProposal.jsx`     | One proposal, read-only, with the hand-off into the editor          |
 | `apps/web/src/components/PullRequestsSection.jsx`  | The list on a lesson's page                                         |
 | `apps/web/src/pages/EditorPage.jsx`                | `?pull=<id>&lesson=<id>` — the review + merge flow                  |
 | `apps/web/src/components/MergeDialog.jsx`          | Settling conflicts, shared with the fork-sync direction             |

@@ -1,4 +1,4 @@
-// Proposed changes to a lesson, shown beneath it in the hub.
+// Proposed changes to a lesson: the body of its Proposals tab.
 //
 // Anyone can fork a lesson, but nobody can write someone else's. To offer work
 // back you open a pull request from your fork (the editor's "Propose changes to
@@ -21,7 +21,7 @@
 // block merge dialog, and nothing is written until it's confirmed.
 
 import { useCallback, useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { Link as RouterLink, useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import {
@@ -35,6 +35,8 @@ import { Badge } from "./ui/badge.jsx";
 import { Alert, AlertDescription } from "./ui/alert.jsx";
 import { Avatar, AvatarFallback } from "./ui/avatar.jsx";
 import { Spinner } from "./ui/spinner.jsx";
+import { ListRowsSkeleton } from "./Skeletons.jsx";
+import PageBody from "./layout/PageBody.jsx";
 import { cn } from "../lib/utils.js";
 import { useAuth } from "../lib/auth.jsx";
 import {
@@ -57,8 +59,13 @@ function formatDate(value) {
 /**
  * @param {object} props
  * @param {string} props.lessonId
+ * @param {boolean} [props.standalone]  True when this *is* the page (the
+ *   lesson's Proposals tab) rather than a section stacked under the lesson.
+ *   A tab someone deliberately opened has to answer them even when the answer
+ *   is "none" — and it can afford a loading state, which the stacked version
+ *   could not. See the comment on the early return below.
  */
-export default function PullRequestsSection({ lessonId }) {
+export default function PullRequestsSection({ lessonId, standalone = false }) {
   const { t } = useTranslation("lesson");
   const navigate = useNavigate();
   const { user, accessToken, isModerator } = useAuth();
@@ -148,12 +155,23 @@ export default function PullRequestsSection({ lessonId }) {
   const open = pulls.filter((p) => p.status === "open");
   const resolved = pulls.filter((p) => p.status !== "open");
 
-  // Most lessons have never had a proposal, so this section usually resolves to
-  // nothing at all — and it's rendered on a server-rendered page. A skeleton here
-  // would put a "Proposed changes" heading into the HTML of every lesson on the
-  // hub and then take it away again a moment later. So it stays silent until
-  // there is something to show.
-  if (loading || (!error && pulls.length === 0)) return null;
+  // Stacked under a lesson, most lessons have never had a proposal, so this
+  // section usually resolves to nothing at all — and it's rendered on a
+  // server-rendered page. A skeleton there would put a "Proposed changes"
+  // heading into the HTML of every lesson on the hub and then take it away
+  // again a moment later. So it stays silent until there is something to show.
+  //
+  // As a tab of its own none of that applies: the heading is the tab you
+  // clicked, and "no proposals yet" is the answer you came for.
+  if (!standalone && (loading || (!error && pulls.length === 0))) return null;
+
+  if (standalone && loading) {
+    return (
+      <PageBody width="reading">
+        <ListRowsSkeleton count={3} />
+      </PageBody>
+    );
+  }
 
   const row = (pull) => {
     const mine = pull.authorId && pull.authorId === user?.id;
@@ -168,7 +186,16 @@ export default function PullRequestsSection({ lessonId }) {
         </Avatar>
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2">
-            <span className="text-sm font-semibold">{pull.title}</span>
+            {standalone ? (
+              <RouterLink
+                to={`/hub/${lessonId}/proposals/${pull.id}`}
+                className="text-sm font-semibold text-inherit no-underline hover:underline"
+              >
+                {pull.title}
+              </RouterLink>
+            ) : (
+              <span className="text-sm font-semibold">{pull.title}</span>
+            )}
             <Badge
               variant="outline"
               className={cn(
@@ -265,7 +292,7 @@ export default function PullRequestsSection({ lessonId }) {
     );
   };
 
-  return (
+  const body = (
     <section>
       <h2 className="text-lg font-semibold">
         {t("pulls.heading", { count: open.length })}
@@ -275,6 +302,10 @@ export default function PullRequestsSection({ lessonId }) {
         <Alert variant="destructive" className="mt-3">
           <AlertDescription>{error}</AlertDescription>
         </Alert>
+      ) : pulls.length === 0 ? (
+        <p className="mt-2 text-sm text-muted-foreground">
+          {t("pulls.emptyState")}
+        </p>
       ) : (
         <div className="mt-1 flex flex-col divide-y divide-border">
           {open.map(row)}
@@ -283,4 +314,10 @@ export default function PullRequestsSection({ lessonId }) {
       )}
     </section>
   );
+
+  // As a tab this component owns its page column; stacked under something else
+  // it must not, or it would nest one column inside another. Wrapping the same
+  // element rather than swapping the component type — a component built inline
+  // is a new type every render, which would remount the whole list each time.
+  return standalone ? <PageBody width="reading">{body}</PageBody> : body;
 }

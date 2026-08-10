@@ -1,16 +1,34 @@
-// A single lesson's own page, reachable at /hub/:id. This replaces the old hub
-// preview dialog: opening a lesson now navigates here instead of popping a
-// modal, so each lesson has a shareable URL. It fetches the full lesson by id,
-// renders its document with the same docx→HTML preview pipeline the editor and
-// export use, and shows the comments below. Authors get Edit/Delete here too.
+// A lesson's own page (/hub/:id), and the shell its tabs render into.
+//
+// This replaces the single scrolling LessonPage, and the reason is that a lesson
+// is a git repository — it has forks, a commit history, and proposals opened
+// against it from other people's clones. All of that used to be stacked under
+// the document or hidden in a dialog, because one centred column was the only
+// place to put it. Here each of those is a tab with its own URL, the way a repo
+// host does it: shareable, back-button-correct, and server-renderable.
+//
+// This component owns everything the tabs share — the fetch, the identity
+// header, and every action that acts on the lesson as a whole (export, fork,
+// edit, delete, and the moderator tools). The tabs own only their own body and
+// read the lesson from `useLesson()`.
+//
+// Note what did *not* move here: merging a proposal. That is a real three-way
+// merge against the lesson's git history, and the history lives in the editor's
+// browser-side repository — so "Review & merge" still hands off to the editor.
+// See LessonProposal.jsx.
 
 import { hasApi } from "@spelling-creator/core/config";
 import { useEffect, useRef, useState } from "react";
-import { Link as RouterLink, useNavigate, useParams } from "react-router-dom";
+import {
+  Link as RouterLink,
+  Outlet,
+  useNavigate,
+  useOutletContext,
+  useParams,
+} from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import {
-  ArrowLeftIcon,
   BanIcon,
   EllipsisVerticalIcon,
   EyeIcon,
@@ -24,41 +42,32 @@ import {
   Trash2Icon,
   WifiOffIcon,
 } from "lucide-react";
-import AppHeader from "../components/AppHeader.jsx";
-import NavActions from "../components/NavActions.jsx";
-import { Button } from "../components/ui/button.jsx";
-import { Badge } from "../components/ui/badge.jsx";
-import { Alert, AlertDescription } from "../components/ui/alert.jsx";
-import { Field, FieldLabel } from "../components/ui/field.jsx";
-import { Input } from "../components/ui/input.jsx";
-import { Spinner } from "../components/ui/spinner.jsx";
-import { StarRating } from "../components/ui/star-rating.jsx";
-import {
-  Tooltip,
-  TooltipTrigger,
-  TooltipContent,
-} from "../components/ui/tooltip.jsx";
+import PageBar from "../../components/layout/PageBar.jsx";
+import PageBody from "../../components/layout/PageBody.jsx";
+import LessonTabs from "./LessonTabs.jsx";
+import { Button } from "../../components/ui/button.jsx";
+import { Badge } from "../../components/ui/badge.jsx";
+import { Alert, AlertDescription } from "../../components/ui/alert.jsx";
+import { Field, FieldLabel } from "../../components/ui/field.jsx";
+import { Input } from "../../components/ui/input.jsx";
+import { Spinner } from "../../components/ui/spinner.jsx";
+import { StarRating } from "../../components/ui/star-rating.jsx";
 import {
   Dialog,
   DialogContent,
   DialogHeader,
   DialogTitle,
   DialogFooter,
-} from "../components/ui/dialog.jsx";
+} from "../../components/ui/dialog.jsx";
 import {
   DropdownMenu,
   DropdownMenuTrigger,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuSeparator,
-} from "../components/ui/dropdown-menu.jsx";
-import CommentsSection from "../components/CommentsSection.jsx";
-import PullRequestsSection from "../components/PullRequestsSection.jsx";
-import InteractiveLesson from "../components/InteractiveLesson.jsx";
-import LessonSummary from "../components/LessonSummary.jsx";
-import MyLessonAnswers from "../components/MyLessonAnswers.jsx";
-import { LessonContentSkeleton } from "../components/Skeletons.jsx";
-import LessonView, { lessonPlainText } from "../components/LessonView.jsx";
+} from "../../components/ui/dropdown-menu.jsx";
+import { LessonContentSkeleton } from "../../components/Skeletons.jsx";
+import { lessonPlainText } from "../../components/LessonView.jsx";
 import {
   fetchLesson,
   deleteLesson,
@@ -73,19 +82,28 @@ import {
   requestLessonDeletion,
   deleteLessonAsAdmin,
 } from "@spelling-creator/core/moderation";
-import { useAuth } from "../lib/auth.jsx";
+import { useAuth } from "../../lib/auth.jsx";
 import {
   DocumentMeta,
   JsonLd,
   buildLessonCourseSchema,
   htmlToDescription,
-} from "../lib/seo.jsx";
-import { useServerData, useSiteOrigin } from "../lib/ssr.jsx";
+} from "../../lib/seo.jsx";
+import { useServerData, useSiteOrigin } from "../../lib/ssr.jsx";
 // The docx/PDF pipeline loads on demand — see lib/exports/engine.js. This is a
 // public, server-rendered route, so it must not preload the Word toolchain.
-import { loadExportEngine } from "../lib/exports/load.js";
+import { loadExportEngine } from "../../lib/exports/load.js";
 
-function formatDate(value) {
+/**
+ * The lesson and its shared actions, for the tab currently rendered into this
+ * layout's <Outlet/>. Every file under pages/lesson/ reads its data through
+ * this rather than fetching again.
+ */
+export function useLesson() {
+  return useOutletContext();
+}
+
+export function formatDate(value) {
   if (!value) return "";
   const d = new Date(value);
   if (Number.isNaN(d.getTime())) return "";
@@ -96,7 +114,7 @@ function formatDate(value) {
   });
 }
 
-export default function LessonPage() {
+export default function LessonLayout() {
   const { t } = useTranslation("lesson");
   const { id } = useParams();
   const {
@@ -122,10 +140,8 @@ export default function LessonPage() {
   // Which export is in flight ('docx' | 'pdf' | null).
   const [busy, setBusy] = useState(null);
 
-  // Interactive mode: the lesson presented a step at a time, with a field to
-  // type each answer into (see InteractiveLesson). Bumping `answersSaved` after
-  // a completed run-through re-fetches the reader's own saved answers below.
-  const [interactiveOpen, setInteractiveOpen] = useState(false);
+  // Bumped after a completed interactive run-through, which re-fetches the
+  // reader's own saved answers on the overview tab.
   const [answersSaved, setAnswersSaved] = useState(0);
 
   // Delete-confirmation dialog. The user must retype the lesson's title to
@@ -187,9 +203,6 @@ export default function LessonPage() {
       try {
         const full = await fetchLesson(id, accessToken);
         if (cancelled) return;
-        // Render happens directly from the doc via <LessonView>; images
-        // lazy-load in the browser, so there's no up-front render step to wait
-        // on here — the page shows as soon as the lesson JSON arrives.
         setLesson(full);
       } catch (err) {
         if (cancelled) return;
@@ -398,7 +411,10 @@ export default function LessonPage() {
 
   // schema.org Course structured data so Google can show this lesson as a rich
   // result. Only emitted once the lesson has loaded successfully — no markup for
-  // the loading or error states.
+  // the loading or error states. The canonical URL is the overview tab even when
+  // a sub-tab is what's open: the tabs are views of one lesson, not separate
+  // works, and pointing them all at /hub/:id is what keeps them from competing
+  // with each other in search results.
   const courseSchema =
     lesson && !error
       ? buildLessonCourseSchema({
@@ -409,8 +425,27 @@ export default function LessonPage() {
         })
       : null;
 
+  const outlet = {
+    id,
+    lesson,
+    setLesson,
+    loading,
+    error,
+    isAuthor,
+    isModerator,
+    playable,
+    busy,
+    handleExport,
+    forkLesson,
+    editLesson,
+    handleRated,
+    answersSaved,
+    onAnswersSaved: () => setAnswersSaved((count) => count + 1),
+    formatDate,
+  };
+
   return (
-    <div className="min-h-dvh bg-background pb-16 text-foreground">
+    <>
       {/* Title + social/SEO tags. React hoists these into <head>, so the
           server-rendered HTML carries them and a crawler needs no JavaScript. */}
       <DocumentMeta
@@ -419,134 +454,52 @@ export default function LessonPage() {
         description={description}
       />
       <JsonLd data={courseSchema} />
-      <AppHeader
-        title={lesson?.title || t("lessonPage.lessonFallback")}
-        left={
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <RouterLink
-                to="/hub"
-                aria-label={t("lessonPage.lessonHubAriaLabel")}
-                className="mr-1 inline-flex shrink-0 items-center gap-2 rounded-md border-0 bg-transparent px-2.5 py-2 text-sm font-medium text-primary-foreground no-underline transition-colors hover:bg-primary-foreground/10 md:px-4"
-              >
-                <ArrowLeftIcon data-icon="inline-start" />
-                <span className="hidden md:inline">
-                  {t("lessonPage.lessonHub")}
-                </span>
-              </RouterLink>
-            </TooltipTrigger>
-            <TooltipContent className="md:hidden">
-              {t("lessonPage.lessonHub")}
-            </TooltipContent>
-          </Tooltip>
-        }
+
+      <PageBar
+        crumbs={[
+          { label: t("lessonPage.lessonHub"), to: "/hub" },
+          { label: lesson?.title || t("lessonPage.lessonFallback") },
+        ]}
       >
         {lesson && (
           <>
-            {/* Desktop: the actions as their own buttons. */}
-            <div className="hidden items-center gap-1 md:flex">
-              {playable && (
+            {/* The one action worth a filled button: this is a lesson, and the
+                thing you do with a lesson is work through it. Everything else
+                is in the overflow menu or the overview's side rail. */}
+            {playable && (
+              <Button size="sm" asChild>
+                <RouterLink to="practice" className="no-underline">
+                  <PlayIcon data-icon="inline-start" />
+                  <span className="hidden sm:inline">
+                    {t("lessonPage.startInteractive")}
+                  </span>
+                </RouterLink>
+              </Button>
+            )}
+
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
                 <Button
                   variant="ghost"
-                  onClick={() => setInteractiveOpen(true)}
-                  className="text-primary-foreground hover:bg-primary-foreground/10 hover:text-primary-foreground"
+                  size="icon"
+                  aria-label={t("lessonPage.lessonActionsAriaLabel")}
                 >
-                  <PlayIcon data-icon="inline-start" />
-                  {t("lessonPage.startInteractive")}
+                  <EllipsisVerticalIcon />
                 </Button>
-              )}
-              <Button
-                variant="ghost"
-                onClick={() => handleExport("pdf")}
-                disabled={Boolean(busy)}
-                className="text-primary-foreground hover:bg-primary-foreground/10 hover:text-primary-foreground"
-              >
-                {busy === "pdf" ? (
-                  <Spinner data-icon="inline-start" />
-                ) : (
-                  <PrinterIcon data-icon="inline-start" />
-                )}
-                {t("lessonPage.printPdf")}
-              </Button>
-              <Button
-                variant="ghost"
-                onClick={() => handleExport("docx")}
-                disabled={Boolean(busy)}
-                className="text-primary-foreground hover:bg-primary-foreground/10 hover:text-primary-foreground"
-              >
-                {busy === "docx" ? (
-                  <Spinner data-icon="inline-start" />
-                ) : (
-                  <FileDownIcon data-icon="inline-start" />
-                )}
-                {t("lessonPage.downloadWord")}
-              </Button>
-              <Button
-                variant="ghost"
-                onClick={forkLesson}
-                disabled={Boolean(busy)}
-                className="text-primary-foreground hover:bg-primary-foreground/10 hover:text-primary-foreground"
-              >
-                <GitForkIcon data-icon="inline-start" />
-                {t("lessonPage.fork")}
-              </Button>
-              {isAuthor && (
-                <>
-                  <Button
-                    variant="ghost"
-                    onClick={editLesson}
-                    className="text-primary-foreground hover:bg-primary-foreground/10 hover:text-primary-foreground"
-                  >
-                    <PencilIcon data-icon="inline-start" />
-                    {t("lessonPage.edit")}
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    onClick={() => openDelete("author")}
-                    className="text-primary-foreground hover:bg-primary-foreground/10 hover:text-primary-foreground"
-                  >
-                    <Trash2Icon data-icon="inline-start" />
-                    {t("lessonPage.delete")}
-                  </Button>
-                </>
-              )}
-            </div>
-
-            {/* Mobile: the same actions collapsed into one overflow menu. */}
-            <DropdownMenu>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <DropdownMenuTrigger asChild>
-                    <button
-                      type="button"
-                      aria-label={t("lessonPage.lessonActionsAriaLabel")}
-                      className="inline-flex size-10 shrink-0 cursor-pointer items-center justify-center rounded-full border-0 bg-transparent text-primary-foreground no-underline transition-colors hover:bg-primary-foreground/10 md:hidden"
-                    >
-                      <EllipsisVerticalIcon />
-                    </button>
-                  </DropdownMenuTrigger>
-                </TooltipTrigger>
-                <TooltipContent>{t("lessonPage.lessonActions")}</TooltipContent>
-              </Tooltip>
+              </DropdownMenuTrigger>
               <DropdownMenuContent align="end">
-                {playable && (
-                  <DropdownMenuItem onClick={() => setInteractiveOpen(true)}>
-                    <PlayIcon />
-                    {t("lessonPage.startInteractive")}
-                  </DropdownMenuItem>
-                )}
                 <DropdownMenuItem
                   onClick={() => handleExport("pdf")}
                   disabled={Boolean(busy)}
                 >
-                  <PrinterIcon />
+                  {busy === "pdf" ? <Spinner /> : <PrinterIcon />}
                   {t("lessonPage.printPdf")}
                 </DropdownMenuItem>
                 <DropdownMenuItem
                   onClick={() => handleExport("docx")}
                   disabled={Boolean(busy)}
                 >
-                  <FileDownIcon />
+                  {busy === "docx" ? <Spinner /> : <FileDownIcon />}
                   {t("lessonPage.downloadWord")}
                 </DropdownMenuItem>
                 <DropdownMenuItem onClick={forkLesson} disabled={Boolean(busy)}>
@@ -575,20 +528,15 @@ export default function LessonPage() {
             {/* Moderator/admin tools — one menu, shown to mods and admins. */}
             {isModerator && (
               <DropdownMenu>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <DropdownMenuTrigger asChild>
-                      <button
-                        type="button"
-                        aria-label={t("lessonPage.moderationActionsAriaLabel")}
-                        className="inline-flex size-10 shrink-0 cursor-pointer items-center justify-center rounded-full border-0 bg-transparent text-primary-foreground no-underline transition-colors hover:bg-primary-foreground/10"
-                      >
-                        <ShieldIcon />
-                      </button>
-                    </DropdownMenuTrigger>
-                  </TooltipTrigger>
-                  <TooltipContent>{t("lessonPage.moderation")}</TooltipContent>
-                </Tooltip>
+                <DropdownMenuTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    aria-label={t("lessonPage.moderationActionsAriaLabel")}
+                  >
+                    <ShieldIcon />
+                  </Button>
+                </DropdownMenuTrigger>
                 <DropdownMenuContent align="end">
                   <DropdownMenuItem
                     onClick={toggleShadowban}
@@ -644,21 +592,26 @@ export default function LessonPage() {
             )}
           </>
         )}
-        <NavActions current="lesson" />
-      </AppHeader>
+      </PageBar>
 
-      <div className="mx-auto max-w-3xl px-4 pt-6">
-        {!hasApi() && (
+      {!hasApi() && (
+        <PageBody>
           <Alert className="border-primary/40 bg-primary/10 text-primary">
             <AlertDescription className="text-primary">
               {t("lessonPage.hubDisabled")}
             </AlertDescription>
           </Alert>
-        )}
+        </PageBody>
+      )}
 
-        {hasApi() && loading && <LessonContentSkeleton />}
+      {hasApi() && loading && (
+        <PageBody>
+          <LessonContentSkeleton />
+        </PageBody>
+      )}
 
-        {hasApi() && !loading && error && (
+      {hasApi() && !loading && error && (
+        <PageBody>
           <Alert variant="destructive">
             <AlertDescription className="flex items-center justify-between gap-2">
               {error}
@@ -669,109 +622,67 @@ export default function LessonPage() {
               </Button>
             </AlertDescription>
           </Alert>
-        )}
+        </PageBody>
+      )}
 
-        {hasApi() && !loading && !error && lesson && (
-          <>
-            <div className="mb-4 flex flex-col">
-              <div className="flex items-center gap-2">
-                <h1 className="text-3xl font-semibold">
-                  {lesson.title || t("lessonPage.untitledLesson")}
-                </h1>
-                {/* Only the author and mods/admins can load a shadowbanned
-                    lesson, so this badge is never seen by the public. */}
-                {lesson.shadowbanned && (
-                  <Badge
-                    variant="outline"
-                    className="border-focus/40 bg-focus/10 text-focus"
-                  >
-                    <EyeOffIcon />
-                    {t("lessonPage.shadowbannedBadge")}
-                  </Badge>
-                )}
-              </div>
-              <p className="text-sm text-muted-foreground">
-                {lesson.authorId ? (
-                  <RouterLink
-                    to={`/users/${lesson.authorId}`}
-                    className="text-inherit no-underline hover:underline"
-                  >
-                    {lesson.author || t("lessonPage.anonymous")}
-                  </RouterLink>
-                ) : (
-                  lesson.author || t("lessonPage.anonymous")
-                )}
-                {typeof lesson.sectionCount === "number"
-                  ? ` · ${t("lessonPage.sectionCount", { count: lesson.sectionCount })}`
-                  : ""}
-                {lesson.createdAt ? ` · ${formatDate(lesson.createdAt)}` : ""}
-              </p>
-              {/* Average star rating, once the lesson has any ratings. Ratings are
-                  left from the comments box below; this updates live via onRated. */}
-              {lesson.ratingCount > 0 && (
-                <div className="mt-1 flex items-center gap-1.5">
-                  <StarRating
-                    value={lesson.avgRating || 0}
-                    readOnly
-                    size="sm"
-                    aria-label={t("lessonPage.averageRatingAriaLabel")}
-                  />
-                  <p className="text-sm text-muted-foreground">
-                    {(lesson.avgRating || 0).toFixed(1)} ·{" "}
-                    {t("lessonPage.ratingCount", { count: lesson.ratingCount })}
-                  </p>
-                </div>
+      {hasApi() && !loading && !error && lesson && (
+        <>
+          {/* The identity block: what this lesson is and who made it. It stays
+              put across every tab, which is what makes the tabs read as views
+              of one thing rather than as separate pages. The tab bar sits
+              directly under it, so it drops the column's bottom padding. */}
+          <PageBody className="pb-0">
+            <div className="flex items-center gap-2">
+              <h2 className="text-3xl font-semibold">
+                {lesson.title || t("lessonPage.untitledLesson")}
+              </h2>
+              {/* Only the author and mods/admins can load a shadowbanned
+                  lesson, so this badge is never seen by the public. */}
+              {lesson.shadowbanned && (
+                <Badge
+                  variant="outline"
+                  className="border-focus/40 bg-focus/10 text-focus"
+                >
+                  <EyeOffIcon />
+                  {t("lessonPage.shadowbannedBadge")}
+                </Badge>
               )}
             </div>
+            <p className="mt-1 text-sm text-muted-foreground">
+              {lesson.authorId ? (
+                <RouterLink
+                  to={`/users/${lesson.authorId}`}
+                  className="text-inherit no-underline hover:underline"
+                >
+                  {lesson.author || t("lessonPage.anonymous")}
+                </RouterLink>
+              ) : (
+                lesson.author || t("lessonPage.anonymous")
+              )}
+              {lesson.createdAt ? ` · ${formatDate(lesson.createdAt)}` : ""}
+            </p>
+            {/* Average star rating, once the lesson has any ratings. Ratings are
+                left from the discussion tab; this updates live via onRated. */}
+            {lesson.ratingCount > 0 && (
+              <div className="mt-1.5 flex items-center gap-1.5">
+                <StarRating
+                  value={lesson.avgRating || 0}
+                  readOnly
+                  size="sm"
+                  aria-label={t("lessonPage.averageRatingAriaLabel")}
+                />
+                <p className="text-sm text-muted-foreground">
+                  {(lesson.avgRating || 0).toFixed(1)} ·{" "}
+                  {t("lessonPage.ratingCount", { count: lesson.ratingCount })}
+                </p>
+              </div>
+            )}
+          </PageBody>
 
-            {/* On-device AI summary, above the lesson itself so a reader can
-                decide whether to read on. Renders nothing unless the browser
-                supports the Summarizer API. */}
-            <LessonSummary doc={lesson.doc} />
+          <LessonTabs lesson={lesson} playable={playable} />
 
-            {/* LessonView draws the lesson in the app's theme, light or dark,
-                the same way interactive mode does — the panel frame around it
-                makes it read as a page floating on the app's background. The
-                printout look lives in the docx/PDF export, not here. */}
-            <div className="overflow-hidden rounded-panel border border-border bg-card shadow-(--shadow-panel)">
-              <LessonView doc={lesson.doc} />
-            </div>
-
-            {/* The reader's own saved run-throughs of this lesson, visible to
-                nobody else — including the lesson's author. Renders nothing when
-                signed out or when there are none (see MyLessonAnswers). */}
-            <div className="mt-6">
-              <MyLessonAnswers
-                lessonId={lesson.id}
-                refreshToken={answersSaved}
-              />
-            </div>
-
-            {/* Changes other people have proposed to this lesson, and — for its
-                author or a trusted collaborator — the way in to reviewing them.
-                Renders nothing until someone has proposed something. */}
-            <div className="mt-6">
-              <PullRequestsSection lessonId={lesson.id} />
-            </div>
-
-            <div className="mt-6">
-              <CommentsSection lessonId={lesson.id} onRated={handleRated} />
-            </div>
-          </>
-        )}
-      </div>
-
-      {/* Interactive mode. Mounted alongside the page rather than only while open:
-          a closed Radix dialog renders no DOM at all, and unmounting it on close
-          would cut its exit animation short. It costs one capability probe for
-          speech synthesis (see useSpeech) and nothing else until it's opened. */}
-      {lesson && playable && (
-        <InteractiveLesson
-          lesson={lesson}
-          open={interactiveOpen}
-          onOpenChange={setInteractiveOpen}
-          onSaved={() => setAnswersSaved((count) => count + 1)}
-        />
+          <Outlet context={outlet} />
+        </>
       )}
 
       <Dialog open={deleteOpen} onOpenChange={(next) => !next && closeDelete()}>
@@ -928,6 +839,6 @@ export default function LessonPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </div>
+    </>
   );
 }
