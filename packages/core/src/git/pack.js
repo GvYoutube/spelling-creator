@@ -82,13 +82,16 @@ async function collectTree({ fs, gitdir, oid, oids }) {
  * a second variation adds only the commits that are actually unique to it.
  *
  * @param {string[]} [args.only] Restrict the pack to these branches. A proposal
- *        offers the lesson, not the variations of it its author happens to have
- *        open, so submitPullRequest asks for the default branch alone.
+ *        offers one version of the lesson, not every variation its author
+ *        happens to have open, so submitPullRequest asks for a single branch.
+ * @param {string} [args.headBranch] Which branch the pack's `head` names. The
+ *        default branch — the lesson — unless the caller says otherwise, which a
+ *        proposal does: it offers the branch its author was working on.
  * @returns {Promise<{ packfile: Uint8Array, filename: string, head: string, refs: object } | null>}
- *          `head` is the default branch's tip — the lesson itself — and `refs`
- *          maps every branch name to its tip. null when there is nothing to send.
+ *          `refs` maps every packed branch name to its tip. null when there is
+ *          nothing to send.
  */
-export async function packRepo({ fs, gitdir, only }) {
+export async function packRepo({ fs, gitdir, only, headBranch = BRANCH }) {
   const names =
     only || (await git.listBranches({ fs, gitdir }).catch(() => []));
 
@@ -99,9 +102,9 @@ export async function packRepo({ fs, gitdir, only }) {
     if (oid) refs[name] = oid;
   }
 
-  // The lesson is the default branch. A repository that somehow has branches but
-  // not that one has nothing to publish as the lesson, and nothing to pack.
-  const head = refs[BRANCH] || null;
+  // A pack has to name a tip, and a repository whose head branch has no commits
+  // has nothing to send under it.
+  const head = refs[headBranch] || null;
   if (!head) return null;
 
   const oids = new Set();

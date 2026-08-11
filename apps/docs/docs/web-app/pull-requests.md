@@ -58,11 +58,42 @@ The lesson, and not your [variations](./lesson-variations.md) of it: a variation
 an idea you are still turning over, and offering one to somebody else to merge,
 unasked and unmentioned, is not what "propose changes" means.
 
+Which version of your fork? **The one you were working on.** If you developed the
+idea on a [variation](./lesson-variations.md), that is what gets proposed — and
+only that one, so the rest of your variations stay yours. The proposal records
+which branch it came from, and the review queue says so.
+
 Snapshotting is deliberate. You carry on editing your fork after proposing, and a
 request that silently tracked your branch would mean the reviewer reading one
-thing and merging another. So the pack is written once and never rewritten: the
-Worker refuses a second upload, and refuses any upload whose tip isn't the commit
-the request was opened with.
+thing and merging another.
+
+## Updating a proposal
+
+The pack used to be written once and never rewritten, which made "silently" moot
+by making _any_ change impossible — so being asked for a tweak meant closing the
+proposal and opening another, throwing away the discussion attached to it.
+
+Proposing again from the same fork now **updates** the proposal you already have
+open, and records that it happened: the version number goes up, the commit it used
+to point at is kept, and the page shows _"Version 3 · updated 4 March"_ along with
+what that last update changed. Nothing moves silently; what was actually being
+protected was never immutability, it was that nothing changes without saying so.
+
+A proposal may only move **forward** — the new tip has to contain the one the
+proposal already points at. That is what keeps one pack per proposal honest: the
+previous version's commit is still reachable in the new pack, which is how "what
+the last update changed" is answerable without storing a pack per version. It is
+checked by the client, because the Worker holds a proposal's history as an opaque
+packfile it cannot walk — the same limit that stops the merge endpoint verifying
+ancestry, bounded the same way, since the only proposal you can rewrite is your
+own and you could always have closed and reopened it.
+
+There is a ceiling of **20 updates**. Past a couple of dozen rewrites it is a
+different change, and the thread attached to it has stopped being about what the
+proposal now contains.
+
+An assistant working over MCP follows the same rule: `propose_changes` from a fork
+that already has one open updates it rather than stacking a second one beside it.
 
 Because a fork is a real clone, that pack shares object ids with the lesson's own
 history. The reviewer indexes it into the lesson's repository, where its objects
@@ -231,14 +262,14 @@ which is why the submission dialog says so plainly before you send it.
 
 ## Worker endpoints
 
-| Method & path                         | Auth                    | What it does                                                                                   |
-| ------------------------------------- | ----------------------- | ---------------------------------------------------------------------------------------------- |
-| `GET /lessons/:id/pulls`              | none, unless a draft\*  | `{ "pulls": [...], "canReview": bool }` — newest first; unready rows only for their own author |
-| `POST /lessons/:id/pulls`             | `Bearer <Supabase JWT>` | Opens a proposal (`{ title, body, head, base, sourceLessonId }`); the author only from a fork  |
-| `PUT /lessons/:id/pulls/:prId/pack`   | `Bearer <Supabase JWT>` | Uploads its packfile (`X-Git-Head` must match). The proposer's, once                           |
-| `GET /lessons/:id/pulls/:prId/pack`   | none, unless a draft\*  | The packfile; `X-Git-Head` names its tip                                                       |
-| `POST /lessons/:id/pulls/:prId/merge` | `Bearer <Supabase JWT>` | Records the merge (`{ mergeCommit }`); author or trusted collaborator only                     |
-| `POST /lessons/:id/pulls/:prId/close` | `Bearer <Supabase JWT>` | Closes it; proposer, author, trusted collaborator, or moderator                                |
+| Method & path                         | Auth                    | What it does                                                                                              |
+| ------------------------------------- | ----------------------- | --------------------------------------------------------------------------------------------------------- |
+| `GET /lessons/:id/pulls`              | none, unless a draft\*  | `{ "pulls": [...], "canReview": bool }` — newest first; unready rows only for their own author            |
+| `POST /lessons/:id/pulls`             | `Bearer <Supabase JWT>` | Opens a proposal (`{ title, body, head, headRef, base, sourceLessonId }`); the author only from a fork    |
+| `PUT /lessons/:id/pulls/:prId/pack`   | `Bearer <Supabase JWT>` | Uploads its packfile. The proposer's; the first must match the row's head, a later one records a revision |
+| `GET /lessons/:id/pulls/:prId/pack`   | none, unless a draft\*  | The packfile; `X-Git-Head` names its tip                                                                  |
+| `POST /lessons/:id/pulls/:prId/merge` | `Bearer <Supabase JWT>` | Records the merge (`{ mergeCommit }`); author or trusted collaborator only                                |
+| `POST /lessons/:id/pulls/:prId/close` | `Bearer <Supabase JWT>` | Closes it; proposer, author, trusted collaborator, or moderator                                           |
 
 \* Reads follow the target lesson's own visibility — the single `canReadLesson`
 rule in `apps/api/src/lib/lesson.js` that also gates `GET /lessons/:id`, its

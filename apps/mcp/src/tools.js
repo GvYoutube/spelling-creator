@@ -618,8 +618,11 @@ export function registerTools(server, ctx) {
         "returned `url` — that is the page where they read the diff and decide. Their answer is theirs to give: " +
         "don't tell them it is done, and don't try to merge it yourself.\n\n" +
         "The proposal carries ONE commit holding the fork as it now stands, so make all your edits before calling " +
-        "this. You may propose again after further edits; each proposal is a separate request (at most 5 open " +
-        "against one lesson).\n\n" +
+        "this.\n\n" +
+        "Calling it AGAIN from the same fork while a proposal is still open UPDATES that proposal rather than " +
+        "opening another — same request, same discussion, new contents — which is what you want after the human " +
+        "asks for a change. The title and body you pass are then ignored, since the ones already there are what " +
+        "they have been reading. `updated` in the result says which happened.\n\n" +
         "Write the title and body for the reviewer, not for the log: say what changed and why it is an improvement, " +
         "so someone who has not read the diff can judge it.",
       inputSchema: {
@@ -656,6 +659,7 @@ export function registerTools(server, ctx) {
         commit,
         changes,
         historyPushed,
+        updated,
       } = await proposeChanges(api, {
         forkLessonId,
         lessonId,
@@ -673,9 +677,14 @@ export function registerTools(server, ctx) {
         commit,
         changes,
         url: proposalUrl(target, pull.id),
+        revision: pull.revision,
         note:
-          "Proposal opened. Nothing has changed in the lesson itself — give the user the `url` so they can read " +
-          "the diff and merge or decline it. Poll list_lesson_proposals if you need to know what they decided." +
+          (updated
+            ? "This fork already had a proposal open, so it was UPDATED rather than duplicated — same proposal, " +
+              "same discussion, new contents. Nothing has changed in the lesson itself."
+            : "Proposal opened. Nothing has changed in the lesson itself.") +
+          " Give the user the `url` so they can read the diff and merge or decline it. Poll " +
+          "list_lesson_proposals if you need to know what they decided." +
           // The proposal is complete either way — its changes are stored with it.
           // This only means the fork's own history didn't catch up.
           (historyPushed

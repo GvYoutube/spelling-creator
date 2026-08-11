@@ -1365,6 +1365,85 @@ export default function EditorPage() {
   // collaborators they named) reviews and merges from their own editor. That
   // review step is deliberate: a fork can no longer push itself into someone
   // else's published lesson, however trusted its owner is.
+  // The proposal this fork already has open against the lesson it came from, if
+  // there is one.
+  //
+  // Without this, being asked for a change and making it meant opening a *second*
+  // proposal, leaving the reviewer two overlapping ones and the conversation on
+  // the wrong one. With it, the button says "update" and does.
+  //
+  // Scoped to proposals from *this* fork (`sourceLessonId`), not merely ones by
+  // this person: proposing to the same lesson from two different forks is a
+  // legitimate thing to do, and they are not updates of each other.
+  const [openProposal, setOpenProposal] = useState(null);
+
+  const refreshOpenProposal = useCallback(async () => {
+    if (!forkedFrom || !editingId || !user?.id || !hasApi()) {
+      setOpenProposal(null);
+      return null;
+    }
+    try {
+      const { pulls } = await fetchPullRequests(forkedFrom, accessToken);
+      const mine =
+        pulls.find(
+          (p) =>
+            p.status === "open" &&
+            p.ready &&
+            p.authorId === user.id &&
+            p.sourceLessonId === editingId,
+        ) || null;
+      setOpenProposal(mine);
+      return mine;
+    } catch {
+      // A queue we couldn't read just means the button keeps its "propose"
+      // wording; opening a second proposal is recoverable, and failing the
+      // editor over it would not be.
+      return null;
+    }
+  }, [forkedFrom, editingId, user?.id, accessToken]);
+
+  useEffect(() => {
+    refreshOpenProposal();
+  }, [refreshOpenProposal]);
+
+  // Replace what an already-open proposal contains with the work as it stands.
+  // No dialog: its title and note are already written and this endpoint doesn't
+  // change them, so there is nothing to ask.
+  const handleUpdateProposal = async () => {
+    if (!openProposal) return;
+    setProposing(true);
+    try {
+      await git.commitNow();
+
+      const engine = await loadGitEngine();
+      const updated = await engine.updatePullRequest({
+        repoId: git.repoId,
+        lessonId: forkedFrom,
+        pullId: openProposal.id,
+        head: openProposal.head,
+        accessToken,
+      });
+      setOpenProposal(updated || openProposal);
+
+      notify({
+        severity: "success",
+        message: t("messages.proposalUpdated", { title: openProposal.title }),
+        route: {
+          to: `/hub/${forkedFrom}/proposals/${openProposal.id}`,
+          label: t("labels.viewProposal"),
+        },
+      });
+    } catch (err) {
+      console.error(err);
+      notify({
+        severity: "error",
+        message: t("messages.couldNotPropose", { error: err.message || err }),
+      });
+    } finally {
+      setProposing(false);
+    }
+  };
+
   const handleProposeChanges = async ({ title, body }) => {
     if (!forkedFrom) return;
     setProposing(true);
@@ -1386,6 +1465,7 @@ export default function EditorPage() {
       });
 
       setProposeOpen(false);
+      refreshOpenProposal();
       notify({
         severity: "success",
         message: t("messages.proposalOpened", {
@@ -2298,25 +2378,38 @@ export default function EditorPage() {
 
                 {/* Offer this fork's work back to the lesson it came from. It goes
                   as a proposal for that lesson's author (or a trusted
-                  collaborator) to review — a fork never writes the original. */}
+                  collaborator) to review — a fork never writes the original.
+                  Once one is open, the same button updates it rather than
+                  opening a second one about the same work. */}
                 {forkedFrom && canPropose && hasApi() && (
                   <Tooltip>
                     <TooltipTrigger asChild>
                       <Button
                         size="sm"
-                        onClick={() => setProposeOpen(true)}
+                        onClick={
+                          openProposal
+                            ? handleUpdateProposal
+                            : () => setProposeOpen(true)
+                        }
                         disabled={busy !== null || proposing}
                       >
                         <GitPullRequestIcon data-icon="inline-start" />
-                        {t("documentPanel.proposeButton", {
-                          name: forkedFromTitle || t("labels.theOriginal"),
-                        })}
+                        {openProposal
+                          ? t("documentPanel.updateProposalButton")
+                          : t("documentPanel.proposeButton", {
+                              name: forkedFromTitle || t("labels.theOriginal"),
+                            })}
                       </Button>
                     </TooltipTrigger>
                     <TooltipContent className="max-w-xs">
-                      {t("documentPanel.proposeTooltip", {
-                        name: forkedFromTitle || t("labels.theOriginalLesson"),
-                      })}
+                      {openProposal
+                        ? t("documentPanel.updateProposalTooltip", {
+                            title: openProposal.title,
+                          })
+                        : t("documentPanel.proposeTooltip", {
+                            name:
+                              forkedFromTitle || t("labels.theOriginalLesson"),
+                          })}
                     </TooltipContent>
                   </Tooltip>
                 )}

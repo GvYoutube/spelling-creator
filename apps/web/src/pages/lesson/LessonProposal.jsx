@@ -164,6 +164,7 @@ export default function LessonProposal() {
           repoId: repoIdFor(lesson.id),
           lessonId: lesson.id,
           pullId: prId,
+          previousHead: pull.previousHead,
           accessToken,
         });
         if (cancelled) return;
@@ -180,7 +181,7 @@ export default function LessonProposal() {
     return () => {
       cancelled = true;
     };
-  }, [lesson.id, prId, ready, accessToken, t]);
+  }, [lesson.id, prId, ready, pull?.previousHead, accessToken, t]);
 
   // Same hand-off as the list's "Review & merge" — see the file header. The
   // lesson id goes in the query string as well as sessionStorage because the
@@ -280,6 +281,20 @@ export default function LessonProposal() {
         </p>
       </div>
 
+      {/* A proposal can be updated while it is open, and a reviewer coming back to
+          one needs to know that happened before they read it again. */}
+      {(pull.revision > 1 || pull.headRef) && (
+        <p className="mt-2 text-sm text-muted-foreground">
+          {pull.revision > 1 &&
+            t("pulls.revision", {
+              n: pull.revision,
+              when: pull.updatedAt ? formatDate(pull.updatedAt) : "",
+            })}
+          {pull.revision > 1 && pull.headRef ? " · " : ""}
+          {pull.headRef && t("pulls.fromVariation", { name: pull.headRef })}
+        </p>
+      )}
+
       {pull.body && (
         <div className="mt-4 rounded-panel border border-border bg-card p-4">
           <p className="text-sm whitespace-pre-wrap">{pull.body}</p>
@@ -320,6 +335,19 @@ export default function LessonProposal() {
               <hr className="my-3 border-border" />
               <ChangeList ops={changes.ops} className="max-h-80" />
             </>
+          )}
+
+          {/* What the most recent update did, for a reviewer who has read this
+              before. Only drawn when there has been one and its commits are
+              still readable. */}
+          {changes?.updateOps?.length > 0 && (
+            <div className="mt-4 rounded-md border border-border p-3">
+              <p className="text-sm font-medium">
+                {t("pulls.changes.sinceUpdate")}
+              </p>
+              <ChangeChips ops={changes.updateOps} className="mt-2" />
+              <ChangeList ops={changes.updateOps} className="mt-3 max-h-40" />
+            </div>
           )}
 
           {/* Whether a reviewer would have anything to decide. Worth saying

@@ -37,6 +37,14 @@ import { apiUrl, hasApi } from "./config.js";
 export const PULL_TITLE_MAX = 200;
 export const PULL_BODY_MAX = 4000;
 
+// How many times one proposal may be updated before it has to be closed and
+// reopened. A proposal is a conversation about a specific change; past a couple
+// of dozen rewrites it is a different change, and the thread attached to it has
+// stopped being about what it now contains. It also bounds the one thing an
+// update costs the hub — a full pack rewrite — for a caller who could otherwise
+// repeat it indefinitely.
+export const MAX_PULL_REVISIONS = 20;
+
 function endpoint(lessonId, path = "") {
   return `${apiUrl()}/lessons/${encodeURIComponent(lessonId)}/pulls${path}`;
 }
@@ -105,7 +113,14 @@ export async function fetchPullRequests(lessonId, accessToken) {
  */
 export async function createPullRequest(
   lessonId,
-  { title, body = "", head, base = null, sourceLessonId = null },
+  {
+    title,
+    body = "",
+    head,
+    headRef = null,
+    base = null,
+    sourceLessonId = null,
+  },
   accessToken,
 ) {
   if (!hasApi()) throw new Error("The lesson hub is not configured.");
@@ -124,6 +139,7 @@ export async function createPullRequest(
         title,
         body,
         head,
+        ...(headRef ? { headRef } : {}),
         ...(base ? { base } : {}),
         ...(sourceLessonId ? { sourceLessonId } : {}),
       }),

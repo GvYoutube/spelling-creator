@@ -123,8 +123,14 @@ dedupes by oid, so a second variation adds only the commits unique to it.
 
 A **fork** takes the default branch alone. Somebody else's half-finished ideas
 aren't part of what was forked, and adopting them as branches of the fork would
-claim they were. A **proposal** likewise carries only the lesson — see
-[Pull requests](./pull-requests.md).
+claim they were.
+
+A **proposal** carries exactly one branch: the one you were working on when you
+proposed it. Both halves matter. Offering the branch you are looking at is the
+only reading of "propose these changes" that isn't a trap — work an idea up on a
+variation, propose, and you would otherwise have sent the untouched lesson and
+been told it worked. Offering _only_ that one is what keeps the rest to yourself.
+See [Pull requests](./pull-requests.md).
 
 ### Pushing more than one branch
 

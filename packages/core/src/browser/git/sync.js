@@ -547,10 +547,19 @@ export async function submitPullRequest({
   sourceLessonId = null,
   accessToken,
 }) {
-  // The lesson as this fork has it, and nothing else. A variation is an idea its
-  // author is still turning over; offering it to somebody else to merge, unasked
-  // and unmentioned, is not what "propose changes" means.
-  const packed = await packRepo({ ...repoCtx(repoId), only: [BRANCH] });
+  const ctx = repoCtx(repoId);
+
+  // The branch the proposer is actually looking at, and only that one.
+  //
+  // Both halves matter. Offering *the branch you are on* is the only reading of
+  // "propose these changes" that isn't a trap: someone who worked up their idea
+  // on a variation and then proposed the untouched lesson would have sent nothing,
+  // and been told it succeeded. And offering *only* that branch is what keeps the
+  // rest to themselves — a variation is an idea its author is still turning over,
+  // and handing somebody else half a dozen of them to merge is not what the button
+  // says.
+  const branch = await currentBranch(ctx);
+  const packed = await packRepo({ ...ctx, only: [branch], headBranch: branch });
   if (!packed) {
     throw new Error("There is nothing to propose yet — make an edit first.");
   }
@@ -566,6 +575,9 @@ export async function submitPullRequest({
       title,
       body,
       head: packed.head,
+      // Named so the review queue can say which version of the fork this is. The
+      // default branch is the fork itself and needs no saying.
+      headRef: branch === BRANCH ? null : branch,
       base: refs?.head || null,
       sourceLessonId,
     },
@@ -584,6 +596,53 @@ export async function submitPullRequest({
     await closePullRequest(lessonId, pull.id, accessToken).catch(() => {});
     throw err;
   }
+}
+
+/**
+ * Replace what an open proposal contains with the work as it now stands.
+ *
+ * The alternative was closing it and opening another, which threw away the
+ * conversation attached to it — so this exists for the ordinary case of being
+ * asked for a change and making it.
+ *
+ * A proposal may only move **forward**: the new tip has to contain the one the
+ * proposal already points at. That is what keeps one pack per proposal honest —
+ * the previous revision's commit is still reachable in the new pack, so "what
+ * changed in this update" stays answerable — and it is checked here because the
+ * Worker holds a proposal's history as an opaque packfile and cannot walk it.
+ *
+ * @returns {Promise<object>} The updated proposal.
+ */
+export async function updatePullRequest({
+  repoId,
+  lessonId,
+  pullId,
+  head,
+  accessToken,
+}) {
+  const ctx = repoCtx(repoId);
+
+  const branch = await currentBranch(ctx);
+  const packed = await packRepo({ ...ctx, only: [branch], headBranch: branch });
+  if (!packed) {
+    throw new Error("There is nothing to propose yet — make an edit first.");
+  }
+  if (packed.head === head) {
+    throw new Error("This proposal already contains everything you have here.");
+  }
+  if (!(await contains({ ...ctx, oid: packed.head, ancestor: head }))) {
+    throw new Error(
+      "This doesn’t build on what the proposal already contains — it would replace it rather than update it. " +
+        "Withdraw the proposal and open a new one.",
+    );
+  }
+
+  return uploadPullPack(
+    lessonId,
+    pullId,
+    { packfile: packed.packfile, head: packed.head },
+    accessToken,
+  );
 }
 
 /**
@@ -647,6 +706,7 @@ export async function prepareProposalReview({
   repoId,
   lessonId,
   pullId,
+  previousHead,
   accessToken,
 }) {
   const ctx = repoCtx(repoId);
@@ -685,8 +745,21 @@ export async function prepareProposalReview({
   const ops = diffDocs(baseDoc || ourDoc, theirDoc);
   const merged = ourDoc ? mergeDocs(baseDoc, ourDoc, theirDoc) : null;
 
+  // What the proposer's most recent update changed, when there has been one. The
+  // commit it moved from is still in this pack — a proposal may only move forward
+  // — so this costs a tree read rather than another download. It is best-effort:
+  // a proposal from before updates existed has no previous head to read, and a
+  // reader who can see the current changes shouldn't lose them over that.
+  let updateOps = null;
+  if (previousHead && previousHead !== theirs) {
+    updateOps = await readDocAt({ ...ctx, oid: previousHead })
+      .then((previousDoc) => diffDocs(previousDoc, theirDoc))
+      .catch(() => null);
+  }
+
   return {
     ops,
+    updateOps,
     conflicts: merged?.conflicts || [],
     auto: merged?.auto || EMPTY_AUTO,
     base,

@@ -306,6 +306,41 @@ export async function proposeChanges(
   const proposed = await packRepo({ ...ctx, only: [DEFAULT_BRANCH] });
   const packed = await packRepo(ctx);
 
+  // Is there already one open from this fork? An assistant asked for a further
+  // change should update the proposal a human is already reading, not stack a
+  // second one beside it — the review queue would then hold two overlapping
+  // proposals and any discussion would be attached to the wrong one.
+  //
+  // Matched on the fork, not merely on the account: proposing to one lesson from
+  // two different forks is legitimate, and those are not updates of each other.
+  const existing = await api
+    .listPulls(target)
+    .then(({ pulls }) =>
+      pulls.find(
+        (p) =>
+          p.status === "open" && p.ready && p.sourceLessonId === forkLessonId,
+      ),
+    )
+    .catch(() => null);
+
+  if (existing) {
+    // The fork's history is the same branch moving forward, so this commit
+    // descends from whatever the proposal already points at — which is the rule
+    // an update has to satisfy.
+    const updated = await api.uploadPullPack(target, existing.id, {
+      packfile: proposed.packfile,
+      head: proposed.head,
+    });
+    return {
+      pull: updated || existing,
+      lessonId: target,
+      commit: commit.oid,
+      changes: ops.map(describeOp),
+      historyPushed: await pushForkHistory(api, forkLessonId, packed, forkPack),
+      updated: true,
+    };
+  }
+
   // The target's tip as it stands, recorded on the request so a reviewer can see
   // what it was built against. Informational: the merge finds its own base from
   // the shared ancestry.
@@ -340,7 +375,31 @@ export async function proposeChanges(
   // operations and refuse — the changes safe but unproposable without making a
   // further edit. Pushing last, a failed proposal leaves the fork exactly as it
   // was and the retry simply works.
-  let historyPushed = true;
+  const historyPushed = await pushForkHistory(
+    api,
+    forkLessonId,
+    packed,
+    forkPack,
+  );
+
+  return {
+    pull: ready || pull,
+    lessonId: target,
+    commit: commit.oid,
+    changes: ops.map(describeOp),
+    historyPushed,
+    updated: false,
+  };
+}
+
+/**
+ * Advance the fork's own stored history, and never let it fail the call.
+ *
+ * The proposal does not depend on it — its pack is stored separately, and that is
+ * what a reviewer merges — so this is bookkeeping: it keeps the fork's History tab
+ * honest and gives the next proposal this commit to build on.
+ */
+async function pushForkHistory(api, forkLessonId, packed, forkPack) {
   try {
     await api.pushLessonPack(forkLessonId, {
       packfile: packed.packfile,
@@ -353,15 +412,8 @@ export async function proposeChanges(
       refs: packed.refs,
       expected: forkPack.refs,
     });
+    return true;
   } catch {
-    historyPushed = false;
+    return false;
   }
-
-  return {
-    pull: ready || pull,
-    lessonId: target,
-    commit: commit.oid,
-    changes: ops.map(describeOp),
-    historyPushed,
-  };
 }

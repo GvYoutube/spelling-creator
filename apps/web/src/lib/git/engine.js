@@ -91,4 +91,5 @@ export {
   pushHistory,
   remoteStatus,
   submitPullRequest,
+  updatePullRequest,
 } from "@spelling-creator/core/browser/git/sync";

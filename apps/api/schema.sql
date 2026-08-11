@@ -262,8 +262,29 @@ create table if not exists public.lesson_pull_requests (
   resolved_at   timestamptz,
   -- Recorded so an admin can later ban the address, as for lessons and comments.
   author_ip     text,
-  created_at    timestamptz not null default now()
+  created_at    timestamptz not null default now(),
+  -- The branch of the fork this was proposed from, for display. A proposer can
+  -- work on a variation of their fork (see /web-app/lesson-variations) and offer
+  -- that, so "which one is this?" is a question the queue has to be able to
+  -- answer. Null on a proposal opened before this, and on one from the default
+  -- branch, where naming it would say nothing.
+  head_ref      text,
+  -- A proposal can be updated while it is open, and each upload is a revision.
+  -- `revision` counts them from 1; `previous_head` is the commit the proposal
+  -- pointed at before the most recent one, which is what makes "what changed in
+  -- this update" answerable — both commits are in the stored pack, because an
+  -- update may only move the proposer's branch forward.
+  revision      integer not null default 1,
+  previous_head text,
+  updated_at    timestamptz
 );
+
+-- Columns added after the table shipped. Safe to re-run, and safe on a database
+-- that already has them.
+alter table public.lesson_pull_requests add column if not exists head_ref text;
+alter table public.lesson_pull_requests add column if not exists revision integer not null default 1;
+alter table public.lesson_pull_requests add column if not exists previous_head text;
+alter table public.lesson_pull_requests add column if not exists updated_at timestamptz;
 
 -- The lesson page and the editor both ask "the open proposals on this lesson,
 -- newest first"; index the filter + sort key.

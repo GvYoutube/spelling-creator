@@ -47,7 +47,9 @@
     "untitledCrumb": "Untitled lesson",
     "mainLesson": "Main lesson",
     "variationsTooltip": "You're working on the main lesson — the one everyone sees. Click to try changes on a separate copy instead.",
-    "onVariationTooltip": "You're working on a variation. The main lesson stays exactly as it is until you bring this in. Click to switch back or manage your variations."
+    "onVariationTooltip": "You're working on a variation. The main lesson stays exactly as it is until you bring this in. Click to switch back or manage your variations.",
+    "updateProposalButton": "Update your proposal",
+    "updateProposalTooltip": "Replace what “{{title}}” contains with your work as it stands now. Its title, note and any discussion stay where they are."
   },
   "stats": {
     "sections_one": "{{count}} section",
@@ -147,7 +149,8 @@
     "loadedDraft": "Loaded your draft — edit and save to the cloud, or publish it to the hub.",
     "couldNotOpenLesson": "Could not open that lesson for {{action}}.",
     "variationBroughtIn": "“{{name}}” is now part of the main lesson.",
-    "variationAlreadyIn": "“{{name}}” is already part of the main lesson."
+    "variationAlreadyIn": "“{{name}}” is already part of the main lesson.",
+    "proposalUpdated": "“{{title}}” now has your latest changes."
   },
   "labels": {
     "theOriginal": "the original",
@@ -164,7 +167,8 @@
     "publishToHub": "Publish to hub",
     "updatePublishedLesson": "Update published lesson",
     "saveAsDraft": "Save as draft",
-    "updateDraft": "Update draft"
+    "updateDraft": "Update draft",
+    "viewProposal": "View proposal"
   },
   "defaultDoc": {
     "title": "Put your topic here..."

@@ -128,10 +128,13 @@
       "clean": "This merges cleanly — there's nothing to decide.",
       "conflicts_one": "{{count}} block has been changed here and in the lesson, so merging will ask you which to keep.",
       "conflicts_other": "{{count}} blocks have been changed here and in the lesson, so merging will ask you which to keep.",
-      "alreadyIn": "These changes are already part of the lesson."
+      "alreadyIn": "These changes are already part of the lesson.",
+      "sinceUpdate": "What the last update changed"
     },
     "changesGone": "The proposed changes are no longer stored.",
-    "changesError": "The proposed changes could not be read."
+    "changesError": "The proposed changes could not be read.",
+    "revision": "Version {{n}} · updated {{when}}",
+    "fromVariation": "From the proposer’s “{{name}}” variation"
   },
   "comments": {
     "couldNotLoad": "Could not load comments.",
