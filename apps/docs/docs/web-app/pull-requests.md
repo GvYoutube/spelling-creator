@@ -134,6 +134,28 @@ The git engine is ~200 KB and is fetched on demand when this page opens, so the
 proposal's title, author and note render first and the diff arrives after. If it
 can't be read at all, the page says so and the rest of it still works.
 
+## Trying it before deciding
+
+Reading a diff tells you what changed. It doesn't tell you whether the lesson
+still works with the change in it — whether the new question fits where it was
+put, whether the rewritten section still reads in order.
+
+So there is a third answer between merging and declining: **try it in a
+variation**. That lands the proposal on a [variation](./lesson-variations.md) of
+the reviewer's own, where they can click through the whole lesson with the change
+in place. The lesson everyone reads is untouched, and the proposal stays open —
+nothing about it is recorded, because nothing has been decided.
+
+Mechanically it is the two features meeting and needing almost nothing new: a
+merge commits to whatever branch is checked out, so the editor starts a variation
+named after the proposal and checks it out *before* preparing the merge. What it
+must not do is record the proposal as being reviewed, since that is what makes the
+confirm push and mark it merged — a try-out deliberately does neither.
+
+Trying the same proposal twice returns to the variation the first attempt made,
+rather than refusing on the name, so whatever the reviewer did to it last time is
+still there.
+
 ## Landing it without a merge commit
 
 When the lesson hasn't moved since the proposal was opened, the merge is a

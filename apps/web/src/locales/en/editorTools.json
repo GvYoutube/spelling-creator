@@ -66,13 +66,15 @@
       "mergeProposal": "Merge these changes in",
       "merge": "Merge",
       "mergeVariation": "Bring it in",
-      "undo": "Undo it"
+      "undo": "Undo it",
+      "tryIt": "Put it in the variation"
     },
     "title": {
       "pullRequest": "Review the proposal: {{name}}",
       "pull": "Merge changes from {{name}}",
       "variation": "Bring “{{name}}” into the main lesson",
-      "undo": "Undo “{{name}}”"
+      "undo": "Undo “{{name}}”",
+      "pullRequestTry": "Try “{{name}}” in a variation"
     },
     "someone": "someone",
     "reviewingNotice": "Merging this updates <strong>the published lesson</strong> itself, for everyone reading it. Nothing is written until you confirm, and {{name}} will be told either way.",
@@ -90,7 +92,8 @@
     "noConflicts": "Nothing is in conflict — the whole merge resolved on its own. Confirm to apply it.",
     "conflictsIntro_one": "{{count}} block was edited on both sides in the same place. Choose which to keep.",
     "conflictsIntro_other": "{{count}} blocks were edited on both sides in the same place. Choose which to keep.",
-    "cancel": "Cancel"
+    "cancel": "Cancel",
+    "tryingNotice": "This goes into a variation of your own, not the lesson. Nothing anyone else sees changes, and the proposal stays open for you to decide on."
   },
   "proposeDialog": {
     "defaultLessonName": "the original lesson",

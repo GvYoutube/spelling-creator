@@ -96,15 +96,15 @@ from_ stays in the timeline, so the restore itself can be undone by restoring
 again.
 
 Restoring is the blunt instrument, though — it takes the whole document back and
-drops everything since. **Undo** is the precise one: put back what *that one
-version* changed, and keep the rest. It is the same three-way merge as everything
+drops everything since. **Undo** is the precise one: put back what _that one
+version_ changed, and keep the rest. It is the same three-way merge as everything
 else here, with the sides pointed backwards:
 
-| Merge argument | Undoing commit C                              |
-| -------------- | --------------------------------------------- |
-| base           | the document as C left it                     |
-| ours           | the document now                              |
-| theirs         | the document immediately before C             |
+| Merge argument | Undoing commit C                  |
+| -------------- | --------------------------------- |
+| base           | the document as C left it         |
+| ours           | the document now                  |
+| theirs         | the document immediately before C |
 
 Every rule then falls out without a line of new logic. A block C changed differs
 between base and theirs, so theirs wins and it goes back. A block changed since

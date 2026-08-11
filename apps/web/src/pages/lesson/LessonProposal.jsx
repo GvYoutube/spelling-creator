@@ -15,6 +15,11 @@
 // the block-by-block merge still happens there. What changed is that nobody has
 // to start that merge to find out whether they want it.
 //
+// There is a third answer between yes and no, too: **try it in a variation**
+// (`&try=1`). A diff says what changed; it doesn't say whether the lesson still
+// works with the change in it. That route lands the proposal on a variation of
+// the reviewer's own, leaves the lesson alone, and leaves the proposal open.
+//
 // The engine is ~200 KB and is fetched on demand (lib/git/load.js) only once this
 // page is open — the same arrangement the History tab uses, and the reason the
 // diff arrives after the proposal's text rather than with it.
@@ -31,6 +36,7 @@ import { Link as RouterLink, useNavigate, useParams } from "react-router-dom";
 import {
   ArrowLeftIcon,
   CircleCheckIcon,
+  GitBranchIcon,
   GitMergeIcon,
   GitPullRequestClosedIcon,
   GitPullRequestIcon,
@@ -187,14 +193,15 @@ export default function LessonProposal() {
   // lesson id goes in the query string as well as sessionStorage because the
   // editor may already have a *different* lesson open, and a proposal is only
   // meaningful against the lesson it was opened on.
-  const review = () => {
+  const review = ({ tryIt = false } = {}) => {
     try {
       sessionStorage.setItem(EDIT_REQUEST_KEY, lesson.id);
     } catch {
       /* ignore — the editor just won't preload if storage is unavailable */
     }
     navigate(
-      `/editor?pull=${encodeURIComponent(prId)}&lesson=${encodeURIComponent(lesson.id)}`,
+      `/editor?pull=${encodeURIComponent(prId)}&lesson=${encodeURIComponent(lesson.id)}` +
+        (tryIt ? "&try=1" : ""),
     );
   };
 
@@ -358,12 +365,24 @@ export default function LessonProposal() {
 
       {isOpen && pull.ready && canReview && (
         <div className="mt-6 border-t border-border pt-4">
-          <Button onClick={review}>
-            <GitMergeIcon data-icon="inline-start" />
-            {t("pulls.review")}
-          </Button>
+          <div className="flex flex-wrap gap-2">
+            <Button onClick={() => review()}>
+              <GitMergeIcon data-icon="inline-start" />
+              {t("pulls.review")}
+            </Button>
+            {/* The middle option, which used to not exist: put it somewhere you
+                can look at it. Reading a diff tells you what changed; it doesn't
+                tell you whether the lesson still works. */}
+            <Button variant="outline" onClick={() => review({ tryIt: true })}>
+              <GitBranchIcon data-icon="inline-start" />
+              {t("pulls.tryIt")}
+            </Button>
+          </div>
           <p className="mt-2 text-sm text-muted-foreground">
             {t("pulls.reviewHint")}
+          </p>
+          <p className="mt-1 text-sm text-muted-foreground">
+            {t("pulls.tryItHint")}
           </p>
         </div>
       )}

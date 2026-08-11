@@ -87,6 +87,7 @@ import { useLessonGit } from "../lib/git/useLessonGit.js";
 import {
   DEFAULT_BRANCH as engineDefaultBranch,
   branchLabel,
+  toBranchName,
 } from "@spelling-creator/core/git/refs";
 import { diffDocs } from "@spelling-creator/core/git/ops";
 // The git engine (isomorphic-git + LightningFS) is loaded on demand rather than
@@ -1312,6 +1313,12 @@ export default function EditorPage() {
     }
   };
 
+  // A variation name for trying a proposal out. Its title is what a reviewer will
+  // recognise; the id's first few characters only stand in when the title is all
+  // punctuation or a language git's ref names can't carry.
+  const variationNameFor = (title, id) =>
+    toBranchName(title) || toBranchName(`Proposal ${id.slice(0, 6)}`);
+
   // Undo one change from the history, keeping everything since it.
   //
   // Restoring puts the whole lesson back and drops what came after; this puts back
@@ -1535,7 +1542,7 @@ export default function EditorPage() {
   // meets the commits the two already share, and merged block by block against
   // the commit they diverged from. Only genuine clashes reach the dialog; the
   // merge is landed by finishPullMerge once they're settled.
-  const reviewPullRequest = async (pullId) => {
+  const reviewPullRequest = async (pullId, { intoVariation = false } = {}) => {
     if (!editingId) return;
     setBusy("review");
     try {
@@ -1554,6 +1561,38 @@ export default function EditorPage() {
         return;
       }
 
+      // Trying it out first: land the proposal on a variation instead of the
+      // lesson, so the reviewer can read it in place — click through it, run it,
+      // show it to somebody — before deciding. The merge below then targets that
+      // variation, because a merge commits to whatever branch is checked out.
+      //
+      // Nothing about the proposal changes. It stays open, and landing it for
+      // real is still a separate act on the main lesson; this only means the
+      // reviewer no longer has to choose between merging blind and not merging.
+      if (intoVariation) {
+        const name = variationNameFor(pull.title, pull.id);
+        // Trying the same proposal twice should land back where the first attempt
+        // put it, not fail on the name being taken. Switching also picks up
+        // whatever the reviewer did to it last time, which is the point of having
+        // kept it.
+        const existing = git.branches.some((b) => b.name === name);
+        if (existing) {
+          const next = await git.switchBranch(name);
+          if (next) setDoc(next);
+        } else {
+          await git.createVariation(name);
+        }
+        notify({
+          severity: "info",
+          message: t(
+            existing
+              ? "messages.tryingInExistingVariation"
+              : "messages.tryingInVariation",
+            { name: branchLabel(name) },
+          ),
+        });
+      }
+
       const engine = await loadGitEngine();
       const prepared = await engine.preparePullMerge({
         repoId: git.repoId,
@@ -1567,16 +1606,27 @@ export default function EditorPage() {
         return;
       }
 
-      setReviewPull(pull);
+      // Only a review that is going to *land* the proposal records it as the one
+      // being reviewed — that is what confirmMerge reads to push and mark it
+      // merged. A try-out must not: the proposal stays open, waiting for a real
+      // decision on the lesson itself.
+      if (!intoVariation) setReviewPull(pull);
 
       // We already contain everything it proposes (it was merged some other way,
       // or it never diverged): there is nothing to settle, so land it as it is.
       if (prepared.upToDate) {
+        if (intoVariation) {
+          notify({
+            severity: "info",
+            message: t("messages.proposalAlreadyIn"),
+          });
+          return;
+        }
         await finishPullMerge(pull, doc);
         return;
       }
 
-      setMergeIntent("pull-request");
+      setMergeIntent(intoVariation ? "pull-request-try" : "pull-request");
       setMerge(prepared);
     } catch (err) {
       console.error(err);
@@ -1675,6 +1725,16 @@ export default function EditorPage() {
         git.refreshBranches();
         return;
       }
+      if (intent === "pull-request-try") {
+        notify({
+          severity: "success",
+          message: t("messages.proposalInVariation", {
+            name: branchLabel(git.branch),
+          }),
+        });
+        git.refreshBranches();
+        return;
+      }
       if (intent === "pull-request") {
         if (reviewPull) await finishPullMerge(reviewPull, merged);
         // A fast-forward leaves no new commit, so the version chip has to be
@@ -1734,6 +1794,8 @@ export default function EditorPage() {
   // the doc changes underneath it.
   const pullParam = searchParams.get("pull") || "";
   const pullLessonParam = searchParams.get("lesson") || "";
+  // ?try=1 — land it on a variation to look at rather than on the lesson.
+  const pullTryParam = searchParams.get("try") === "1";
   const reviewPullRef = useRef(reviewPullRequest);
   const pullHandledRef = useRef("");
   useEffect(() => {
@@ -1744,8 +1806,15 @@ export default function EditorPage() {
     if (editingId !== pullLessonParam) return;
     if (pullHandledRef.current === pullParam) return;
     pullHandledRef.current = pullParam;
-    reviewPullRef.current(pullParam);
-  }, [pullParam, pullLessonParam, editingId, git.ready, accessToken]);
+    reviewPullRef.current(pullParam, { intoVariation: pullTryParam });
+  }, [
+    pullParam,
+    pullLessonParam,
+    pullTryParam,
+    editingId,
+    git.ready,
+    accessToken,
+  ]);
 
   // Word import. We warn first (the conversion is lossy and can fail), then open
   // the file picker; the chosen file is parsed and validated by importDocxFile,

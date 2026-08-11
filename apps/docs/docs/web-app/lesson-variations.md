@@ -48,6 +48,13 @@ by accident.
 Afterwards the variation is still there, now reading "0 changes that aren't in the
 main lesson". Keep it and carry on, or delete it.
 
+### Trying somebody else's proposal in one
+
+A variation is also where a reviewer can put a [proposal](./pull-requests.md)
+they aren't sure about — "Try it in a variation" on its page — and read the whole
+lesson with the change in it before deciding. The lesson doesn't move and the
+proposal stays open.
+
 ## Variations are as public as the lesson
 
 They travel with the lesson, so a variation you start on your laptop is there when

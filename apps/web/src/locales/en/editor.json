@@ -153,7 +153,11 @@
     "proposalUpdated": "“{{title}}” now has your latest changes.",
     "couldNotUndo": "That change could not be undone: {{error}}",
     "nothingToUndo": "That change isn’t in the lesson any more — there’s nothing to undo.",
-    "undone": "That change has been undone. Everything since it is still here."
+    "undone": "That change has been undone. Everything since it is still here.",
+    "tryingInVariation": "Started a variation called “{{name}}” to try these changes in.",
+    "proposalInVariation": "These changes are now in your “{{name}}” variation. The main lesson is untouched, and the proposal is still waiting for your decision.",
+    "proposalAlreadyIn": "The lesson already contains these changes.",
+    "tryingInExistingVariation": "Switched to your “{{name}}” variation to try these changes in."
   },
   "labels": {
     "theOriginal": "the original",

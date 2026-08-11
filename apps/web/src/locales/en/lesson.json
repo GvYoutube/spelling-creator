@@ -134,7 +134,9 @@
     "changesGone": "The proposed changes are no longer stored.",
     "changesError": "The proposed changes could not be read.",
     "revision": "Version {{n}} · updated {{when}}",
-    "fromVariation": "From the proposer’s “{{name}}” variation"
+    "fromVariation": "From the proposer’s “{{name}}” variation",
+    "tryIt": "Try it in a variation",
+    "tryItHint": "Or put these changes in a variation of your own first, so you can look through the lesson with them in it. The lesson everyone reads doesn’t change, and this proposal stays open."
   },
   "comments": {
     "couldNotLoad": "Could not load comments.",
