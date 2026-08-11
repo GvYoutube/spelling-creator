@@ -277,6 +277,34 @@ export function useLessonGit({ doc, editingId, identity, enabled = true }) {
     [repoId, run],
   );
 
+  /**
+   * What restoring a version would change — the difference between it and the
+   * document as it now stands.
+   *
+   * A different question from `diffFor`, and the one actually being asked at the
+   * moment somebody hovers over Restore. "What changed in this version" is
+   * history; "what would I get back" is a decision.
+   */
+  const diffAgainstCurrent = useCallback(
+    (oid) =>
+      run(async () => {
+        try {
+          const engine = await loadGitEngine();
+          const ctx = engine.repoCtx(repoId);
+          const head = await engine.headOid(ctx);
+          if (!head || head === oid) return [];
+          return await engine.diffCommits({
+            ...ctx,
+            fromOid: head,
+            toOid: oid,
+          });
+        } catch {
+          return [];
+        }
+      }),
+    [repoId, run],
+  );
+
   /** Restore an earlier version. Returns the restored doc for the editor to adopt. */
   const restore = useCallback(
     (oid) =>
@@ -450,6 +478,7 @@ export function useLessonGit({ doc, editingId, identity, enabled = true }) {
     commitNow,
     loadHistory,
     diffFor,
+    diffAgainstCurrent,
     restore,
     adoptDraft,
     reload,

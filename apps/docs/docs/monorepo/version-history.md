@@ -88,12 +88,34 @@ tree (unchanged blocks resolve to oids git already has) and compare its oid with
 The editor shows this as a chip — _"Version saved 2 minutes ago"_, or _"3 unsaved
 changes"_ — which opens the history.
 
-## Restoring
+## Restoring, and undoing
 
 Restoring an old version is an ordinary **forward** commit whose tree happens to
 equal an older one. History is never rewritten: the version you restored _away
 from_ stays in the timeline, so the restore itself can be undone by restoring
 again.
+
+Restoring is the blunt instrument, though — it takes the whole document back and
+drops everything since. **Undo** is the precise one: put back what *that one
+version* changed, and keep the rest. It is the same three-way merge as everything
+else here, with the sides pointed backwards:
+
+| Merge argument | Undoing commit C                              |
+| -------------- | --------------------------------------------- |
+| base           | the document as C left it                     |
+| ours           | the document now                              |
+| theirs         | the document immediately before C             |
+
+Every rule then falls out without a line of new logic. A block C changed differs
+between base and theirs, so theirs wins and it goes back. A block changed since
+differs between base and ours, so ours wins and is kept. A block in both is a
+genuine conflict — the change being undone has been built on, and only the author
+can say what they meant — so it reaches the usual dialog. The result is a forward
+commit with one parent, so an undo can itself be undone.
+
+The history view asks two questions about a selected version, because they have
+different answers the moment anything has happened since: _what changed here_
+(history) and _difference from now_ (the decision you are about to make).
 
 ## More than one branch
 

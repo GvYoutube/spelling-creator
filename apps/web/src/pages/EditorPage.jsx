@@ -88,6 +88,7 @@ import {
   DEFAULT_BRANCH as engineDefaultBranch,
   branchLabel,
 } from "@spelling-creator/core/git/refs";
+import { diffDocs } from "@spelling-creator/core/git/ops";
 // The git engine (isomorphic-git + LightningFS) is loaded on demand rather than
 // imported directly, so it stays out of the bundle every homepage and hub visitor
 // downloads. loadGitEngine() memoises the import; by the time any of these flows
@@ -1311,6 +1312,48 @@ export default function EditorPage() {
     }
   };
 
+  // Undo one change from the history, keeping everything since it.
+  //
+  // Restoring puts the whole lesson back and drops what came after; this puts back
+  // only what that one version changed. Where the two overlap — the change has
+  // been built on since — there is a genuine decision to make, and it goes to the
+  // usual conflict dialog rather than being guessed at.
+  const handleUndoCommit = async (oid) => {
+    setBusy("merge");
+    try {
+      await git.commitNow();
+
+      const engine = await loadGitEngine();
+      const prepared = await engine.prepareRevert({
+        repoId: git.repoId,
+        oid,
+        doc,
+      });
+
+      // Nothing of that change is still standing: it has already been undone, or
+      // everything it touched has since been changed again. Say so rather than
+      // opening a dialog that would commit nothing.
+      if (
+        prepared.conflicts.length === 0 &&
+        diffDocs(doc, prepared.doc).length === 0
+      ) {
+        notify({ severity: "info", message: t("messages.nothingToUndo") });
+        return;
+      }
+
+      setMergeIntent("undo");
+      setMerge(prepared);
+    } catch (err) {
+      console.error(err);
+      notify({
+        severity: "error",
+        message: t("messages.couldNotUndo", { error: err.message || err }),
+      });
+    } finally {
+      setBusy(null);
+    }
+  };
+
   // Bring a variation into the main lesson.
   //
   // The order is the whole of it. We switch to the main lesson *first*, so the
@@ -1605,7 +1648,9 @@ export default function EditorPage() {
               ? reviewPull?.title || t("labels.theProposal")
               : mergeIntent === "variation"
                 ? branchLabel(mergeVariation || "")
-                : forkedFromTitle,
+                : mergeIntent === "undo"
+                  ? merge.summary || ""
+                  : forkedFromTitle,
         currentDoc: doc,
       });
       setDoc(merged);
@@ -1613,6 +1658,12 @@ export default function EditorPage() {
       const variation = mergeVariation;
       setMerge(null);
       setMergeVariation(null);
+
+      if (intent === "undo") {
+        notify({ severity: "success", message: t("messages.undone") });
+        git.refreshBranches();
+        return;
+      }
 
       if (intent === "variation") {
         notify({
@@ -2759,6 +2810,7 @@ export default function EditorPage() {
         onClose={() => openPanel(null)}
         git={git}
         onRestore={setDoc}
+        onUndo={handleUndoCommit}
       />
 
       {/* Settling a merge with the lesson this one was forked from. Only blocks
@@ -2794,7 +2846,9 @@ export default function EditorPage() {
               ? reviewPull?.title || t("labels.theProposal")
               : mergeIntent === "variation"
                 ? branchLabel(mergeVariation || "")
-                : forkedFromTitle || t("labels.theOriginal")
+                : mergeIntent === "undo"
+                  ? merge?.summary || ""
+                  : forkedFromTitle || t("labels.theOriginal")
         }
         proposerName={reviewPull?.author || ""}
         onConfirm={confirmMerge}

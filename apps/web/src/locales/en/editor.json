@@ -150,7 +150,10 @@
     "couldNotOpenLesson": "Could not open that lesson for {{action}}.",
     "variationBroughtIn": "“{{name}}” is now part of the main lesson.",
     "variationAlreadyIn": "“{{name}}” is already part of the main lesson.",
-    "proposalUpdated": "“{{title}}” now has your latest changes."
+    "proposalUpdated": "“{{title}}” now has your latest changes.",
+    "couldNotUndo": "That change could not be undone: {{error}}",
+    "nothingToUndo": "That change isn’t in the lesson any more — there’s nothing to undo.",
+    "undone": "That change has been undone. Everything since it is still here."
   },
   "labels": {
     "theOriginal": "the original",

@@ -341,6 +341,76 @@ async function mergeAgainstCommit({ repoId, theirs, doc }) {
 }
 
 /**
+ * Undo one commit, leaving everything since it alone.
+ *
+ * `restoreCommit` (repo.js) is the blunt instrument: it takes the whole document
+ * back to a point and drops every change after it. This is the precise one — undo
+ * *that* change, keep the rest — and it is the same three-way merge as everything
+ * else here, with the sides pointed backwards:
+ *
+ *   base   the document as that commit left it
+ *   ours   the document now
+ *   theirs the document as it was immediately before
+ *
+ * Every rule then falls out correctly without a line of new logic. A block the
+ * commit changed differs between base and theirs, so theirs wins and it goes
+ * back. A block changed since differs between base and ours, so ours wins and is
+ * kept. A block in both is a genuine conflict — the change being undone has been
+ * built on, and only the author can say what they meant — so it reaches the usual
+ * dialog.
+ *
+ * The result is an ordinary forward commit with one parent, like a restore:
+ * history is never rewritten, so an undo can itself be undone.
+ *
+ * @returns {Promise<object>} A prepared merge, for completeMerge().
+ */
+export async function prepareRevert({ repoId, oid, doc }) {
+  const ctx = repoCtx(repoId);
+
+  const { commit } = await git.readCommit({ ...ctx, oid });
+  const parent = commit.parent[0] || null;
+  // The very first commit has nothing before it, so there is no "before" to put
+  // back — undoing it would mean emptying the lesson, which is a different
+  // request and not this one.
+  if (!parent) {
+    throw new Error(
+      "This is where the lesson starts — there is nothing before it to go back to.",
+    );
+  }
+
+  const ours = await headOid(ctx);
+  if (!ours) throw new Error("There is no history to undo.");
+
+  const [afterDoc, beforeDoc] = await Promise.all([
+    readDocAt({ ...ctx, oid }),
+    readDocAt({ ...ctx, oid: parent }),
+  ]);
+
+  const result = mergeDocs(afterDoc, doc, beforeDoc);
+  const summary = commit.message.split("\n")[0].trim();
+
+  return {
+    doc: preserveLocalFields(result.doc, doc),
+    conflicts: result.conflicts,
+    auto: result.auto,
+    ours,
+    theirs: oid,
+    base: oid,
+    identical: false,
+    ahead: false,
+    upToDate: false,
+    // One parent: this is a new change that happens to reverse an old one, not a
+    // join of two histories. Two would claim the reverted commit was being
+    // merged in, which is the opposite of what happened.
+    parents: [ours],
+    // Carried so the dialog and the toast can name the change being undone
+    // without reading the commit again.
+    summary,
+    message: `Undo "${summary}"\n\nReverses ${oid.slice(0, 7)}, keeping everything changed since.\n`,
+  };
+}
+
+/**
  * Bring a variation into the lesson: the same three-way merge, with both sides
  * already in this repository.
  *
@@ -422,8 +492,10 @@ export async function completeMerge({
     ...ctx,
     doc,
     author,
-    message: mergeSummary(prepared, choices, theirName),
-    parents: [prepared.ours, prepared.theirs],
+    // An undo brings its own wording and its own shape; anything else is a join
+    // of two histories and gets the two parents that say so.
+    message: prepared.message || mergeSummary(prepared, choices, theirName),
+    parents: prepared.parents || [prepared.ours, prepared.theirs],
   });
 
   return doc;

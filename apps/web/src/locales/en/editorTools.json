@@ -27,7 +27,17 @@
     "whatChanged": "What changed",
     "close": "Close",
     "restoreCurrent": "This is the current version",
-    "restore": "Restore this version"
+    "restore": "Restore this version",
+    "compare": {
+      "changed": "What changed here",
+      "current": "Difference from now"
+    },
+    "whatRestoringChanges": "Going back to this would:",
+    "sameAsNow": "This is exactly what the lesson looks like now.",
+    "undo": "Undo this change",
+    "undoing": "Undoing...",
+    "undoError": "That change could not be undone.",
+    "undoTooltip": "Put back what this version changed, and keep everything since."
   },
   "mergeDialog": {
     "emptyValue": "(empty)",
@@ -55,12 +65,14 @@
       "merging": "Merging...",
       "mergeProposal": "Merge these changes in",
       "merge": "Merge",
-      "mergeVariation": "Bring it in"
+      "mergeVariation": "Bring it in",
+      "undo": "Undo it"
     },
     "title": {
       "pullRequest": "Review the proposal: {{name}}",
       "pull": "Merge changes from {{name}}",
-      "variation": "Bring “{{name}}” into the main lesson"
+      "variation": "Bring “{{name}}” into the main lesson",
+      "undo": "Undo “{{name}}”"
     },
     "someone": "someone",
     "reviewingNotice": "Merging this updates <strong>the published lesson</strong> itself, for everyone reading it. Nothing is written until you confirm, and {{name}} will be told either way.",

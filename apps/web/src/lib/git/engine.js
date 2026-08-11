@@ -86,6 +86,7 @@ export {
   forkLocalRepo,
   prepareBranchMerge,
   prepareMerge,
+  prepareRevert,
   prepareProposalReview,
   preparePullMerge,
   pushHistory,

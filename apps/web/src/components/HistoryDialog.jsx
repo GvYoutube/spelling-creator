@@ -8,7 +8,13 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { GitMergeIcon, HistoryIcon, RotateCcwIcon, XIcon } from "lucide-react";
+import {
+  GitMergeIcon,
+  HistoryIcon,
+  RotateCcwIcon,
+  Undo2Icon,
+  XIcon,
+} from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -58,8 +64,17 @@ export function timeAgo(ts) {
 /**
  * @param {object}   props.git       The useLessonGit controller.
  * @param {Function} props.onRestore Called with the restored doc; the editor adopts it.
+ * @param {Function} props.onUndo    Called with a commit oid to undo just that
+ *                                   change. The editor owns it because it may
+ *                                   need the conflict dialog.
  */
-export default function HistoryDialog({ open, onClose, git, onRestore }) {
+export default function HistoryDialog({
+  open,
+  onClose,
+  git,
+  onRestore,
+  onUndo,
+}) {
   const { t } = useTranslation("editorTools");
   const [commits, setCommits] = useState(null); // null = still loading
   const [selected, setSelected] = useState(null); // oid
@@ -67,7 +82,13 @@ export default function HistoryDialog({ open, onClose, git, onRestore }) {
   const [restoring, setRestoring] = useState(false);
   const [error, setError] = useState(null);
 
-  const { loadHistory, diffFor, restore, pending } = git;
+  const { loadHistory, diffFor, diffAgainstCurrent, restore, pending } = git;
+
+  // Which question the right-hand panel is answering. "What changed in this
+  // version" is history; "what would I get back" is the decision someone is
+  // actually about to make, and the two have different answers the moment
+  // anything has happened since.
+  const [mode, setMode] = useState("changed");
 
   // Re-read the history each time the dialog opens: the editor has very likely
   // committed since it was last closed.
@@ -79,6 +100,7 @@ export default function HistoryDialog({ open, onClose, git, onRestore }) {
     setSelected(null);
     setDetail(null);
     setError(null);
+    setMode("changed");
 
     loadHistory().then((list) => {
       if (cancelled) return;
@@ -91,20 +113,21 @@ export default function HistoryDialog({ open, onClose, git, onRestore }) {
     };
   }, [open, loadHistory]);
 
-  // What the selected commit changed, against its first parent.
+  // What the selected commit changed, or how it differs from the document now.
   useEffect(() => {
     if (!open || !selected) return;
     let cancelled = false;
 
     setDetail(null);
-    diffFor(selected).then((ops) => {
+    const ask = mode === "current" ? diffAgainstCurrent : diffFor;
+    ask(selected).then((ops) => {
       if (!cancelled) setDetail(ops);
     });
 
     return () => {
       cancelled = true;
     };
-  }, [open, selected, diffFor]);
+  }, [open, selected, mode, diffFor, diffAgainstCurrent]);
 
   const handleRestore = useCallback(async () => {
     if (!selected) return;
@@ -122,6 +145,10 @@ export default function HistoryDialog({ open, onClose, git, onRestore }) {
   }, [selected, restore, onRestore, onClose, t]);
 
   const isCurrent = commits && selected === commits[0]?.oid;
+  // The first commit has nothing before it, so there is no "before" to put back —
+  // undoing it would mean emptying the lesson, which is a different request.
+  const canUndo =
+    commits && selected && commits[commits.length - 1]?.oid !== selected;
 
   return (
     <Dialog open={open} onOpenChange={(next) => !next && onClose()}>
@@ -205,18 +232,43 @@ export default function HistoryDialog({ open, onClose, git, onRestore }) {
                 ))}
               </div>
 
-              {/* What that version changed. */}
+              {/* What that version changed — or how it differs from the document
+                  as it now stands, which is the question worth asking with a
+                  finger over Restore. */}
               <div className="min-h-[200px] rounded-md border border-border p-3 md:col-span-7">
+                <div className="mb-3 flex flex-wrap gap-1">
+                  {["changed", "current"].map((option) => (
+                    <button
+                      key={option}
+                      type="button"
+                      onClick={() => setMode(option)}
+                      aria-pressed={mode === option}
+                      className={cn(
+                        "cursor-pointer rounded-md border px-2 py-1 text-xs transition-colors",
+                        mode === option
+                          ? "border-primary/40 bg-primary/10 text-primary"
+                          : "border-border bg-transparent text-muted-foreground hover:bg-accent/50",
+                      )}
+                    >
+                      {t(`historyDialog.compare.${option}`)}
+                    </button>
+                  ))}
+                </div>
+
                 {detail === null ? (
                   <HistorySkeleton count={3} />
                 ) : detail.length === 0 ? (
                   <p className="text-sm text-muted-foreground">
-                    {t("historyDialog.origin")}
+                    {mode === "current"
+                      ? t("historyDialog.sameAsNow")
+                      : t("historyDialog.origin")}
                   </p>
                 ) : (
                   <>
                     <p className="text-sm font-medium">
-                      {t("historyDialog.whatChanged")}
+                      {mode === "current"
+                        ? t("historyDialog.whatRestoringChanges")
+                        : t("historyDialog.whatChanged")}
                     </p>
                     <ChangeChips ops={detail} />
                     <hr className="my-3 border-border" />
@@ -232,6 +284,31 @@ export default function HistoryDialog({ open, onClose, git, onRestore }) {
           <Button variant="outline" onClick={onClose}>
             {t("historyDialog.close")}
           </Button>
+
+          {/* Undo one change, as against Restore's "put the whole lesson back to
+              here". They answer different questions and the difference matters:
+              restoring drops everything since, undoing keeps it. */}
+          {onUndo && (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="outline"
+                  disabled={!selected || restoring || !canUndo}
+                  onClick={() => {
+                    onUndo(selected);
+                    onClose();
+                  }}
+                >
+                  <Undo2Icon data-icon="inline-start" />
+                  {t("historyDialog.undo")}
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent className="max-w-xs">
+                {t("historyDialog.undoTooltip")}
+              </TooltipContent>
+            </Tooltip>
+          )}
+
           <Button
             disabled={
               !selected || restoring || isCurrent || commits?.length === 0
