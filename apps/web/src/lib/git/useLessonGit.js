@@ -20,6 +20,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { DRAFT_REPO, repoIdFor } from "@spelling-creator/core/git/doc";
 import { loadGitEngine } from "./load.js";
 import { fetchPack } from "@spelling-creator/core/git/remote";
+import { DEFAULT_BRANCH, toBranchName } from "@spelling-creator/core/git/refs";
 
 // Commit once the user has been still for this long.
 const IDLE_MS = 4000;
@@ -44,6 +45,13 @@ export function useLessonGit({ doc, editingId, identity, enabled = true }) {
   const [pending, setPending] = useState(0);
   const [lastCommit, setLastCommit] = useState(null); // { oid, at } | null
   const [error, setError] = useState(null);
+
+  // The variations this lesson holds, and which one is being edited. Both come
+  // out of the repository (branches, and HEAD) rather than being state of their
+  // own — so a reload, a second tab, or publishing a draft all find the same
+  // answer the repository already had.
+  const [branches, setBranches] = useState([]);
+  const [branch, setBranch] = useState(DEFAULT_BRANCH);
 
   // Bumped to force the setup effect to run again. A fork or an import swaps the
   // repository out from under us *without* changing the repo id (both land in the
@@ -119,6 +127,8 @@ export function useLessonGit({ doc, editingId, identity, enabled = true }) {
         setPending(
           (await engine.pendingOps({ ...ctx, doc: docRef.current })).length,
         );
+        setBranch(await engine.currentBranch(ctx));
+        setBranches(await engine.listBranches(ctx));
         setReady(true);
       } catch (err) {
         console.error("[lesson-git] setup failed", err);
@@ -287,6 +297,114 @@ export function useLessonGit({ doc, editingId, identity, enabled = true }) {
     [repoId, run],
   );
 
+  // ---- variations ----------------------------------------------------------
+  //
+  // A variation is a branch, and the four things you can do to one are create,
+  // switch, rename and delete. Every one of them commits what's outstanding
+  // first: the editor's rule is that work is checkpointed when you pause, so a
+  // variation must never be the thing that loses the last few seconds of it.
+
+  const refreshBranches = useCallback(
+    () =>
+      run(async () => {
+        const engine = await loadGitEngine();
+        const ctx = engine.repoCtx(repoId);
+        const list = await engine.listBranches(ctx);
+        setBranches(list);
+        setBranch(await engine.currentBranch(ctx));
+        return list;
+      }),
+    [repoId, run],
+  );
+
+  /** Move to a branch and hand back the document as it stands there. */
+  const switchBranch = useCallback(
+    (name) =>
+      run(async () => {
+        const engine = await loadGitEngine();
+        const ctx = engine.repoCtx(repoId);
+
+        await engine
+          .commitDoc({
+            ...ctx,
+            doc: docRef.current,
+            author: identityRef.current,
+          })
+          .catch(() => null);
+
+        const result = await engine.checkoutBranch({ ...ctx, name });
+        dirtySince.current = null;
+        setPending(0);
+        setBranch(result.name);
+        setBranches(await engine.listBranches(ctx));
+        const head = await engine.headOid(ctx);
+        setLastCommit(head ? { oid: head, at: Date.now() } : null);
+        return result.doc;
+      }),
+    [repoId, run],
+  );
+
+  /**
+   * Start a variation from where we are and switch to it.
+   *
+   * `label` is what the author typed; the branch takes the name that survives
+   * git's rules (see core/git/refs.js). An empty result means they typed nothing
+   * git could keep, which is the caller's to report.
+   */
+  const createVariation = useCallback(
+    (label) =>
+      run(async () => {
+        const name = toBranchName(label);
+        if (!name) throw new Error("Please give this variation a name.");
+
+        const engine = await loadGitEngine();
+        const ctx = engine.repoCtx(repoId);
+
+        await engine
+          .commitDoc({
+            ...ctx,
+            doc: docRef.current,
+            author: identityRef.current,
+          })
+          .catch(() => null);
+
+        await engine.createBranch({ ...ctx, name });
+        dirtySince.current = null;
+        setPending(0);
+        setBranch(name);
+        setBranches(await engine.listBranches(ctx));
+        return name;
+      }),
+    [repoId, run],
+  );
+
+  const renameVariation = useCallback(
+    (from, label) =>
+      run(async () => {
+        const to = toBranchName(label);
+        if (!to) throw new Error("Please give this variation a name.");
+
+        const engine = await loadGitEngine();
+        const ctx = engine.repoCtx(repoId);
+        await engine.renameBranch({ ...ctx, from, to });
+        setBranch(await engine.currentBranch(ctx));
+        setBranches(await engine.listBranches(ctx));
+        return to;
+      }),
+    [repoId, run],
+  );
+
+  const deleteVariation = useCallback(
+    (name) =>
+      run(async () => {
+        const engine = await loadGitEngine();
+        const ctx = engine.repoCtx(repoId);
+        await engine.deleteBranch({ ...ctx, name });
+        setBranches(await engine.listBranches(ctx));
+      }),
+    [repoId, run],
+  );
+
   /**
    * Take the draft repo's history with us when a draft is first published.
    * Commits everything outstanding first, so nothing is stranded in the draft.
@@ -315,6 +433,14 @@ export function useLessonGit({ doc, editingId, identity, enabled = true }) {
     error,
     clearError: () => setError(null),
     repoId,
+    branch,
+    branches,
+    onDefaultBranch: branch === DEFAULT_BRANCH,
+    refreshBranches,
+    switchBranch,
+    createVariation,
+    renameVariation,
+    deleteVariation,
     commitNow,
     loadHistory,
     diffFor,

@@ -47,9 +47,14 @@ import {
   uploadPullPack,
 } from "../../pulls.js";
 import {
+  BRANCH,
   ORIGIN_REF,
   UPSTREAM_REF,
+  branchRef,
+  clearDeletedBranch,
   commitDoc,
+  currentBranch,
+  deletedBranches,
   headOid,
   pullRef,
   readDocAt,
@@ -73,17 +78,59 @@ const EMPTY_AUTO = { merged: [], tookTheirs: [], added: [], removed: [] };
  */
 export async function remoteStatus({ repoId, lessonId, ref = ORIGIN_REF }) {
   const ctx = repoCtx(repoId);
+  const branch = await currentBranch(ctx);
   const ours = await headOid(ctx);
 
   const pack = await fetchPack(lessonId).catch(() => null);
-  if (!pack) return { state: "fresh", ours, theirs: null, needsMerge: false };
+  if (!pack) {
+    return {
+      state: "fresh",
+      ours,
+      theirs: null,
+      branch,
+      hasRemote: false,
+      needsMerge: false,
+    };
+  }
 
-  await fetchRemotePack({ ...ctx, ...pack, ref });
-  const theirs = pack.head;
+  await fetchRemotePack({
+    ...ctx,
+    ...pack,
+    ref,
+    refs: pack.refs,
+    remote: "origin",
+  });
+  await syncRemoteBranches(ctx, pack.refs);
+
+  // Compare like with like: the branch we are on against the hub's copy of *that*
+  // branch, not against the lesson. A variation and the lesson are supposed to
+  // differ — that is what a variation is — so measuring one against the other
+  // would report a conflict on every save.
+  const theirs = pack.refs?.[branch] || (branch === BRANCH ? pack.head : null);
+
+  // The hub has never seen this branch, so there is nothing there to overwrite.
+  if (!theirs) {
+    return {
+      state: "fresh",
+      ours,
+      theirs: null,
+      branch,
+      hasRemote: true,
+      needsMerge: false,
+    };
+  }
 
   // Nothing committed locally: whatever the hub has, take it.
   if (!ours) {
-    return { state: "behind", ours, theirs, base: null, needsMerge: true };
+    return {
+      state: "behind",
+      ours,
+      theirs,
+      base: null,
+      branch,
+      hasRemote: true,
+      needsMerge: true,
+    };
   }
   if (ours === theirs) {
     return {
@@ -91,6 +138,8 @@ export async function remoteStatus({ repoId, lessonId, ref = ORIGIN_REF }) {
       ours,
       theirs,
       base: theirs,
+      branch,
+      hasRemote: true,
       needsMerge: false,
     };
   }
@@ -99,13 +148,77 @@ export async function remoteStatus({ repoId, lessonId, ref = ORIGIN_REF }) {
 
   // We already contain their tip, so pushing can only move the lesson forward.
   if (await contains({ ...ctx, oid: ours, ancestor: theirs })) {
-    return { state: "ahead", ours, theirs, base, needsMerge: false };
+    return {
+      state: "ahead",
+      ours,
+      theirs,
+      base,
+      branch,
+      hasRemote: true,
+      needsMerge: false,
+    };
   }
   // They contain ours: someone pushed commits we don't have.
   if (await contains({ ...ctx, oid: theirs, ancestor: ours })) {
-    return { state: "behind", ours, theirs, base, needsMerge: true };
+    return {
+      state: "behind",
+      ours,
+      theirs,
+      base,
+      branch,
+      hasRemote: true,
+      needsMerge: true,
+    };
   }
-  return { state: "diverged", ours, theirs, base, needsMerge: true };
+  return {
+    state: "diverged",
+    ours,
+    theirs,
+    base,
+    branch,
+    hasRemote: true,
+    needsMerge: true,
+  };
+}
+
+/**
+ * Bring our idea of the hub's branches in line with what it just told us.
+ *
+ * Two halves, and they are both about the next push being able to say something
+ * true. Creating local branches for the hub's is what makes a variation started
+ * on one device turn up on another — the objects are already here, off the pack
+ * we have just indexed, so it costs a ref write. Dropping remote-tracking refs
+ * for branches the hub no longer has is what stops us claiming a tip for a branch
+ * that isn't there, which the compare-and-swap would refuse for ever.
+ *
+ * A branch we deliberately deleted is not adopted back: its marker is still
+ * waiting to be pushed, and undoing a delete on the way to reporting it would be
+ * the opposite of what the author asked for.
+ */
+async function syncRemoteBranches(ctx, refs) {
+  if (!refs) return;
+  const deleted = await deletedBranches(ctx);
+
+  for (const [name, oid] of Object.entries(refs)) {
+    if (!oid || deleted[name]) continue;
+    if (await headOid({ ...ctx, ref: branchRef(name) })) continue;
+    await git.writeRef({
+      ...ctx,
+      ref: branchRef(name),
+      value: oid,
+      force: false,
+    });
+  }
+
+  const tracked = await git
+    .listRefs({ ...ctx, filepath: "refs/remotes/origin" })
+    .catch(() => []);
+  for (const name of tracked) {
+    if (refs[name]) continue;
+    await git
+      .deleteRef({ ...ctx, ref: `refs/remotes/origin/${name}` })
+      .catch(() => {});
+  }
 }
 
 /**
@@ -131,10 +244,11 @@ export async function prepareMerge({
   lessonId,
   doc,
   ref = UPSTREAM_REF,
+  theirs,
 }) {
   const pack = await fetchPack(lessonId).catch(() => null);
   if (!pack) return null;
-  return mergeAgainstPack({ repoId, pack, doc, ref });
+  return mergeAgainstPack({ repoId, pack, doc, ref, theirs });
 }
 
 /**
@@ -145,13 +259,29 @@ export async function prepareMerge({
  * The objects land in our own store, so the commits the two sides share are
  * literally the same objects and the merge base below is a real answer.
  */
-async function mergeAgainstPack({ repoId, pack, doc, ref }) {
+async function mergeAgainstPack({ repoId, pack, doc, ref, theirs }) {
+  await fetchRemotePack({ ...repoCtx(repoId), ...pack, ref });
+  // `theirs` names which of the pack's commits to merge. It defaults to the
+  // lesson itself, which is what pulling an original's changes or reviewing a
+  // proposal means — but catching up with our own hub while editing a variation
+  // has to merge the hub's copy of *that* variation, or we would fold the whole
+  // lesson into the variation and call it a sync.
+  return mergeAgainstCommit({ repoId, theirs: theirs || pack.head, doc });
+}
+
+/**
+ * Merge one commit into the branch we are on — the part of a merge that has
+ * nothing to do with where the other side came from.
+ *
+ * Downloaded from the hub, unpacked from a proposal, or simply another branch of
+ * this same repository: by the time we are here it is an oid whose objects we
+ * hold, and the answer is the same three-way merge against the commit the two
+ * sides last agreed on.
+ */
+async function mergeAgainstCommit({ repoId, theirs, doc }) {
   const ctx = repoCtx(repoId);
 
-  await fetchRemotePack({ ...ctx, ...pack, ref });
-
   const ours = await headOid(ctx);
-  const theirs = pack.head;
   if (!ours) return null;
 
   const identical = ours === theirs;
@@ -193,6 +323,39 @@ async function mergeAgainstPack({ repoId, pack, doc, ref }) {
     ahead: false,
     upToDate: false,
   };
+}
+
+/**
+ * Bring a variation into the lesson: the same three-way merge, with both sides
+ * already in this repository.
+ *
+ * The switch happens *first*, and that ordering is the whole of it. A merge
+ * commits to the branch you are standing on, so we move to the lesson before
+ * preparing anything, and what comes back is the lesson's document with the
+ * variation merged into it — not the other way round. Pending edits are committed
+ * to the variation on the way out (checkoutBranch's caller does that), so nothing
+ * in progress is carried across by accident.
+ *
+ * Feed the result to completeMerge(), exactly as with a merge from the hub.
+ *
+ * @param {string} args.name  The variation to bring in.
+ * @param {string} [args.into] The branch to bring it into. The lesson by default.
+ * @returns {Promise<object|null>} The prepared merge, or null when the variation
+ *          is already contained in the target — there is nothing to bring in.
+ */
+export async function prepareBranchMerge({ repoId, name, into = BRANCH, doc }) {
+  const ctx = repoCtx(repoId);
+
+  const theirs = await headOid({ ...ctx, ref: branchRef(name) });
+  if (!theirs) throw new Error("That version no longer exists.");
+
+  const ours = await headOid({ ...ctx, ref: branchRef(into) });
+  // Already in: the lesson's history contains every commit the variation has, so
+  // a merge would produce a commit that changes nothing.
+  if (ours && (await contains({ ...ctx, oid: ours, ancestor: theirs }))) {
+    return null;
+  }
+  return mergeAgainstCommit({ repoId, theirs, doc });
 }
 
 /**
@@ -244,33 +407,84 @@ export async function completeMerge({
 export async function pushHistory({ repoId, lessonId, doc, accessToken }) {
   const status = await remoteStatus({ repoId, lessonId, ref: ORIGIN_REF });
 
-  if (status.state === "identical") return { pushed: false, status };
-
   if (status.needsMerge) {
     const prepared = await prepareMerge({
       repoId,
       lessonId,
       doc,
       ref: ORIGIN_REF,
+      // The hub's copy of the branch we are on, which remoteStatus has just
+      // resolved — not the lesson's tip, unless they are the same thing.
+      theirs: status.theirs,
     });
     return { pushed: false, needsMerge: true, prepared, status };
   }
 
-  const packed = await packRepo(repoCtx(repoId));
+  const ctx = repoCtx(repoId);
+  const packed = await packRepo(ctx);
   if (!packed) return { pushed: false, status }; // nothing committed yet
+
+  // What the hub held when remoteStatus fetched a moment ago, which is what the
+  // per-branch compare-and-swap is against. Read from the remote-tracking refs
+  // that fetch wrote rather than kept in a variable, so it is the same answer the
+  // objects in our store came with.
+  const remote = status.hasRemote ? await remoteBranches(ctx) : {};
+  const deleted = status.hasRemote ? await deletedBranches(ctx) : {};
+
+  // "Nothing to do" is asked of the whole repository, not of the branch being
+  // edited. Asking only about that one would strand the others: deleting a
+  // variation, or merging one into the lesson from somewhere else, changes what
+  // the hub should hold without moving the branch we happen to be standing on.
+  const settled =
+    Object.keys(deleted).length === 0 &&
+    Object.keys(packed.refs).length === Object.keys(remote).length &&
+    Object.entries(packed.refs).every(([name, oid]) => remote[name] === oid);
+  if (settled) return { pushed: false, status };
+
+  // Say what we believe about every branch we are touching. A branch we hold that
+  // the hub doesn't gets "" — "I believe this is new" — which is the claim that
+  // fails if somebody else created the same name in the meantime.
+  const expected = {};
+  for (const name of Object.keys(packed.refs))
+    expected[name] = remote[name] || "";
+  for (const [name, oid] of Object.entries(deleted)) expected[name] = oid;
 
   await pushPack(
     lessonId,
     {
       packfile: packed.packfile,
       head: packed.head,
-      // The compare-and-swap: null on a lesson with no history yet, otherwise the
-      // tip we just confirmed we contain.
-      parent: status.theirs,
+      // The compare-and-swap for the lesson itself: null on a lesson with no
+      // history yet, otherwise the tip we just confirmed we contain.
+      parent: remote[BRANCH] || null,
+      refs: packed.refs,
+      expected,
+      deletes: Object.keys(deleted),
     },
     accessToken,
   );
+
+  // The deletions have landed, so stop asking for them. Only now: a marker
+  // cleared before the push succeeded would leave a variation deleted here and
+  // alive on the hub, ready to come back on the next device that clones.
+  for (const name of Object.keys(deleted)) {
+    await clearDeletedBranch({ ...ctx, name });
+  }
   return { pushed: true, status };
+}
+
+/** The hub's branches as of our last fetch, from the remote-tracking refs. */
+async function remoteBranches(ctx) {
+  const names = await git
+    .listRefs({ ...ctx, filepath: "refs/remotes/origin" })
+    .catch(() => []);
+
+  const out = {};
+  for (const name of names) {
+    const oid = await headOid({ ...ctx, ref: `refs/remotes/origin/${name}` });
+    if (oid) out[name] = oid;
+  }
+  return out;
 }
 
 /**
@@ -298,7 +512,10 @@ export async function submitPullRequest({
   sourceLessonId = null,
   accessToken,
 }) {
-  const packed = await packRepo(repoCtx(repoId));
+  // The lesson as this fork has it, and nothing else. A variation is an idea its
+  // author is still turning over; offering it to somebody else to merge, unasked
+  // and unmentioned, is not what "propose changes" means.
+  const packed = await packRepo({ ...repoCtx(repoId), only: [BRANCH] });
   if (!packed) {
     throw new Error("There is nothing to propose yet — make an edit first.");
   }
@@ -385,7 +602,11 @@ export async function forkLessonRepo(sourceLessonId) {
   await deleteRepo(DRAFT_REPO);
 
   const ctx = repoCtx(DRAFT_REPO);
-  await cloneFromPack({ ...ctx, ...pack });
+  // The lesson, and only the lesson. Its author's variations came down in the same
+  // pack — they are in it so that *they* can reach them from another device — but
+  // somebody else's half-finished ideas are not part of what was forked, and
+  // adopting them as branches of the fork would say they were.
+  await cloneFromPack({ ...ctx, ...pack, refs: null });
 
   // Record where we came from, so the first sync has a base even before it
   // fetches anything new.

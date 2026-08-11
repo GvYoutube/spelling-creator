@@ -95,6 +95,27 @@ equal an older one. History is never rewritten: the version you restored _away
 from_ stays in the timeline, so the restore itself can be undone by restoring
 again.
 
+## More than one branch
+
+A lesson's repository holds a branch per **variation** — an alternative version of
+the lesson its author is trying out, kept apart from the one people are reading.
+The default branch (`main`) is the lesson; the rest are drafts of what it might
+become.
+
+Which one is being edited is `HEAD`, a symbolic ref, exactly as in git. That is
+not just tidiness: `HEAD` lives inside the gitdir, so it survives the two places a
+repository is copied wholesale — publishing a draft (`adoptDraftRepo`) and forking
+a lesson locally (`copyRepo`) — neither of which knows branches exist.
+
+Everything on this page is per branch as a result. A commit moves whatever `HEAD`
+points at; the history view reads the branch being edited unless given a ref; the
+pack carries every branch, and the push compare-and-swaps each one separately.
+What doesn't change is what "the lesson" means: `main`, and only `main`, is what a
+reader sees, what a fork clones, and what a proposal is offered against.
+
+See [Variations](/web-app/lesson-variations) for what an author sees, why a
+variation is as public as its lesson, and how a deletion travels.
+
 ## Forking is cloning
 
 For someone else to fork a lesson, its repository has to travel. It travels the
@@ -119,8 +140,9 @@ so a pack is pure JSON and stays small — a few KB for a typical lesson.
 ### Worker endpoints
 
 ```
-GET /git/:lessonId/refs   public*  -> { head, size, updatedAt }   (404 = no history)
-GET /git/:lessonId/pack   public*  -> the packfile (X-Git-Head names its tip)
+GET /git/:lessonId/refs   public*  -> { head, refs, updatedAt }   (404 = no history)
+GET /git/:lessonId/pack   public*  -> the packfile (X-Git-Head names its tip,
+                                      X-Git-Refs every branch it holds)
 PUT /git/:lessonId/pack   Bearer   -> store it (the author, or a trusted collaborator)
 ```
 
@@ -129,13 +151,14 @@ open [pull request](/web-app/pull-requests), which is a packfile too:
 
 ```
 git/<lessonId>/pack           the packfile bytes
-git/<lessonId>/refs.json      { head, size, updatedAt }
+git/<lessonId>/refs.json      { head, refs, size, updatedAt }
 git/pulls/<pullId>/pack       a proposal's snapshot (no refs.json: its tip is fixed)
 ```
 
-The pack carries its own tip in R2 `customMetadata`, echoed in the `X-Git-Head`
-response header — so a clone reads the bytes and the ref they belong to from the
-_same object_, and can never pair a fresh ref with a stale pack.
+The pack carries its own tip **and its branch map** in R2 `customMetadata`, echoed
+in the `X-Git-Head` and `X-Git-Refs` response headers — so a clone reads the bytes
+and the refs they belong to from the _same object_, and can never pair a fresh ref
+with a stale pack.
 
 `GET` is public because forking a published lesson is public; a private draft's
 history (like the draft itself) 404s to everyone but its author, a trusted
@@ -290,6 +313,7 @@ in the browser, in Node and inside the Worker:
 | Module   | Purpose                                                            |
 | -------- | ------------------------------------------------------------------ |
 | `doc`    | Pure doc helpers: canonical JSON, manifest, block map. No git.     |
+| `refs`   | Branch names, limits, and the ref map's wire format. No git.       |
 | `ops`    | Diff two docs into operations; render commit messages. No git.     |
 | `merge`  | Three-way merge by block id, field-level. No git.                  |
 | `layout` | Document ⇄ git tree (one file per block).                          |
@@ -318,18 +342,19 @@ thing to it and uploads the result. See
 
 App-bound (`apps/web/src/lib/git/`) — what cannot leave the bundle:
 
-| File                    | Purpose                                                    |
-| ----------------------- | ---------------------------------------------------------- |
-| `engine.js` + `load.js` | The git engine, behind one dynamic import.                 |
-| `useLessonGit.js`       | The editor's controller: setup, periodic commits, history. |
+| File                    | Purpose                                                                |
+| ----------------------- | ---------------------------------------------------------------------- |
+| `engine.js` + `load.js` | The git engine, behind one dynamic import.                             |
+| `useLessonGit.js`       | The editor's controller: setup, periodic commits, history, variations. |
 
 `repo` and friends take their filesystem through `repoCtx` rather than opening
 one, which is exactly what lets the same commit/merge/restore logic run against
 LightningFS in the browser, and `memfs` in Node, in the Worker and in tests.
 
 A repo tracks remotes in git's own vocabulary: `origin` (this lesson's own
-published history, which a trusted collaborator may have moved on without us),
-`upstream` (the lesson it was forked from), and, while one is being reviewed,
+published history, which a trusted collaborator may have moved on without us —
+one `refs/remotes/origin/<branch>` per branch the hub holds), `upstream` (the
+lesson it was forked from), and, while one is being reviewed,
 `refs/remotes/pull/<id>` — one ref per proposal, so two open ones can't overwrite
 each other's tip.
 

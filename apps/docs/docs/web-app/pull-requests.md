@@ -50,9 +50,13 @@ visible); only its stored changes are dropped.
 
 ## A proposal is a snapshot
 
-What a pull request actually contains is a **git packfile** — your whole
-repository as it stood the moment you opened the request — stored in R2 under
+What a pull request actually contains is a **git packfile** — your fork's lesson
+as it stood the moment you opened the request — stored in R2 under
 `git/pulls/<id>/pack`, beside the lessons' own packs.
+
+The lesson, and not your [variations](./lesson-variations.md) of it: a variation is
+an idea you are still turning over, and offering one to somebody else to merge,
+unasked and unmentioned, is not what "propose changes" means.
 
 Snapshotting is deliberate. You carry on editing your fork after proposing, and a
 request that silently tracked your branch would mean the reviewer reading one

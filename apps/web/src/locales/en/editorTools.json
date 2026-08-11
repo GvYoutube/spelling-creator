@@ -54,11 +54,13 @@
       "landing": "Merging it in...",
       "merging": "Merging...",
       "mergeProposal": "Merge these changes in",
-      "merge": "Merge"
+      "merge": "Merge",
+      "mergeVariation": "Bring it in"
     },
     "title": {
       "pullRequest": "Review the proposal: {{name}}",
-      "pull": "Merge changes from {{name}}"
+      "pull": "Merge changes from {{name}}",
+      "variation": "Bring “{{name}}” into the main lesson"
     },
     "someone": "someone",
     "reviewingNotice": "Merging this updates <strong>the published lesson</strong> itself, for everyone reading it. Nothing is written until you confirm, and {{name}} will be told either way.",
@@ -128,5 +130,25 @@
     },
     "noResults": "No images found. Try different words.",
     "close": "Close"
+  },
+  "variations": {
+    "title": "Variations",
+    "description": "A variation is a separate copy of this lesson you can change freely. The main lesson stays exactly as it is until you bring a variation into it.",
+    "mainLesson": "Main lesson",
+    "mainLessonHint": "What everyone sees",
+    "editingNow": "You're working on this",
+    "changesAhead_one": "{{count}} change that isn't in the main lesson",
+    "changesAhead_other": "{{count}} changes that aren't in the main lesson",
+    "start": "New variation",
+    "create": "Create",
+    "namePlaceholder": "Simpler for Year 3",
+    "saveName": "Rename",
+    "cancel": "Cancel",
+    "close": "Close",
+    "rename": "Rename…",
+    "bringIn": "Bring into the main lesson",
+    "delete": "Delete",
+    "moreActions": "More actions for {{name}}",
+    "privacy": "Variations are saved with the lesson, so anyone who can open the lesson can see them."
   }
 }

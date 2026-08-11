@@ -7,6 +7,11 @@
 // token. On a 401 we transparently refresh the token once and retry, so a
 // long-lived server survives the access token expiring between calls.
 
+import {
+  DEFAULT_BRANCH,
+  parseRefMap,
+  serializeRefMap,
+} from "@spelling-creator/core/git/refs";
 import { sha256Hex, extFromMime } from "./images.js";
 
 /**
@@ -88,7 +93,11 @@ export function createApi(config, auth) {
    * tip travels in X-Git-Head so the bytes and the ref they belong to can never
    * be paired from two different moments (see core/git/remote.js).
    */
-  async function putPack(url, { packfile, head, parent }, badStatusMessage) {
+  async function putPack(
+    url,
+    { packfile, head, parent, refs, expected },
+    badStatusMessage,
+  ) {
     const headers = {
       "Content-Type": "application/x-git-packfile",
       "X-Git-Head": head,
@@ -96,6 +105,12 @@ export function createApi(config, auth) {
     // The compare-and-swap: the head we believe the lesson points at. Omitted
     // when it has no history yet.
     if (parent) headers["X-Git-Parent"] = parent;
+    // And the same claim for every branch the pack carries. A lesson can hold a
+    // branch per variation its author is trying out, and packRepo sends all of
+    // them — so the push has to name them all, or the hub would be left
+    // advertising tips whose objects the stored pack no longer contains.
+    if (refs) headers["X-Git-Refs"] = serializeRefMap(refs);
+    if (expected) headers["X-Git-Expected"] = serializeRefMap(expected);
 
     const res = await request(url, { method: "PUT", headers, body: packfile });
     if (!res.ok) throw await readError(res, badStatusMessage);
@@ -116,7 +131,13 @@ export function createApi(config, auth) {
     if (!head) return null; // a pack with no tip is unusable
     const packfile = new Uint8Array(await res.arrayBuffer());
     if (packfile.byteLength === 0) return null;
-    return { packfile, head };
+    // The branch map comes off the same response as the bytes, so the two can
+    // never be paired from different moments. A lesson stored before variations
+    // existed sends none, which reads as the one branch it has.
+    const refs = parseRefMap(res.headers.get("X-Git-Refs")) || {
+      [DEFAULT_BRANCH]: head,
+    };
+    return { packfile, head, refs };
   }
 
   return {
@@ -249,10 +270,10 @@ export function createApi(config, auth) {
      * the Worker refuses the push if the lesson has moved on since, which is
      * what stops two writers erasing each other.
      */
-    async pushLessonPack(lessonId, { packfile, head, parent }) {
+    async pushLessonPack(lessonId, { packfile, head, parent, refs, expected }) {
       return putPack(
         gitUrl(lessonId, "/pack"),
-        { packfile, head, parent },
+        { packfile, head, parent, refs, expected },
         "Could not save the lesson history.",
       );
     },

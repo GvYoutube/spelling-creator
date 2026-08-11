@@ -175,7 +175,8 @@ function ConflictCard({ conflict, choice, onChoose, theirName }) {
  * @param {string}   props.theirName What to call the other side — the original's
  *                                   title when pulling, the proposal's when reviewing one.
  * @param {string}   [props.proposerName] Who opened the proposal, when reviewing one.
- * @param {"pull"|"pull-request"|"publish"} props.intent  What happens once it's settled.
+ * @param {"pull"|"pull-request"|"publish"|"variation"} props.intent  What happens
+ *                                   once it's settled.
  * @param {Function} props.onConfirm Called with the { blockId: choice } map.
  */
 export default function MergeDialog({
@@ -202,13 +203,19 @@ export default function MergeDialog({
   // it — so say that plainly rather than letting "Merge" imply it only touches
   // the copy in front of us.
   const reviewing = intent === "pull-request";
+  // Folding one of the author's own variations into their lesson. Nothing arrives
+  // from anybody else, so the framing is "bring this in" rather than "merge
+  // theirs with ours".
+  const variation = intent === "variation";
   const confirmLabel = busy
     ? reviewing
       ? t("mergeDialog.confirm.landing")
       : t("mergeDialog.confirm.merging")
     : reviewing
       ? t("mergeDialog.confirm.mergeProposal")
-      : t("mergeDialog.confirm.merge");
+      : variation
+        ? t("mergeDialog.confirm.mergeVariation")
+        : t("mergeDialog.confirm.merge");
 
   const choiceFor = (blockId) => choices[blockId] || "ours";
   const choose = (blockId, value) =>
@@ -236,7 +243,11 @@ export default function MergeDialog({
                 ? t("mergeDialog.title.pullRequest", {
                     name: effectiveTheirName,
                   })
-                : t("mergeDialog.title.pull", { name: effectiveTheirName })}
+                : variation
+                  ? t("mergeDialog.title.variation", {
+                      name: effectiveTheirName,
+                    })
+                  : t("mergeDialog.title.pull", { name: effectiveTheirName })}
             </span>
           </DialogTitle>
         </DialogHeader>

@@ -6,7 +6,14 @@
 // here. Two objects per lesson:
 //
 //   git/<lessonId>/pack        the packfile bytes
-//   git/<lessonId>/refs.json   { head, size, updatedAt }
+//   git/<lessonId>/refs.json   { head, refs, size, updatedAt }
+//
+// `head` is the lesson itself — the default branch — and `refs` maps every branch
+// the repository holds to its tip, one per *variation* its author is trying out
+// (see /web-app/lesson-variations). `head` came first and is kept as its own
+// field rather than being read out of the map: everything that wants "the
+// lesson" wants exactly that one branch, and a reader written before variations
+// existed still gets the right answer from it.
 //
 // A pull request — someone proposing changes to a lesson they don't own — is a
 // packfile too, snapshotted when the request was opened, under its own key:
@@ -28,8 +35,19 @@ import { supabaseHeaders } from './supabase.js';
 // A lesson id is a UUID — pinned down because it's interpolated into an R2 key.
 export const LESSON_ID_RE = /^[0-9a-fA-F-]{36}$/;
 
-// A commit oid is a 40-char lowercase hex SHA-1.
-export const OID_RE = /^[0-9a-f]{40}$/;
+// A commit oid is a 40-char lowercase hex SHA-1, and a branch name is what the
+// editor is allowed to create. Both rules come from the shared module so the
+// Worker validates a push against exactly what the client validated it against —
+// the same arrangement as the pull-request length limits.
+export {
+	DEFAULT_BRANCH,
+	OID_RE,
+	MAX_BRANCHES,
+	MAX_BRANCH_NAME,
+	isBranchName,
+	parseRefMap,
+	serializeRefMap,
+} from '@spelling-creator/core/git/refs';
 
 // Cap one repository's history. Packs hold only JSON (images are referenced by
 // hash and live in the images bucket, not in the repo), so even a long-lived

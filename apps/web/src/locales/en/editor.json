@@ -44,7 +44,10 @@
     "proposeTooltip": "Offer your work back to {{name}}. Nothing there changes: your version is sent as a proposal, and its author — or someone they trust — decides whether to merge it in.",
     "collapseAll": "Collapse all",
     "expandAll": "Expand all",
-    "untitledCrumb": "Untitled lesson"
+    "untitledCrumb": "Untitled lesson",
+    "mainLesson": "Main lesson",
+    "variationsTooltip": "You're working on the main lesson — the one everyone sees. Click to try changes on a separate copy instead.",
+    "onVariationTooltip": "You're working on a variation. The main lesson stays exactly as it is until you bring this in. Click to switch back or manage your variations."
   },
   "stats": {
     "sections_one": "{{count}} section",
@@ -142,7 +145,9 @@
     "forkedWithoutHistory": "Forked into a new lesson — edit freely, then save it to the cloud as your own copy.",
     "loadedPublished": "Loaded your published lesson — edit and save to the cloud to update it.",
     "loadedDraft": "Loaded your draft — edit and save to the cloud, or publish it to the hub.",
-    "couldNotOpenLesson": "Could not open that lesson for {{action}}."
+    "couldNotOpenLesson": "Could not open that lesson for {{action}}.",
+    "variationBroughtIn": "“{{name}}” is now part of the main lesson.",
+    "variationAlreadyIn": "“{{name}}” is already part of the main lesson."
   },
   "labels": {
     "theOriginal": "the original",

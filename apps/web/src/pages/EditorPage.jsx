@@ -18,6 +18,7 @@ import {
   EyeIcon,
   FileTextIcon,
   FileUpIcon,
+  GitBranchIcon,
   GitForkIcon,
   GitMergeIcon,
   GitPullRequestIcon,
@@ -73,6 +74,7 @@ import CollabChat from "../components/CollabChat.jsx";
 import FirstLessonWizard from "../components/FirstLessonWizard.jsx";
 import AiLessonIdeaDialog from "../components/AiLessonIdeaDialog.jsx";
 import HistoryDialog, { timeAgo } from "../components/HistoryDialog.jsx";
+import VariationsDialog from "../components/VariationsDialog.jsx";
 import MergeDialog from "../components/MergeDialog.jsx";
 import ProposeChangesDialog from "../components/ProposeChangesDialog.jsx";
 // The preview dialog renders the working doc with the very same read-only
@@ -82,6 +84,10 @@ import { AGE_RANGES } from "@spelling-creator/core/ageRanges";
 import { newId } from "@spelling-creator/core/id";
 import { extractCapitalizedWords } from "@spelling-creator/core/spelling";
 import { useLessonGit } from "../lib/git/useLessonGit.js";
+import {
+  DEFAULT_BRANCH as engineDefaultBranch,
+  branchLabel,
+} from "@spelling-creator/core/git/refs";
 // The git engine (isomorphic-git + LightningFS) is loaded on demand rather than
 // imported directly, so it stays out of the bundle every homepage and hub visitor
 // downloads. loadGitEngine() memoises the import; by the time any of these flows
@@ -286,6 +292,9 @@ export default function EditorPage() {
   //                   for (author / trusted collaborator only, server-enforced)
   //   "publish"       a save found the hub ahead of us; merge, then save again
   const [mergeIntent, setMergeIntent] = useState("pull");
+  // The variation being folded into the main lesson, so the merge dialog and the
+  // toast afterwards can name it.
+  const [mergeVariation, setMergeVariation] = useState(null);
 
   const {
     enabled: authEnabled,
@@ -315,6 +324,7 @@ export default function EditorPage() {
   const panel = location.pathname.replace(/^\/editor\/?/, "").split("/")[0];
   const historyOpen = panel === "history";
   const collabOpen = panel === "collaborate";
+  const variationsOpen = panel === "variations";
   //
   // Opening pushes; closing *replaces*. Both pushing would leave the history as
   // [/editor, /editor/history, /editor], so Back from a panel you had just
@@ -1301,6 +1311,52 @@ export default function EditorPage() {
     }
   };
 
+  // Bring a variation into the main lesson.
+  //
+  // The order is the whole of it. We switch to the main lesson *first*, so the
+  // merge commits there and the document that comes back is the lesson with the
+  // variation folded in — not the variation with the lesson folded in, which is
+  // the same commit and the opposite meaning. Switching commits anything
+  // outstanding to the variation on its way out, so nothing in flight is lost.
+  const handleBringVariationIn = async (name) => {
+    setBusy("merge");
+    try {
+      const onMain = await git.switchBranch(engineDefaultBranch);
+      if (onMain) setDoc(onMain);
+
+      const engine = await loadGitEngine();
+      const prepared = await engine.prepareBranchMerge({
+        repoId: git.repoId,
+        name,
+        doc: onMain || doc,
+      });
+
+      // Already in: every commit the variation has is in the lesson's history, so
+      // there is nothing to fold in.
+      if (!prepared || prepared.upToDate) {
+        notify({
+          severity: "info",
+          message: t("messages.variationAlreadyIn", {
+            name: branchLabel(name),
+          }),
+        });
+        return;
+      }
+
+      setMergeIntent("variation");
+      setMergeVariation(name);
+      setMerge(prepared);
+    } catch (err) {
+      console.error(err);
+      notify({
+        severity: "error",
+        message: t("messages.couldNotMerge", { error: err.message || err }),
+      });
+    } finally {
+      setBusy(null);
+    }
+  };
+
   // Offer this fork's work back to the lesson it came from — as a proposal, not
   // a write.
   //
@@ -1467,13 +1523,27 @@ export default function EditorPage() {
             ? doc.title
             : mergeIntent === "pull-request"
               ? reviewPull?.title || t("labels.theProposal")
-              : forkedFromTitle,
+              : mergeIntent === "variation"
+                ? branchLabel(mergeVariation || "")
+                : forkedFromTitle,
         currentDoc: doc,
       });
       setDoc(merged);
       const intent = mergeIntent;
+      const variation = mergeVariation;
       setMerge(null);
+      setMergeVariation(null);
 
+      if (intent === "variation") {
+        notify({
+          severity: "success",
+          message: t("messages.variationBroughtIn", {
+            name: branchLabel(variation || ""),
+          }),
+        });
+        git.refreshBranches();
+        return;
+      }
       if (intent === "pull-request") {
         if (reviewPull) await finishPullMerge(reviewPull, merged);
         return;
@@ -2145,6 +2215,42 @@ export default function EditorPage() {
                   </Tooltip>
                 )}
 
+                {/* Which copy of the lesson is being edited. On the main lesson
+                    this is a quiet chip that mostly exists to say the feature is
+                    there; on a variation it is the reminder that what you change
+                    isn't what people are reading. */}
+                {git.ready && (
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <button
+                        type="button"
+                        onClick={() => openPanel("variations")}
+                        className="cursor-pointer border-0 bg-transparent p-0"
+                      >
+                        <Badge
+                          variant="outline"
+                          className={cn(
+                            "gap-1",
+                            git.onDefaultBranch
+                              ? "border-border bg-transparent text-muted-foreground"
+                              : "border-primary/40 bg-primary/10 text-primary",
+                          )}
+                        >
+                          <GitBranchIcon />
+                          {git.onDefaultBranch
+                            ? t("documentPanel.mainLesson")
+                            : branchLabel(git.branch)}
+                        </Badge>
+                      </button>
+                    </TooltipTrigger>
+                    <TooltipContent className="max-w-xs">
+                      {git.onDefaultBranch
+                        ? t("documentPanel.variationsTooltip")
+                        : t("documentPanel.onVariationTooltip")}
+                    </TooltipContent>
+                  </Tooltip>
+                )}
+
                 {editingId && (
                   <Tooltip>
                     <TooltipTrigger asChild>
@@ -2541,6 +2647,16 @@ export default function EditorPage() {
         onTrustedChange={setTrustedCollaborators}
       />
 
+      {/* Variations: the other branches of this lesson's repository, as an author
+          sees them — separate copies to try things in. */}
+      <VariationsDialog
+        open={variationsOpen}
+        onClose={() => openPanel(null)}
+        git={git}
+        onSwitch={(next) => next && setDoc(next)}
+        onBringIn={handleBringVariationIn}
+      />
+
       {/* The lesson's own version history, read out of its git repository. */}
       <HistoryDialog
         open={historyOpen}
@@ -2570,6 +2686,7 @@ export default function EditorPage() {
         // to be landed and land it.
         onClose={() => {
           setMerge(null);
+          setMergeVariation(null);
           setReviewPull(null);
         }}
         prepared={merge}
@@ -2579,7 +2696,9 @@ export default function EditorPage() {
             ? t("labels.theSavedLesson")
             : mergeIntent === "pull-request"
               ? reviewPull?.title || t("labels.theProposal")
-              : forkedFromTitle || t("labels.theOriginal")
+              : mergeIntent === "variation"
+                ? branchLabel(mergeVariation || "")
+                : forkedFromTitle || t("labels.theOriginal")
         }
         proposerName={reviewPull?.author || ""}
         onConfirm={confirmMerge}
