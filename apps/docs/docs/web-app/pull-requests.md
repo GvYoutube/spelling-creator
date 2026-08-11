@@ -148,7 +148,7 @@ nothing about it is recorded, because nothing has been decided.
 
 Mechanically it is the two features meeting and needing almost nothing new: a
 merge commits to whatever branch is checked out, so the editor starts a variation
-named after the proposal and checks it out *before* preparing the merge. What it
+named after the proposal and checks it out _before_ preparing the merge. What it
 must not do is record the proposal as being reviewed, since that is what makes the
 confirm push and mark it merged — a try-out deliberately does neither.
 
