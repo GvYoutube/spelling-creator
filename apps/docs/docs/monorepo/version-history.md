@@ -206,6 +206,13 @@ one to adjudicate, so a reorder on both sides resolves to ours.
 The result is committed with **two parents**, which genuinely joins the two
 histories — so the next merge can find _this_ commit as its base.
 
+Unless it needn't be. When our side _is_ the merge base — their history already
+contains ours and we have added nothing to it, neither commits nor uncommitted
+edits — the merge is a **fast-forward**: our branch moves to their commit and no
+merge commit is written. There is nothing for one to record, and manufacturing it
+would put an entry in the lesson's timeline saying a decision was made when none
+was.
+
 ## Merging a fork back in (pull requests)
 
 Anyone can fork a lesson and pull the original's later changes in. Going the other

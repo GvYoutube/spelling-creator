@@ -31,8 +31,8 @@ lesson ───────▶ your copy ────────────�
    uploads it with a title and an optional note. Nothing in the original changes.
 4. The lesson's author sees it on the lesson's **Proposals** tab
    (`/hub/:id/proposals`), and gets a notification. Each proposal also has a page
-   of its own at `/hub/:id/proposals/:prId` — read-only, because merging needs
-   the git objects and those live in the editor. They (or a trusted collaborator)
+   of its own at `/hub/:id/proposals/:prId`, which shows **what it changes** and
+   whether it would merge cleanly (see below). They (or a trusted collaborator)
    hit **Review & merge**.
 5. That opens the lesson in _their_ editor (`?pull=<id>&lesson=<lessonId>` — the
    link names both, so the review waits for the lesson it belongs to rather than
@@ -76,6 +76,49 @@ is listed **only to the person who opened it** — there's nothing to review, an
 reviewer shouldn't have to tell a half-finished submission from a real one. If the
 upload fails, the client withdraws the empty request rather than leaving it in the
 author's queue.
+
+## Reading one without merging it
+
+A proposal's own page shows its changes — block by block, in the same summary the
+history view renders — and whether merging it would ask the reviewer for anything:
+
+- _"This merges cleanly — there's nothing to decide."_
+- _"2 blocks have been changed here and in the lesson, so merging will ask you
+  which to keep."_
+- _"These changes are already part of the lesson."_
+
+That is computed on the page, from the git objects themselves. Both packs are
+public exactly as far as the lesson is, so the browser indexes the proposal's pack
+beside the lesson's, finds the commit the two diverged at, and diffs against
+**that** — not against the lesson's current tip, which would show the author's own
+later edits as though the proposer had made them, reversed.
+
+Merging still happens in the editor, and that split is deliberate rather than a
+limitation: merging commits to the lesson's history and pushes it under the
+reviewer's credentials, which needs the editor's repository. Reading needs none of
+it. What changed is that nobody has to start a merge to find out whether they want
+one.
+
+The git engine is ~200 KB and is fetched on demand when this page opens, so the
+proposal's title, author and note render first and the diff arrives after. If it
+can't be read at all, the page says so and the rest of it still works.
+
+## Landing it without a merge commit
+
+When the lesson hasn't moved since the proposal was opened, the merge is a
+**fast-forward**: the lesson's branch simply moves to the proposal's commit. No
+merge commit is written, because there is nothing for one to record — no decision
+was made and no content changed that the proposal's own commits don't already
+describe.
+
+Two conditions, and both are needed. The lesson's tip must be the merge base (the
+commit-graph half), and the reviewer must have nothing uncommitted in their editor
+(the half the graph can't see — skipping it would drop whatever they had typed but
+not yet paused long enough to commit).
+
+The proposal is still recorded as merged against the commit the lesson now points
+at, which is the proposal's own head. If anything that is easier to verify than
+before.
 
 ## Who can do what
 
@@ -206,20 +249,21 @@ frontend can surface `res.text()` directly.
 
 ## Where it lives
 
-| Piece                                              | What it does                                                        |
-| -------------------------------------------------- | ------------------------------------------------------------------- |
-| `apps/api/src/routes/pulls.js`                     | The endpoints above, and every permission rule                      |
-| `apps/api/schema.sql`                              | `lesson_pull_requests`                                              |
-| `apps/api/src/lib/lessonGit.js`                    | R2 key layout (`git/pulls/<id>/pack`) and the sweeps that delete it |
-| `@spelling-creator/core/pulls`                     | The browser client, and the shared length limits                    |
-| `@spelling-creator/core/browser/git/sync`          | `submitPullRequest` (propose) and `preparePullMerge` (review)       |
-| `apps/mcp/src/git.js`                              | The same two steps for an AI assistant — fork, then propose         |
-| `apps/web/src/components/ProposeChangesDialog.jsx` | The submission form                                                 |
-| `apps/web/src/pages/lesson/LessonProposals.jsx`    | The Proposals tab                                                   |
-| `apps/web/src/pages/lesson/LessonProposal.jsx`     | One proposal, read-only, with the hand-off into the editor          |
-| `apps/web/src/components/PullRequestsSection.jsx`  | The list on a lesson's page                                         |
-| `apps/web/src/pages/EditorPage.jsx`                | `?pull=<id>&lesson=<id>` — the review + merge flow                  |
-| `apps/web/src/components/MergeDialog.jsx`          | Settling conflicts, shared with the fork-sync direction             |
+| Piece                                              | What it does                                                                              |
+| -------------------------------------------------- | ----------------------------------------------------------------------------------------- |
+| `apps/api/src/routes/pulls.js`                     | The endpoints above, and every permission rule                                            |
+| `apps/api/schema.sql`                              | `lesson_pull_requests`                                                                    |
+| `apps/api/src/lib/lessonGit.js`                    | R2 key layout (`git/pulls/<id>/pack`) and the sweeps that delete it                       |
+| `@spelling-creator/core/pulls`                     | The browser client, and the shared length limits                                          |
+| `@spelling-creator/core/browser/git/sync`          | `submitPullRequest` (propose), `prepareProposalReview` (read), `preparePullMerge` (merge) |
+| `apps/mcp/src/git.js`                              | The same two steps for an AI assistant — fork, then propose                               |
+| `apps/web/src/components/ProposeChangesDialog.jsx` | The submission form                                                                       |
+| `apps/web/src/pages/lesson/LessonProposals.jsx`    | The Proposals tab                                                                         |
+| `apps/web/src/pages/lesson/LessonProposal.jsx`     | One proposal: its changes, its mergeability, and the hand-off into the editor             |
+| `apps/web/src/components/ChangeSummary.jsx`        | The change chips and operation list, shared with the history view                         |
+| `apps/web/src/components/PullRequestsSection.jsx`  | The list on a lesson's page                                                               |
+| `apps/web/src/pages/EditorPage.jsx`                | `?pull=<id>&lesson=<id>` — the review + merge flow                                        |
+| `apps/web/src/components/MergeDialog.jsx`          | Settling conflicts, shared with the fork-sync direction                                   |
 
 A pack is swept when its proposal is **closed** — nothing there will ever be
 merged — and when the lesson is deleted, before the row goes, since the cascade

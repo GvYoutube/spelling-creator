@@ -121,7 +121,17 @@
     "emptyState": "Nobody has proposed changes to this lesson yet. Fork it, make your changes, and offer them back.",
     "notFound": "That proposal no longer exists.",
     "backToProposals": "All proposals",
-    "reviewHint": "Opens this lesson in the editor with the proposal in hand. Nothing is written until you confirm the merge."
+    "reviewHint": "Opens this lesson in the editor with the proposal in hand. Nothing is written until you confirm the merge.",
+    "changes": {
+      "heading": "What this changes",
+      "none": "This proposal doesn't change anything in the lesson.",
+      "clean": "This merges cleanly — there's nothing to decide.",
+      "conflicts_one": "{{count}} block has been changed here and in the lesson, so merging will ask you which to keep.",
+      "conflicts_other": "{{count}} blocks have been changed here and in the lesson, so merging will ask you which to keep.",
+      "alreadyIn": "These changes are already part of the lesson."
+    },
+    "changesGone": "The proposed changes are no longer stored.",
+    "changesError": "The proposed changes could not be read."
   },
   "comments": {
     "couldNotLoad": "Could not load comments.",

@@ -1546,6 +1546,9 @@ export default function EditorPage() {
       }
       if (intent === "pull-request") {
         if (reviewPull) await finishPullMerge(reviewPull, merged);
+        // A fast-forward leaves no new commit, so the version chip has to be
+        // told the branch moved.
+        git.refreshBranches();
         return;
       }
       if (intent === "publish") {

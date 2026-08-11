@@ -312,6 +312,12 @@ export function useLessonGit({ doc, editingId, identity, enabled = true }) {
         const list = await engine.listBranches(ctx);
         setBranches(list);
         setBranch(await engine.currentBranch(ctx));
+
+        // Re-read the tip too. A merge doesn't always leave a commit behind — a
+        // fast-forward moves the branch instead (see completeMerge) — so the
+        // chip would otherwise still be timing the commit before it.
+        const head = await engine.headOid(ctx);
+        setLastCommit(head ? { oid: head, at: Date.now() } : null);
         return list;
       }),
     [repoId, run],

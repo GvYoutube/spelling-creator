@@ -32,6 +32,7 @@ import { newId } from "../../id.js";
 import { preserveLocalFields } from "../../git/doc.js";
 import { DRAFT_REPO, copyRepo, deleteRepo, repoCtx } from "./fs.js";
 import { applyResolutions, mergeDocs } from "../../git/merge.js";
+import { diffDocs } from "../../git/ops.js";
 import {
   cloneFromPack,
   contains,
@@ -54,6 +55,7 @@ import {
   clearDeletedBranch,
   commitDoc,
   currentBranch,
+  currentBranchRef,
   deletedBranches,
   headOid,
   pullRef,
@@ -312,6 +314,18 @@ async function mergeAgainstCommit({ repoId, theirs, doc }) {
   // uncommitted edits must not be silently dropped by a merge.
   const result = mergeDocs(baseDoc, doc, theirDoc);
 
+  // A fast-forward: their history already contains ours (we are the merge base),
+  // and we have nothing of our own on top — no commits, and nothing uncommitted
+  // in the editor either. Then "merging" is only moving our branch to theirs, and
+  // manufacturing a merge commit for it would put an entry in the lesson's
+  // timeline that records no decision and changes no content.
+  //
+  // Both halves matter. `base === ours` is the commit-graph half; diffing the
+  // live document against ours is the half the graph can't see, and skipping it
+  // would drop whatever the reviewer had typed but not yet paused long enough to
+  // commit.
+  const fastForward = base === ours && diffDocs(baseDoc, doc).length === 0;
+
   return {
     doc: preserveLocalFields(result.doc, doc),
     conflicts: result.conflicts,
@@ -321,6 +335,7 @@ async function mergeAgainstCommit({ repoId, theirs, doc }) {
     base,
     identical: false,
     ahead: false,
+    fastForward,
     upToDate: false,
   };
 }
@@ -382,6 +397,26 @@ export async function completeMerge({
     newId,
   );
   const doc = preserveLocalFields(resolved, currentDoc);
+
+  // A fast-forward has nothing to record. Their history already contains ours and
+  // we added nothing to it, so the merge is our branch moving to their commit —
+  // and writing a merge commit instead would leave a permanent entry in the
+  // lesson's timeline saying a decision was made when none was.
+  //
+  // The conflicts guard is belt and braces: mergeAgainstCommit can't produce both,
+  // because a merge whose base is ours takes their side of everything. But the
+  // flag arrives here from a prepared object the caller has held across a dialog,
+  // and silently discarding somebody's conflict resolutions would be the worst
+  // possible way to find out that assumption had stopped holding.
+  if (prepared.fastForward && prepared.conflicts.length === 0) {
+    await git.writeRef({
+      ...ctx,
+      ref: await currentBranchRef(ctx),
+      value: prepared.theirs,
+      force: true,
+    });
+    return doc;
+  }
 
   await commitDoc({
     ...ctx,
@@ -581,6 +616,85 @@ export async function preparePullMerge({
   const pack = await fetchPullPack(lessonId, pullId, accessToken);
   if (!pack) return null;
   return mergeAgainstPack({ repoId, pack, doc, ref: pullRef(pullId) });
+}
+
+/**
+ * What a proposal changes, and whether it would merge cleanly — computed without
+ * an editor, so a proposal can be *read* on its own page.
+ *
+ * Merging a proposal needs the reviewer's editor, because the merge is theirs to
+ * make and to push. Reading one doesn't, and the difference matters: the whole
+ * queue was previously a list of titles nobody could look inside without opening
+ * the lesson and starting a merge they might not want.
+ *
+ * Both packs are public exactly as far as the lesson is (a proposal is as
+ * readable as what it targets), so this works for any viewer, signed in or not.
+ * It answers two questions:
+ *
+ *   ops        what the proposer changed, as blocks, against the commit the two
+ *              histories diverged at — a proposal's diff, in the same shape the
+ *              history view renders
+ *   conflicts  which blocks the lesson and the proposal have both changed in the
+ *              same field, i.e. what a reviewer would actually have to decide
+ *
+ * Nothing is committed and no branch moves; the only writes are objects and a
+ * remote-tracking ref, which is what indexing a pack means.
+ *
+ * @returns {Promise<null | { ops, conflicts, auto, base, ours, theirs, contained,
+ *          hasLesson }>} null when the proposal's changes are no longer stored.
+ */
+export async function prepareProposalReview({
+  repoId,
+  lessonId,
+  pullId,
+  accessToken,
+}) {
+  const ctx = repoCtx(repoId);
+
+  // The lesson's own history, so there is something to compare against. A lesson
+  // with none (one written before version history) still gets a diff below — just
+  // against nothing, which reads as "everything in it is new", and is true.
+  const lessonPack = await fetchPack(lessonId).catch(() => null);
+  if (lessonPack) {
+    await fetchRemotePack({ ...ctx, ...lessonPack, ref: ORIGIN_REF });
+  }
+
+  const pack = await fetchPullPack(lessonId, pullId, accessToken);
+  if (!pack) return null;
+  await fetchRemotePack({ ...ctx, ...pack, ref: pullRef(pullId) });
+
+  const theirs = pack.head;
+  const ours = lessonPack?.head || null;
+
+  const base = ours ? await mergeBase({ ...ctx, ours, theirs }) : null;
+  // Already landed: every commit the proposal has is in the lesson's history.
+  const contained = ours
+    ? await contains({ ...ctx, oid: ours, ancestor: theirs })
+    : false;
+
+  const [baseDoc, ourDoc, theirDoc] = await Promise.all([
+    base ? readDocAt({ ...ctx, oid: base }) : Promise.resolve(null),
+    ours ? readDocAt({ ...ctx, oid: ours }) : Promise.resolve(null),
+    readDocAt({ ...ctx, oid: theirs }),
+  ]);
+
+  // Against the merge base where there is one — that is a proposal's diff, and it
+  // shows what the proposer did rather than every way the two now differ. Without
+  // shared ancestry there is no such point, so fall back to the lesson as it
+  // stands, which is the question a reader is really asking anyway.
+  const ops = diffDocs(baseDoc || ourDoc, theirDoc);
+  const merged = ourDoc ? mergeDocs(baseDoc, ourDoc, theirDoc) : null;
+
+  return {
+    ops,
+    conflicts: merged?.conflicts || [],
+    auto: merged?.auto || EMPTY_AUTO,
+    base,
+    ours,
+    theirs,
+    contained,
+    hasLesson: Boolean(ours),
+  };
 }
 
 /**

@@ -1,12 +1,23 @@
 // One proposal's own page (/hub/:id/proposals/:prId).
 //
-// Read-only, and that is not a shortcut. Merging a proposal is a genuine
-// three-way merge against the lesson's git history, and that history lives in
-// the editor's browser-side repository (LightningFS + isomorphic-git, loaded on
-// demand) — not here, on a page whose whole point is to be cheap enough to
-// server-render for a reader. So "Review & merge" does what it has always done:
-// hands the editor the lesson and the proposal id, and the block-by-block merge
-// happens there, where the objects are.
+// You can **read** a proposal here — what it changes, block by block, and whether
+// it would merge cleanly — but you cannot merge one. That split is the point, and
+// it is not the same as the page being read-only for want of trying.
+//
+// Merging is the reviewer's act: it commits to the lesson's history and pushes it
+// under their credentials, which needs the editor's repository. Reading needs none
+// of that. Both packs are public exactly as far as the lesson is, so the diff is
+// computed right here from the objects themselves — index the proposal's pack
+// beside the lesson's, find the commit the two diverged at, and diff. See
+// prepareProposalReview in core/browser/git/sync.js.
+//
+// So "Review & merge" still hands the editor the lesson and the proposal id, and
+// the block-by-block merge still happens there. What changed is that nobody has
+// to start that merge to find out whether they want it.
+//
+// The engine is ~200 KB and is fetched on demand (lib/git/load.js) only once this
+// page is open — the same arrangement the History tab uses, and the reason the
+// diff arrives after the proposal's text rather than with it.
 //
 // There is no single-proposal endpoint (see apps/api/src/routes/pulls.js), so
 // this reads the lesson's list and picks its one out. The list is small by
@@ -19,18 +30,26 @@ import { useTranslation } from "react-i18next";
 import { Link as RouterLink, useNavigate, useParams } from "react-router-dom";
 import {
   ArrowLeftIcon,
+  CircleCheckIcon,
   GitMergeIcon,
   GitPullRequestClosedIcon,
   GitPullRequestIcon,
+  TriangleAlertIcon,
 } from "lucide-react";
 import PageBody from "../../components/layout/PageBody.jsx";
+import { ChangeChips, ChangeList } from "../../components/ChangeSummary.jsx";
 import { Button } from "../../components/ui/button.jsx";
 import { Badge } from "../../components/ui/badge.jsx";
 import { Alert, AlertDescription } from "../../components/ui/alert.jsx";
 import { Avatar, AvatarFallback } from "../../components/ui/avatar.jsx";
-import { ListRowsSkeleton } from "../../components/Skeletons.jsx";
+import {
+  HistorySkeleton,
+  ListRowsSkeleton,
+} from "../../components/Skeletons.jsx";
 import { cn } from "../../lib/utils.js";
 import { useAuth } from "../../lib/auth.jsx";
+import { loadGitEngine } from "../../lib/git/load.js";
+import { repoIdFor } from "@spelling-creator/core/git/doc";
 import { fetchPullRequests } from "@spelling-creator/core/pulls";
 import { EDIT_REQUEST_KEY } from "@spelling-creator/core/lessons";
 import { useLesson } from "./LessonLayout.jsx";
@@ -38,6 +57,50 @@ import { useLesson } from "./LessonLayout.jsx";
 function initial(name) {
   const s = (name || "").trim();
   return s ? s[0].toUpperCase() : "?";
+}
+
+/**
+ * Whether this would merge on its own, said plainly.
+ *
+ * The three answers are genuinely different actions for a reviewer, not shades of
+ * one: nothing to do, press the button, or set aside ten minutes. A count of
+ * conflicting blocks is the honest measure of the last, because that is exactly
+ * how many decisions the merge dialog will ask for.
+ */
+function Mergeability({ changes }) {
+  const { t } = useTranslation("lesson");
+
+  if (changes.contained) {
+    return (
+      <Alert className="mt-4 border-success/40 bg-success/10 text-success">
+        <CircleCheckIcon />
+        <AlertDescription className="text-success">
+          {t("pulls.changes.alreadyIn")}
+        </AlertDescription>
+      </Alert>
+    );
+  }
+
+  const count = changes.conflicts.length;
+  if (count === 0) {
+    return (
+      <Alert className="mt-4 border-success/40 bg-success/10 text-success">
+        <CircleCheckIcon />
+        <AlertDescription className="text-success">
+          {t("pulls.changes.clean")}
+        </AlertDescription>
+      </Alert>
+    );
+  }
+
+  return (
+    <Alert className="mt-4 border-focus/40 bg-focus/10 text-focus">
+      <TriangleAlertIcon />
+      <AlertDescription className="text-focus">
+        {t("pulls.changes.conflicts", { count })}
+      </AlertDescription>
+    </Alert>
+  );
 }
 
 export default function LessonProposal() {
@@ -73,6 +136,51 @@ export default function LessonProposal() {
       cancelled = true;
     };
   }, [lesson.id, prId, accessToken, t]);
+
+  // What the proposal changes, worked out from the git objects themselves.
+  //
+  // Deliberately a second effect rather than part of the fetch above: it needs a
+  // 200 KB engine and two packfile downloads, and the proposal's title, author and
+  // note should be on screen long before any of that lands. It also fails softly —
+  // a proposal whose changes can't be read is still a proposal worth showing, and
+  // the reviewer can always open it in the editor.
+  //
+  // It waits for `ready`, because an unready proposal has no pack to read.
+  const [changes, setChanges] = useState(null); // null = still working
+  const [changesError, setChangesError] = useState("");
+  const ready = pull?.ready;
+
+  useEffect(() => {
+    if (!ready) return;
+    let cancelled = false;
+
+    setChanges(null);
+    setChangesError("");
+
+    (async () => {
+      try {
+        const engine = await loadGitEngine();
+        const result = await engine.prepareProposalReview({
+          repoId: repoIdFor(lesson.id),
+          lessonId: lesson.id,
+          pullId: prId,
+          accessToken,
+        });
+        if (cancelled) return;
+        if (!result) {
+          setChangesError(t("pulls.changesGone"));
+          return;
+        }
+        setChanges(result);
+      } catch (err) {
+        if (!cancelled) setChangesError(err.message || t("pulls.changesError"));
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [lesson.id, prId, ready, accessToken, t]);
 
   // Same hand-off as the list's "Review & merge" — see the file header. The
   // lesson id goes in the query string as well as sessionStorage because the
@@ -187,6 +295,37 @@ export default function LessonProposal() {
             {t("pulls.viewFork")}
           </RouterLink>
         </p>
+      )}
+
+      {/* What it changes, and whether it would land cleanly. Drawn for a closed
+          or merged proposal too — "what did that one do?" is a question people
+          ask most often about the ones already resolved. */}
+      {pull.ready && (
+        <section className="mt-6 rounded-panel border border-border bg-card p-4">
+          <h3 className="text-base font-medium">
+            {t("pulls.changes.heading")}
+          </h3>
+
+          {changesError ? (
+            <p className="mt-2 text-sm text-muted-foreground">{changesError}</p>
+          ) : changes === null ? (
+            <HistorySkeleton count={3} />
+          ) : changes.ops.length === 0 ? (
+            <p className="mt-2 text-sm text-muted-foreground">
+              {t("pulls.changes.none")}
+            </p>
+          ) : (
+            <>
+              <ChangeChips ops={changes.ops} className="mt-2" />
+              <hr className="my-3 border-border" />
+              <ChangeList ops={changes.ops} className="max-h-80" />
+            </>
+          )}
+
+          {/* Whether a reviewer would have anything to decide. Worth saying
+              before they open the editor, because the usual answer is "no". */}
+          {changes && isOpen && <Mergeability changes={changes} />}
+        </section>
       )}
 
       {isOpen && pull.ready && canReview && (
