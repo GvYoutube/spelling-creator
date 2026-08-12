@@ -196,6 +196,10 @@ export async function remoteStatus({ repoId, lessonId, ref = ORIGIN_REF }) {
  * A branch we deliberately deleted is not adopted back: its marker is still
  * waiting to be pushed, and undoing a delete on the way to reporting it would be
  * the opposite of what the author asked for.
+ *
+ * Every write here is best-effort. This is bookkeeping so that the *next* push can
+ * say something true, and one branch that won't adopt is no reason to fail the
+ * save it is riding along with — including the lesson's own.
  */
 async function syncRemoteBranches(ctx, refs) {
   if (!refs) return;
@@ -204,19 +208,35 @@ async function syncRemoteBranches(ctx, refs) {
   for (const [name, oid] of Object.entries(refs)) {
     if (!oid || deleted[name]) continue;
     if (await headOid({ ...ctx, ref: branchRef(name) })) continue;
-    await git.writeRef({
-      ...ctx,
-      ref: branchRef(name),
-      value: oid,
-      force: false,
-    });
+    await git
+      .writeRef({ ...ctx, ref: branchRef(name), value: oid, force: false })
+      .catch(() => {});
   }
 
+  // The other direction: a branch the hub no longer has, which we do.
+  //
+  // Dropping only the remote-tracking ref would leave the local branch to be
+  // pushed back as new on the next save — so a variation deleted on one device
+  // would quietly reappear, put there by another device that still had it. What
+  // makes the delete safe is the tracking ref itself: it is the last thing the hub
+  // told us this branch was, so a local branch still sitting exactly there holds
+  // nothing that isn't already gone. One that has moved holds unpushed work, and
+  // that is the author's to keep — it goes back up, and they can delete it again.
   const tracked = await git
     .listRefs({ ...ctx, filepath: "refs/remotes/origin" })
     .catch(() => []);
+
   for (const name of tracked) {
     if (refs[name]) continue;
+
+    const trackedOid = await headOid({
+      ...ctx,
+      ref: `refs/remotes/origin/${name}`,
+    });
+    const localOid = await headOid({ ...ctx, ref: branchRef(name) });
+    if (name !== BRANCH && localOid && localOid === trackedOid) {
+      await git.deleteRef({ ...ctx, ref: branchRef(name) }).catch(() => {});
+    }
     await git
       .deleteRef({ ...ctx, ref: `refs/remotes/origin/${name}` })
       .catch(() => {});
@@ -336,6 +356,11 @@ async function mergeAgainstCommit({ repoId, theirs, doc }) {
     identical: false,
     ahead: false,
     fastForward,
+    // The branch this merge is *for*. A fast-forward moves a ref, and it must move
+    // the one the merge was computed against — not whatever HEAD happens to point
+    // at when the user finally confirms, which a variation switch in between would
+    // have changed.
+    ref: await currentBranchRef(ctx),
     upToDate: false,
   };
 }
@@ -479,13 +504,14 @@ export async function completeMerge({
   // and silently discarding somebody's conflict resolutions would be the worst
   // possible way to find out that assumption had stopped holding.
   if (prepared.fastForward && prepared.conflicts.length === 0) {
-    await git.writeRef({
-      ...ctx,
-      ref: await currentBranchRef(ctx),
-      value: prepared.theirs,
-      force: true,
-    });
-    return doc;
+    // Against the branch it was prepared for, and only if we are still on it.
+    // Anything else means the ground moved under the dialog, and moving a ref
+    // somebody has since navigated away from is worse than making a merge commit.
+    const ref = prepared.ref || (await currentBranchRef(ctx));
+    if (ref === (await currentBranchRef(ctx))) {
+      await git.writeRef({ ...ctx, ref, value: prepared.theirs, force: true });
+      return doc;
+    }
   }
 
   await commitDoc({

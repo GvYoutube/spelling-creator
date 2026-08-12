@@ -40,9 +40,9 @@ export const OID_RE = /^[0-9a-f]{40}$/;
 /**
  * Whether `name` is a branch name we will store.
  *
- * The two exclusions past the character set are git's own: `..` is how a revision
- * range is written, and a ref file may not end in `.lock`, which is the name git
- * gives its own lock files.
+ * The exclusions past the character set are git's own: `..` is how a revision
+ * range is written, a ref file may not end in `.lock` (the name git gives its own
+ * lock files), and a ref may not end in a dot at all.
  */
 export function isBranchName(name) {
   if (typeof name !== "string") return false;
@@ -50,6 +50,10 @@ export function isBranchName(name) {
   if (!BRANCH_NAME_RE.test(name)) return false;
   if (name.includes("..")) return false;
   if (name.endsWith(".lock")) return false;
+  // git check-ref-format: a ref may not end with a dot. Ours could, because the
+  // character set allows one anywhere, and the name would then be one the Worker
+  // stored and git refused to write.
+  if (name.endsWith(".")) return false;
   return true;
 }
 

@@ -284,14 +284,14 @@ which is why the submission dialog says so plainly before you send it.
 
 ## Worker endpoints
 
-| Method & path                         | Auth                    | What it does                                                                                              |
-| ------------------------------------- | ----------------------- | --------------------------------------------------------------------------------------------------------- |
-| `GET /lessons/:id/pulls`              | none, unless a draft\*  | `{ "pulls": [...], "canReview": bool }` — newest first; unready rows only for their own author            |
-| `POST /lessons/:id/pulls`             | `Bearer <Supabase JWT>` | Opens a proposal (`{ title, body, head, headRef, base, sourceLessonId }`); the author only from a fork    |
-| `PUT /lessons/:id/pulls/:prId/pack`   | `Bearer <Supabase JWT>` | Uploads its packfile. The proposer's; the first must match the row's head, a later one records a revision |
-| `GET /lessons/:id/pulls/:prId/pack`   | none, unless a draft\*  | The packfile; `X-Git-Head` names its tip                                                                  |
-| `POST /lessons/:id/pulls/:prId/merge` | `Bearer <Supabase JWT>` | Records the merge (`{ mergeCommit }`); author or trusted collaborator only                                |
-| `POST /lessons/:id/pulls/:prId/close` | `Bearer <Supabase JWT>` | Closes it; proposer, author, trusted collaborator, or moderator                                           |
+| Method & path                         | Auth                    | What it does                                                                                                                                    |
+| ------------------------------------- | ----------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
+| `GET /lessons/:id/pulls`              | none, unless a draft\*  | `{ "pulls": [...], "canReview": bool }` — newest first; unready rows only for their own author                                                  |
+| `POST /lessons/:id/pulls`             | `Bearer <Supabase JWT>` | Opens a proposal (`{ title, body, head, headRef, base, sourceLessonId }`); anyone signed in — the lesson's own author only from a fork they own |
+| `PUT /lessons/:id/pulls/:prId/pack`   | `Bearer <Supabase JWT>` | Uploads its packfile — the proposer's only. The first must match the head the row was opened with; a later one records a revision               |
+| `GET /lessons/:id/pulls/:prId/pack`   | none, unless a draft\*  | The packfile; `X-Git-Head` names its tip                                                                                                        |
+| `POST /lessons/:id/pulls/:prId/merge` | `Bearer <Supabase JWT>` | Records the merge (`{ mergeCommit }`); author or trusted collaborator only                                                                      |
+| `POST /lessons/:id/pulls/:prId/close` | `Bearer <Supabase JWT>` | Closes it; proposer, author, trusted collaborator, or moderator                                                                                 |
 
 \* Reads follow the target lesson's own visibility — the single `canReadLesson`
 rule in `apps/api/src/lib/lesson.js` that also gates `GET /lessons/:id`, its

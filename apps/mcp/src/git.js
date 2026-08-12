@@ -35,6 +35,7 @@ import { memRepo } from "@spelling-creator/core/git/memfs";
 import { describeOp } from "@spelling-creator/core/git/ops";
 import {
   cloneFromPack,
+  contains,
   fetchRemotePack,
   packRepo,
 } from "@spelling-creator/core/git/pack";
@@ -324,9 +325,28 @@ export async function proposeChanges(
     .catch(() => null);
 
   if (existing) {
-    // The fork's history is the same branch moving forward, so this commit
-    // descends from whatever the proposal already points at — which is the rule
-    // an update has to satisfy.
+    // An update may only move the proposal *forward*: the new tip has to contain
+    // the one it already points at. Usually it does — the fork's history is one
+    // branch advancing — but not always. If an earlier proposal's history push
+    // failed (it is best-effort, see pushForkHistory), this call cloned a pack
+    // without that commit and built a sibling instead. Uploading it would drop
+    // `previous_head` out of the history the pack carries, which is exactly the
+    // invariant that lets one pack per proposal answer "what changed in this
+    // update". The Worker cannot check this — it holds the pack opaquely — so it
+    // is checked here.
+    const forward = await contains({
+      ...ctx,
+      oid: proposed.head,
+      ancestor: existing.head,
+    });
+    if (!forward) {
+      throw new Error(
+        `This fork's history no longer builds on proposal ${existing.id}, so updating it would replace ` +
+          "what the reviewer has been reading rather than adding to it. Close that proposal in the web app " +
+          "and call propose_changes again to open a fresh one.",
+      );
+    }
+
     const updated = await api.uploadPullPack(target, existing.id, {
       packfile: proposed.packfile,
       head: proposed.head,

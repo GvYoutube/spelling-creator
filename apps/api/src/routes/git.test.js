@@ -58,6 +58,16 @@ describe('applyRefs', () => {
 		expect(push({ main: A, 'Year-3': C }, { refs: { main: A }, deletes: ['Year-3'], expected: { main: A, 'Year-3': B } }).status).toBe(409);
 	});
 
+	it('refuses a push that both sets and deletes one branch', () => {
+		// Reachable from a delete-then-recreate on the client: the request
+		// contradicts itself, and applying it in order would let the delete win.
+		const result = push(
+			{ main: A, 'Year-3': B },
+			{ refs: { main: A, 'Year-3': C }, deletes: ['Year-3'], expected: { main: A, 'Year-3': B } },
+		);
+		expect(result.status).toBe(400);
+	});
+
 	it('will not delete the lesson itself', () => {
 		const result = push({ main: A }, { deletes: ['main'], expected: { main: A } });
 		expect(result.status).toBe(400);

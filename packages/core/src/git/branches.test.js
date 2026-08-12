@@ -68,6 +68,9 @@ describe("branch names", () => {
     expect(isBranchName("-leading")).toBe(false);
     expect(isBranchName("with space")).toBe(false);
     expect(isBranchName("x".repeat(33))).toBe(false);
+    // git refuses a ref that ends in a dot, so we must too.
+    expect(isBranchName("Year-3.")).toBe(false);
+    expect(toBranchName("Year 3.")).toBe("Year-3");
   });
 
   it("keeps a long name inside the limit, cut on a separator", () => {
@@ -198,6 +201,32 @@ describe("removing a variation", () => {
     expect(await deleteBranch({ ...ctx, name: "Year-3" })).toBe(true);
     expect((await listBranches(ctx)).map((b) => b.name)).toEqual([BRANCH]);
     expect(await deletedBranches(ctx)).toEqual({ "Year-3": tip });
+  });
+
+  it("forgets the deletion when the same name is used again", async () => {
+    const ctx = await seeded();
+    await createBranch({ ...ctx, name: "Year-3" });
+    await commitDoc({ ...ctx, doc: doc("Lesson", "variation"), author });
+    await checkoutBranch({ ...ctx, name: BRANCH });
+    await deleteBranch({ ...ctx, name: "Year-3" });
+
+    // Reusing the name is not the deleted variation coming back. Left behind, the
+    // marker would make the next push ask to create and delete one name at once.
+    await createBranch({ ...ctx, name: "Year-3" });
+    expect(await deletedBranches(ctx)).toEqual({});
+  });
+
+  it("forgets it when a rename takes the name instead", async () => {
+    const ctx = await seeded();
+    await createBranch({ ...ctx, name: "Year-3" });
+    await checkoutBranch({ ...ctx, name: BRANCH });
+    await createBranch({ ...ctx, name: "Year-5" });
+    await checkoutBranch({ ...ctx, name: BRANCH });
+    await deleteBranch({ ...ctx, name: "Year-3" });
+
+    await renameBranch({ ...ctx, from: "Year-5", to: "Year-3" });
+    // "Year-5" is gone and marked; "Year-3" exists again and must not be.
+    expect(Object.keys(await deletedBranches(ctx))).toEqual(["Year-5"]);
   });
 
   it("refuses to remove the lesson, or the branch being edited", async () => {

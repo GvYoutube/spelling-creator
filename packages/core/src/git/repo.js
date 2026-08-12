@@ -449,6 +449,11 @@ export async function createBranch({ fs, gitdir, name, from }) {
   if (!oid) throw new Error("There is nothing to base it on yet.");
 
   await git.writeRef({ fs, gitdir, ref, value: oid, force: false });
+  // A name deleted earlier and used again is not the deleted one coming back, and
+  // the marker must go with it. Left behind, the next push would send this name in
+  // `refs` *and* in `deletes` — one request contradicting itself, which the hub
+  // would resolve by deleting a branch that is alive here.
+  await clearDeletedBranch({ fs, gitdir, name });
   // Creating a variation and then not being on it is never what was meant.
   await checkoutBranch({ fs, gitdir, name });
   return { name, ref, oid };
@@ -509,6 +514,9 @@ export async function renameBranch({ fs, gitdir, from, to }) {
     value: oid,
     force: false,
   });
+  // As in createBranch: renaming *onto* a name deleted earlier must clear that
+  // name's marker, or the push would create and delete it in one breath.
+  await clearDeletedBranch({ fs, gitdir, name: to });
   const wasCurrent = (await currentBranch({ fs, gitdir })) === from;
   if (wasCurrent) await checkoutBranch({ fs, gitdir, name: to });
   await git.deleteRef({ fs, gitdir, ref: branchRef(from) });

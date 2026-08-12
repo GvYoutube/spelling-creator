@@ -175,8 +175,8 @@ function ConflictCard({ conflict, choice, onChoose, theirName }) {
  * @param {string}   props.theirName What to call the other side — the original's
  *                                   title when pulling, the proposal's when reviewing one.
  * @param {string}   [props.proposerName] Who opened the proposal, when reviewing one.
- * @param {"pull"|"pull-request"|"publish"|"variation"|"undo"} props.intent  What
- *                                   happens once it's settled.
+ * @param {"pull"|"pull-request"|"pull-request-try"|"publish"|"variation"|"undo"} props.intent
+ *                                   What happens once it's settled.
  * @param {Function} props.onConfirm Called with the { blockId: choice } map.
  */
 export default function MergeDialog({

@@ -101,10 +101,19 @@ async function stored(env, lessonId) {
 	if (!object) return null;
 	const value = await object.json().catch(() => null);
 	if (!value || !value.head) return null;
+
 	// A lesson stored before variations existed has no map; the one branch it has
 	// is its head, and saying so here means the rest of this file has one shape to
 	// reason about rather than two.
-	const refs = parseRefMap(value.refs) || { [DEFAULT_BRANCH]: value.head };
+	//
+	// A map that is *present but unreadable* is a different thing entirely, and must
+	// not be flattened into the same answer. Both of parseRefMap's limits — the
+	// branch count and the name rules — can be tightened later, and if either is,
+	// every lesson past the new limit would read as single-branch here: the push
+	// path would skip its old-client guard and write the variations away. So say we
+	// don't know, and let the caller refuse.
+	const refs = value.refs === undefined ? { [DEFAULT_BRANCH]: value.head } : parseRefMap(value.refs);
+	if (!refs) return { head: value.head, refs: null, unreadable: true };
 	return { head: value.head, refs };
 }
 
@@ -131,6 +140,16 @@ export function applyRefs(current, { refs, deletes, expected }) {
 		if (believed === null) return Boolean(current[name]);
 		return (current[name] || '') !== believed;
 	};
+
+	// A name in both halves is a request that contradicts itself, and we cannot know
+	// which half was meant. Refusing is the only honest answer — applying them in
+	// order would silently let the delete win, which is how a branch that is alive
+	// on the client disappears from the hub.
+	for (const name of deletes) {
+		if (Object.hasOwn(refs, name)) {
+			return { error: 'That push asks to both keep and remove the same version.', status: 400 };
+		}
+	}
 
 	for (const name of Object.keys(refs)) {
 		if (mismatch(name)) return { error: 'moved', status: 409 };
@@ -285,6 +304,12 @@ export async function handleGit(request, env, lessonId, rest, cors) {
 		const parent = (request.headers.get('X-Git-Parent') || '').trim();
 		const held = await stored(env, lessonId);
 		const current = held?.head || null;
+
+		// We hold a branch map we can't read. Every path below decides what to keep
+		// and what to drop by comparing against it, so none of them can run safely.
+		if (held?.unreadable) {
+			return textResponse('This lesson’s stored history could not be read. Please report this rather than saving over it.', 409, cors);
+		}
 
 		if (current && parent !== current) {
 			return textResponse(

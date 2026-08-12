@@ -129,6 +129,10 @@ function fakeHub() {
     async uploadPullPack(lessonId, pullId, { packfile, head }) {
       const pull = pulls.find((p) => p.id === pullId);
       if (!pull) throw new Error("Proposal not found.");
+      // The Worker refuses an upload to a proposal that is no longer open, and a
+      // fake that accepted one would hide a caller that had stopped checking.
+      if (pull.status !== "open")
+        throw new Error("This proposal is no longer open.");
       if (pull.ready) {
         assert.notEqual(head, pull.head, "an update has to actually move");
         pull.previousHead = pull.head;

@@ -21,6 +21,7 @@ import { DRAFT_REPO, repoIdFor } from "@spelling-creator/core/git/doc";
 import { loadGitEngine } from "./load.js";
 import { fetchPack } from "@spelling-creator/core/git/remote";
 import { DEFAULT_BRANCH, toBranchName } from "@spelling-creator/core/git/refs";
+import { diffDocs } from "@spelling-creator/core/git/ops";
 
 // Commit once the user has been still for this long.
 const IDLE_MS = 4000;
@@ -284,6 +285,11 @@ export function useLessonGit({ doc, editingId, identity, enabled = true }) {
    * A different question from `diffFor`, and the one actually being asked at the
    * moment somebody hovers over Restore. "What changed in this version" is
    * history; "what would I get back" is a decision.
+   *
+   * Against the *live* document, not the last commit. Restoring replaces what is
+   * on screen, so edits made inside the four-second commit window are part of what
+   * would be lost — and a preview that omitted them would understate the cost of
+   * the one action it exists to inform.
    */
   const diffAgainstCurrent = useCallback(
     (oid) =>
@@ -291,13 +297,10 @@ export function useLessonGit({ doc, editingId, identity, enabled = true }) {
         try {
           const engine = await loadGitEngine();
           const ctx = engine.repoCtx(repoId);
-          const head = await engine.headOid(ctx);
-          if (!head || head === oid) return [];
-          return await engine.diffCommits({
-            ...ctx,
-            fromOid: head,
-            toOid: oid,
-          });
+          return diffDocs(
+            docRef.current,
+            await engine.readDocAt({ ...ctx, oid }),
+          );
         } catch {
           return [];
         }
@@ -331,6 +334,13 @@ export function useLessonGit({ doc, editingId, identity, enabled = true }) {
   // switch, rename and delete. Every one of them commits what's outstanding
   // first: the editor's rule is that work is checkpointed when you pause, so a
   // variation must never be the thing that loses the last few seconds of it.
+  //
+  // Which is why the checkpoint below is *not* wrapped in a catch. commitDoc
+  // returns null when there is nothing to commit — that is the ordinary case and
+  // needs no handling — so the only thing a catch could swallow is a real failure,
+  // and swallowing that would let the checkout replace the document and clear the
+  // dirty markers with the edits still uncommitted. The caller shows the error
+  // instead, and nothing moves.
 
   const refreshBranches = useCallback(
     () =>
@@ -358,13 +368,11 @@ export function useLessonGit({ doc, editingId, identity, enabled = true }) {
         const engine = await loadGitEngine();
         const ctx = engine.repoCtx(repoId);
 
-        await engine
-          .commitDoc({
-            ...ctx,
-            doc: docRef.current,
-            author: identityRef.current,
-          })
-          .catch(() => null);
+        await engine.commitDoc({
+          ...ctx,
+          doc: docRef.current,
+          author: identityRef.current,
+        });
 
         const result = await engine.checkoutBranch({ ...ctx, name });
         dirtySince.current = null;
@@ -394,13 +402,11 @@ export function useLessonGit({ doc, editingId, identity, enabled = true }) {
         const engine = await loadGitEngine();
         const ctx = engine.repoCtx(repoId);
 
-        await engine
-          .commitDoc({
-            ...ctx,
-            doc: docRef.current,
-            author: identityRef.current,
-          })
-          .catch(() => null);
+        await engine.commitDoc({
+          ...ctx,
+          doc: docRef.current,
+          author: identityRef.current,
+        });
 
         await engine.createBranch({ ...ctx, name });
         dirtySince.current = null;

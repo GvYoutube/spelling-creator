@@ -106,11 +106,13 @@ else here, with the sides pointed backwards:
 | ours           | the document now                  |
 | theirs         | the document immediately before C |
 
-Every rule then falls out without a line of new logic. A block C changed differs
-between base and theirs, so theirs wins and it goes back. A block changed since
-differs between base and ours, so ours wins and is kept. A block in both is a
-genuine conflict — the change being undone has been built on, and only the author
-can say what they meant — so it reaches the usual dialog. The result is a forward
+Every rule then falls out without a line of new logic, including the field-level
+one: a block C changed differs between base and theirs, so theirs wins and it goes
+back; a block changed since differs between base and ours, so ours wins and is
+kept; a block in both _but in different fields_ merges field by field, with both
+surviving. Only a block where the same field was changed on both sides is a genuine
+conflict — the change being undone has been built on in the very place it touched,
+and only the author can say what they meant — so that is what reaches the dialog. The result is a forward
 commit with one parent, so an undo can itself be undone.
 
 The history view asks two questions about a selected version, because they have

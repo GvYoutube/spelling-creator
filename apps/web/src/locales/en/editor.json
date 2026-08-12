@@ -157,7 +157,8 @@
     "tryingInVariation": "Started a variation called “{{name}}” to try these changes in.",
     "proposalInVariation": "These changes are now in your “{{name}}” variation. The main lesson is untouched, and the proposal is still waiting for your decision.",
     "proposalAlreadyIn": "The lesson already contains these changes.",
-    "tryingInExistingVariation": "Switched to your “{{name}}” variation to try these changes in."
+    "tryingInExistingVariation": "Switched to your “{{name}}” variation to try these changes in.",
+    "nothingToMergeInto": "The main lesson has no versions yet, so there is nothing to bring these changes into."
   },
   "labels": {
     "theOriginal": "the original",

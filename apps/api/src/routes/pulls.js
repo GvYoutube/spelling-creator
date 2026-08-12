@@ -538,11 +538,24 @@ async function putPullPack(request, env, base, lessonId, pullId, cors) {
 	// transition doesn't take, the pack we just stored is ours to clean up.
 	const updated = await patchPull(env, base, pullId, plan.patch, plan.expect);
 	if (!updated) {
-		// Only the *first* upload owns the bytes it just wrote. An update that lost
-		// the race leaves the pack ahead of its row, which is harmless: the pack is
-		// a superset and getPullPack serves the row's head. Deleting it, by
-		// contrast, would strand a proposal that is still perfectly valid.
-		if (!updating) await deletePullGit(env, pullId);
+		// The write didn't take, and which pack we just orphaned depends on why.
+		//
+		// A first upload always owns its bytes: the proposal never became ready, so
+		// nothing else can be pointing at them.
+		//
+		// An update has two possible losers, and only re-reading the row tells them
+		// apart. Against a proposal that has since been *resolved*, closePull already
+		// deleted the pack and we have just written one back after the sweep — that
+		// one is ours to remove, or it stays in the bucket for ever. Against one still
+		// open, we lost a race with the proposer's own other upload: the pack there is
+		// theirs, it is a superset, and getPullPack serves the row's head regardless,
+		// so leaving it is both harmless and the only safe choice.
+		if (!updating) {
+			await deletePullGit(env, pullId);
+		} else {
+			const now = await fetchPull(env, base, lessonId, pullId);
+			if (!now || now.status !== 'open') await deletePullGit(env, pullId);
+		}
 		return textResponse('This proposal is no longer open.', 409, cors);
 	}
 

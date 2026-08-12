@@ -164,6 +164,9 @@
     "bringIn": "Bring into the main lesson",
     "delete": "Delete",
     "moreActions": "More actions for {{name}}",
-    "privacy": "Variations are saved with the lesson, so anyone who can open the lesson can see them."
+    "privacy": "Variations are saved with the lesson, so anyone who can open the lesson can see them.",
+    "confirmDelete": "Delete “{{name}}”? Anything only in this variation goes with it.",
+    "confirmDeleteYes": "Delete it",
+    "nameLabel": "Name for this variation"
   }
 }

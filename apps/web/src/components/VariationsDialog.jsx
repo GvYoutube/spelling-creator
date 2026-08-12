@@ -39,7 +39,11 @@ import { Input } from "./ui/input.jsx";
 import { ListRowsSkeleton } from "./Skeletons.jsx";
 import { Spinner } from "./ui/spinner.jsx";
 import { cn } from "../lib/utils.js";
-import { DEFAULT_BRANCH, branchLabel } from "@spelling-creator/core/git/refs";
+import {
+  DEFAULT_BRANCH,
+  MAX_BRANCH_NAME,
+  branchLabel,
+} from "@spelling-creator/core/git/refs";
 
 /**
  * @param {object}   props.git       The useLessonGit controller.
@@ -66,6 +70,10 @@ export default function VariationsDialog({
   const [name, setName] = useState("");
   const [busy, setBusy] = useState(null); // the branch name being worked on
   const [error, setError] = useState(null);
+  // The variation awaiting a second press before it goes. Deleting one makes every
+  // commit that exists only on it unreachable and there is no undo for that here,
+  // so it asks first — as every other destructive action in the editor does.
+  const [confirming, setConfirming] = useState(null);
 
   // Re-read on open: a save may have brought a variation down from another
   // device since this was last looked at.
@@ -74,6 +82,7 @@ export default function VariationsDialog({
     setNaming(null);
     setName("");
     setError(null);
+    setConfirming(null);
     refreshBranches();
   }, [open, refreshBranches]);
 
@@ -122,6 +131,7 @@ export default function VariationsDialog({
 
   const handleDelete = useCallback(
     async (target) => {
+      setConfirming(null);
       // Switching away first is what makes deleting the one you're looking at
       // possible at all, and it lands you somewhere sensible either way.
       if (target === branch) {
@@ -144,7 +154,19 @@ export default function VariationsDialog({
 
   return (
     <Dialog open={open} onOpenChange={(next) => !next && onClose()}>
-      <DialogContent className="flex max-h-[85dvh] flex-col sm:max-w-lg">
+      <DialogContent
+        className="flex max-h-[85dvh] flex-col sm:max-w-lg"
+        // Escape backs out of the thing in front of you. While a name is being
+        // typed or a delete is being confirmed, that is the field or the question
+        // — not the dialog behind them, which Radix would otherwise dismiss from
+        // its own capture-phase handler before the input ever sees the key.
+        onEscapeKeyDown={(event) => {
+          if (naming === null && confirming === null) return;
+          event.preventDefault();
+          setNaming(null);
+          setConfirming(null);
+        }}
+      >
         <DialogHeader>
           <DialogTitle>{t("variations.title")}</DialogTitle>
           <DialogDescription>{t("variations.description")}</DialogDescription>
@@ -185,7 +207,10 @@ export default function VariationsDialog({
                     onBringIn(item.name);
                     onClose();
                   }}
-                  onDelete={() => handleDelete(item.name)}
+                  confirming={confirming === item.name}
+                  onDelete={() => setConfirming(item.name)}
+                  onConfirmDelete={() => handleDelete(item.name)}
+                  onCancelDelete={() => setConfirming(null)}
                 />
               ),
             )
@@ -227,8 +252,37 @@ export default function VariationsDialog({
 }
 
 /** One variation: what it is called, how much is on it, and what can be done. */
-function Row({ item, current, busy, onSwitch, onRename, onBringIn, onDelete }) {
+function Row({
+  item,
+  current,
+  busy,
+  confirming,
+  onSwitch,
+  onRename,
+  onBringIn,
+  onDelete,
+  onConfirmDelete,
+  onCancelDelete,
+}) {
   const { t } = useTranslation("editorTools");
+
+  // Asking in place rather than in a second dialog: the question is about this one
+  // row, and the answer is one press from where the finger already is.
+  if (confirming) {
+    return (
+      <div className="flex flex-wrap items-center gap-2 rounded-md border border-destructive/40 bg-destructive/5 px-3 py-2">
+        <p className="min-w-0 flex-1 text-sm">
+          {t("variations.confirmDelete", { name: branchLabel(item.name) })}
+        </p>
+        <Button size="sm" variant="destructive" onClick={onConfirmDelete}>
+          {t("variations.confirmDeleteYes")}
+        </Button>
+        <Button size="sm" variant="ghost" onClick={onCancelDelete}>
+          {t("variations.cancel")}
+        </Button>
+      </div>
+    );
+  }
 
   return (
     <div
@@ -325,7 +379,8 @@ function NameField({
         autoFocus={autoFocus}
         value={value}
         placeholder={placeholder}
-        maxLength={40}
+        aria-label={t("variations.nameLabel")}
+        maxLength={MAX_BRANCH_NAME}
         onChange={(event) => onChange(event.target.value)}
         onKeyDown={(event) => event.key === "Escape" && onCancel()}
         className="h-8"

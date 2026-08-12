@@ -17,7 +17,7 @@ proposal against yourself. A variation is the same idea at the right size.
 
 The editor shows which copy you're on, next to the "Version saved" chip:
 
-```
+```text
   Version saved 2 minutes ago     Main lesson  ▾
   Version saved just now          Simpler for Year 3  ▾   <- on a variation
 ```
@@ -84,8 +84,14 @@ The mapping is exact, though, and everything on this page falls out of it.
 | A variation                 | `refs/heads/<name>`                                 |
 | Which one you're editing    | `HEAD`, a symbolic ref                              |
 | Switching                   | Writing `HEAD`, and adopting the doc at the new tip |
-| Bringing one in             | A merge commit on `main`, with two parents          |
+| Bringing one in             | A merge commit on `main` — or a fast-forward\*      |
 | "3 changes that aren't in…" | Commits on the branch not reachable from `main`     |
+
+\* When `main` is the merge base and the editor has nothing uncommitted, the
+branch simply moves: there is nothing for a merge commit to record. Otherwise it
+is a two-parent commit, and only blocks changed on both sides _in the same field_
+reach a dialog — a caption edited here and a width edited there merge field by
+field, with both kept.
 
 Recording the current variation in `HEAD` rather than beside the repository is
 what makes it survive a reload, a second tab, and the two places a repository gets
@@ -144,7 +150,7 @@ See [Pull requests](./pull-requests.md).
 The compare-and-swap that has always guarded a push now runs per branch. Three
 headers describe what a push wants, and the Worker applies all of it or none:
 
-```
+```text
 X-Git-Refs      the branches to set, { "<name>": "<oid>" }
 X-Git-Expected  what the client believes the hub holds for each name it touches,
                 with "" meaning "I believe this one does not exist yet"
@@ -173,7 +179,17 @@ landed clears the marker. Cleared any earlier and the variation would be gone
 locally, alive on the hub, and back on the next device that opened the lesson.
 
 The same marker is why fetching doesn't undo a delete: a branch on the hub that we
-hold a marker for is not adopted back.
+hold a marker for is not adopted back. And reusing the name clears it — a name
+used again is not the deleted variation returning, and a marker left behind would
+make the next push ask to create and remove one name in a single request. The
+Worker refuses that request rather than picking a half.
+
+Fetching prunes in the other direction too. A branch the hub no longer has, which
+we still hold at exactly the tip it last told us about, holds nothing that isn't
+already gone, so it goes — otherwise a deletion made on one device would be
+undone by another that still had the branch. One that has _moved_ holds unpushed
+work, and that is the author's to keep: it goes back up, and they can delete it
+again.
 
 ## Where it lives
 

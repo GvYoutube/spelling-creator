@@ -297,6 +297,10 @@ export default function EditorPage() {
   // The variation being folded into the main lesson, so the merge dialog and the
   // toast afterwards can name it.
   const [mergeVariation, setMergeVariation] = useState(null);
+  // The proposal a try-out is for. `reviewPull` deliberately stays null on that
+  // path (it is what makes a confirm *land* the proposal), so the title it needs
+  // for the dialog and the merge message is held separately.
+  const [mergeProposalTitle, setMergeProposalTitle] = useState("");
 
   const {
     enabled: authEnabled,
@@ -1313,11 +1317,21 @@ export default function EditorPage() {
     }
   };
 
-  // A variation name for trying a proposal out. Its title is what a reviewer will
-  // recognise; the id's first few characters only stand in when the title is all
-  // punctuation or a language git's ref names can't carry.
-  const variationNameFor = (title, id) =>
-    toBranchName(title) || toBranchName(`Proposal ${id.slice(0, 6)}`);
+  // A variation name for trying a proposal out: the title, so a reviewer knows
+  // which one it is, and the proposal's first few characters, so they know *which
+  // proposal*.
+  //
+  // The suffix isn't decoration. Without it two proposals whose titles normalise
+  // the same share a variation, and trying the second lands it on top of the
+  // first — one branch holding two people's changes, presented as one. It also
+  // makes the name stable, so re-trying a proposal returns to the variation it
+  // made last time rather than to somebody else's.
+  const variationNameFor = (title, id) => {
+    const short = id.replace(/-/g, "").slice(0, 6);
+    return (
+      toBranchName(`${title} ${short}`) || toBranchName(`Proposal ${short}`)
+    );
+  };
 
   // Undo one change from the history, keeping everything since it.
   //
@@ -1325,6 +1339,31 @@ export default function EditorPage() {
   // only what that one version changed. Where the two overlap — the change has
   // been built on since — there is a genuine decision to make, and it goes to the
   // usual conflict dialog rather than being guessed at.
+  // What to call the other side of a merge, per intent.
+  //
+  // One function rather than the two parallel ternary chains this used to be —
+  // the merge dialog's title and the commit message have to agree, and a new
+  // intent added to one chain and not the other is exactly how they stopped.
+  // `dialog` differs only where a generic name reads better than an empty one.
+  const theirNameFor = (intent, { dialog = false } = {}) => {
+    switch (intent) {
+      case "publish":
+        return dialog ? t("labels.theSavedLesson") : doc.title;
+      case "pull-request":
+        return reviewPull?.title || t("labels.theProposal");
+      case "pull-request-try":
+        return mergeProposalTitle || t("labels.theProposal");
+      case "variation":
+        return branchLabel(mergeVariation || "");
+      case "undo":
+        return merge?.summary || "";
+      default:
+        return dialog
+          ? forkedFromTitle || t("labels.theOriginal")
+          : forkedFromTitle;
+    }
+  };
+
   const handleUndoCommit = async (oid) => {
     setBusy("merge");
     try {
@@ -1371,14 +1410,23 @@ export default function EditorPage() {
   const handleBringVariationIn = async (name) => {
     setBusy("merge");
     try {
+      // Merging commits to whatever is checked out, so this has to have taken
+      // before anything is prepared — otherwise the lesson gets folded into the
+      // variation, which is the same commit and the opposite meaning. A failure
+      // throws and is caught below; a null document means the lesson has no
+      // commits at all, and there is nothing to merge into.
       const onMain = await git.switchBranch(engineDefaultBranch);
-      if (onMain) setDoc(onMain);
+      if (!onMain) {
+        notify({ severity: "info", message: t("messages.nothingToMergeInto") });
+        return;
+      }
+      setDoc(onMain);
 
       const engine = await loadGitEngine();
       const prepared = await engine.prepareBranchMerge({
         repoId: git.repoId,
         name,
-        doc: onMain || doc,
+        doc: onMain,
       });
 
       // Already in: every commit the variation has is in the lesson's history, so
@@ -1427,7 +1475,16 @@ export default function EditorPage() {
   // legitimate thing to do, and they are not updates of each other.
   const [openProposal, setOpenProposal] = useState(null);
 
+  // Bumped on every lookup, so a slow response for a lesson we have since left
+  // can't win. Without it, switching lessons while a request is in flight can
+  // leave `openProposal` holding one that belongs to a different fork — and the
+  // update button would then push this work to that proposal's id.
+  const proposalLookup = useRef(0);
+
   const refreshOpenProposal = useCallback(async () => {
+    const attempt = ++proposalLookup.current;
+    const current = () => proposalLookup.current === attempt;
+
     if (!forkedFrom || !editingId || !user?.id || !hasApi()) {
       setOpenProposal(null);
       return null;
@@ -1442,6 +1499,7 @@ export default function EditorPage() {
             p.authorId === user.id &&
             p.sourceLessonId === editingId,
         ) || null;
+      if (!current()) return null;
       setOpenProposal(mine);
       return mine;
     } catch {
@@ -1569,6 +1627,13 @@ export default function EditorPage() {
       // Nothing about the proposal changes. It stays open, and landing it for
       // real is still a separate act on the main lesson; this only means the
       // reviewer no longer has to choose between merging blind and not merging.
+      // The merge is computed against a document, and after a branch switch that
+      // must be the document on the branch being switched *to*. `doc` is this
+      // render's value and setDoc doesn't change it, so the switched-to document
+      // is threaded through explicitly — the same shape handleBringVariationIn
+      // uses, and for the same reason.
+      let mergeDoc = doc;
+
       if (intoVariation) {
         const name = variationNameFor(pull.title, pull.id);
         // Trying the same proposal twice should land back where the first attempt
@@ -1578,8 +1643,13 @@ export default function EditorPage() {
         const existing = git.branches.some((b) => b.name === name);
         if (existing) {
           const next = await git.switchBranch(name);
-          if (next) setDoc(next);
+          if (next) {
+            setDoc(next);
+            mergeDoc = next;
+          }
         } else {
+          // A new variation starts at the commit we are already on, so the
+          // document doesn't move and `doc` is still the right one.
           await git.createVariation(name);
         }
         notify({
@@ -1598,7 +1668,7 @@ export default function EditorPage() {
         repoId: git.repoId,
         lessonId: editingId,
         pullId,
-        doc,
+        doc: mergeDoc,
         accessToken,
       });
       if (!prepared) {
@@ -1622,10 +1692,11 @@ export default function EditorPage() {
           });
           return;
         }
-        await finishPullMerge(pull, doc);
+        await finishPullMerge(pull, mergeDoc);
         return;
       }
 
+      setMergeProposalTitle(pull.title || "");
       setMergeIntent(intoVariation ? "pull-request-try" : "pull-request");
       setMerge(prepared);
     } catch (err) {
@@ -1691,16 +1762,7 @@ export default function EditorPage() {
         prepared: merge,
         choices,
         author: identity,
-        theirName:
-          mergeIntent === "publish"
-            ? doc.title
-            : mergeIntent === "pull-request"
-              ? reviewPull?.title || t("labels.theProposal")
-              : mergeIntent === "variation"
-                ? branchLabel(mergeVariation || "")
-                : mergeIntent === "undo"
-                  ? merge.summary || ""
-                  : forkedFromTitle,
+        theirName: theirNameFor(mergeIntent),
         currentDoc: doc,
       });
       setDoc(merged);
@@ -1708,6 +1770,7 @@ export default function EditorPage() {
       const variation = mergeVariation;
       setMerge(null);
       setMergeVariation(null);
+      setMergeProposalTitle("");
 
       if (intent === "undo") {
         notify({ severity: "success", message: t("messages.undone") });
@@ -2904,21 +2967,12 @@ export default function EditorPage() {
         onClose={() => {
           setMerge(null);
           setMergeVariation(null);
+          setMergeProposalTitle("");
           setReviewPull(null);
         }}
         prepared={merge}
         intent={mergeIntent}
-        theirName={
-          mergeIntent === "publish"
-            ? t("labels.theSavedLesson")
-            : mergeIntent === "pull-request"
-              ? reviewPull?.title || t("labels.theProposal")
-              : mergeIntent === "variation"
-                ? branchLabel(mergeVariation || "")
-                : mergeIntent === "undo"
-                  ? merge?.summary || ""
-                  : forkedFromTitle || t("labels.theOriginal")
-        }
+        theirName={theirNameFor(mergeIntent, { dialog: true })}
         proposerName={reviewPull?.author || ""}
         onConfirm={confirmMerge}
         busy={merging}
