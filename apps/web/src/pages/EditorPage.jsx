@@ -18,6 +18,7 @@ import {
   EyeIcon,
   FileTextIcon,
   FileUpIcon,
+  GitBranchIcon,
   GitForkIcon,
   GitMergeIcon,
   GitPullRequestIcon,
@@ -73,6 +74,7 @@ import CollabChat from "../components/CollabChat.jsx";
 import FirstLessonWizard from "../components/FirstLessonWizard.jsx";
 import AiLessonIdeaDialog from "../components/AiLessonIdeaDialog.jsx";
 import HistoryDialog, { timeAgo } from "../components/HistoryDialog.jsx";
+import VariationsDialog from "../components/VariationsDialog.jsx";
 import MergeDialog from "../components/MergeDialog.jsx";
 import ProposeChangesDialog from "../components/ProposeChangesDialog.jsx";
 // The preview dialog renders the working doc with the very same read-only
@@ -82,6 +84,12 @@ import { AGE_RANGES } from "@spelling-creator/core/ageRanges";
 import { newId } from "@spelling-creator/core/id";
 import { extractCapitalizedWords } from "@spelling-creator/core/spelling";
 import { useLessonGit } from "../lib/git/useLessonGit.js";
+import {
+  DEFAULT_BRANCH as engineDefaultBranch,
+  branchLabel,
+  toBranchName,
+} from "@spelling-creator/core/git/refs";
+import { diffDocs } from "@spelling-creator/core/git/ops";
 // The git engine (isomorphic-git + LightningFS) is loaded on demand rather than
 // imported directly, so it stays out of the bundle every homepage and hub visitor
 // downloads. loadGitEngine() memoises the import; by the time any of these flows
@@ -286,6 +294,13 @@ export default function EditorPage() {
   //                   for (author / trusted collaborator only, server-enforced)
   //   "publish"       a save found the hub ahead of us; merge, then save again
   const [mergeIntent, setMergeIntent] = useState("pull");
+  // The variation being folded into the main lesson, so the merge dialog and the
+  // toast afterwards can name it.
+  const [mergeVariation, setMergeVariation] = useState(null);
+  // The proposal a try-out is for. `reviewPull` deliberately stays null on that
+  // path (it is what makes a confirm *land* the proposal), so the title it needs
+  // for the dialog and the merge message is held separately.
+  const [mergeProposalTitle, setMergeProposalTitle] = useState("");
 
   const {
     enabled: authEnabled,
@@ -315,6 +330,7 @@ export default function EditorPage() {
   const panel = location.pathname.replace(/^\/editor\/?/, "").split("/")[0];
   const historyOpen = panel === "history";
   const collabOpen = panel === "collaborate";
+  const variationsOpen = panel === "variations";
   //
   // Opening pushes; closing *replaces*. Both pushing would leave the history as
   // [/editor, /editor/history, /editor], so Back from a panel you had just
@@ -1301,6 +1317,144 @@ export default function EditorPage() {
     }
   };
 
+  // A variation name for trying a proposal out: the title, so a reviewer knows
+  // which one it is, and the proposal's first few characters, so they know *which
+  // proposal*.
+  //
+  // The suffix isn't decoration. Without it two proposals whose titles normalise
+  // the same share a variation, and trying the second lands it on top of the
+  // first — one branch holding two people's changes, presented as one. It also
+  // makes the name stable, so re-trying a proposal returns to the variation it
+  // made last time rather than to somebody else's.
+  const variationNameFor = (title, id) => {
+    const short = id.replace(/-/g, "").slice(0, 6);
+    return (
+      toBranchName(`${title} ${short}`) || toBranchName(`Proposal ${short}`)
+    );
+  };
+
+  // Undo one change from the history, keeping everything since it.
+  //
+  // Restoring puts the whole lesson back and drops what came after; this puts back
+  // only what that one version changed. Where the two overlap — the change has
+  // been built on since — there is a genuine decision to make, and it goes to the
+  // usual conflict dialog rather than being guessed at.
+  // What to call the other side of a merge, per intent.
+  //
+  // One function rather than the two parallel ternary chains this used to be —
+  // the merge dialog's title and the commit message have to agree, and a new
+  // intent added to one chain and not the other is exactly how they stopped.
+  // `dialog` differs only where a generic name reads better than an empty one.
+  const theirNameFor = (intent, { dialog = false } = {}) => {
+    switch (intent) {
+      case "publish":
+        return dialog ? t("labels.theSavedLesson") : doc.title;
+      case "pull-request":
+        return reviewPull?.title || t("labels.theProposal");
+      case "pull-request-try":
+        return mergeProposalTitle || t("labels.theProposal");
+      case "variation":
+        return branchLabel(mergeVariation || "");
+      case "undo":
+        return merge?.summary || "";
+      default:
+        return dialog
+          ? forkedFromTitle || t("labels.theOriginal")
+          : forkedFromTitle;
+    }
+  };
+
+  const handleUndoCommit = async (oid) => {
+    setBusy("merge");
+    try {
+      await git.commitNow();
+
+      const engine = await loadGitEngine();
+      const prepared = await engine.prepareRevert({
+        repoId: git.repoId,
+        oid,
+        doc,
+      });
+
+      // Nothing of that change is still standing: it has already been undone, or
+      // everything it touched has since been changed again. Say so rather than
+      // opening a dialog that would commit nothing.
+      if (
+        prepared.conflicts.length === 0 &&
+        diffDocs(doc, prepared.doc).length === 0
+      ) {
+        notify({ severity: "info", message: t("messages.nothingToUndo") });
+        return;
+      }
+
+      setMergeIntent("undo");
+      setMerge(prepared);
+    } catch (err) {
+      console.error(err);
+      notify({
+        severity: "error",
+        message: t("messages.couldNotUndo", { error: err.message || err }),
+      });
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  // Bring a variation into the main lesson.
+  //
+  // The order is the whole of it. We switch to the main lesson *first*, so the
+  // merge commits there and the document that comes back is the lesson with the
+  // variation folded in — not the variation with the lesson folded in, which is
+  // the same commit and the opposite meaning. Switching commits anything
+  // outstanding to the variation on its way out, so nothing in flight is lost.
+  const handleBringVariationIn = async (name) => {
+    setBusy("merge");
+    try {
+      // Merging commits to whatever is checked out, so this has to have taken
+      // before anything is prepared — otherwise the lesson gets folded into the
+      // variation, which is the same commit and the opposite meaning. A failure
+      // throws and is caught below; a null document means the lesson has no
+      // commits at all, and there is nothing to merge into.
+      const onMain = await git.switchBranch(engineDefaultBranch);
+      if (!onMain) {
+        notify({ severity: "info", message: t("messages.nothingToMergeInto") });
+        return;
+      }
+      setDoc(onMain);
+
+      const engine = await loadGitEngine();
+      const prepared = await engine.prepareBranchMerge({
+        repoId: git.repoId,
+        name,
+        doc: onMain,
+      });
+
+      // Already in: every commit the variation has is in the lesson's history, so
+      // there is nothing to fold in.
+      if (!prepared || prepared.upToDate) {
+        notify({
+          severity: "info",
+          message: t("messages.variationAlreadyIn", {
+            name: branchLabel(name),
+          }),
+        });
+        return;
+      }
+
+      setMergeIntent("variation");
+      setMergeVariation(name);
+      setMerge(prepared);
+    } catch (err) {
+      console.error(err);
+      notify({
+        severity: "error",
+        message: t("messages.couldNotMerge", { error: err.message || err }),
+      });
+    } finally {
+      setBusy(null);
+    }
+  };
+
   // Offer this fork's work back to the lesson it came from — as a proposal, not
   // a write.
   //
@@ -1309,6 +1463,95 @@ export default function EditorPage() {
   // collaborators they named) reviews and merges from their own editor. That
   // review step is deliberate: a fork can no longer push itself into someone
   // else's published lesson, however trusted its owner is.
+  // The proposal this fork already has open against the lesson it came from, if
+  // there is one.
+  //
+  // Without this, being asked for a change and making it meant opening a *second*
+  // proposal, leaving the reviewer two overlapping ones and the conversation on
+  // the wrong one. With it, the button says "update" and does.
+  //
+  // Scoped to proposals from *this* fork (`sourceLessonId`), not merely ones by
+  // this person: proposing to the same lesson from two different forks is a
+  // legitimate thing to do, and they are not updates of each other.
+  const [openProposal, setOpenProposal] = useState(null);
+
+  // Bumped on every lookup, so a slow response for a lesson we have since left
+  // can't win. Without it, switching lessons while a request is in flight can
+  // leave `openProposal` holding one that belongs to a different fork — and the
+  // update button would then push this work to that proposal's id.
+  const proposalLookup = useRef(0);
+
+  const refreshOpenProposal = useCallback(async () => {
+    const attempt = ++proposalLookup.current;
+    const current = () => proposalLookup.current === attempt;
+
+    if (!forkedFrom || !editingId || !user?.id || !hasApi()) {
+      setOpenProposal(null);
+      return null;
+    }
+    try {
+      const { pulls } = await fetchPullRequests(forkedFrom, accessToken);
+      const mine =
+        pulls.find(
+          (p) =>
+            p.status === "open" &&
+            p.ready &&
+            p.authorId === user.id &&
+            p.sourceLessonId === editingId,
+        ) || null;
+      if (!current()) return null;
+      setOpenProposal(mine);
+      return mine;
+    } catch {
+      // A queue we couldn't read just means the button keeps its "propose"
+      // wording; opening a second proposal is recoverable, and failing the
+      // editor over it would not be.
+      return null;
+    }
+  }, [forkedFrom, editingId, user?.id, accessToken]);
+
+  useEffect(() => {
+    refreshOpenProposal();
+  }, [refreshOpenProposal]);
+
+  // Replace what an already-open proposal contains with the work as it stands.
+  // No dialog: its title and note are already written and this endpoint doesn't
+  // change them, so there is nothing to ask.
+  const handleUpdateProposal = async () => {
+    if (!openProposal) return;
+    setProposing(true);
+    try {
+      await git.commitNow();
+
+      const engine = await loadGitEngine();
+      const updated = await engine.updatePullRequest({
+        repoId: git.repoId,
+        lessonId: forkedFrom,
+        pullId: openProposal.id,
+        head: openProposal.head,
+        accessToken,
+      });
+      setOpenProposal(updated || openProposal);
+
+      notify({
+        severity: "success",
+        message: t("messages.proposalUpdated", { title: openProposal.title }),
+        route: {
+          to: `/hub/${forkedFrom}/proposals/${openProposal.id}`,
+          label: t("labels.viewProposal"),
+        },
+      });
+    } catch (err) {
+      console.error(err);
+      notify({
+        severity: "error",
+        message: t("messages.couldNotPropose", { error: err.message || err }),
+      });
+    } finally {
+      setProposing(false);
+    }
+  };
+
   const handleProposeChanges = async ({ title, body }) => {
     if (!forkedFrom) return;
     setProposing(true);
@@ -1330,6 +1573,7 @@ export default function EditorPage() {
       });
 
       setProposeOpen(false);
+      refreshOpenProposal();
       notify({
         severity: "success",
         message: t("messages.proposalOpened", {
@@ -1356,7 +1600,7 @@ export default function EditorPage() {
   // meets the commits the two already share, and merged block by block against
   // the commit they diverged from. Only genuine clashes reach the dialog; the
   // merge is landed by finishPullMerge once they're settled.
-  const reviewPullRequest = async (pullId) => {
+  const reviewPullRequest = async (pullId, { intoVariation = false } = {}) => {
     if (!editingId) return;
     setBusy("review");
     try {
@@ -1375,12 +1619,56 @@ export default function EditorPage() {
         return;
       }
 
+      // Trying it out first: land the proposal on a variation instead of the
+      // lesson, so the reviewer can read it in place — click through it, run it,
+      // show it to somebody — before deciding. The merge below then targets that
+      // variation, because a merge commits to whatever branch is checked out.
+      //
+      // Nothing about the proposal changes. It stays open, and landing it for
+      // real is still a separate act on the main lesson; this only means the
+      // reviewer no longer has to choose between merging blind and not merging.
+      // The merge is computed against a document, and after a branch switch that
+      // must be the document on the branch being switched *to*. `doc` is this
+      // render's value and setDoc doesn't change it, so the switched-to document
+      // is threaded through explicitly — the same shape handleBringVariationIn
+      // uses, and for the same reason.
+      let mergeDoc = doc;
+
+      if (intoVariation) {
+        const name = variationNameFor(pull.title, pull.id);
+        // Trying the same proposal twice should land back where the first attempt
+        // put it, not fail on the name being taken. Switching also picks up
+        // whatever the reviewer did to it last time, which is the point of having
+        // kept it.
+        const existing = git.branches.some((b) => b.name === name);
+        if (existing) {
+          const next = await git.switchBranch(name);
+          if (next) {
+            setDoc(next);
+            mergeDoc = next;
+          }
+        } else {
+          // A new variation starts at the commit we are already on, so the
+          // document doesn't move and `doc` is still the right one.
+          await git.createVariation(name);
+        }
+        notify({
+          severity: "info",
+          message: t(
+            existing
+              ? "messages.tryingInExistingVariation"
+              : "messages.tryingInVariation",
+            { name: branchLabel(name) },
+          ),
+        });
+      }
+
       const engine = await loadGitEngine();
       const prepared = await engine.preparePullMerge({
         repoId: git.repoId,
         lessonId: editingId,
         pullId,
-        doc,
+        doc: mergeDoc,
         accessToken,
       });
       if (!prepared) {
@@ -1388,16 +1676,28 @@ export default function EditorPage() {
         return;
       }
 
-      setReviewPull(pull);
+      // Only a review that is going to *land* the proposal records it as the one
+      // being reviewed — that is what confirmMerge reads to push and mark it
+      // merged. A try-out must not: the proposal stays open, waiting for a real
+      // decision on the lesson itself.
+      if (!intoVariation) setReviewPull(pull);
 
       // We already contain everything it proposes (it was merged some other way,
       // or it never diverged): there is nothing to settle, so land it as it is.
       if (prepared.upToDate) {
-        await finishPullMerge(pull, doc);
+        if (intoVariation) {
+          notify({
+            severity: "info",
+            message: t("messages.proposalAlreadyIn"),
+          });
+          return;
+        }
+        await finishPullMerge(pull, mergeDoc);
         return;
       }
 
-      setMergeIntent("pull-request");
+      setMergeProposalTitle(pull.title || "");
+      setMergeIntent(intoVariation ? "pull-request-try" : "pull-request");
       setMerge(prepared);
     } catch (err) {
       console.error(err);
@@ -1462,20 +1762,47 @@ export default function EditorPage() {
         prepared: merge,
         choices,
         author: identity,
-        theirName:
-          mergeIntent === "publish"
-            ? doc.title
-            : mergeIntent === "pull-request"
-              ? reviewPull?.title || t("labels.theProposal")
-              : forkedFromTitle,
+        theirName: theirNameFor(mergeIntent),
         currentDoc: doc,
       });
       setDoc(merged);
       const intent = mergeIntent;
+      const variation = mergeVariation;
       setMerge(null);
+      setMergeVariation(null);
+      setMergeProposalTitle("");
 
+      if (intent === "undo") {
+        notify({ severity: "success", message: t("messages.undone") });
+        git.refreshBranches();
+        return;
+      }
+
+      if (intent === "variation") {
+        notify({
+          severity: "success",
+          message: t("messages.variationBroughtIn", {
+            name: branchLabel(variation || ""),
+          }),
+        });
+        git.refreshBranches();
+        return;
+      }
+      if (intent === "pull-request-try") {
+        notify({
+          severity: "success",
+          message: t("messages.proposalInVariation", {
+            name: branchLabel(git.branch),
+          }),
+        });
+        git.refreshBranches();
+        return;
+      }
       if (intent === "pull-request") {
         if (reviewPull) await finishPullMerge(reviewPull, merged);
+        // A fast-forward leaves no new commit, so the version chip has to be
+        // told the branch moved.
+        git.refreshBranches();
         return;
       }
       if (intent === "publish") {
@@ -1530,6 +1857,8 @@ export default function EditorPage() {
   // the doc changes underneath it.
   const pullParam = searchParams.get("pull") || "";
   const pullLessonParam = searchParams.get("lesson") || "";
+  // ?try=1 — land it on a variation to look at rather than on the lesson.
+  const pullTryParam = searchParams.get("try") === "1";
   const reviewPullRef = useRef(reviewPullRequest);
   const pullHandledRef = useRef("");
   useEffect(() => {
@@ -1540,8 +1869,15 @@ export default function EditorPage() {
     if (editingId !== pullLessonParam) return;
     if (pullHandledRef.current === pullParam) return;
     pullHandledRef.current = pullParam;
-    reviewPullRef.current(pullParam);
-  }, [pullParam, pullLessonParam, editingId, git.ready, accessToken]);
+    reviewPullRef.current(pullParam, { intoVariation: pullTryParam });
+  }, [
+    pullParam,
+    pullLessonParam,
+    pullTryParam,
+    editingId,
+    git.ready,
+    accessToken,
+  ]);
 
   // Word import. We warn first (the conversion is lossy and can fail), then open
   // the file picker; the chosen file is parsed and validated by importDocxFile,
@@ -2145,6 +2481,42 @@ export default function EditorPage() {
                   </Tooltip>
                 )}
 
+                {/* Which copy of the lesson is being edited. On the main lesson
+                    this is a quiet chip that mostly exists to say the feature is
+                    there; on a variation it is the reminder that what you change
+                    isn't what people are reading. */}
+                {git.ready && (
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <button
+                        type="button"
+                        onClick={() => openPanel("variations")}
+                        className="cursor-pointer border-0 bg-transparent p-0"
+                      >
+                        <Badge
+                          variant="outline"
+                          className={cn(
+                            "gap-1",
+                            git.onDefaultBranch
+                              ? "border-border bg-transparent text-muted-foreground"
+                              : "border-primary/40 bg-primary/10 text-primary",
+                          )}
+                        >
+                          <GitBranchIcon />
+                          {git.onDefaultBranch
+                            ? t("documentPanel.mainLesson")
+                            : branchLabel(git.branch)}
+                        </Badge>
+                      </button>
+                    </TooltipTrigger>
+                    <TooltipContent className="max-w-xs">
+                      {git.onDefaultBranch
+                        ? t("documentPanel.variationsTooltip")
+                        : t("documentPanel.onVariationTooltip")}
+                    </TooltipContent>
+                  </Tooltip>
+                )}
+
                 {editingId && (
                   <Tooltip>
                     <TooltipTrigger asChild>
@@ -2189,25 +2561,38 @@ export default function EditorPage() {
 
                 {/* Offer this fork's work back to the lesson it came from. It goes
                   as a proposal for that lesson's author (or a trusted
-                  collaborator) to review — a fork never writes the original. */}
+                  collaborator) to review — a fork never writes the original.
+                  Once one is open, the same button updates it rather than
+                  opening a second one about the same work. */}
                 {forkedFrom && canPropose && hasApi() && (
                   <Tooltip>
                     <TooltipTrigger asChild>
                       <Button
                         size="sm"
-                        onClick={() => setProposeOpen(true)}
+                        onClick={
+                          openProposal
+                            ? handleUpdateProposal
+                            : () => setProposeOpen(true)
+                        }
                         disabled={busy !== null || proposing}
                       >
                         <GitPullRequestIcon data-icon="inline-start" />
-                        {t("documentPanel.proposeButton", {
-                          name: forkedFromTitle || t("labels.theOriginal"),
-                        })}
+                        {openProposal
+                          ? t("documentPanel.updateProposalButton")
+                          : t("documentPanel.proposeButton", {
+                              name: forkedFromTitle || t("labels.theOriginal"),
+                            })}
                       </Button>
                     </TooltipTrigger>
                     <TooltipContent className="max-w-xs">
-                      {t("documentPanel.proposeTooltip", {
-                        name: forkedFromTitle || t("labels.theOriginalLesson"),
-                      })}
+                      {openProposal
+                        ? t("documentPanel.updateProposalTooltip", {
+                            title: openProposal.title,
+                          })
+                        : t("documentPanel.proposeTooltip", {
+                            name:
+                              forkedFromTitle || t("labels.theOriginalLesson"),
+                          })}
                     </TooltipContent>
                   </Tooltip>
                 )}
@@ -2541,12 +2926,23 @@ export default function EditorPage() {
         onTrustedChange={setTrustedCollaborators}
       />
 
+      {/* Variations: the other branches of this lesson's repository, as an author
+          sees them — separate copies to try things in. */}
+      <VariationsDialog
+        open={variationsOpen}
+        onClose={() => openPanel(null)}
+        git={git}
+        onSwitch={(next) => next && setDoc(next)}
+        onBringIn={handleBringVariationIn}
+      />
+
       {/* The lesson's own version history, read out of its git repository. */}
       <HistoryDialog
         open={historyOpen}
         onClose={() => openPanel(null)}
         git={git}
         onRestore={setDoc}
+        onUndo={handleUndoCommit}
       />
 
       {/* Settling a merge with the lesson this one was forked from. Only blocks
@@ -2570,17 +2966,13 @@ export default function EditorPage() {
         // to be landed and land it.
         onClose={() => {
           setMerge(null);
+          setMergeVariation(null);
+          setMergeProposalTitle("");
           setReviewPull(null);
         }}
         prepared={merge}
         intent={mergeIntent}
-        theirName={
-          mergeIntent === "publish"
-            ? t("labels.theSavedLesson")
-            : mergeIntent === "pull-request"
-              ? reviewPull?.title || t("labels.theProposal")
-              : forkedFromTitle || t("labels.theOriginal")
-        }
+        theirName={theirNameFor(mergeIntent, { dialog: true })}
         proposerName={reviewPull?.author || ""}
         onConfirm={confirmMerge}
         busy={merging}

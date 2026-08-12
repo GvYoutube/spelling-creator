@@ -55,8 +55,13 @@ Some mechanics worth knowing:
   happened.
 - **A proposal is one commit**, made when it's opened, holding the fork as it then
   stands. Intermediate `patch_lesson` calls aren't separate commits, so make all the
-  edits first. Proposing again after further edits opens a second, separate proposal
-  (at most 5 open against one lesson).
+  edits first.
+- **Proposing again updates the proposal already open** from that fork, rather than
+  stacking a second one beside it — same request, same discussion, new contents, with
+  the version number recorded. That's what you want after the human asks for a change;
+  the `title` and `body` passed are then ignored, since the ones already there are what
+  they have been reading. `updated` in the result says which happened. (At most 5 open
+  against one lesson, and at most 20 updates to one proposal.)
 - **Images aren't copied.** Blocks reference them by content hash and the bytes are
   already stored, so forking is cheap.
 - **Forks are private drafts** and count against the draft cap, so `delete_lesson` the

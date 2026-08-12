@@ -35,6 +35,7 @@
     "./git/merge": "./src/git/merge.js",
     "./git/ops": "./src/git/ops.js",
     "./git/pack": "./src/git/pack.js",
+    "./git/refs": "./src/git/refs.js",
     "./git/remote": "./src/git/remote.js",
     "./git/repo": "./src/git/repo.js",
     "./id": "./src/id.js",

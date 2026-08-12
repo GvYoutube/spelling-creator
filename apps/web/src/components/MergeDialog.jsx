@@ -175,7 +175,8 @@ function ConflictCard({ conflict, choice, onChoose, theirName }) {
  * @param {string}   props.theirName What to call the other side — the original's
  *                                   title when pulling, the proposal's when reviewing one.
  * @param {string}   [props.proposerName] Who opened the proposal, when reviewing one.
- * @param {"pull"|"pull-request"|"publish"} props.intent  What happens once it's settled.
+ * @param {"pull"|"pull-request"|"pull-request-try"|"publish"|"variation"|"undo"} props.intent
+ *                                   What happens once it's settled.
  * @param {Function} props.onConfirm Called with the { blockId: choice } map.
  */
 export default function MergeDialog({
@@ -201,14 +202,32 @@ export default function MergeDialog({
   // Merging a proposal changes the published lesson itself, for everyone reading
   // it — so say that plainly rather than letting "Merge" imply it only touches
   // the copy in front of us.
+  // A proposal being landed on the lesson — the act that changes what everyone
+  // reads — as against one being tried out in a variation first, which changes
+  // nothing anybody else can see.
   const reviewing = intent === "pull-request";
+  const trying = intent === "pull-request-try";
+  // Folding one of the author's own variations into their lesson. Nothing arrives
+  // from anybody else, so the framing is "bring this in" rather than "merge
+  // theirs with ours".
+  const variation = intent === "variation";
+  // Undoing one change. Nothing is arriving from anywhere — the "other side" is
+  // the lesson as it stood before that change — so the framing is neither merge
+  // nor bring-in.
+  const undoing = intent === "undo";
   const confirmLabel = busy
     ? reviewing
       ? t("mergeDialog.confirm.landing")
       : t("mergeDialog.confirm.merging")
     : reviewing
       ? t("mergeDialog.confirm.mergeProposal")
-      : t("mergeDialog.confirm.merge");
+      : trying
+        ? t("mergeDialog.confirm.tryIt")
+        : variation
+          ? t("mergeDialog.confirm.mergeVariation")
+          : undoing
+            ? t("mergeDialog.confirm.undo")
+            : t("mergeDialog.confirm.merge");
 
   const choiceFor = (blockId) => choices[blockId] || "ours";
   const choose = (blockId, value) =>
@@ -232,11 +251,25 @@ export default function MergeDialog({
           <DialogTitle className="flex items-center gap-2">
             <GitMergeIcon className="size-4" />
             <span>
-              {reviewing
-                ? t("mergeDialog.title.pullRequest", {
+              {trying
+                ? t("mergeDialog.title.pullRequestTry", {
                     name: effectiveTheirName,
                   })
-                : t("mergeDialog.title.pull", { name: effectiveTheirName })}
+                : reviewing
+                  ? t("mergeDialog.title.pullRequest", {
+                      name: effectiveTheirName,
+                    })
+                  : variation
+                    ? t("mergeDialog.title.variation", {
+                        name: effectiveTheirName,
+                      })
+                    : undoing
+                      ? t("mergeDialog.title.undo", {
+                          name: effectiveTheirName,
+                        })
+                      : t("mergeDialog.title.pull", {
+                          name: effectiveTheirName,
+                        })}
             </span>
           </DialogTitle>
         </DialogHeader>
@@ -254,6 +287,17 @@ export default function MergeDialog({
                   }}
                   components={{ strong: <strong className="font-medium" /> }}
                 />
+              </AlertDescription>
+            </Alert>
+          )}
+          {/* The mirror of the warning above. A reviewer arriving here has been
+              told all along that merging changes what everyone reads, so the
+              one flow where it doesn't has to say so just as plainly. */}
+          {trying && (
+            <Alert className="border-success/40 bg-success/10 text-success">
+              <CircleCheckIcon />
+              <AlertDescription className="text-success">
+                {t("mergeDialog.tryingNotice")}
               </AlertDescription>
             </Alert>
           )}

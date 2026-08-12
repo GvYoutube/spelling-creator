@@ -117,12 +117,36 @@ function fakeHub() {
       return clone(pull);
     },
 
+    async listPulls(lessonId) {
+      return {
+        pulls: pulls.filter((p) => p.lessonId === lessonId).map(clone),
+        canReview: false,
+      };
+    },
+
+    // Mirrors the Worker's planPullUpload: the first upload has to match the head
+    // the row was opened with; a later one records a revision.
     async uploadPullPack(lessonId, pullId, { packfile, head }) {
       const pull = pulls.find((p) => p.id === pullId);
       if (!pull) throw new Error("Proposal not found.");
-      assert.equal(head, pull.head, "the pack must match the head opened with");
+      // The Worker refuses an upload to a proposal that is no longer open, and a
+      // fake that accepted one would hide a caller that had stopped checking.
+      if (pull.status !== "open")
+        throw new Error("This proposal is no longer open.");
+      if (pull.ready) {
+        assert.notEqual(head, pull.head, "an update has to actually move");
+        pull.previousHead = pull.head;
+        pull.head = head;
+        pull.revision = (pull.revision || 1) + 1;
+      } else {
+        assert.equal(
+          head,
+          pull.head,
+          "the pack must match the head opened with",
+        );
+        pull.ready = true;
+      }
       pullPacks.set(pullId, { packfile, head });
-      pull.ready = true;
       return clone(pull);
     },
 
@@ -358,7 +382,7 @@ test("proposing sends a pack that shares ancestry with the target lesson", async
   assert.equal(hub.packs.get(fork.id).head, uploaded.head);
 });
 
-test("proposing twice stacks on the first proposal instead of colliding", async () => {
+test("proposing twice updates the proposal already open, rather than stacking one beside it", async () => {
   const hub = fakeHub();
   const source = await seedLesson(hub, {
     title: "Volcanoes",
@@ -371,6 +395,7 @@ test("proposing twice stacks on the first proposal instead of colliding", async 
     forkLessonId: fork.id,
     title: "First pass",
   });
+  assert.equal(first.updated, false);
 
   hub.lessons.get(fork.id).doc.sections[0].blocks[0].text = "Second revision.";
   const second = await proposeChanges(hub.api, {
@@ -378,17 +403,53 @@ test("proposing twice stacks on the first proposal instead of colliding", async 
     title: "Second pass",
   });
 
+  assert.equal(
+    second.updated,
+    true,
+    "the second call updates rather than opens",
+  );
+  assert.equal(hub.pulls.length, 1, "the reviewer sees one proposal, not two");
+  assert.equal(second.pull.id, first.pull.id);
+  assert.equal(second.pull.revision, 2);
+  // Its title is the one the reviewer has been reading; an update doesn't rewrite
+  // the conversation it belongs to.
+  assert.equal(second.pull.title, "First pass");
   assert.notEqual(second.commit, first.commit);
-  assert.equal(hub.pulls.length, 2, "each proposal is its own request");
 
-  // The second builds on the first, which is what the compare-and-swap in
-  // pushLessonPack would have refused otherwise.
+  // The update builds on what the proposal already contained, which is the rule
+  // that keeps one pack per proposal enough — the earlier commit is still in it.
   const ctx = memRepo("review");
   await cloneFromPack({ ...ctx, ...hub.pullPacks.get(second.pull.id) });
   assert.equal(
     await contains({ ...ctx, oid: second.commit, ancestor: first.commit }),
     true,
   );
+});
+
+test("a proposal that has been resolved is not updated — the next one is its own", async () => {
+  const hub = fakeHub();
+  const source = await seedLesson(hub, {
+    title: "Volcanoes",
+    text: "A volcano ERUPTS.",
+  });
+  const { lesson: fork } = await forkLesson(hub.api, { lessonId: source.id });
+
+  hub.lessons.get(fork.id).doc.sections[0].blocks[0].text = "First revision.";
+  const first = await proposeChanges(hub.api, {
+    forkLessonId: fork.id,
+    title: "First pass",
+  });
+  await hub.api.closePull(source.id, first.pull.id);
+
+  hub.lessons.get(fork.id).doc.sections[0].blocks[0].text = "Second revision.";
+  const second = await proposeChanges(hub.api, {
+    forkLessonId: fork.id,
+    title: "Second pass",
+  });
+
+  assert.equal(second.updated, false);
+  assert.notEqual(second.pull.id, first.pull.id);
+  assert.equal(second.pull.title, "Second pass");
 });
 
 test("proposing an unchanged fork is refused, and opens nothing", async () => {

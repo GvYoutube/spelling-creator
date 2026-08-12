@@ -2,7 +2,8 @@
 // packed repository in R2 (see apps/api/src/routes/git.js).
 //
 //   GET {API}/git/:lessonId/refs   public  -> { head, refs } (404 when never pushed)
-//   GET {API}/git/:lessonId/pack   public  -> the packfile bytes
+//   GET {API}/git/:lessonId/pack   public  -> the packfile bytes, with its tip and
+//                                             branch map in X-Git-Head/X-Git-Refs
 //   PUT {API}/git/:lessonId/pack   Bearer  -> store them (the author, or a trusted
 //                                             collaborator merging a fork back in)
 //
@@ -13,6 +14,7 @@
 // Because a lesson has more than one possible writer, PUT is a compare-and-swap:
 // see pushPack below.
 import { apiUrl, hasApi } from "../config.js";
+import { DEFAULT_BRANCH, parseRefMap, serializeRefMap } from "./refs.js";
 
 /** Whether the lesson hub (and so the shared history) is reachable at all. */
 
@@ -22,9 +24,12 @@ function endpoint(lessonId, path) {
 }
 
 /**
- * The tip commit of a lesson's published history.
- * @returns {Promise<{ head: string } | null>} null when the lesson has no repo
- *          on the server (it predates this feature, or was never pushed).
+ * The tip commits of a lesson's published history: `head` for the lesson itself,
+ * and `refs` naming every branch it holds.
+ *
+ * @returns {Promise<{ head: string, refs?: object } | null>} null when the lesson
+ *          has no repo on the server (it predates this feature, or was never
+ *          pushed).
  */
 export async function fetchRefs(lessonId) {
   if (!hasApi() || !lessonId) return null;
@@ -51,8 +56,12 @@ export async function fetchRefs(lessonId) {
  * the downloaded pack doesn't contain. Reading both from one response makes that
  * impossible.
  *
- * @returns {Promise<{ packfile: Uint8Array, head: string } | null>} null when the
- *          lesson has no published history.
+ * The branch map rides in the same response for the same reason, as X-Git-Refs.
+ * A lesson stored before it could have more than one branch sends no map, which
+ * reads as the one branch it had.
+ *
+ * @returns {Promise<{ packfile: Uint8Array, head: string, refs: object } | null>}
+ *          null when the lesson has no published history.
  */
 export async function fetchPack(lessonId) {
   if (!hasApi() || !lessonId) return null;
@@ -71,7 +80,13 @@ export async function fetchPack(lessonId) {
 
   const bytes = new Uint8Array(await res.arrayBuffer());
   if (bytes.byteLength === 0) return null;
-  return { packfile: bytes, head };
+
+  // A map we can't read is treated as absent rather than fatal: the default
+  // branch is in X-Git-Head regardless, so the lesson itself still clones.
+  const refs = parseRefMap(res.headers.get("X-Git-Refs")) || {
+    [DEFAULT_BRANCH]: head,
+  };
+  return { packfile: bytes, head, refs };
 }
 
 /**
@@ -95,10 +110,26 @@ export class HistoryMovedError extends Error {
  * compare-and-swap. The Worker rejects the push (409) if that isn't the head it
  * holds, which is what stops two writers from overwriting each other's commits.
  * Pass null only when the lesson has no history at all yet.
+ *
+ * ---- Pushing more than one branch -------------------------------------------
+ *
+ * A lesson holds a branch per variation, and a push moves as many of them as
+ * changed. Three headers describe that, and the Worker applies all of it or none:
+ *
+ *   X-Git-Refs      the branches to set, `{ "<name>": "<oid>" }`
+ *   X-Git-Expected  what we believe the hub currently holds for each name we are
+ *                   touching — "" meaning "I believe this one does not exist"
+ *   X-Git-Deletes   the branches to remove, comma-separated
+ *
+ * The compare-and-swap is per branch, and it guards the same thing it always did,
+ * one level down: a branch we don't mention is left exactly as it is, so a device
+ * that has never heard of somebody's new variation cannot delete it by omission.
+ * Pushing only `parent` and `head` — which is what a client written before any of
+ * this does — still means "move the lesson, leave everything else alone".
  */
 export async function pushPack(
   lessonId,
-  { packfile, head, parent },
+  { packfile, head, parent, refs, expected, deletes },
   accessToken,
 ) {
   if (!hasApi()) throw new Error("The lesson hub is not configured.");
@@ -111,6 +142,9 @@ export async function pushPack(
     Authorization: `Bearer ${accessToken}`,
   };
   if (parent) headers["X-Git-Parent"] = parent;
+  if (refs) headers["X-Git-Refs"] = serializeRefMap(refs);
+  if (expected) headers["X-Git-Expected"] = serializeRefMap(expected);
+  if (deletes?.length) headers["X-Git-Deletes"] = deletes.join(",");
 
   let res;
   try {

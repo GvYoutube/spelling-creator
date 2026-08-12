@@ -19,7 +19,15 @@
 // a pack is pure JSON and stays small.
 
 import * as git from "isomorphic-git";
-import { BRANCH_REF, UPSTREAM_REF, ensureRepo, headOid } from "./repo.js";
+import {
+  BRANCH,
+  BRANCH_REF,
+  UPSTREAM_REF,
+  branchRef,
+  ensureRepo,
+  headOid,
+} from "./repo.js";
+import { isBranchName } from "./refs.js";
 
 /**
  * Every object reachable from a commit: the commit itself, its ancestors, and
@@ -65,23 +73,55 @@ async function collectTree({ fs, gitdir, oid, oids }) {
 }
 
 /**
- * Pack the lesson's whole history for upload.
+ * Pack the lesson's whole history for upload — every branch it holds, not only
+ * the one being edited.
+ *
+ * A variation is worth nothing if it only exists on the machine it was started
+ * on, so all of them travel. They cost almost nothing to carry: branches of one
+ * lesson share nearly all of their objects, and reachableOids dedupes by oid, so
+ * a second variation adds only the commits that are actually unique to it.
+ *
+ * @param {string[]} [args.only] Restrict the pack to these branches. A proposal
+ *        offers one version of the lesson, not every variation its author
+ *        happens to have open, so submitPullRequest asks for a single branch.
+ * @param {string} [args.headBranch] Which branch the pack's `head` names. The
+ *        default branch — the lesson — unless the caller says otherwise, which a
+ *        proposal does: it offers the branch its author was working on.
  * @returns {Promise<{ packfile: Uint8Array, filename: string, head: string, refs: object } | null>}
- *          null when the repo has no commits to send.
+ *          `refs` maps every packed branch name to its tip. null when there is
+ *          nothing to send.
  */
-export async function packRepo({ fs, gitdir }) {
-  const head = await headOid({ fs, gitdir });
+export async function packRepo({ fs, gitdir, only, headBranch = BRANCH }) {
+  const names =
+    only || (await git.listBranches({ fs, gitdir }).catch(() => []));
+
+  const refs = {};
+  for (const name of names) {
+    if (!isBranchName(name)) continue; // not one of ours; don't publish it
+    const oid = await headOid({ fs, gitdir, ref: branchRef(name) });
+    if (oid) refs[name] = oid;
+  }
+
+  // A pack has to name a tip, and a repository whose head branch has no commits
+  // has nothing to send under it.
+  const head = refs[headBranch] || null;
   if (!head) return null;
 
-  const oids = await reachableOids({ fs, gitdir, oid: head });
+  const oids = new Set();
+  for (const oid of Object.values(refs)) {
+    for (const reachable of await reachableOids({ fs, gitdir, oid })) {
+      oids.add(reachable);
+    }
+  }
+
   const { packfile, filename } = await git.packObjects({
     fs,
     gitdir,
-    oids,
+    oids: [...oids],
     write: false,
   });
 
-  return { packfile, filename, head, refs: { [BRANCH_REF]: head } };
+  return { packfile, filename, head, refs };
 }
 
 /**
@@ -115,10 +155,34 @@ async function absorbPack({ fs, gitdir, packfile, filename }) {
  * common ancestor with the lesson it came from — so the fork can later be merged
  * back (or pull the original's changes in) with a true three-way merge.
  */
-export async function cloneFromPack({ fs, gitdir, packfile, filename, head }) {
+export async function cloneFromPack({
+  fs,
+  gitdir,
+  packfile,
+  filename,
+  head,
+  refs,
+}) {
   await ensureRepo({ fs, gitdir });
   await absorbPack({ fs, gitdir, packfile, filename });
 
+  // Every branch the pack carries, so opening a lesson on a second machine brings
+  // the variations along with it and not just the published version. A pack from
+  // before branches existed advertises no map at all, which is the same thing as
+  // a map holding only the default branch.
+  const all = refs && Object.keys(refs).length ? refs : { [BRANCH]: head };
+  for (const [name, oid] of Object.entries(all)) {
+    if (!isBranchName(name) || !oid) continue;
+    await git.writeRef({
+      fs,
+      gitdir,
+      ref: branchRef(name),
+      value: oid,
+      force: true,
+    });
+  }
+  // Always land on the lesson itself, whatever the author was last editing
+  // elsewhere. A clone is somebody arriving, and the lesson is what they came for.
   await git.writeRef({ fs, gitdir, ref: BRANCH_REF, value: head, force: true });
   await git.writeRef({
     fs,
@@ -141,6 +205,11 @@ export async function cloneFromPack({ fs, gitdir, packfile, filename, head }) {
  * `ref` says *which* remote this is: UPSTREAM_REF for the lesson we forked from,
  * ORIGIN_REF for this lesson's own published history (which a trusted
  * collaborator may have moved on without us).
+ *
+ * `refs` and `remote` together record the rest of what the far side holds, as
+ * remote-tracking branches (`refs/remotes/<remote>/<name>`). That is what lets a
+ * push know which of the hub's branches it is replacing and which it has never
+ * seen — the difference between moving somebody's work forward and erasing it.
  */
 export async function fetchRemotePack({
   fs,
@@ -149,10 +218,25 @@ export async function fetchRemotePack({
   filename,
   head,
   ref = UPSTREAM_REF,
+  refs,
+  remote,
 }) {
   await ensureRepo({ fs, gitdir });
   await absorbPack({ fs, gitdir, packfile, filename });
   await git.writeRef({ fs, gitdir, ref, value: head, force: true });
+
+  if (remote && refs) {
+    for (const [name, oid] of Object.entries(refs)) {
+      if (!isBranchName(name) || !oid) continue;
+      await git.writeRef({
+        fs,
+        gitdir,
+        ref: `refs/remotes/${remote}/${name}`,
+        value: oid,
+        force: true,
+      });
+    }
+  }
   return head;
 }
 

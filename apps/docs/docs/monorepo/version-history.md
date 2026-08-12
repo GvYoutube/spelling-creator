@@ -88,12 +88,57 @@ tree (unchanged blocks resolve to oids git already has) and compare its oid with
 The editor shows this as a chip — _"Version saved 2 minutes ago"_, or _"3 unsaved
 changes"_ — which opens the history.
 
-## Restoring
+## Restoring, and undoing
 
 Restoring an old version is an ordinary **forward** commit whose tree happens to
 equal an older one. History is never rewritten: the version you restored _away
 from_ stays in the timeline, so the restore itself can be undone by restoring
 again.
+
+Restoring is the blunt instrument, though — it takes the whole document back and
+drops everything since. **Undo** is the precise one: put back what _that one
+version_ changed, and keep the rest. It is the same three-way merge as everything
+else here, with the sides pointed backwards:
+
+| Merge argument | Undoing commit C                  |
+| -------------- | --------------------------------- |
+| base           | the document as C left it         |
+| ours           | the document now                  |
+| theirs         | the document immediately before C |
+
+Every rule then falls out without a line of new logic, including the field-level
+one: a block C changed differs between base and theirs, so theirs wins and it goes
+back; a block changed since differs between base and ours, so ours wins and is
+kept; a block in both _but in different fields_ merges field by field, with both
+surviving. Only a block where the same field was changed on both sides is a genuine
+conflict — the change being undone has been built on in the very place it touched,
+and only the author can say what they meant — so that is what reaches the dialog. The result is a forward
+commit with one parent, so an undo can itself be undone.
+
+The history view asks two questions about a selected version, because they have
+different answers the moment anything has happened since: _what changed here_
+(history) and _difference from now_ (the decision you are about to make).
+
+## More than one branch
+
+A lesson's repository holds a branch per **variation** — an alternative version of
+the lesson its author is trying out, kept apart from the one people are reading.
+The default branch (`main`) is the lesson; the rest are drafts of what it might
+become.
+
+Which one is being edited is `HEAD`, a symbolic ref, exactly as in git. That is
+not just tidiness: `HEAD` lives inside the gitdir, so it survives the two places a
+repository is copied wholesale — publishing a draft (`adoptDraftRepo`) and forking
+a lesson locally (`copyRepo`) — neither of which knows branches exist.
+
+Everything on this page is per branch as a result. A commit moves whatever `HEAD`
+points at; the history view reads the branch being edited unless given a ref; the
+pack carries every branch, and the push compare-and-swaps each one separately.
+What doesn't change is what "the lesson" means: `main`, and only `main`, is what a
+reader sees, what a fork clones, and what a proposal is offered against.
+
+See [Variations](/web-app/lesson-variations) for what an author sees, why a
+variation is as public as its lesson, and how a deletion travels.
 
 ## Forking is cloning
 
@@ -119,8 +164,9 @@ so a pack is pure JSON and stays small — a few KB for a typical lesson.
 ### Worker endpoints
 
 ```
-GET /git/:lessonId/refs   public*  -> { head, size, updatedAt }   (404 = no history)
-GET /git/:lessonId/pack   public*  -> the packfile (X-Git-Head names its tip)
+GET /git/:lessonId/refs   public*  -> { head, refs, updatedAt }   (404 = no history)
+GET /git/:lessonId/pack   public*  -> the packfile (X-Git-Head names its tip,
+                                      X-Git-Refs every branch it holds)
 PUT /git/:lessonId/pack   Bearer   -> store it (the author, or a trusted collaborator)
 ```
 
@@ -129,13 +175,14 @@ open [pull request](/web-app/pull-requests), which is a packfile too:
 
 ```
 git/<lessonId>/pack           the packfile bytes
-git/<lessonId>/refs.json      { head, size, updatedAt }
+git/<lessonId>/refs.json      { head, refs, size, updatedAt }
 git/pulls/<pullId>/pack       a proposal's snapshot (no refs.json: its tip is fixed)
 ```
 
-The pack carries its own tip in R2 `customMetadata`, echoed in the `X-Git-Head`
-response header — so a clone reads the bytes and the ref they belong to from the
-_same object_, and can never pair a fresh ref with a stale pack.
+The pack carries its own tip **and its branch map** in R2 `customMetadata`, echoed
+in the `X-Git-Head` and `X-Git-Refs` response headers — so a clone reads the bytes
+and the refs they belong to from the _same object_, and can never pair a fresh ref
+with a stale pack.
 
 `GET` is public because forking a published lesson is public; a private draft's
 history (like the draft itself) 404s to everyone but its author, a trusted
@@ -182,6 +229,13 @@ one to adjudicate, so a reorder on both sides resolves to ours.
 
 The result is committed with **two parents**, which genuinely joins the two
 histories — so the next merge can find _this_ commit as its base.
+
+Unless it needn't be. When our side _is_ the merge base — their history already
+contains ours and we have added nothing to it, neither commits nor uncommitted
+edits — the merge is a **fast-forward**: our branch moves to their commit and no
+merge commit is written. There is nothing for one to record, and manufacturing it
+would put an entry in the lesson's timeline saying a decision was made when none
+was.
 
 ## Merging a fork back in (pull requests)
 
@@ -290,6 +344,7 @@ in the browser, in Node and inside the Worker:
 | Module   | Purpose                                                            |
 | -------- | ------------------------------------------------------------------ |
 | `doc`    | Pure doc helpers: canonical JSON, manifest, block map. No git.     |
+| `refs`   | Branch names, limits, and the ref map's wire format. No git.       |
 | `ops`    | Diff two docs into operations; render commit messages. No git.     |
 | `merge`  | Three-way merge by block id, field-level. No git.                  |
 | `layout` | Document ⇄ git tree (one file per block).                          |
@@ -318,18 +373,19 @@ thing to it and uploads the result. See
 
 App-bound (`apps/web/src/lib/git/`) — what cannot leave the bundle:
 
-| File                    | Purpose                                                    |
-| ----------------------- | ---------------------------------------------------------- |
-| `engine.js` + `load.js` | The git engine, behind one dynamic import.                 |
-| `useLessonGit.js`       | The editor's controller: setup, periodic commits, history. |
+| File                    | Purpose                                                                |
+| ----------------------- | ---------------------------------------------------------------------- |
+| `engine.js` + `load.js` | The git engine, behind one dynamic import.                             |
+| `useLessonGit.js`       | The editor's controller: setup, periodic commits, history, variations. |
 
 `repo` and friends take their filesystem through `repoCtx` rather than opening
 one, which is exactly what lets the same commit/merge/restore logic run against
 LightningFS in the browser, and `memfs` in Node, in the Worker and in tests.
 
 A repo tracks remotes in git's own vocabulary: `origin` (this lesson's own
-published history, which a trusted collaborator may have moved on without us),
-`upstream` (the lesson it was forked from), and, while one is being reviewed,
+published history, which a trusted collaborator may have moved on without us —
+one `refs/remotes/origin/<branch>` per branch the hub holds), `upstream` (the
+lesson it was forked from), and, while one is being reviewed,
 `refs/remotes/pull/<id>` — one ref per proposal, so two open ones can't overwrite
 each other's tip.
 

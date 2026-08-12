@@ -48,13 +48,23 @@
 import { authorFromUser, bearerToken, clientIp, displayNameOf, isModeratorRole, verifyUserAndRole } from '../lib/auth.js';
 import { bannedResponse } from '../lib/bans.js';
 import { canReadLesson, fetchLessonRow, isTrustedCollaborator } from '../lib/lesson.js';
-import { LESSON_ID_RE, MAX_PACK_BYTES, OID_RE, deletePullGit, isPackfile, pullPackKey, refsKey } from '../lib/lessonGit.js';
+import {
+	DEFAULT_BRANCH,
+	LESSON_ID_RE,
+	MAX_PACK_BYTES,
+	OID_RE,
+	deletePullGit,
+	isBranchName,
+	isPackfile,
+	pullPackKey,
+	refsKey,
+} from '../lib/lessonGit.js';
 import { profanityFilter } from '../lib/profanity.js';
 import { supabaseBase, supabaseConfigured, supabaseHeaders, verifySupabaseUser } from '../lib/supabase.js';
 import { textResponse, jsonResponse } from '../lib/http.js';
 import { createNotification } from './notifications.js';
 // The same limits the submission form counts against, so the two can't drift.
-import { PULL_BODY_MAX, PULL_TITLE_MAX } from '@spelling-creator/core/pulls';
+import { MAX_PULL_REVISIONS, PULL_BODY_MAX, PULL_TITLE_MAX } from '@spelling-creator/core/pulls';
 
 // How many proposals one person may have open against one lesson at a time.
 // High enough that nobody splitting real work across several requests will ever
@@ -62,7 +72,7 @@ import { PULL_BODY_MAX, PULL_TITLE_MAX } from '@spelling-creator/core/pulls';
 const MAX_OPEN_PER_AUTHOR = 5;
 
 const PULL_COLUMNS =
-	'id,lesson_id,source_lesson_id,author_id,author,title,body,head,base,ready,status,merge_commit,resolved_by,resolved_at,created_at';
+	'id,lesson_id,source_lesson_id,author_id,author,title,body,head,head_ref,base,ready,status,merge_commit,resolved_by,resolved_at,created_at,revision,previous_head,updated_at';
 
 /** Map a Supabase `lesson_pull_requests` row to the camelCase shape the frontend expects. */
 function rowToPull(row) {
@@ -80,6 +90,14 @@ function rowToPull(row) {
 		// The commit the stored pack points at, and the lesson tip it was built on.
 		head: row.head,
 		base: row.base || null,
+		// Which branch of the fork this is, when it isn't the fork's own lesson.
+		headRef: row.head_ref || null,
+		// How many times the proposer has uploaded, and what the proposal pointed
+		// at before the most recent time — enough to show "updated, and here is
+		// what that update changed" without keeping a pack per revision.
+		revision: row.revision || 1,
+		previousHead: row.previous_head || null,
+		updatedAt: row.updated_at || null,
 		// False until the packfile landed — see the note at the top of this file.
 		ready: Boolean(row.ready),
 		status: row.status,
@@ -306,6 +324,8 @@ async function openPull(request, env, base, lessonId, cors) {
 	// is dropped rather than rejected — the pack is what carries the changes.
 	//
 	// Resolved before the own-lesson check below, which turns on it.
+	const headRef = typeof body.headRef === 'string' ? body.headRef.trim() : '';
+
 	let sourceLessonId = null;
 	// Whether that source is a fork *of this lesson*, which is a stricter thing and
 	// the only one that may unlock a self-proposal below.
@@ -368,6 +388,10 @@ async function openPull(request, env, base, lessonId, cors) {
 		title: parsed.title,
 		body: parsed.text || null,
 		head,
+		// Which branch of their fork this is, when it isn't the fork itself. Purely
+		// for display, and validated as a branch name because it is shown verbatim
+		// in the review queue.
+		head_ref: isBranchName(headRef) && headRef !== DEFAULT_BRANCH ? headRef : null,
 		base: OID_RE.test(baseOid) ? baseOid : null,
 		ready: false,
 		status: 'open',
@@ -396,12 +420,77 @@ async function openPull(request, env, base, lessonId, cors) {
 }
 
 /**
+ * What an upload to a proposal should do — or why it shouldn't.
+ *
+ * The first upload completes the two-step open, so its tip has to be the one the
+ * row was created with. A later one is an update, and must actually move:
+ * re-sending the commit we already hold is a no-op dressed as a new revision.
+ *
+ * `expect` is the conditional the row write carries. Including `head` in it is
+ * what makes two of the proposer's own uploads racing safe — the loser finds the
+ * row no longer where it read it, and says so rather than overwriting.
+ *
+ * @returns {{ error: string, status: number } | { updating: boolean, patch: object, expect: object }}
+ */
+export function planPullUpload(pull, head, now = new Date().toISOString()) {
+	const updating = Boolean(pull.ready);
+
+	if (!updating) {
+		if (head !== pull.head) {
+			return {
+				error: 'These changes don’t match the proposal they were opened with. Start the proposal again.',
+				status: 409,
+			};
+		}
+		return { updating, patch: { ready: true }, expect: { status: 'open', ready: false, head: pull.head } };
+	}
+
+	if (head === pull.head) {
+		return { error: 'These changes are already what this proposal contains.', status: 409 };
+	}
+	const revision = pull.revision || 1;
+	if (revision >= MAX_PULL_REVISIONS) {
+		return {
+			error: `This proposal has been updated ${MAX_PULL_REVISIONS} times. Close it and open a new one.`,
+			status: 409,
+		};
+	}
+	return {
+		updating,
+		patch: { head, previous_head: pull.head, revision: revision + 1, updated_at: now },
+		expect: { status: 'open', ready: true, head: pull.head },
+	};
+}
+
+/**
  * PUT /lessons/:id/pulls/:prId/pack — upload the proposal's packfile.
  *
- * The proposer's only, once, while the request is open: the tip must match the
- * head the row was opened with, and a request that is already ready is not
- * re-writable. Together those are what make a proposal a snapshot — there is no
- * way to swap the contents out from under a reviewer who has already read it.
+ * The proposer's only, while the request is open.
+ *
+ * ---- Updating an open proposal ----------------------------------------------
+ *
+ * This used to be a once-only write, so that a reviewer could not have the
+ * contents swapped out from under them. That reasoning is right and is kept — but
+ * the consequence was that changing a proposal meant closing it and opening a new
+ * one, which threw away the conversation attached to it.
+ *
+ * So an upload to an already-ready proposal is allowed, and *recorded*: the
+ * revision number goes up, the head it used to point at is kept, and the row's
+ * `updated_at` says when. A reviewer is never silently shown different bytes; they
+ * are shown that it changed, and what the change was. The stability that mattered
+ * was never immutability, it was that nothing moves without saying so.
+ *
+ * One pack per proposal, not one per revision. The proposer's branch only moves
+ * forward, so the commit the previous revision pointed at is still reachable in
+ * the new pack — which is what lets "what changed in this update" be answered
+ * from the pack we already store.
+ *
+ * That forward-only rule is enforced by the client, not here: verifying it means
+ * walking the commit graph, and this Worker holds a proposal's history as an
+ * opaque packfile with no filesystem to index one into — the same limit that
+ * stops the merge endpoint checking ancestry (see mergePull below). The exposure
+ * is bounded the same way, too: the only proposal a proposer can rewrite is their
+ * own, which they could always have closed and reopened instead.
  */
 async function putPullPack(request, env, base, lessonId, pullId, cors) {
 	if (!env.LESSON_GIT) return textResponse('Lesson history is not configured.', 500, cors);
@@ -416,13 +505,13 @@ async function putPullPack(request, env, base, lessonId, pullId, cors) {
 	if (!pull) return textResponse('Proposal not found.', 404, cors);
 	if (pull.author_id !== user.id) return textResponse('You can only upload changes for your own proposal.', 403, cors);
 	if (pull.status !== 'open') return textResponse('This proposal is no longer open.', 409, cors);
-	if (pull.ready) return textResponse('This proposal’s changes have already been uploaded.', 409, cors);
 
 	const head = (request.headers.get('X-Git-Head') || '').trim();
 	if (!OID_RE.test(head)) return textResponse('Missing or invalid X-Git-Head.', 400, cors);
-	if (head !== pull.head) {
-		return textResponse('These changes don’t match the proposal they were opened with. Start the proposal again.', 409, cors);
-	}
+
+	const plan = planPullUpload(pull, head);
+	if (plan.error) return textResponse(plan.error, plan.status, cors);
+	const { updating } = plan;
 
 	const declared = Number(request.headers.get('Content-Length') || 0);
 	if (declared > MAX_PACK_BYTES) return textResponse('This proposal has too much history to store.', 413, cors);
@@ -440,15 +529,33 @@ async function putPullPack(request, env, base, lessonId, pullId, cors) {
 	// The pack is stored before the row is flipped: `ready` means "there is
 	// something to review", so it must never be true ahead of the bytes.
 	//
-	// Conditional on the request still being open and still unready. The status
-	// was checked above, but the row can be closed between that read and this
-	// write — and a close deletes the pack, so an unconditional flip would leave
-	// a resolved proposal advertising bytes that were just swept, or bytes we
-	// wrote back after the sweep. When the transition doesn't take, the pack we
-	// just stored is ours to clean up.
-	const updated = await patchPull(env, base, pullId, { ready: true }, { status: 'open', ready: false });
+	// Conditional on the request still being open, and on it still pointing where
+	// we read it pointing. The status was checked above, but the row can be closed
+	// between that read and this write — and a close deletes the pack, so an
+	// unconditional write would leave a resolved proposal advertising bytes that
+	// were just swept, or bytes we wrote back after the sweep. The head condition
+	// does the same job for two of the proposer's own uploads racing. When the
+	// transition doesn't take, the pack we just stored is ours to clean up.
+	const updated = await patchPull(env, base, pullId, plan.patch, plan.expect);
 	if (!updated) {
-		await deletePullGit(env, pullId);
+		// The write didn't take, and which pack we just orphaned depends on why.
+		//
+		// A first upload always owns its bytes: the proposal never became ready, so
+		// nothing else can be pointing at them.
+		//
+		// An update has two possible losers, and only re-reading the row tells them
+		// apart. Against a proposal that has since been *resolved*, closePull already
+		// deleted the pack and we have just written one back after the sweep — that
+		// one is ours to remove, or it stays in the bucket for ever. Against one still
+		// open, we lost a race with the proposer's own other upload: the pack there is
+		// theirs, it is a superset, and getPullPack serves the row's head regardless,
+		// so leaving it is both harmless and the only safe choice.
+		if (!updating) {
+			await deletePullGit(env, pullId);
+		} else {
+			const now = await fetchPull(env, base, lessonId, pullId);
+			if (!now || now.status !== 'open') await deletePullGit(env, pullId);
+		}
 		return textResponse('This proposal is no longer open.', 409, cors);
 	}
 
@@ -464,10 +571,17 @@ async function putPullPack(request, env, base, lessonId, pullId, cors) {
 	const lesson = await fetchLessonRow(env, base, lessonId);
 	if (lesson) {
 		const own = lesson.author_id === user.id;
+		const who = authorFromUser(user);
 		await createNotification(env, base, {
 			userId: lesson.author_id,
 			type: 'pull_request',
-			title: own ? 'Changes are waiting for your review' : `${authorFromUser(user)} proposed changes to your lesson`,
+			title: updating
+				? own
+					? 'Changes waiting for your review were updated'
+					: `${who} updated the changes they proposed`
+				: own
+					? 'Changes are waiting for your review'
+					: `${who} proposed changes to your lesson`,
 			body: pull.title,
 			link: `/hub/${lessonId}/proposals/${pullId}`,
 		}).catch(() => {});
@@ -504,7 +618,14 @@ async function getPullPack(request, env, base, lessonId, pullId, cors) {
 	// A proposal's pack never changes once uploaded, but it is deleted when the
 	// proposal is resolved — so it may be cached briefly, never indefinitely.
 	headers.set('Cache-Control', 'private, max-age=60');
-	const head = object.customMetadata?.head || pull.head || '';
+	// The *row* names the tip, in preference to the object's own metadata — the
+	// reverse of how a lesson's pack works, and for a reason particular to
+	// proposals. An update writes the pack before it moves the row, so between
+	// those two the stored bytes are ahead of the record. The bytes are a superset
+	// either way (a proposal only ever moves forward), so serving the row's head
+	// with them hands a reviewer exactly the revision the proposal claims to be,
+	// whichever way that write went.
+	const head = pull.head || object.customMetadata?.head || '';
 	if (head) headers.set('X-Git-Head', head);
 	// The SPA reads X-Git-Head cross-origin, which needs it explicitly exposed.
 	headers.set('Access-Control-Expose-Headers', 'X-Git-Head');
