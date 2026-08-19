@@ -18,3 +18,5 @@ allowBuilds:
 
 patchedDependencies:
   "@cfworker/json-schema@4.1.1": patches/@cfworker__json-schema@4.1.1.patch
+  "@modelcontextprotocol/client@2.0.0": patches/@modelcontextprotocol__client@2.0.0.patch
+  "@modelcontextprotocol/server@2.0.0": patches/@modelcontextprotocol__server@2.0.0.patch

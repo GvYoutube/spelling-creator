@@ -104,7 +104,7 @@ oxlint, so there is nothing to disable.
 
 ## Continuous integration
 
-`.github/workflows/ci.yml` runs on every pull request and on `master` after a
+`.github/workflows/ci.yml` runs on every pull request and on `main` after a
 merge: install (with `--frozen-lockfile`), `pnpm lint`, `pnpm test`, then the web
 and docs builds.
 
@@ -120,7 +120,7 @@ resolves every import and runs the full bundler, which is what catches a bad
 module path or a broken chunk boundary.
 
 `.github/workflows/deploy.yml` is separate and still triggers only on a push to
-`master`. It lints and builds again before deploying, but by then the change has
+`main`. It lints and builds again before deploying, but by then the change has
 already been merged — CI is what gates the merge.
 
 ## Dependency updates
@@ -135,6 +135,10 @@ Minor and patch bumps are grouped (dev tooling, React, Radix UI, Cloudflare,
 then everything else split by production/development) so a routine week lands as
 a handful of PRs; majors open individually because they need review.
 
-`@cfworker/json-schema` is ignored — it's patched via `patchedDependencies` in
-`pnpm-workspace.yaml`, so bumping it requires regenerating
-`patches/@cfworker__json-schema@<version>.patch` by hand.
+`@cfworker/json-schema`, `@modelcontextprotocol/client` and
+`@modelcontextprotocol/server` are ignored — all three are patched via
+`patchedDependencies` in `pnpm-workspace.yaml` (the latter two inline their own
+copy of the first), so bumping any of them requires regenerating the matching
+`patches/*.patch` by hand. See
+[the note on the `agents` dependency](../mcp-server/remote-mode.md#a-note-on-the-agents-dependency)
+for why the patches exist and how to verify a regenerated one.

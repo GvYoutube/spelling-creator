@@ -15,7 +15,7 @@ on:
       - "pnpm-workspace.yaml"
       - ".github/workflows/deploy.yml"
     branches:
-      - master
+      - main
   workflow_dispatch:
 
 # Don't run two deploys against the Worker at once.

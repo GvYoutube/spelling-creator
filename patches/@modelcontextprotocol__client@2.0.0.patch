@@ -1,0 +1,52 @@
+diff --git a/dist/cfWorkerProvider-B3dvjU3F.cjs b/dist/cfWorkerProvider-B3dvjU3F.cjs
+index 6a77815e57bc1789af150f1f3a63e39cce9b52c3..728e1e086cdcbee0143955ace92b39ee516603a9 100644
+--- a/dist/cfWorkerProvider-B3dvjU3F.cjs
++++ b/dist/cfWorkerProvider-B3dvjU3F.cjs
+@@ -75,7 +75,20 @@ const ignoredKeyword = {
+ 	maxProperties: true,
+ 	minProperties: true
+ };
+-let initialBaseURI = typeof self !== "undefined" && self.location && self.location.origin !== "null" ? new URL(self.location.origin + self.location.pathname + location.search) : new URL("https://github.com/cfworker");
++// Patched (see /patches/@modelcontextprotocol__client@2.0.0.patch): this is an
++// inlined copy of @cfworker/json-schema, so the patch we already carry on that
++// package can't reach it. workerd exposes a `self.location` whose fields don't
++// always form a valid URL (e.g. under nodejs_compat), which threw here at
++// module load and crashed the whole Worker before any request was handled --
++// the upload itself fails with Cloudflare error 10021. Fall back to the same
++// safe default this file already uses for non-browser environments.
++let initialBaseURI = (() => {
++	try {
++		return typeof self !== "undefined" && self.location && self.location.origin !== "null" ? new URL(self.location.origin + self.location.pathname + location.search) : new URL("https://github.com/cfworker");
++	} catch {
++		return new URL("https://github.com/cfworker");
++	}
++})();
+ function dereference(schema, lookup = Object.create(null), baseURI = initialBaseURI, basePointer = "") {
+ 	if (schema && typeof schema === "object" && !Array.isArray(schema)) {
+ 		const id = schema.$id || schema.id;
+diff --git a/dist/cfWorkerProvider-BylNJ1R5.mjs b/dist/cfWorkerProvider-BylNJ1R5.mjs
+index 96211d3dc710d77cf556ec2774638bf6a7df1860..3570504f12b38f8be944058aee6ad03f3fff985d 100644
+--- a/dist/cfWorkerProvider-BylNJ1R5.mjs
++++ b/dist/cfWorkerProvider-BylNJ1R5.mjs
+@@ -75,7 +75,20 @@ const ignoredKeyword = {
+ 	maxProperties: true,
+ 	minProperties: true
+ };
+-let initialBaseURI = typeof self !== "undefined" && self.location && self.location.origin !== "null" ? new URL(self.location.origin + self.location.pathname + location.search) : new URL("https://github.com/cfworker");
++// Patched (see /patches/@modelcontextprotocol__client@2.0.0.patch): this is an
++// inlined copy of @cfworker/json-schema, so the patch we already carry on that
++// package can't reach it. workerd exposes a `self.location` whose fields don't
++// always form a valid URL (e.g. under nodejs_compat), which threw here at
++// module load and crashed the whole Worker before any request was handled --
++// the upload itself fails with Cloudflare error 10021. Fall back to the same
++// safe default this file already uses for non-browser environments.
++let initialBaseURI = (() => {
++	try {
++		return typeof self !== "undefined" && self.location && self.location.origin !== "null" ? new URL(self.location.origin + self.location.pathname + location.search) : new URL("https://github.com/cfworker");
++	} catch {
++		return new URL("https://github.com/cfworker");
++	}
++})();
+ function dereference(schema, lookup = Object.create(null), baseURI = initialBaseURI, basePointer = "") {
+ 	if (schema && typeof schema === "object" && !Array.isArray(schema)) {
+ 		const id = schema.$id || schema.id;

@@ -41,23 +41,42 @@ dependency-free, but they now reach real packages:
 If that fires, either keep the module dependency-free or add the package to
 `apps/mcp/package.json`'s dependencies so npm vendors it into the bundle.
 
-## Publishing a release (CI)
+## Publishing a release
 
-The [`.github/workflows/mcpb-release.yml`](https://github.com/playforge-coding/spelling-creator/blob/master/.github/workflows/mcpb-release.yml)
-workflow validates the manifest, runs the same `pack` command, and attaches the
-resulting `.mcpb` to a **GitHub Release**. It triggers two ways:
+Releases are cut by hand. There is no CI workflow for this — an
+`mcpb-release.yml` existed once and was removed as broken, so the tag-push
+trigger some older notes describe does nothing.
 
-- **Push a tag** matching `mcp-v*` — the release is created for that tag:
+1. Bump the version in **both** `apps/mcp/manifest.json` and
+   `apps/mcp/package.json`. They must match — the release tag and asset name are
+   derived from the manifest.
 
-  ```bash
-  # bump the version in apps/mcp/manifest.json and package.json first, then:
-  git tag mcp-v0.1.4
-  git push origin mcp-v0.1.4
-  ```
+2. Validate and build:
 
-- **Run it manually** from the Actions tab (`workflow_dispatch`) — the tag and
-  release name are derived from the version in `apps/mcp/manifest.json`
-  (e.g. `mcp-v0.1.4`).
+   ```bash
+   pnpm --filter @spelling-creator/mcp validate
+   pnpm --filter @spelling-creator/mcp pack
+   ```
 
-The asset is uploaded as `spelling-creator-hub-<version>.mcpb`. Users install it
-by opening that file with Claude Desktop.
+   `pack` also leaves an `npm pack` tarball in the repo root as a side effect of
+   vendoring; it is not the release artifact and can be deleted.
+
+3. Give the asset a versioned, self-describing name:
+
+   ```bash
+   version=$(node -p "require('./apps/mcp/manifest.json').version")
+   cp apps/mcp/dist/spelling-creator-hub.mcpb \
+      "apps/mcp/dist/spelling-creator-hub-$version.mcpb"
+   ```
+
+4. Create the GitHub Release and attach it:
+
+   ```bash
+   gh release create "mcp-v$version" \
+     --title "Spelling Creator Hub MCPB $version" \
+     --notes "Install by opening the attached \`.mcpb\` file with Claude Desktop." \
+     "apps/mcp/dist/spelling-creator-hub-$version.mcpb"
+   ```
+
+Users install the bundle by opening the downloaded `.mcpb` file with Claude
+Desktop.

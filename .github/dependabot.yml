@@ -74,9 +74,14 @@ updates:
           - "*"
     ignore:
       # Patched locally via pnpm patchedDependencies — a version bump would
-      # break `pnpm install` until patches/@cfworker__json-schema*.patch is
-      # regenerated, so bump this one by hand.
+      # break `pnpm install` until the matching patches/*.patch is regenerated,
+      # so bump these by hand. The two @modelcontextprotocol packages each
+      # inline their own copy of @cfworker/json-schema, so they need the same
+      # fix applied separately (see patches/ and apps/docs/docs/mcp-server/
+      # remote-mode.md).
       - dependency-name: "@cfworker/json-schema"
+      - dependency-name: "@modelcontextprotocol/client"
+      - dependency-name: "@modelcontextprotocol/server"
 
   # GitHub Actions used by .github/workflows/*.yml
   - package-ecosystem: "github-actions"

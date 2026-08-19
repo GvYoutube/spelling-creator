@@ -86,7 +86,39 @@ vars already in `wrangler.jsonc`.
 dependencies, `@cfworker/json-schema`, probes `self.location` at module load
 to pick a default base URI and throws on Workers' `location` global under this
 Worker's compatibility settings — crashing the whole Worker before any request
-is handled. This is patched via `pnpm patch` (see
-`patches/@cfworker__json-schema@4.1.1.patch` and the `patchedDependencies`
-entry in `pnpm-workspace.yaml`) to fall back to the library's own safe default
+is handled. Because the crash happens while Cloudflare evaluates the script's
+top-level scope, the _upload_ fails too, with error code 10021 — the deploy
+never produces a broken version, it just refuses.
+
+This is patched via `pnpm patch` to fall back to the library's own safe default
 instead of throwing; `pnpm install` applies it automatically.
+
+Three patches are needed, not one, because two of `agents`' other dependencies
+**inline** their own copy of `@cfworker/json-schema` into their published
+bundles. A `patchedDependencies` entry only rewrites the package pnpm installs,
+so it cannot reach a copy baked into someone else's `dist/`:
+
+| Patch                                               | Fixes                                           |
+| --------------------------------------------------- | ----------------------------------------------- |
+| `patches/@cfworker__json-schema@4.1.1.patch`        | the real package                                |
+| `patches/@modelcontextprotocol__client@2.0.0.patch` | its copy in `dist/cfWorkerProvider-*.{mjs,cjs}` |
+| `patches/@modelcontextprotocol__server@2.0.0.patch` | its copy in `dist/cfWorkerProvider-*.{mjs,cjs}` |
+
+All three are registered under `patchedDependencies` in `pnpm-workspace.yaml`.
+
+Two traps when this resurfaces after a dependency bump. First, the stack trace
+points at a path like
+`node_modules/.pnpm/@modelcontextprotocol+client@2.0.0/node_modules/node_modules/.pnpm/@cfworker+json-schema@4.1.1/…`
+that does not exist in your tree — it is a sourcemap path from the upstream
+package's own build machine, and it is what gives the inlining away. Second,
+the patched copies live in `.pnpm` directories carrying a `_patch_hash=` suffix,
+so a path _without_ that suffix is an unpatched copy.
+
+To check the fix actually reaches the shipped bundle rather than trusting the
+install, bundle the Worker and grep the output — every hit should be inside a
+`try`:
+
+```bash
+pnpm --filter @spelling-creator/api exec wrangler deploy --dry-run --outdir=/tmp/dryrun
+grep -c 'initialBaseURI[0-9]* = typeof self' /tmp/dryrun/index.js   # expect 0
+```

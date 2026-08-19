@@ -57,7 +57,7 @@ export default defineConfig({
     ],
     editLink: {
       pattern:
-        "https://github.com/playforge-coding/spelling-creator/edit/master/apps/docs/docs/:path",
+        "https://github.com/playforge-coding/spelling-creator/edit/main/apps/docs/docs/:path",
       text: "Edit this page on GitHub",
     },
     footer: {
