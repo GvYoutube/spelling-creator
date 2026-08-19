@@ -107,6 +107,11 @@ PDF printing.
   and merges your proposal (see [Pull requests](./pull-requests.md)).
 - **Auto-save** - your work is kept in IndexedDB between reloads (images as binary
   blobs, so large drafts aren't capped by `localStorage`'s ~5 MB quota).
+- **As many lessons as you make** - the editor holds a whole library of them
+  locally, each with its own document and version history, and switches between
+  them from the **Lessons** button. Opening a lesson from the hub, forking one or
+  importing a document adds to that library rather than replacing what you were
+  working on (see [Lessons on this device](./local-lessons.md)).
 - **Installable, and works offline** - the app can be installed to a Home Screen
   or dock and opens in its own window; a service worker precaches the shell, so
   the editor, version history and DOCX/PDF export all keep working with no

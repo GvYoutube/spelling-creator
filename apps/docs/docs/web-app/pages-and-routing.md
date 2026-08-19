@@ -97,7 +97,9 @@ whether 256px of the screen is currently a sidebar or not.
 | -------------------------- | ----------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `/`                        | **Home**                | Landing page. Signed out: a marketing splash (animated floating words + feature blurbs). Signed in: a dashboard (latest-lessons feed, your activity, activity from people you follow, notifications). |
 | `/editor`                  | **Editor**              | The lesson builder. Three panes — section outline, document, live preview — each appearing once the page column has room for it.                                                                      |
+| `/editor/lessons`          | **Editor**              | The [lessons this device holds](./local-lessons.md), over the editor — switch between them, copy, rename or delete one.                                                                               |
 | `/editor/history`          | **Editor**              | The version-history panel, over the editor.                                                                                                                                                           |
+| `/editor/variations`       | **Editor**              | The [variations](./lesson-variations.md) panel, over the editor.                                                                                                                                      |
 | `/editor/collaborate`      | **Editor**              | The [live-collaboration](./live-collaboration.md) panel, over the editor.                                                                                                                             |
 | `/hub`                     | **Lesson hub**          | Public gallery of published lessons (plus your own drafts), with search.                                                                                                                              |
 | `/hub/:id`                 | **Lesson → Lesson**     | The lesson itself, with an "About" rail: author, ages, section count, fork lineage, and the print / Word / fork actions.                                                                              |
@@ -142,15 +144,21 @@ Two things deliberately did **not** become tabs:
 
 ## Query-string deep links
 
-Two query strings deep-link into the editor rather than being routes of their
-own: `?join=<code>` opens the [live-collaboration](./live-collaboration.md)
-panel on that invite, and `?pull=<id>&lesson=<lessonId>` opens a
-[proposed change](./pull-requests.md) for review once the lesson it names has
-loaded — the lesson id is part of the link precisely so the review waits for the
-right one, rather than acting on whatever the editor already had open. Both are
-consumed once and then simply sit in the URL. Opening an editor panel preserves
-them, so navigating to `/editor/collaborate` never drops the invite that sent
-you there.
+Four query strings deep-link into the editor rather than being routes of their
+own:
+
+| Link                           | What it does                                                                                                                                                                                                                                  |
+| ------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `?join=<code>`                 | Opens the [live-collaboration](./live-collaboration.md) panel on that invite.                                                                                                                                                                 |
+| `?pull=<id>&lesson=<lessonId>` | Opens a [proposed change](./pull-requests.md) for review once the lesson it names has loaded — the lesson id is part of the link precisely so the review waits for the right one, rather than acting on whatever the editor already had open. |
+| `?local=<id>`                  | Switches to one of the [lessons on this device](./local-lessons.md).                                                                                                                                                                          |
+| `?new=1`                       | Starts a new lesson — what the sidebar's **New lesson** button links to, since plain `/editor` resumes whichever lesson you last had open.                                                                                                    |
+
+The first two are consumed once and then simply sit in the URL; the last two are
+stripped from it as they are read, because they are instructions rather than
+state and a reload should not carry them out twice. Opening an editor panel
+preserves the query string, so navigating to `/editor/collaborate` never drops
+the invite that sent you there.
 
 ## Offline and the service worker
 

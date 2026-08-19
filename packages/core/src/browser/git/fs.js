@@ -9,10 +9,12 @@
 //
 //   /lessons/<repoId>/.git      the object store, refs and config
 //
-// `repoId` is the hub lesson's id once it has one, and DRAFT_REPO while the
-// lesson is still an unattached local draft. Publishing a draft copies its repo
-// under the new lesson id (adoptDraftRepo), so the history a user built up
-// before they first published isn't thrown away.
+// `repoId` is the hub lesson's id once it has one, and the lesson's id in this
+// device's library (see browser/storage.js) while it is still an unattached
+// local draft — so every lesson held locally has a repository to itself, and
+// switching lessons in the editor switches histories. Publishing a draft copies
+// its repo under the new lesson id (adoptDraftRepo), so the history a user built
+// up before they first published isn't thrown away.
 
 import LightningFS from "@isomorphic-git/lightning-fs";
 import { DRAFT_REPO } from "../../git/doc.js";
@@ -51,25 +53,28 @@ export async function repoExists(repoId) {
 }
 
 /**
- * Copy the draft repo to a published lesson's id, then drop the draft.
+ * Copy a local draft's repo to a published lesson's id, then drop the draft.
  *
  * Called the first time a lesson is saved to the cloud: the user may have been
  * editing (and accumulating history) for an hour before they hit Publish, and
  * that history is theirs. Copying the object store is a legitimate clone — git
  * objects are immutable and content-addressed, so the copy is byte-identical and
  * every commit oid survives.
+ *
+ * `draftRepoId` is the library id the lesson has been living under; it defaults
+ * to the old single-draft slot for anything still calling this the old way.
  */
-export async function adoptDraftRepo(lessonId) {
-  if (!lessonId || lessonId === DRAFT_REPO) return;
+export async function adoptDraftRepo(lessonId, draftRepoId = DRAFT_REPO) {
+  if (!lessonId || !draftRepoId || lessonId === draftRepoId) return;
   const fs = gitFs();
-  if (!(await exists(fs, `${ROOT}/${DRAFT_REPO}/.git/config`))) return;
+  if (!(await exists(fs, `${ROOT}/${draftRepoId}/.git/config`))) return;
 
   // Don't clobber an existing repo for this lesson (e.g. re-publishing after a
   // fork already cloned one under this id).
   if (await exists(fs, `${ROOT}/${lessonId}/.git/config`)) return;
 
-  await copyDir(fs, `${ROOT}/${DRAFT_REPO}`, `${ROOT}/${lessonId}`);
-  await removeDir(fs, `${ROOT}/${DRAFT_REPO}`);
+  await copyDir(fs, `${ROOT}/${draftRepoId}`, `${ROOT}/${lessonId}`);
+  await removeDir(fs, `${ROOT}/${draftRepoId}`);
 }
 
 /** Delete a lesson's repository (used when the draft is reset or a lesson deleted). */

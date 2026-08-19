@@ -9,8 +9,9 @@ Home Screen or a desktop dock, it opens in its own window with no browser
 chrome, and the editor keeps working with no network at all.
 
 Offline support is mostly something the app already had. Lessons live in
-IndexedDB — the working document, its images as binary blobs, and the whole git
-repository behind version history (see
+IndexedDB — every lesson this device holds, their images as binary blobs, and a
+git repository per lesson behind version history (see
+[Lessons on this device](./local-lessons.md),
 [Version history](/monorepo/version-history) and
 [Lesson images](/monorepo/lesson-images)). What was missing was the other half:
 without a service worker the browser still has to fetch `index.html` and the JS
@@ -19,14 +20,15 @@ the built shell closes that gap.
 
 ## What works offline, and what doesn't
 
-| Works offline                                              | Needs the network                        |
-| ---------------------------------------------------------- | ---------------------------------------- |
-| Opening the app at any client-side route                   | The lesson hub, profiles, comments       |
-| Writing, editing, reordering, deleting sections and blocks | Publishing / saving to the cloud         |
-| Images already in the local image store                    | Image search (Pixabay, Wikimedia)        |
-| Version history: commits, browsing, restoring              | AI text / question / lesson-idea dialogs |
-| DOCX export and PDF printing                               | Live collaboration                       |
-| Lesson images seen before (cached by hash)                 | Sign-in, Save to Google Docs             |
+| Works offline                                              | Needs the network                         |
+| ---------------------------------------------------------- | ----------------------------------------- |
+| Opening the app at any client-side route                   | The lesson hub, profiles, comments        |
+| Switching between the lessons on this device               | Publishing a fork's changes as a proposal |
+| Writing, editing, reordering, deleting sections and blocks | Publishing / saving to the cloud          |
+| Images already in the local image store                    | Image search (Pixabay, Wikimedia)         |
+| Version history: commits, browsing, restoring              | AI text / question / lesson-idea dialogs  |
+| DOCX export and PDF printing                               | Live collaboration                        |
+| Lesson images seen before (cached by hash)                 | Sign-in, Save to Google Docs              |
 
 Everything in the right-hand column already degrades with a clear message when
 the feature is unconfigured (see [Getting started](./getting-started.md)); with

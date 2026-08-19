@@ -15,9 +15,14 @@
 //     the same lesson on another machine brings its whole timeline with it)
 //   - anything else gets a fresh repo, seeded with a root commit of the current
 //     doc, so there is always a baseline to diff against
+//
+// Which repository that is comes from the lesson being edited: its hub id once
+// it has one, and otherwise its id in this device's library. Switching lessons
+// in the editor therefore changes `repoId`, which re-runs the setup effect and
+// opens the other lesson's history — nothing here has to be told about it.
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { DRAFT_REPO, repoIdFor } from "@spelling-creator/core/git/doc";
+import { repoIdFor } from "@spelling-creator/core/git/doc";
 import { loadGitEngine } from "./load.js";
 import { fetchPack } from "@spelling-creator/core/git/remote";
 import { DEFAULT_BRANCH, toBranchName } from "@spelling-creator/core/git/refs";
@@ -36,11 +41,19 @@ function worthCommitting(doc) {
 /**
  * @param {object}  opts.doc         The live editor document.
  * @param {string}  [opts.editingId] The hub lesson being edited, if any.
+ * @param {string}  [opts.localId]   The lesson's id in this device's library —
+ *                                   the repository it uses until it's published.
  * @param {object}  [opts.identity]  { name, email } — stamped on commits.
  * @param {boolean} [opts.enabled]   Set false to disable version control entirely.
  */
-export function useLessonGit({ doc, editingId, identity, enabled = true }) {
-  const repoId = repoIdFor(editingId);
+export function useLessonGit({
+  doc,
+  editingId,
+  localId,
+  identity,
+  enabled = true,
+}) {
+  const repoId = repoIdFor(editingId, localId);
 
   const [ready, setReady] = useState(false);
   const [pending, setPending] = useState(0);
@@ -53,11 +66,6 @@ export function useLessonGit({ doc, editingId, identity, enabled = true }) {
   // answer the repository already had.
   const [branches, setBranches] = useState([]);
   const [branch, setBranch] = useState(DEFAULT_BRANCH);
-
-  // Bumped to force the setup effect to run again. A fork or an import swaps the
-  // repository out from under us *without* changing the repo id (both land in the
-  // draft slot), and the effect keys on the id, so it needs telling.
-  const [generation, setGeneration] = useState(0);
 
   // Timers for the two commit triggers, and the wall-clock time the current
   // batch of unsaved edits began (so MAX_WAIT_MS is measured from the first
@@ -110,6 +118,32 @@ export function useLessonGit({ doc, editingId, identity, enabled = true }) {
             }
           }
           if (!cloned) await engine.ensureRepo(ctx);
+        } else {
+          // A repository we already hold, which we are about to read the whole
+          // timeline out of — so check first that we actually can.
+          //
+          // A browser closed (or reloaded) in the middle of a commit can leave
+          // the branch pointing at a commit whose object never made it to disk:
+          // LightningFS persists file contents and its directory index
+          // separately, so a torn write is possible however careful the code
+          // above it is. Every later read then throws on the same missing
+          // object, and the lesson is stuck with no history at all rather than a
+          // shortened one. Starting the repository again costs the old timeline,
+          // which was already unreadable; the *document* is never at stake,
+          // since it lives in the library, not in here. A published lesson gets
+          // a better deal still: with no local repo, the next open clones its
+          // history back down from the hub.
+          const existingHead = await engine.headOid(ctx).catch(() => null);
+          if (existingHead) {
+            const readable = await engine
+              .readDocAt({ ...ctx, oid: existingHead })
+              .then(() => true)
+              .catch(() => false);
+            if (!readable) {
+              await engine.deleteRepo(repoId);
+              await engine.ensureRepo(ctx);
+            }
+          }
         }
 
         // Seed a baseline so the first real edit has something to diff against.
@@ -143,32 +177,11 @@ export function useLessonGit({ doc, editingId, identity, enabled = true }) {
     return () => {
       cancelled = true;
     };
-  }, [repoId, editingId, enabled, generation, run]);
-
-  /** Re-open the repository — after a fork has swapped a new one into place. */
-  const reload = useCallback(() => {
-    dirtySince.current = null;
-    setGeneration((n) => n + 1);
-  }, []);
-
-  /**
-   * Throw the current repository away and start a fresh one. Used when the doc is
-   * replaced by something with no relationship to it (a Word/JSON import): that
-   * lesson's history is not this lesson's history, and grafting the two would be
-   * a lie about where the content came from.
-   */
-  const discard = useCallback(
-    () =>
-      run(async () => {
-        const engine = await loadGitEngine();
-        await engine.deleteRepo(repoId);
-        dirtySince.current = null;
-        setLastCommit(null);
-        setPending(0);
-        setGeneration((n) => n + 1);
-      }),
-    [repoId, run],
-  );
+    // Every one of the flows that swaps a repository out — a fork, an import, a
+    // duplicate — now does it by creating a *new* lesson, which changes `repoId`
+    // and re-runs this effect on its own. There is nothing left that replaces a
+    // repository under its own id, so there is no "reload" to ask for.
+  }, [repoId, editingId, enabled, run]);
 
   // ---- committing ----------------------------------------------------------
   const commitNow = useCallback(
@@ -452,16 +465,18 @@ export function useLessonGit({ doc, editingId, identity, enabled = true }) {
   const adoptDraft = useCallback(
     (lessonId) =>
       run(async () => {
-        if (!lessonId || repoId !== DRAFT_REPO) return;
+        // Nothing to adopt once the repo is already the lesson's own — which is
+        // the case for every save after the first.
+        if (!lessonId || repoId === lessonId) return;
         const engine = await loadGitEngine();
         await engine
           .commitDoc({
-            ...engine.repoCtx(DRAFT_REPO),
+            ...engine.repoCtx(repoId),
             doc: docRef.current,
             author: identityRef.current,
           })
           .catch(() => null);
-        await engine.adoptDraftRepo(lessonId);
+        await engine.adoptDraftRepo(lessonId, repoId);
       }),
     [repoId, run],
   );
@@ -487,8 +502,6 @@ export function useLessonGit({ doc, editingId, identity, enabled = true }) {
     diffAgainstCurrent,
     restore,
     adoptDraft,
-    reload,
-    discard,
     /** Queue work against this lesson's repo (used by the fork/merge flows). */
     run,
   };

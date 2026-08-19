@@ -90,6 +90,10 @@ export default defineConfig({
         items: [
           { text: "Overview & features", link: "/web-app/overview" },
           { text: "Pages & routing", link: "/web-app/pages-and-routing" },
+          {
+            text: "Lessons on this device",
+            link: "/web-app/local-lessons",
+          },
           { text: "Server rendering", link: "/web-app/server-rendering" },
           { text: "Question blocks", link: "/web-app/question-blocks" },
           { text: "AI text suggestions", link: "/web-app/ai-text-suggestions" },

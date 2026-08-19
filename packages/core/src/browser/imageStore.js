@@ -1,16 +1,34 @@
-// IndexedDB-backed storage for the working lesson and its images.
+// IndexedDB-backed storage for the lessons held on this device and their images.
 //
 // This replaces the old localStorage doc + flags (which were capped at ~5 MB
 // and forced images to be stored as base64). Images live as binary Blobs keyed
 // by their SHA-256 content hash (so identical images dedupe automatically); the
-// working doc and the small editor flags live in a separate key-value store.
+// small editor flags live in a key-value store.
+//
+// The lessons themselves are split across *two* stores, and the split is the
+// reason the library can be listed cheaply:
+//
+//   lessons     one small metadata record per lesson — title, counts, which hub
+//               lesson it is attached to, when it was last touched
+//   lessonDocs  the documents themselves, keyed by the same id
+//
+// A lesson document with images and a hundred blocks is not small, and the
+// library UI (and the sidebar) only ever want the titles. Keeping the bodies in
+// their own store means listing every lesson reads the metadata store and
+// nothing else — `getAll` on a store that held the documents too would deserialise
+// every one of them to show a list of names.
 //
 // Everything here is async — IndexedDB has no synchronous API. Callers await.
 
 const DB_NAME = "s2c-lesson-maker";
-const DB_VERSION = 1;
+// v2 added the `lessons` / `lessonDocs` stores — the library. v1 held a single
+// working document under the app store's `doc` key; see migrateToLibrary() in
+// storage.js, which moves it across.
+const DB_VERSION = 2;
 const IMAGE_STORE = "images";
 const APP_STORE = "app";
+const LESSON_STORE = "lessons";
+const LESSON_DOC_STORE = "lessonDocs";
 
 // app-store keys for the bits of editor state that used to live in localStorage.
 const DOC_KEY = "doc";
@@ -21,6 +39,8 @@ const WIZARD_SEEN_KEY = "wizard-seen";
 // editing id so a fork still knows where it came from after a reload, and can
 // offer to pull the original's later changes in (see lib/git/sync.js).
 const FORKED_FROM_KEY = "forked-from";
+// Which lesson in the library is open in the editor.
+const CURRENT_LESSON_KEY = "current-lesson";
 
 let dbPromise = null;
 
@@ -41,6 +61,12 @@ function openDb() {
       }
       if (!db.objectStoreNames.contains(APP_STORE)) {
         db.createObjectStore(APP_STORE);
+      }
+      if (!db.objectStoreNames.contains(LESSON_STORE)) {
+        db.createObjectStore(LESSON_STORE, { keyPath: "id" });
+      }
+      if (!db.objectStoreNames.contains(LESSON_DOC_STORE)) {
+        db.createObjectStore(LESSON_DOC_STORE);
       }
     };
     req.onsuccess = () => resolve(req.result);
@@ -256,5 +282,108 @@ export async function saveWizardSeen() {
     await appSet(WIZARD_SEEN_KEY, true);
   } catch {
     /* ignore — the wizard just shows again next visit */
+  }
+}
+
+// ---- the lesson library ----------------------------------------------------
+//
+// Raw store access, no policy: storage.js layers the library API (titles,
+// counts, timestamps, the current lesson) on top of these. Every one of them
+// swallows a failed transaction and answers with "nothing", because a browser
+// that has denied us IndexedDB (private mode, a full disk) must still let the
+// editor run against an in-memory document.
+
+/** Every lesson's metadata record, in no particular order. */
+export async function listLessonRecords() {
+  try {
+    const db = await openDb();
+    return (
+      (await reqToPromise(store(db, LESSON_STORE, "readonly").getAll())) || []
+    );
+  } catch {
+    return [];
+  }
+}
+
+export async function getLessonRecord(id) {
+  if (!id) return null;
+  try {
+    const db = await openDb();
+    return (
+      (await reqToPromise(store(db, LESSON_STORE, "readonly").get(id))) || null
+    );
+  } catch {
+    return null;
+  }
+}
+
+export async function putLessonRecord(record) {
+  try {
+    const db = await openDb();
+    await reqToPromise(store(db, LESSON_STORE, "readwrite").put(record));
+  } catch {
+    /* ignore — the in-memory lesson still works */
+  }
+}
+
+export async function deleteLessonRecord(id) {
+  if (!id) return;
+  try {
+    const db = await openDb();
+    await reqToPromise(store(db, LESSON_STORE, "readwrite").delete(id));
+  } catch {
+    /* ignore */
+  }
+}
+
+/** One lesson's document, or null when it has none stored yet. */
+export async function getLessonDoc(id) {
+  if (!id) return null;
+  try {
+    const db = await openDb();
+    return (
+      (await reqToPromise(store(db, LESSON_DOC_STORE, "readonly").get(id))) ||
+      null
+    );
+  } catch {
+    return null;
+  }
+}
+
+export async function putLessonDoc(id, doc) {
+  if (!id) return;
+  try {
+    const db = await openDb();
+    await reqToPromise(store(db, LESSON_DOC_STORE, "readwrite").put(doc, id));
+  } catch {
+    // Quota errors are non-fatal — the in-memory doc still works.
+  }
+}
+
+export async function deleteLessonDoc(id) {
+  if (!id) return;
+  try {
+    const db = await openDb();
+    await reqToPromise(store(db, LESSON_DOC_STORE, "readwrite").delete(id));
+  } catch {
+    /* ignore */
+  }
+}
+
+/** The library lesson the editor is on, so a reload comes back to it. */
+export async function loadCurrentLessonId() {
+  try {
+    return (await appGet(CURRENT_LESSON_KEY)) || null;
+  } catch {
+    return null;
+  }
+}
+
+export async function saveCurrentLessonId(id) {
+  try {
+    if (id) await appSet(CURRENT_LESSON_KEY, id);
+    else await appDelete(CURRENT_LESSON_KEY);
+  } catch {
+    /* ignore */
   }
 }
