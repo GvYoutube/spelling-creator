@@ -21,7 +21,7 @@
     "pack": "node scripts/pack.mjs"
   },
   "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.18.0",
+    "@modelcontextprotocol/sdk": "^1.30.0",
     "@spelling-creator/core": "workspace:*",
     "zod": "^3.25.0"
   },
