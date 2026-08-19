@@ -467,23 +467,39 @@ export default function EditorPage() {
     if (hydrateRef.current) return;
     hydrateRef.current = true;
     (async () => {
-      await migrateLocalStorage();
-      await migrateToLibrary();
-      const [currentId, seen] = await Promise.all([
-        getCurrentLessonId(),
-        loadWizardSeen(),
-      ]);
-      // A device with a library but no current lesson (its last one was deleted
-      // in another tab) opens the most recent.
-      let record = currentId ? await getLesson(currentId) : null;
-      if (!record) {
-        const [newest] = await listLessons();
-        record = newest ? await getLesson(newest.id) : null;
+      try {
+        await migrateLocalStorage();
+        await migrateToLibrary();
+        const [currentId, seen] = await Promise.all([
+          getCurrentLessonId(),
+          loadWizardSeen(),
+        ]);
+        // A device with a library but no current lesson (its last one was
+        // deleted in another tab) opens the most recent.
+        let record = currentId ? await getLesson(currentId) : null;
+        if (!record) {
+          const [newest] = await listLessons();
+          record = newest ? await getLesson(newest.id) : null;
+        }
+        if (!record) record = await createLesson({ doc: createInitialDoc(t) });
+        adoptRecord(record);
+        if (!seen) setWizardOpen(true);
+      } catch (err) {
+        // Storage we can't reach at all: private mode, an exhausted quota, or —
+        // reachable for the first time in this version — a v1 → v2 upgrade
+        // blocked by another tab still holding the old connection open. The
+        // editor is still a perfectly good editor without a library, so say so
+        // and carry on in memory rather than leaving the page on its skeleton
+        // for ever: `hydrated` gates every persistence effect *and* the section
+        // list, and the one-shot guard above means nothing would retry.
+        console.error("[lessons] could not open this device's library", err);
+        notify({
+          severity: "error",
+          message: t("messages.libraryUnavailable"),
+        });
+      } finally {
+        setHydrated(true);
       }
-      if (!record) record = await createLesson({ doc: createInitialDoc(t) });
-      adoptRecord(record);
-      if (!seen) setWizardOpen(true);
-      setHydrated(true);
     })();
     // Mount-only: `t` and adoptRecord are stable enough that re-hydrating on a
     // language change would only throw away in-progress work.
@@ -634,11 +650,19 @@ export default function EditorPage() {
     await commitNow();
   }, [commitNow, localId]);
 
+  // Which open request is the live one. Opening a lesson saves and commits the
+  // one being left before it reads the next, so it is several awaits long, and
+  // two of them in flight can finish in either order — a slower first click
+  // would otherwise land last and put the editor in a lesson the user has
+  // already moved on from. Only the newest request may adopt anything.
+  const openRequestRef = useRef(0);
   const openLocalLesson = useCallback(
     async (id) => {
       if (!id || id === localId) return;
+      const request = ++openRequestRef.current;
       await flushCurrentLesson();
       const record = await getLesson(id);
+      if (request !== openRequestRef.current) return;
       if (!record) {
         // Deleted in another tab, most likely. Re-read rather than insist.
         await refreshLocalLessons();
@@ -661,8 +685,10 @@ export default function EditorPage() {
       (current?.sections?.length ?? 0) === 0 &&
       (!current?.title || current.title === t("defaultDoc.title"));
     if (untouched) return null;
+    const request = ++openRequestRef.current;
     await flushCurrentLesson();
     const record = await createLesson({ doc: createInitialDoc(t) });
+    if (request !== openRequestRef.current) return record;
     adoptRecord(record);
     await refreshLocalLessons();
     return record;
@@ -716,17 +742,25 @@ export default function EditorPage() {
         const engine = await loadGitEngine();
         // The local repository only. A lesson that reached the cloud keeps its
         // history there, and the lesson page clones it back on demand.
+        //
+        // Both possible names for it: a published lesson's repository lives
+        // under its hub id, but one left under the lesson's own id — by an
+        // adoption that found the destination already taken and returned rather
+        // than merge two histories — would otherwise be unreachable for ever,
+        // since nothing else ever looks there again.
         await engine.deleteRepo(repoIdFor(record?.lessonId, id));
+        if (record?.lessonId) await engine.deleteRepo(id);
       } catch {
         /* the repo may never have existed */
       }
 
       if (id === localId) {
+        const request = ++openRequestRef.current;
         const remaining = (await listLessons()).filter((l) => l.id !== id);
         const next = remaining[0]
           ? await getLesson(remaining[0].id)
           : await createLesson({ doc: createInitialDoc(t) });
-        adoptRecord(next);
+        if (request === openRequestRef.current) adoptRecord(next);
       }
       await refreshLocalLessons();
     },
@@ -736,9 +770,15 @@ export default function EditorPage() {
   const renameLocalLesson = useCallback(
     async (id, title) => {
       if (id === localId) {
-        // The open lesson retitles like any other edit — the auto-save above
-        // carries it (and the library's copy of the title) from here.
-        setDoc((d) => ({ ...d, title }));
+        // Written through rather than left to the debounce, because the list is
+        // re-read the moment this returns and would otherwise show the old title
+        // until the panel was closed and opened again. The same object goes into
+        // React state and into storage, so `savedDocRef` matching it keeps the
+        // debounce from writing the identical document a second time.
+        const next = { ...docRef.current, title };
+        setDoc(next);
+        savedDocRef.current = next;
+        await saveLessonDoc(id, next);
       } else {
         const record = await getLesson(id);
         if (record?.doc) await saveLessonDoc(id, { ...record.doc, title });
@@ -895,9 +935,9 @@ export default function EditorPage() {
   //
   //   import  a new lesson of its own, keeping the document's own title
   //   fork    a new lesson, unattached, titled "… (copy)"
-  //   edit    the lesson you already hold for it, if you hold one — otherwise a
-  //           new lesson attached to it, so "Publish" means "Update" on the row
-  //           it came from
+  //   edit    the lesson you already hold for it, opened as you left it — or,
+  //           when you hold none, a new lesson attached to it, so "Publish"
+  //           means "Update" on the row it came from
   const applyEdit = async ({
     id,
     doc: nextDoc,
@@ -963,20 +1003,33 @@ export default function EditorPage() {
       return;
     }
 
-    // Editing a hub lesson we already have a copy of reopens that copy and takes
-    // the hub's document — which is the authority, since it holds whatever was
-    // saved from any other device — rather than starting a second copy of the
-    // same lesson.
+    // Editing a hub lesson we already hold reopens *that* copy, exactly as it was
+    // left, rather than starting a second copy of the same lesson — and, just as
+    // importantly, rather than overwriting it with the document just fetched.
+    // The device copy is the only one that can hold edits made since the last
+    // save to the cloud, and replacing it would discard them with no warning:
+    // the single flow in here that would still destroy local work, on the one
+    // page that now promises not to.
+    //
+    // The hub does stay authoritative about the lesson's *status* — whether it
+    // is published, and what it was forked from — so the record's metadata is
+    // refreshed from what came back.
+    //
+    // When the two documents differ we say so, because the reason can be either
+    // side (unsaved work here, or a save from another device) and only the user
+    // knows which. Saving to the cloud is what settles it: the push refuses to
+    // overwrite a lesson that has moved on and offers the merge instead.
     const existing = (await listLessons()).find((l) => l.lessonId === id);
     let record;
+    let differs = false;
     if (existing) {
-      await saveLessonDoc(existing.id, nextDoc);
       await saveLessonMeta(existing.id, {
         lessonId: id,
         published,
         forkedFrom: incomingFork || null,
       });
       record = await getLesson(existing.id);
+      differs = diffDocs(record?.doc, nextDoc).length > 0;
     } else {
       record = await createLesson({
         doc: nextDoc,
@@ -989,9 +1042,11 @@ export default function EditorPage() {
     await refreshLocalLessons();
     notify({
       severity: "info",
-      message: published
-        ? t("messages.loadedPublished")
-        : t("messages.loadedDraft"),
+      message: differs
+        ? t("messages.loadedLocalCopyDiffers")
+        : published
+          ? t("messages.loadedPublished")
+          : t("messages.loadedDraft"),
     });
   };
 

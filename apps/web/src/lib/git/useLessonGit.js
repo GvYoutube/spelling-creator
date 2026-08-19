@@ -106,18 +106,22 @@ export function useLessonGit({
         const engine = await loadGitEngine();
         const ctx = engine.repoCtx(repoId);
 
-        if (!(await engine.repoExists(repoId))) {
-          // A published lesson we don't have locally: bring its history down, so
-          // the timeline follows the lesson rather than the browser.
-          let cloned = false;
+        // Give this lesson a repository. A published one brings its history down
+        // first, so the timeline follows the lesson rather than the browser;
+        // anything else starts empty.
+        const createRepo = async () => {
           if (editingId) {
             const pack = await fetchPack(editingId).catch(() => null);
             if (pack) {
               await engine.cloneFromPack({ ...ctx, ...pack });
-              cloned = true;
+              return;
             }
           }
-          if (!cloned) await engine.ensureRepo(ctx);
+          await engine.ensureRepo(ctx);
+        };
+
+        if (!(await engine.repoExists(repoId))) {
+          await createRepo();
         } else {
           // A repository we already hold, which we are about to read the whole
           // timeline out of — so check first that we actually can.
@@ -130,9 +134,13 @@ export function useLessonGit({
           // object, and the lesson is stuck with no history at all rather than a
           // shortened one. Starting the repository again costs the old timeline,
           // which was already unreadable; the *document* is never at stake,
-          // since it lives in the library, not in here. A published lesson gets
-          // a better deal still: with no local repo, the next open clones its
-          // history back down from the hub.
+          // since it lives in the library, not in here.
+          //
+          // Rebuilt through the same createRepo as a lesson we never had, which
+          // is what makes a published lesson whole again rather than merely
+          // working: its history is on the hub, so the replacement is a clone of
+          // it. An empty repository would look established enough for every
+          // later open to leave alone, stranding the published timeline for good.
           const existingHead = await engine.headOid(ctx).catch(() => null);
           if (existingHead) {
             const readable = await engine
@@ -141,7 +149,7 @@ export function useLessonGit({
               .catch(() => false);
             if (!readable) {
               await engine.deleteRepo(repoId);
-              await engine.ensureRepo(ctx);
+              await createRepo();
             }
           }
         }

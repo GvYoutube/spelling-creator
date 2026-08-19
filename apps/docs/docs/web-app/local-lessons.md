@@ -45,33 +45,35 @@ lesson you are not currently in:
 
 ## Where each lesson lives
 
-A lesson is three things, and each one is keyed by the same id:
+A lesson is three things. The first two are keyed by its id in this device's
+library; the third is keyed by whichever id its repository currently answers to:
 
-| What                | Where                                                                       |
-| ------------------- | --------------------------------------------------------------------------- |
-| Its metadata        | The `lessons` store — title, block counts, hub attachment, last-edited time |
-| Its document        | The `lessonDocs` store, one record per lesson                               |
-| Its version history | A git repository of its own, at `/lessons/<id>/.git` in LightningFS         |
+| What                | Where                                                                                           |
+| ------------------- | ----------------------------------------------------------------------------------------------- |
+| Its metadata        | The `lessons` store, under the local id — title, block counts, hub attachment, last-edited time |
+| Its document        | The `lessonDocs` store, under that same local id                                                |
+| Its version history | A git repository of its own, at `/lessons/<repoId>/.git` in LightningFS                         |
 
 The split between the first two is what keeps the list cheap: showing you a
 dozen titles reads a dozen small records, not a dozen whole lessons with their
 images.
 
-The id is also the name of the lesson's repository — until the lesson is saved to
-the cloud, at which point the repository moves under the hub's id for it and
-follows the lesson to your other devices. See
+`repoId` is that local id too, right up until the lesson is saved to the cloud —
+at which point the repository moves under the hub's id for it and follows the
+lesson to your other devices, while its metadata and document stay where they
+are. `repoIdFor(lessonId, localId)` is the one place that decides. See
 [Version history](/monorepo/version-history) for what that repository holds.
 
 ## What each flow does now
 
-| You do this                                | What happens                                                                                        |
-| ------------------------------------------ | --------------------------------------------------------------------------------------------------- |
-| **New lesson** (sidebar)                   | Adds an empty lesson and opens it. Pressing it while already in an untouched one stays put.         |
-| **Edit** on one of your hub lessons        | Opens the copy this device already has of it, or makes one. Never a second copy of the same lesson. |
-| **Fork** a lesson from the hub             | A new lesson, cloned with the original's history, titled "… (copy)".                                |
-| **Fork into a new lesson** (in the editor) | The same, from the lesson you're in — which stays in the list, still attached to its hub row.       |
-| **Import** a Word or JSON file             | A new lesson, with a history that starts at the import.                                             |
-| **Save to cloud** on a device-only lesson  | Attaches it to the hub lesson it creates, and takes its history up with it.                         |
+| You do this                                | What happens                                                                                                                                                                    |
+| ------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **New lesson** (sidebar)                   | Adds an empty lesson and opens it. Pressing it while already in an untouched one stays put.                                                                                     |
+| **Edit** on one of your hub lessons        | Opens the copy this device already has, exactly as you left it — never a second copy of the same lesson, and never overwritten by the cloud's. If the two differ, it tells you. |
+| **Fork** a lesson from the hub             | A new lesson, cloned with the original's history, titled "… (copy)".                                                                                                            |
+| **Fork into a new lesson** (in the editor) | The same, from the lesson you're in — which stays in the list, still attached to its hub row.                                                                                   |
+| **Import** a Word or JSON file             | A new lesson, with a history that starts at the import.                                                                                                                         |
+| **Save to cloud** on a device-only lesson  | Attaches it to the hub lesson it creates, and takes its history up with it.                                                                                                     |
 
 ## What this does not do
 
@@ -84,6 +86,11 @@ bottom, for the same reason.
 Deleting a lesson that has been saved to the cloud removes only the local copy.
 The hub keeps the lesson and its published history, and opening it for editing
 again clones that history back down.
+
+Because the copy here is never replaced, it can drift from the cloud one — edits
+made on this device and not saved, or edits saved from another. Saving to the
+cloud is what settles that: the push refuses to overwrite a lesson that has moved
+on since, and offers the same block-by-block merge everything else here uses.
 
 ## Where this lives in the code
 

@@ -45,6 +45,7 @@ import {
   getLessonDoc,
   putLessonDoc,
   deleteLessonDoc,
+  updateLessonRecord,
   loadCurrentLessonId,
   saveCurrentLessonId,
 } from "./imageStore.js";
@@ -99,6 +100,13 @@ export async function getLesson(id) {
  * published and takes the hub's id instead — so a caller that wants to clone a
  * repository into a new lesson (a fork, an import) creates the record first and
  * clones into `record.id`.
+ *
+ * @param {object}  [opts]
+ * @param {string}  [opts.id]         The lesson's id here, and its repo id. Ours to make unless you need to know it in advance.
+ * @param {object}  [opts.doc]        The document to start from. Defaults to an empty one.
+ * @param {?string} [opts.lessonId]   The hub lesson this one is attached to, if it is already published or saved as a cloud draft.
+ * @param {boolean} [opts.published]  Whether that hub lesson is public or a private draft. Only meaningful with `lessonId`.
+ * @param {?string} [opts.forkedFrom] The hub lesson this one was forked from, so it can be synced with it later.
  */
 export async function createLesson({
   id = newId(),
@@ -128,19 +136,18 @@ export async function createLesson({
 /**
  * Store a lesson's document, refreshing the title and counts beside it.
  *
- * The record is read *first*, and a lesson that no longer has one is left alone
- * rather than half-written. The editor's document save is debounced, so a save
- * can still be in flight when its lesson is deleted; writing the document then
- * would leave a body in the store that nothing points at and nothing collects.
+ * Document and record go down together, in one transaction, and a lesson that no
+ * longer has a record is left alone entirely — the editor's document save is
+ * debounced, so one can still be in flight when its lesson is deleted, and it
+ * must neither resurrect the lesson nor leave a document body behind that
+ * nothing points at.
  */
 export async function saveLessonDoc(id, doc) {
-  if (!id) return null;
-  const record = await getLessonRecord(id);
-  if (!record) return null;
-  await putLessonDoc(id, doc);
-  const next = { ...record, ...statsFor(doc), updatedAt: Date.now() };
-  await putLessonRecord(next);
-  return next;
+  return updateLessonRecord(
+    id,
+    (record) => ({ ...record, ...statsFor(doc), updatedAt: Date.now() }),
+    doc,
+  );
 }
 
 /**
@@ -152,12 +159,7 @@ export async function saveLessonDoc(id, doc) {
  * learnt its own hub id would be noise.
  */
 export async function saveLessonMeta(id, patch) {
-  if (!id) return null;
-  const record = await getLessonRecord(id);
-  if (!record) return null;
-  const next = { ...record, ...patch };
-  await putLessonRecord(next);
-  return next;
+  return updateLessonRecord(id, (record) => ({ ...record, ...patch }));
 }
 
 /**
@@ -177,6 +179,10 @@ export async function getCurrentLessonId() {
   return loadCurrentLessonId();
 }
 
+/**
+ * Remember which lesson is open, so a reload comes back to it. A nullish `id`
+ * clears the memory, and the editor then opens the most recently edited lesson.
+ */
 export async function setCurrentLessonId(id) {
   return saveCurrentLessonId(id);
 }
@@ -295,8 +301,19 @@ export async function migrateToLibrary() {
   });
   await saveCurrentLessonId(DRAFT_REPO);
 
-  // Only now drop the v1 keys: if anything above failed, the next load finds
-  // them still there and tries again rather than losing the lesson.
+  // Read the lesson back before dropping the v1 keys, because the writes above
+  // cannot fail loudly: every store helper swallows a failed transaction so that
+  // a browser refusing us IndexedDB still gets a working editor. That is right
+  // for an autosave and quite wrong here — this is the only durable copy of the
+  // lesson, and deleting it on the strength of a write that may never have
+  // landed would lose it outright. If either half is missing, leave v1 alone and
+  // let the next load try again.
+  const [migrated, migratedDoc] = await Promise.all([
+    getLessonRecord(DRAFT_REPO),
+    getLessonDoc(DRAFT_REPO),
+  ]);
+  if (!migrated || !migratedDoc) return;
+
   await clearDocument();
   await saveEditingId(null);
   await saveEditingPublished(null);

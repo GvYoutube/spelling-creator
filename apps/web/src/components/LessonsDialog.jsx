@@ -37,6 +37,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "./ui/dropdown-menu.jsx";
+import { Alert, AlertDescription } from "./ui/alert.jsx";
 import { Badge } from "./ui/badge.jsx";
 import { Button } from "./ui/button.jsx";
 import { Input } from "./ui/input.jsx";
@@ -45,6 +46,9 @@ import { cn } from "../lib/utils.js";
 import { timeAgo } from "./HistoryDialog.jsx";
 
 /**
+ * @param {boolean}  props.open        Whether the panel is showing (it is a
+ *                                     route — /editor/lessons — not local state).
+ * @param {Function} props.onClose     Leave the panel, returning to the editor.
  * @param {object}   props.lessons     The library, newest first — or null while
  *                                     it is being read (which draws a skeleton).
  * @param {string}   props.currentId   The lesson open in the editor.
@@ -78,6 +82,11 @@ export default function LessonsDialog({
   // is no undo for that here.
   const [confirming, setConfirming] = useState(null);
   const [busy, setBusy] = useState(null);
+  // Every action here optimistically closes its own bit of UI — the name field,
+  // the delete confirmation — before the write it triggered has finished. When
+  // one fails, that leaves a list that looks changed and isn't, so the failure is
+  // shown rather than swallowed (as VariationsDialog does with its own).
+  const [error, setError] = useState(null);
 
   // Re-read on open: the list is a snapshot, and this one may have been left
   // open in another tab, or added to by a fork since it was last looked at.
@@ -86,13 +95,17 @@ export default function LessonsDialog({
     setNaming(null);
     setName("");
     setConfirming(null);
+    setError(null);
     onRefresh();
   }, [open, onRefresh]);
 
   const run = useCallback(async (id, work) => {
     setBusy(id);
+    setError(null);
     try {
       await work();
+    } catch (err) {
+      setError(err?.message || String(err));
     } finally {
       setBusy(null);
     }
@@ -219,6 +232,7 @@ export default function LessonsDialog({
                         {confirming === lesson.id ? (
                           <div className="flex shrink-0 items-center gap-1">
                             <Button
+                              autoFocus
                               size="sm"
                               variant="destructive"
                               disabled={busy !== null}
@@ -234,6 +248,7 @@ export default function LessonsDialog({
                             <Button
                               size="sm"
                               variant="ghost"
+                              disabled={busy !== null}
                               onClick={() => setConfirming(null)}
                             >
                               {t("lessonsDialog.keepIt")}
@@ -253,7 +268,16 @@ export default function LessonsDialog({
                                 <MoreHorizontalIcon />
                               </Button>
                             </DropdownMenuTrigger>
-                            <DropdownMenuContent align="end">
+                            {/* Choosing Delete unmounts this menu's trigger,
+                                and Radix's closing focus would land on an
+                                element that no longer exists — dropping focus to
+                                the body, and the keyboard user out of the list.
+                                Decline it, and let the confirmation button that
+                                replaces the trigger take focus itself. */}
+                            <DropdownMenuContent
+                              align="end"
+                              onCloseAutoFocus={(e) => e.preventDefault()}
+                            >
                               <DropdownMenuItem
                                 onClick={() => {
                                   setName(lesson.title || "");
@@ -293,16 +317,29 @@ export default function LessonsDialog({
         {/* Deleting a lesson takes its history with it, and none of this is
             backed up anywhere unless the lesson has been saved to the cloud.
             Say so once, here, rather than in each row. */}
+        {error && (
+          <Alert variant="destructive">
+            <AlertDescription>{error}</AlertDescription>
+          </Alert>
+        )}
+
         <p className="text-xs text-muted-foreground">
           {t("lessonsDialog.storageNote")}
         </p>
 
         <DialogFooter className="sm:justify-between">
           <Button
-            onClick={async () => {
-              await onCreate();
-              onClose();
-            }}
+            // Through `run`, so `busy` is set before the first await and the
+            // button disables itself. Creating a lesson saves and commits the one
+            // being left first, which is long enough for a second press to land —
+            // and each press would find the same non-empty lesson still open and
+            // make a whole new one, the untitled twins again.
+            onClick={() =>
+              run("new", async () => {
+                await onCreate();
+                onClose();
+              })
+            }
             disabled={busy !== null}
           >
             <PlusIcon data-icon="inline-start" />

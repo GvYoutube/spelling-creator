@@ -317,6 +317,43 @@ export async function getLessonRecord(id) {
   }
 }
 
+/**
+ * Read-modify-write a lesson's record — and, when `doc` is given, store that
+ * document in the *same* transaction.
+ *
+ * The single transaction is the point. A lesson's title and block counts are
+ * derived from its document, while its hub attachment is set from somewhere else
+ * entirely, and the editor writes both on their own schedules: a debounced save
+ * as you type, and a metadata write the moment a lesson is published. Done as
+ * separate get-then-put pairs, the save that read first could put its stale copy
+ * back last and quietly drop the lesson's brand-new hub id. IndexedDB serialises
+ * overlapping readwrite transactions over the same store, so doing the read and
+ * the write inside one makes each update see the previous one's result.
+ *
+ * It is also the deletion guard: `derive` is never called, and nothing is
+ * written, when the record is already gone — so a save still in flight when its
+ * lesson is deleted cannot resurrect it.
+ *
+ * `derive` must be synchronous; awaiting anything else would let the transaction
+ * close underneath it.
+ */
+export async function updateLessonRecord(id, derive, doc) {
+  if (!id) return null;
+  try {
+    const db = await openDb();
+    const tx = db.transaction([LESSON_STORE, LESSON_DOC_STORE], "readwrite");
+    const record = await reqToPromise(tx.objectStore(LESSON_STORE).get(id));
+    if (!record) return null;
+    const next = derive(record);
+    if (doc !== undefined) tx.objectStore(LESSON_DOC_STORE).put(doc, id);
+    tx.objectStore(LESSON_STORE).put(next);
+    return next;
+  } catch {
+    // Quota errors and the like are non-fatal — the in-memory lesson still works.
+    return null;
+  }
+}
+
 export async function putLessonRecord(record) {
   try {
     const db = await openDb();
