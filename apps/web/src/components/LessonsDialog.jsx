@@ -11,7 +11,7 @@
 // the same way VariationsDialog does. Everything else is reversible by clicking
 // a different row.
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
   CheckIcon,
@@ -87,6 +87,9 @@ export default function LessonsDialog({
   // one fails, that leaves a list that looks changed and isn't, so the failure is
   // shown rather than swallowed (as VariationsDialog does with its own).
   const [error, setError] = useState(null);
+  // Set by the two menu actions that replace this row's menu trigger with a
+  // control of their own — see the closing-focus note on DropdownMenuContent.
+  const replacesTriggerRef = useRef(false);
 
   // Re-read on open: the list is a snapshot, and this one may have been left
   // open in another tab, or added to by a fork since it was last looked at.
@@ -96,7 +99,7 @@ export default function LessonsDialog({
     setName("");
     setConfirming(null);
     setError(null);
-    onRefresh();
+    onRefresh().catch((err) => setError(err?.message || String(err)));
   }, [open, onRefresh]);
 
   const run = useCallback(async (id, work) => {
@@ -268,18 +271,26 @@ export default function LessonsDialog({
                                 <MoreHorizontalIcon />
                               </Button>
                             </DropdownMenuTrigger>
-                            {/* Choosing Delete unmounts this menu's trigger,
-                                and Radix's closing focus would land on an
-                                element that no longer exists — dropping focus to
-                                the body, and the keyboard user out of the list.
-                                Decline it, and let the confirmation button that
-                                replaces the trigger take focus itself. */}
+                            {/* Rename and Delete unmount this menu's trigger —
+                                one swaps the row for a name field, the other for
+                                a confirmation — so Radix's closing focus would
+                                land on an element that no longer exists, dropping
+                                the keyboard user out of the list to the body.
+                                Decline it for those two and let the control that
+                                replaced the trigger take focus itself.
+                                Duplicate leaves the trigger where it is, so
+                                Radix's own restoration is what's wanted there. */}
                             <DropdownMenuContent
                               align="end"
-                              onCloseAutoFocus={(e) => e.preventDefault()}
+                              onCloseAutoFocus={(e) => {
+                                if (!replacesTriggerRef.current) return;
+                                replacesTriggerRef.current = false;
+                                e.preventDefault();
+                              }}
                             >
                               <DropdownMenuItem
                                 onClick={() => {
+                                  replacesTriggerRef.current = true;
                                   setName(lesson.title || "");
                                   setNaming(lesson.id);
                                 }}
@@ -297,7 +308,10 @@ export default function LessonsDialog({
                               </DropdownMenuItem>
                               <DropdownMenuItem
                                 variant="destructive"
-                                onClick={() => setConfirming(lesson.id)}
+                                onClick={() => {
+                                  replacesTriggerRef.current = true;
+                                  setConfirming(lesson.id);
+                                }}
                               >
                                 <Trash2Icon />
                                 {t("lessonsDialog.delete")}

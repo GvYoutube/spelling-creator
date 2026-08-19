@@ -77,6 +77,11 @@ export function useLessonGit({
   // repo would interleave their ref writes, and the loser's work would vanish.
   const queue = useRef(Promise.resolve());
 
+  // Set when this lesson deliberately has no repository — its published history
+  // was unreachable, so setup left the slot empty for a later mount to clone
+  // into. Nothing may write git objects there in the meantime.
+  const noRepoRef = useRef(false);
+
   // The doc, mirrored for the timer callbacks, which outlive any single render.
   const docRef = useRef(doc);
   const identityRef = useRef(identity);
@@ -102,6 +107,7 @@ export function useLessonGit({
     setReady(false);
     run(async () => {
       try {
+        noRepoRef.current = false;
         // Fetches the git chunk the first time the editor mounts (see load.js).
         const engine = await loadGitEngine();
         const ctx = engine.repoCtx(repoId);
@@ -109,9 +115,20 @@ export function useLessonGit({
         // Give this lesson a repository. A published one brings its history down
         // first, so the timeline follows the lesson rather than the browser;
         // anything else starts empty.
+        //
+        // fetchPack distinguishes the two failures that matter here, and this
+        // must not flatten them: it returns null when the lesson genuinely has no
+        // published history (a 404, or a pack with no tip), and *throws* when the
+        // hub couldn't be reached at all. Only the first means "start empty". If a
+        // dropped connection were read that way, the empty repository would take a
+        // baseline commit of the current document, and every later open would find
+        // a repository that exists with a readable head and leave it alone — the
+        // published timeline never cloned, and the local one diverged from the hub
+        // for good. So a throw propagates: setup fails, no repository is left
+        // behind, and the next mount tries the clone again.
         const createRepo = async () => {
           if (editingId) {
-            const pack = await fetchPack(editingId).catch(() => null);
+            const pack = await fetchPack(editingId);
             if (pack) {
               await engine.cloneFromPack({ ...ctx, ...pack });
               return;
@@ -175,6 +192,10 @@ export function useLessonGit({
         setReady(true);
       } catch (err) {
         console.error("[lesson-git] setup failed", err);
+        // Nothing usable was left on disk, and commitNow must not put anything
+        // there either: a stray object store would be indistinguishable from a
+        // real repository next time, and the clone would never be retried.
+        noRepoRef.current = true;
         if (!cancelled) {
           setError(err.message || "Version history is unavailable.");
           setReady(false);
@@ -196,7 +217,7 @@ export function useLessonGit({
     () =>
       run(async () => {
         const current = docRef.current;
-        if (!worthCommitting(current)) return null;
+        if (!worthCommitting(current) || noRepoRef.current) return null;
 
         try {
           const engine = await loadGitEngine();
