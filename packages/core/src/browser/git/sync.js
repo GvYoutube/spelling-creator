@@ -877,16 +877,22 @@ export async function prepareProposalReview({
  * older lesson, from before this feature): the caller then falls back to seeding
  * a fresh repo from the lesson's plain doc, which still gives the fork history
  * from that point on, just no common ancestor with the original.
+ *
+ * `targetRepoId` is the new library lesson the fork is being cloned into — the
+ * fork is a lesson of its own now, not a takeover of the one draft slot.
  */
-export async function forkLessonRepo(sourceLessonId) {
+export async function forkLessonRepo(
+  sourceLessonId,
+  targetRepoId = DRAFT_REPO,
+) {
   const pack = await fetchPack(sourceLessonId).catch(() => null);
   if (!pack) return null;
 
-  // A fork starts from a clean draft repo — any earlier draft history belongs to
+  // A fork starts from a clean repo — anything already under this id belongs to
   // a different lesson and must not be grafted onto this one.
-  await deleteRepo(DRAFT_REPO);
+  await deleteRepo(targetRepoId);
 
-  const ctx = repoCtx(DRAFT_REPO);
+  const ctx = repoCtx(targetRepoId);
   // The lesson, and only the lesson. Its author's variations came down in the same
   // pack — they are in it so that *they* can reach them from another device — but
   // somebody else's half-finished ideas are not part of what was forked, and
@@ -905,14 +911,16 @@ export async function forkLessonRepo(sourceLessonId) {
  * which detaches the open lesson so the next save creates a separate one.
  *
  * Same idea as forking from the hub, without the download: copy the repository
- * into the draft slot and remember where it came from. The new lesson keeps the
- * original's history and shares ancestry with it, so it can be merged back later.
+ * into the new lesson's own id and remember where it came from. The new lesson
+ * keeps the original's history and shares ancestry with it, so it can be merged
+ * back later — and the lesson it was forked from stays in the library, still
+ * attached to whatever it was attached to.
  */
-export async function forkLocalRepo(sourceRepoId) {
-  const copied = await copyRepo(sourceRepoId, DRAFT_REPO);
+export async function forkLocalRepo(sourceRepoId, targetRepoId = DRAFT_REPO) {
+  const copied = await copyRepo(sourceRepoId, targetRepoId);
   if (!copied) return false;
 
-  const ctx = repoCtx(DRAFT_REPO);
+  const ctx = repoCtx(targetRepoId);
   const head = await headOid(ctx);
   if (head) {
     await git.writeRef({ ...ctx, ref: UPSTREAM_REF, value: head, force: true });

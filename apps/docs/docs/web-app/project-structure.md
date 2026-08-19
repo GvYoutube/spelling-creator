@@ -12,7 +12,7 @@ src/
   styles/globals.css      Tailwind v4 + shadcn/ui design tokens (light/dark palettes, glass-surface shadows/blur), plus the `mb-safe` utility (see mobile-layout.md)
   locales/en/*.json      one JSON file per i18next namespace (see internationalization.md)
   pages/
-    EditorPage.jsx        the lesson builder (toolbar, section list, + button, publish, collaborate)
+    EditorPage.jsx        the lesson builder (toolbar, section list, + button, publish, collaborate) — and the owner of which of this device's lessons is open
     HubPage.jsx           public gallery of published lessons + client-side search
     ProfilePage.jsx       a user's public profile: bio + their published lessons
     LoginPage.jsx         magic-link sign-in / account status
@@ -60,6 +60,8 @@ src/
     CollabCursors.jsx      floating coloured carets showing collaborators' selections
     CollabChat.jsx         in-session chat: a floating corner panel on desktop, a bottom sheet on mobile
     HistoryDialog.jsx      the lesson's version timeline: what each commit changed, per block, + restore
+    LessonsDialog.jsx      the lessons this device holds: switch, copy, rename, delete, start another (see local-lessons.md)
+    VariationsDialog.jsx   a lesson's variations — the branches of its repository, as an author sees them (see lesson-variations.md)
     MergeDialog.jsx        settle a merge — a fork's original, or a pull request being reviewed (mine / theirs / keep both)
     ProposeChangesDialog.jsx  open a pull request against the lesson this fork came from (see pull-requests.md)
     PullRequestsSection.jsx   proposed changes on a lesson's page, with review/merge and close for whoever may
@@ -192,10 +194,10 @@ the MCP server cannot reach it by accident:
 
 ```
 @spelling-creator/core/browser/
-  imageStore            IndexedDB storage for the working lesson + its images
+  imageStore            the IndexedDB stores themselves: the lesson library, its documents, image blobs, editor flags
   imageRef              binary image-ref model (a block references its bytes)
   imageFile             read a File to bytes, measure it, opportunistically re-encode to WEBP
-  storage               IndexedDB auto-save for the working lesson (+ the one-time localStorage migration)
+  storage               the lesson library: every lesson this device holds, which one is open, and the two migrations into it
   docxExport            build the .docx (text, images, questions)
   docxImport            best-effort import of a .docx back into the lesson model
   pdfExport             docx -> html (mammoth) -> pdf (html2pdf.js) — the only non-Word use of the Word pipeline

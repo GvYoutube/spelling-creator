@@ -168,5 +168,28 @@
     "confirmDelete": "Delete “{{name}}”? Anything only in this variation goes with it.",
     "confirmDeleteYes": "Delete it",
     "nameLabel": "Name for this variation"
+  },
+  "lessonsDialog": {
+    "title": "Lessons on this device",
+    "description": "Everything you’re working on, kept in this browser. Open one to switch to it — nothing is overwritten.",
+    "untitled": "Untitled lesson",
+    "sectionsCount_one": "{{count}} section",
+    "sectionsCount_other": "{{count}} sections",
+    "blocksCount_one": "{{count}} block",
+    "blocksCount_other": "{{count}} blocks",
+    "stats": "{{sections}} · {{blocks}}",
+    "edited": "edited {{time}}",
+    "published": "Published",
+    "cloudDraft": "Cloud draft",
+    "titleLabel": "Lesson title",
+    "rowActions": "actions for {{title}}",
+    "rename": "Rename",
+    "duplicate": "Duplicate",
+    "delete": "Delete from this device",
+    "confirmDelete": "Delete forever",
+    "keepIt": "Keep it",
+    "storageNote": "These lessons live in this browser. Deleting one takes its version history with it, and clearing your browsing data removes them all — save a lesson to the cloud to keep a copy off this device.",
+    "newLesson": "New lesson",
+    "close": "Close"
   }
 }

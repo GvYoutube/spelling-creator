@@ -107,10 +107,20 @@ export function stripLocalFields(doc) {
   return out;
 }
 
-/** The repo id used before a lesson has been saved to the hub. */
+/**
+ * The repo id of the one working lesson the editor used to have, and the id the
+ * library's migration gives it (see browser/storage.js) so its history survives.
+ */
 export const DRAFT_REPO = "draft";
 
-/** The repo id for a lesson: its hub id, or the draft repo when unattached. */
-export function repoIdFor(editingId) {
-  return editingId || DRAFT_REPO;
+/**
+ * The repo id for a lesson: its hub id once it has one, and otherwise the id it
+ * has in this device's library — which is what gives every local lesson a
+ * repository of its own rather than all of them sharing one draft slot.
+ *
+ * `localId` is optional because the readers of a *published* lesson's repository
+ * (the history tab, a proposal's diff) know its hub id and nothing else.
+ */
+export function repoIdFor(lessonId, localId) {
+  return lessonId || localId || DRAFT_REPO;
 }

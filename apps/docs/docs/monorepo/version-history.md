@@ -119,6 +119,31 @@ The history view asks two questions about a selected version, because they have
 different answers the moment anything has happened since: _what changed here_
 (history) and _difference from now_ (the decision you are about to make).
 
+## One repository per lesson
+
+The browser holds **a repository per lesson**, not one for "the editor":
+
+```
+/lessons/<repoId>/.git      bare — no working tree, no index
+```
+
+`repoId` is the lesson's hub id once it has one, and otherwise its id in this
+device's [lesson library](/web-app/local-lessons) — which is what lets the editor
+hold as many lessons as you make, each with a history of its own, and switch
+between them by switching repositories. `repoIdFor(lessonId, localId)` is the one
+place that decides.
+
+The id changes exactly once in a lesson's life: the first time it is saved to the
+cloud, `adoptDraftRepo` copies `/lessons/<localId>` to `/lessons/<hubId>` and
+drops the original. The copy is a legitimate clone — git objects are immutable and
+content-addressed, so every commit keeps its oid — and it is what stops an hour of
+history built before publishing from being stranded under an id nothing points at
+any more. From then on the repository follows the _lesson_: opening it on another
+machine clones that history down rather than starting a new one.
+
+A repository is only ever read through `repoCtx(repoId)`, so nothing below this
+line knows or cares which of the two kinds of id it was given.
+
 ## More than one branch
 
 A lesson's repository holds a branch per **variation** — an alternative version of
@@ -128,8 +153,9 @@ become.
 
 Which one is being edited is `HEAD`, a symbolic ref, exactly as in git. That is
 not just tidiness: `HEAD` lives inside the gitdir, so it survives the two places a
-repository is copied wholesale — publishing a draft (`adoptDraftRepo`) and forking
-a lesson locally (`copyRepo`) — neither of which knows branches exist.
+repository is copied wholesale — publishing a local lesson (`adoptDraftRepo`) and
+copying one into another (`copyRepo`, behind both "fork into a new lesson" and
+"duplicate") — neither of which knows branches exist.
 
 Everything on this page is per branch as a result. A commit moves whatever `HEAD`
 points at; the history view reads the branch being edited unless given a ref; the
@@ -359,10 +385,10 @@ than the bundler's env, which is what lets it sit on this side of the line.
 Browser-bound (`@spelling-creator/core/browser/git/*`) — framework-agnostic, but
 needs a real browser:
 
-| Module | Purpose                                                      |
-| ------ | ------------------------------------------------------------ |
-| `fs`   | LightningFS — the IndexedDB filesystem the repos live on.    |
-| `sync` | Fork (clone), merge, push, and both sides of a pull request. |
+| Module | Purpose                                                                             |
+| ------ | ----------------------------------------------------------------------------------- |
+| `fs`   | LightningFS — the IndexedDB filesystem the repos live on, one directory per lesson. |
+| `sync` | Fork (clone), merge, push, and both sides of a pull request.                        |
 
 Server-side (`apps/mcp/src/git.js`) — the fork-and-propose flow for an AI
 assistant, which is `browser/git/sync`'s two outbound steps built on `memfs`
@@ -393,8 +419,8 @@ Worker: `apps/api/src/routes/git.js` and `apps/api/src/routes/pulls.js`, with th
 trusted-collaborator check in `apps/api/src/lib/lesson.js`
 (`isTrustedCollaborator`).
 
-Repositories are **bare** — no working tree, no index. The editor's document
-lives in React state and IndexedDB, so checked-out files would be dead weight;
+Repositories are **bare** — no working tree, no index. The editor's documents
+live in React state and IndexedDB, so checked-out files would be dead weight;
 everything goes straight through plumbing (`writeBlob` → `writeTree` →
 `writeCommit` → `writeRef`).
 

@@ -23,6 +23,7 @@ import {
   GitMergeIcon,
   GitPullRequestIcon,
   HistoryIcon,
+  LibraryIcon,
   PlusIcon,
   PrinterIcon,
   SaveIcon,
@@ -75,6 +76,7 @@ import FirstLessonWizard from "../components/FirstLessonWizard.jsx";
 import AiLessonIdeaDialog from "../components/AiLessonIdeaDialog.jsx";
 import HistoryDialog, { timeAgo } from "../components/HistoryDialog.jsx";
 import VariationsDialog from "../components/VariationsDialog.jsx";
+import LessonsDialog from "../components/LessonsDialog.jsx";
 import MergeDialog from "../components/MergeDialog.jsx";
 import ProposeChangesDialog from "../components/ProposeChangesDialog.jsx";
 // The preview dialog renders the working doc with the very same read-only
@@ -90,23 +92,25 @@ import {
   toBranchName,
 } from "@spelling-creator/core/git/refs";
 import { diffDocs } from "@spelling-creator/core/git/ops";
+import { repoIdFor } from "@spelling-creator/core/git/doc";
 // The git engine (isomorphic-git + LightningFS) is loaded on demand rather than
 // imported directly, so it stays out of the bundle every homepage and hub visitor
 // downloads. loadGitEngine() memoises the import; by the time any of these flows
 // runs, useLessonGit has already fetched the chunk.
 import { loadGitEngine } from "../lib/git/load.js";
 import {
-  loadDocument,
-  saveDocument,
-  loadEditingId,
-  saveEditingId,
-  loadEditingPublished,
-  saveEditingPublished,
-  loadForkedFrom,
-  saveForkedFrom,
+  listLessons,
+  getLesson,
+  createLesson,
+  saveLessonDoc,
+  saveLessonMeta,
+  deleteLesson,
+  getCurrentLessonId,
+  setCurrentLessonId,
   loadWizardSeen,
   saveWizardSeen,
   migrateLocalStorage,
+  migrateToLibrary,
 } from "@spelling-creator/core/browser/storage";
 import { convertDocImages } from "@spelling-creator/core/browser/imageRef";
 import { ensureImagesUploaded } from "@spelling-creator/core/imagesClient";
@@ -177,14 +181,6 @@ function createInitialDoc(t) {
   return { title: t("defaultDoc.title"), sections: [] };
 }
 
-// Whether a document holds work worth protecting from being clobbered. The
-// starter doc has no sections; once the user has added one, replacing the doc
-// (e.g. by opening a published lesson to edit) is destructive and warrants a
-// warning.
-function docHasContent(d) {
-  return Boolean(d && Array.isArray(d.sections) && d.sections.length > 0);
-}
-
 // Apply a finished block drag to the document: pull the dragged block out of the
 // section it came from and slot it into the section it was dropped on, before or
 // after the block the insertion line was showing. The two sections are often the
@@ -250,20 +246,26 @@ export default function EditorPage() {
   // lossless round-trip of our own model. Its own hidden picker.
   const jsonInputRef = useRef(null);
 
+  // Which of this device's lessons is open. Every lesson in the library
+  // (core/browser/storage.js) has one of these ids, and it is also the name of
+  // the lesson's git repository until it is published and takes the hub's id
+  // instead — so `localId` is what makes switching lessons switch documents and
+  // histories together. `localLessons` is the library itself, read for the
+  // lessons panel and refreshed whenever one is added or removed; null until
+  // it has been read once.
+  const [localId, setLocalId] = useState(null);
+  const [localLessons, setLocalLessons] = useState(null);
+
   // Hub-editing state. `editingId` is the id of a published lesson currently
   // loaded for editing (so "Publish" becomes "Update"); null when authoring a
-  // fresh lesson. It's persisted to localStorage (see effect below) so the
-  // status survives reloads and tab closes until the user overwrites it (by
-  // opening another published lesson) or forks into a new lesson.
-  // `pendingEdit` holds a fetched lesson awaiting the user's confirmation to
-  // overwrite their in-progress work; `editLoading` covers the fetch of the
-  // lesson to edit.
+  // fresh lesson. It's stored on the library record (see effect below) so the
+  // status survives reloads and tab closes until the user forks into a new
+  // lesson. `editLoading` covers the fetch of a lesson to edit.
   const [editingId, setEditingId] = useState(null);
   // Whether the lesson loaded for editing is published to the hub or a private
   // draft. Only meaningful when `editingId` is set; it tunes the "Save to cloud"
   // actions and the status chip. Persisted so it survives reloads.
   const [editingPublished, setEditingPublished] = useState(true);
-  const [pendingEdit, setPendingEdit] = useState(null); // { id, title, doc, published } | null
   const [editLoading, setEditLoading] = useState(false);
 
   // Version control. The lesson is kept in a real git repository in the browser,
@@ -331,6 +333,7 @@ export default function EditorPage() {
   const historyOpen = panel === "history";
   const collabOpen = panel === "collaborate";
   const variationsOpen = panel === "variations";
+  const lessonsOpen = panel === "lessons";
   //
   // Opening pushes; closing *replaces*. Both pushing would leave the history as
   // [/editor, /editor/history, /editor], so Back from a panel you had just
@@ -408,42 +411,99 @@ export default function EditorPage() {
   // version control never commits the empty starter doc over a real draft's
   // history before that draft has loaded.
   const [hydrated, setHydrated] = useState(false);
-  const git = useLessonGit({ doc, editingId, identity, enabled: hydrated });
+  const git = useLessonGit({
+    doc,
+    editingId,
+    localId,
+    identity,
+    enabled: hydrated,
+  });
 
   // First-lesson wizard. Auto-shows once for newcomers (tracked by a
   // localStorage flag); dismissing it sets the flag so it won't reappear. The
   // help button reopens it on demand without touching the flag.
   const [wizardOpen, setWizardOpen] = useState(false);
 
+  // The document as it was last written to storage. Compared by identity, so
+  // opening a lesson doesn't immediately save the very document it just read
+  // (which would restamp its "edited" time and reorder the library for a lesson
+  // nobody has touched). Every edit makes a new object, so anything the user
+  // actually does compares unequal.
+  const savedDocRef = useRef(null);
+
+  // Take a lesson out of the library and into the editor. The whole of the
+  // editor's per-lesson state changes together — document, hub attachment,
+  // publish status, fork origin — and `localId` changing swaps the git
+  // repository under useLessonGit as well.
+  const adoptRecord = useCallback((record) => {
+    const next = record.doc || { title: "", sections: [] };
+    setLocalId(record.id);
+    setDoc(next);
+    savedDocRef.current = next;
+    setEditingId(record.lessonId || null);
+    setEditingPublished(record.published !== false);
+    setForkedFrom(record.forkedFrom || null);
+    setCurrentLessonId(record.id);
+  }, []);
+
   // Editor state lives in IndexedDB now (async), so we hydrate it on mount
   // rather than synchronously at useState time. `hydrated` gates the persistence
-  // effects below so they don't write the empty starter doc over a saved draft
-  // before it loads, and defers the hub edit/fork request until we know whether
-  // there's in-progress work to protect. migrateLocalStorage() first moves any
-  // pre-IndexedDB draft across (a one-time, idempotent no-op afterwards).
+  // effects below so they don't write the empty starter doc over a saved lesson
+  // before it loads, and defers the hub edit/fork request until the library is
+  // there to put the lesson into. The two migrations run first, in order: the
+  // pre-IndexedDB draft moves into IndexedDB, then the single working document
+  // becomes the library's first lesson. Both are idempotent no-ops afterwards.
+  // Guarded by a ref rather than by a cancellation flag, and the difference
+  // matters here. This effect *writes*: a device with an empty library has its
+  // first lesson made for it, so there is always one open. StrictMode invokes
+  // the effect twice in development, and two runs racing to discover an empty
+  // library would each create a lesson and leave an untitled twin behind — while
+  // the usual "cancelled" cleanup would abandon the first run's work after the
+  // second had already been told not to start. A ref survives the double-invoke
+  // (the instance is reused), so exactly one run happens and it finishes; a real
+  // remount gets a fresh ref, and hydrates again as it should.
+  const hydrateRef = useRef(false);
   useEffect(() => {
-    let cancelled = false;
+    if (hydrateRef.current) return;
+    hydrateRef.current = true;
     (async () => {
-      await migrateLocalStorage();
-      const [savedDoc, savedEditingId, savedPublished, savedFork, seen] =
-        await Promise.all([
-          loadDocument(),
-          loadEditingId(),
-          loadEditingPublished(),
-          loadForkedFrom(),
+      try {
+        await migrateLocalStorage();
+        await migrateToLibrary();
+        const [currentId, seen] = await Promise.all([
+          getCurrentLessonId(),
           loadWizardSeen(),
         ]);
-      if (cancelled) return;
-      if (savedDoc) setDoc(savedDoc);
-      if (savedEditingId) setEditingId(savedEditingId);
-      if (savedFork) setForkedFrom(savedFork);
-      setEditingPublished(savedPublished);
-      if (!seen) setWizardOpen(true);
-      setHydrated(true);
+        // A device with a library but no current lesson (its last one was
+        // deleted in another tab) opens the most recent.
+        let record = currentId ? await getLesson(currentId) : null;
+        if (!record) {
+          const [newest] = await listLessons();
+          record = newest ? await getLesson(newest.id) : null;
+        }
+        if (!record) record = await createLesson({ doc: createInitialDoc(t) });
+        adoptRecord(record);
+        if (!seen) setWizardOpen(true);
+      } catch (err) {
+        // Storage we can't reach at all: private mode, an exhausted quota, or —
+        // reachable for the first time in this version — a v1 → v2 upgrade
+        // blocked by another tab still holding the old connection open. The
+        // editor is still a perfectly good editor without a library, so say so
+        // and carry on in memory rather than leaving the page on its skeleton
+        // for ever: `hydrated` gates every persistence effect *and* the section
+        // list, and the one-shot guard above means nothing would retry.
+        console.error("[lessons] could not open this device's library", err);
+        notify({
+          severity: "error",
+          message: t("messages.libraryUnavailable"),
+        });
+      } finally {
+        setHydrated(true);
+      }
     })();
-    return () => {
-      cancelled = true;
-    };
+    // Mount-only: `t` and adoptRecord are stable enough that re-hydrating on a
+    // language change would only throw away in-progress work.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // The lesson this one was forked from: its name (for the sync and propose
@@ -514,43 +574,249 @@ export default function EditorPage() {
     editingIdRef.current = editingId;
   }, [editingId]);
 
-  // Persist the working doc to IndexedDB, debounced: typing into a large lesson
+  // Persist the open lesson's document, debounced: typing into a large lesson
   // shouldn't rewrite the whole document on every keystroke (the synchronous
   // write janks low-end machines). We save ~600ms after edits pause, and flush a
   // pending save on unmount so the last keystrokes aren't lost.
+  //
+  // The pending save carries the lesson id it belongs to, not just the document:
+  // switching lessons changes both at once, and a save that outlived its lesson
+  // would write one lesson's text into another's record.
   const pendingSaveRef = useRef(null);
   useEffect(() => {
-    if (!hydrated) return;
-    pendingSaveRef.current = doc;
-    const id = setTimeout(() => {
+    if (!hydrated || !localId) return;
+    // Just opened, and unedited since — nothing has changed to write.
+    if (doc === savedDocRef.current) return;
+    pendingSaveRef.current = { id: localId, doc };
+    const timer = setTimeout(() => {
       pendingSaveRef.current = null;
-      saveDocument(doc);
+      savedDocRef.current = doc;
+      saveLessonDoc(localId, doc);
     }, 600);
-    return () => clearTimeout(id);
-  }, [doc, hydrated]);
+    return () => clearTimeout(timer);
+  }, [doc, localId, hydrated]);
   useEffect(
     () => () => {
-      if (pendingSaveRef.current) saveDocument(pendingSaveRef.current);
+      const pending = pendingSaveRef.current;
+      if (pending) saveLessonDoc(pending.id, pending.doc);
     },
     [],
   );
 
-  // Persist the editing-published status so it survives reloads/tab closes.
+  // Persist where this lesson lives besides here: the hub lesson it's attached
+  // to, whether that lesson is published or a private draft, and the lesson it
+  // was forked from (so the link home survives a reload and the fork can still
+  // be synced with its original days later). All three belong to the library
+  // record rather than the document, so they travel with the lesson when you
+  // switch to another and back.
   useEffect(() => {
-    if (hydrated) saveEditingId(editingId);
-  }, [editingId, hydrated]);
+    if (!hydrated || !localId) return;
+    saveLessonMeta(localId, {
+      lessonId: editingId,
+      published: editingId ? editingPublished : true,
+      forkedFrom,
+    });
+  }, [localId, editingId, editingPublished, forkedFrom, hydrated]);
 
-  // Persist whether the edited lesson is published or a draft. Clear it when no
-  // lesson is attached, so a fresh document defaults back to "publish".
-  useEffect(() => {
-    if (hydrated) saveEditingPublished(editingId ? editingPublished : null);
-  }, [editingId, editingPublished, hydrated]);
+  // ---- the library ---------------------------------------------------------
+  //
+  // Everything below moves the editor between lessons. There is one rule they
+  // all obey: whatever is on screen is written down *before* it is replaced.
+  // That is the whole reason none of these has to ask permission first — the
+  // editor used to hold a single working document, so opening anything meant
+  // destroying what you had, and three flows (edit, fork, import) each needed a
+  // "Replace your current work?" dialog to guard it. A lesson you leave is a
+  // lesson still in the list.
 
-  // Persist the lesson this one was forked from, so the link home survives a
-  // reload and the fork can still be synced with its original days later.
+  const refreshLocalLessons = useCallback(async () => {
+    setLocalLessons(await listLessons());
+  }, []);
+
+  // commitNow keeps a stable identity (it is keyed to the repository), unlike
+  // the `git` object, which is rebuilt every render.
+  const commitNow = git.commitNow;
+
+  // Get the open lesson fully onto disk: the debounced document save, then a
+  // version-control checkpoint. Both are skipped when there's nothing new —
+  // committing an unchanged document is already a no-op (see repo.js).
+  const flushCurrentLesson = useCallback(async () => {
+    if (!localId) return;
+    pendingSaveRef.current = null;
+    const current = docRef.current;
+    if (current !== savedDocRef.current) {
+      savedDocRef.current = current;
+      await saveLessonDoc(localId, current);
+    }
+    await commitNow();
+  }, [commitNow, localId]);
+
+  // Which open request is the live one. Opening a lesson saves and commits the
+  // one being left before it reads the next, so it is several awaits long, and
+  // two of them in flight can finish in either order — a slower first click
+  // would otherwise land last and put the editor in a lesson the user has
+  // already moved on from. Only the newest request may adopt anything.
+  const openRequestRef = useRef(0);
+  const openLocalLesson = useCallback(
+    async (id) => {
+      if (!id || id === localId) return;
+      const request = ++openRequestRef.current;
+      await flushCurrentLesson();
+      const record = await getLesson(id);
+      if (request !== openRequestRef.current) return;
+      if (!record) {
+        // Deleted in another tab, most likely. Re-read rather than insist.
+        await refreshLocalLessons();
+        return;
+      }
+      adoptRecord(record);
+    },
+    [adoptRecord, flushCurrentLesson, localId, refreshLocalLessons],
+  );
+
+  const startNewLesson = useCallback(async () => {
+    // Already in an untouched lesson? That *is* the new lesson. Making another
+    // would leave a trail of untitled empties behind every time someone pressed
+    // the button twice. "Untouched" means no sections, no hub lesson behind it,
+    // and the title still exactly as the editor wrote it — a lesson somebody has
+    // named is one they have started, however empty it still looks.
+    const current = docRef.current;
+    const untouched =
+      !editingIdRef.current &&
+      (current?.sections?.length ?? 0) === 0 &&
+      (!current?.title || current.title === t("defaultDoc.title"));
+    if (untouched) return null;
+    const request = ++openRequestRef.current;
+    await flushCurrentLesson();
+    const record = await createLesson({ doc: createInitialDoc(t) });
+    if (request !== openRequestRef.current) return record;
+    adoptRecord(record);
+    await refreshLocalLessons();
+    return record;
+  }, [adoptRecord, flushCurrentLesson, refreshLocalLessons, t]);
+
+  const duplicateLocalLesson = useCallback(
+    async (id) => {
+      if (id === localId) await flushCurrentLesson();
+      const source = await getLesson(id);
+      if (!source) return null;
+
+      const doc = {
+        ...(source.doc || createInitialDoc(t)),
+        title: t("labels.copyOf", {
+          title: source.doc?.title || t("labels.untitledLesson"),
+        }),
+      };
+      // Unattached on purpose: a copy is a lesson of its own, so saving it to
+      // the cloud creates a separate one rather than overwriting what it was
+      // copied from — while remembering what that was, so the two can still be
+      // merged later.
+      const record = await createLesson({
+        doc,
+        forkedFrom: source.lessonId || source.forkedFrom || null,
+      });
+      try {
+        // A real clone of the repository, not just of the text: the copy keeps
+        // the original's history and shares its commit oids.
+        const engine = await loadGitEngine();
+        await engine.forkLocalRepo(
+          repoIdFor(source.lessonId, source.id),
+          record.id,
+        );
+      } catch {
+        /* no history to carry over — the copy starts a fresh one */
+      }
+      await refreshLocalLessons();
+      return record;
+    },
+    [flushCurrentLesson, localId, refreshLocalLessons, t],
+  );
+
+  const removeLocalLesson = useCallback(
+    async (id) => {
+      // Drop any save still in flight for it, so nothing recreates what we are
+      // about to delete.
+      if (pendingSaveRef.current?.id === id) pendingSaveRef.current = null;
+      const record = await getLesson(id);
+      await deleteLesson(id);
+      try {
+        const engine = await loadGitEngine();
+        // The local repository only. A lesson that reached the cloud keeps its
+        // history there, and the lesson page clones it back on demand.
+        //
+        // Both possible names for it: a published lesson's repository lives
+        // under its hub id, but one left under the lesson's own id — by an
+        // adoption that found the destination already taken and returned rather
+        // than merge two histories — would otherwise be unreachable for ever,
+        // since nothing else ever looks there again.
+        await engine.deleteRepo(repoIdFor(record?.lessonId, id));
+        if (record?.lessonId) await engine.deleteRepo(id);
+      } catch {
+        /* the repo may never have existed */
+      }
+
+      if (id === localId) {
+        const request = ++openRequestRef.current;
+        const remaining = (await listLessons()).filter((l) => l.id !== id);
+        const next = remaining[0]
+          ? await getLesson(remaining[0].id)
+          : await createLesson({ doc: createInitialDoc(t) });
+        if (request === openRequestRef.current) adoptRecord(next);
+      }
+      await refreshLocalLessons();
+    },
+    [adoptRecord, localId, refreshLocalLessons, t],
+  );
+
+  const renameLocalLesson = useCallback(
+    async (id, title) => {
+      if (id === localId) {
+        // Written through rather than left to the debounce, because the list is
+        // re-read the moment this returns and would otherwise show the old title
+        // until the panel was closed and opened again. The same object goes into
+        // React state and into storage, so `savedDocRef` matching it keeps the
+        // debounce from writing the identical document a second time.
+        const next = { ...docRef.current, title };
+        setDoc(next);
+        savedDocRef.current = next;
+        await saveLessonDoc(id, next);
+      } else {
+        const record = await getLesson(id);
+        if (record?.doc) await saveLessonDoc(id, { ...record.doc, title });
+      }
+      await refreshLocalLessons();
+    },
+    [localId, refreshLocalLessons],
+  );
+
+  // Deep links into the library: the sidebar lists the lessons on this device
+  // and links here with ?local=<id>, and its "New lesson" button with ?new=1.
+  // The editor is already mounted when either is followed from another page, so
+  // a param is what carries the intent across; it's stripped as soon as it's
+  // read, which is also what stops this from firing twice.
+  const localParam = searchParams.get("local");
+  const newParam = searchParams.get("new");
   useEffect(() => {
-    if (hydrated) saveForkedFrom(forkedFrom);
-  }, [forkedFrom, hydrated]);
+    if (!hydrated || (!localParam && !newParam)) return;
+    const params = new URLSearchParams(location.search);
+    params.delete("local");
+    params.delete("new");
+    const search = params.toString();
+    navigate(
+      { pathname: location.pathname, search: search ? `?${search}` : "" },
+      { replace: true },
+    );
+    if (newParam) startNewLesson();
+    else openLocalLesson(localParam);
+  }, [
+    hydrated,
+    localParam,
+    newParam,
+    location.pathname,
+    location.search,
+    navigate,
+    openLocalLesson,
+    startNewLesson,
+  ]);
 
   // Which sections are collapsed to their header.
   //
@@ -662,11 +928,16 @@ export default function EditorPage() {
     return () => cancelAnimationFrame(raf);
   }, [hydrated]);
 
-  // Adopt a fetched lesson into the editor: replace the working doc (this is the
-  // step that overwrites the auto-saved draft). For an edit, enter edit mode so
-  // "Publish" becomes "Update" on the original row. For a fork, load it as a
-  // fresh, unattached draft (editingId stays null) titled "… (copy)", so
-  // publishing creates a separate lesson and the original is left untouched.
+  // Adopt a fetched lesson into the editor. Each mode lands somewhere different
+  // in this device's library, and — this is the part that used to need a
+  // "Replace your current work?" dialog — none of them touches the lesson that
+  // was on screen. Whatever you were doing is saved and stays in the list.
+  //
+  //   import  a new lesson of its own, keeping the document's own title
+  //   fork    a new lesson, unattached, titled "… (copy)"
+  //   edit    the lesson you already hold for it, opened as you left it — or,
+  //           when you hold none, a new lesson attached to it, so "Publish"
+  //           means "Update" on the row it came from
   const applyEdit = async ({
     id,
     doc: nextDoc,
@@ -675,20 +946,14 @@ export default function EditorPage() {
     published,
     forkedFrom: incomingFork,
   }) => {
+    await flushCurrentLesson();
+
     if (mode === "import") {
-      // An imported doc loads as a fresh, unattached lesson (like a fork, but
-      // keeping the document's own title): saving it later creates a new cloud
-      // lesson rather than overwriting anything.
-      //
-      // Its history starts here too. An imported lesson has no relationship to
-      // whatever was in the editor before, so the draft repo is thrown away
-      // rather than having the import committed on top of an unrelated timeline.
-      await git.discard();
-      setDoc(nextDoc);
-      setEditingId(null);
-      setForkedFrom(null);
-      setEditingPublished(true);
-      setPendingEdit(null);
+      // An imported document has no relationship to whatever was in the editor
+      // before, so it gets a lesson — and therefore a history — of its own,
+      // starting at the import rather than continuing someone else's timeline.
+      adoptRecord(await createLesson({ doc: nextDoc }));
+      await refreshLocalLessons();
       notify({
         severity: "info",
         message:
@@ -698,34 +963,37 @@ export default function EditorPage() {
       });
       return;
     }
+
     if (mode === "fork") {
       // Forking *clones the lesson's repository*: the copy keeps the original's
       // full history and, because git addresses commits by content, shares its
       // ancestry — which is what lets the fork be merged with the original later,
       // against the exact commit the two diverged from.
       //
+      // The library record is created first because its id is the name of the
+      // repository the clone lands in (see core/browser/storage.js).
+      //
       // A lesson published before this feature has no repo to clone. The fork
       // still works and still gets history from here on; it just has no common
       // ancestor with the original, so a later sync compares the two directly.
+      const record = await createLesson({
+        doc: {
+          ...nextDoc,
+          title: t("labels.copyOf", {
+            title: nextDoc.title || t("labels.untitledLesson"),
+          }),
+        },
+        forkedFrom: id,
+      });
       let cloned = false;
       try {
         const engine = await loadGitEngine();
-        cloned = Boolean(await engine.forkLessonRepo(id));
+        cloned = Boolean(await engine.forkLessonRepo(id, record.id));
       } catch {
         /* no history to clone — fall through to a fresh one */
       }
-
-      setDoc({
-        ...nextDoc,
-        title: t("labels.copyOf", {
-          title: nextDoc.title || t("labels.untitledLesson"),
-        }),
-      });
-      setEditingId(null);
-      setForkedFrom(id);
-      setEditingPublished(true);
-      setPendingEdit(null);
-      git.reload();
+      adoptRecord(record);
+      await refreshLocalLessons();
       notify({
         severity: "info",
         message: cloned
@@ -734,16 +1002,51 @@ export default function EditorPage() {
       });
       return;
     }
-    setDoc(nextDoc);
-    setEditingId(id);
-    setForkedFrom(incomingFork || null);
-    setEditingPublished(published);
-    setPendingEdit(null);
+
+    // Editing a hub lesson we already hold reopens *that* copy, exactly as it was
+    // left, rather than starting a second copy of the same lesson — and, just as
+    // importantly, rather than overwriting it with the document just fetched.
+    // The device copy is the only one that can hold edits made since the last
+    // save to the cloud, and replacing it would discard them with no warning:
+    // the single flow in here that would still destroy local work, on the one
+    // page that now promises not to.
+    //
+    // The hub does stay authoritative about the lesson's *status* — whether it
+    // is published, and what it was forked from — so the record's metadata is
+    // refreshed from what came back.
+    //
+    // When the two documents differ we say so, because the reason can be either
+    // side (unsaved work here, or a save from another device) and only the user
+    // knows which. Saving to the cloud is what settles it: the push refuses to
+    // overwrite a lesson that has moved on and offers the merge instead.
+    const existing = (await listLessons()).find((l) => l.lessonId === id);
+    let record;
+    let differs = false;
+    if (existing) {
+      await saveLessonMeta(existing.id, {
+        lessonId: id,
+        published,
+        forkedFrom: incomingFork || null,
+      });
+      record = await getLesson(existing.id);
+      differs = diffDocs(record?.doc, nextDoc).length > 0;
+    } else {
+      record = await createLesson({
+        doc: nextDoc,
+        lessonId: id,
+        published,
+        forkedFrom: incomingFork || null,
+      });
+    }
+    adoptRecord(record);
+    await refreshLocalLessons();
     notify({
       severity: "info",
-      message: published
-        ? t("messages.loadedPublished")
-        : t("messages.loadedDraft"),
+      message: differs
+        ? t("messages.loadedLocalCopyDiffers")
+        : published
+          ? t("messages.loadedPublished")
+          : t("messages.loadedDraft"),
     });
   };
 
@@ -805,16 +1108,10 @@ export default function EditorPage() {
           // "sync with the original" action stays available across sessions.
           forkedFrom: lesson.forkedFrom || null,
         };
-        // Edit can adopt straight away when re-opening the same lesson; either
-        // mode adopts when there's no in-progress work to lose. Otherwise warn.
-        if (
-          (mode === "edit" && editingIdRef.current === lesson.id) ||
-          !docHasContent(docRef.current)
-        ) {
-          applyEditRef.current(incoming);
-        } else {
-          setPendingEdit(incoming);
-        }
+        // Straight in. Nothing is at risk: an edit reopens the copy this device
+        // already has of that lesson (or makes one), and a fork always becomes a
+        // lesson of its own.
+        applyEditRef.current(incoming);
       })
       .catch((err) => {
         notify({
@@ -1236,29 +1533,40 @@ export default function EditorPage() {
     }
   };
 
-  // Detach the working doc from the published lesson it was loaded from, so the
-  // next "Publish" creates a new lesson instead of updating the original. This
-  // is the explicit way to leave the editing-published status (the status
-  // otherwise persists across reloads).
+  // Fork the lesson being edited into a new one, and continue in the fork — so
+  // the next "Publish" creates a separate lesson instead of updating the one
+  // this came from.
   //
-  // Like forking from the hub, this clones the lesson's repository rather than
-  // just copying its text: the new lesson keeps the history and shares ancestry
-  // with the one it left, so it can be merged back with it later.
+  // The lesson it came from doesn't go anywhere: it stays in this device's
+  // library, still attached to its hub row, and is one click away in the lessons
+  // panel. (Before the library there was only one working document, so forking
+  // had to *detach* that document, and the original was gone from the editor
+  // until you fetched it again.)
+  //
+  // Like forking from the hub, this clones the repository rather than just
+  // copying the text: the fork keeps the history and shares ancestry with the
+  // lesson it left, so the two can be merged later.
   const handleFork = async () => {
     const from = editingId;
-    if (from) {
-      await git.commitNow();
-      try {
-        const engine = await loadGitEngine();
-        await engine.forkLocalRepo(from);
-      } catch {
-        /* no local history to carry over — the fork starts a fresh one */
-      }
+    await flushCurrentLesson();
+
+    const record = await createLesson({
+      doc: {
+        ...doc,
+        title: t("labels.copyOf", {
+          title: doc.title || t("labels.untitledLesson"),
+        }),
+      },
+      forkedFrom: from || null,
+    });
+    try {
+      const engine = await loadGitEngine();
+      await engine.forkLocalRepo(repoIdFor(from, localId), record.id);
+    } catch {
+      /* no local history to carry over — the fork starts a fresh one */
     }
-    setEditingId(null);
-    setForkedFrom(from || null);
-    setEditingPublished(true);
-    git.reload();
+    adoptRecord(record);
+    await refreshLocalLessons();
     notify({
       severity: "info",
       message: t("messages.forkedNoUpstream"),
@@ -1901,16 +2209,14 @@ export default function EditorPage() {
     try {
       const { importDocxFile } = await loadExportEngine();
       const imported = await importDocxFile(file);
-      // Reuse the overwrite-confirmation flow when there's in-progress work to
-      // lose; otherwise load straight away.
-      const incoming = {
+      // Straight in — the import opens as a new lesson beside the one you were
+      // working on, rather than in place of it.
+      await applyEdit({
         doc: imported,
         title: imported.title,
         mode: "import",
         source: "word",
-      };
-      if (docHasContent(doc)) setPendingEdit(incoming);
-      else applyEdit(incoming);
+      });
     } catch (err) {
       setImportErrorSource("word");
       setImportError(err?.message || t("messages.wordImportFailed"));
@@ -1934,14 +2240,12 @@ export default function EditorPage() {
     setBusy("import");
     try {
       const imported = await importJsonFile(file);
-      const incoming = {
+      await applyEdit({
         doc: imported,
         title: imported.title,
         mode: "import",
         source: "json",
-      };
-      if (docHasContent(doc)) setPendingEdit(incoming);
-      else applyEdit(incoming);
+      });
     } catch (err) {
       setImportErrorSource("json");
       setImportError(err?.message || t("messages.jsonImportFailed"));
@@ -2099,6 +2403,11 @@ export default function EditorPage() {
             <TooltipContent>{t("header.actionsTooltip")}</TooltipContent>
           </Tooltip>
           <DropdownMenuContent align="end">
+            <DropdownMenuItem onClick={() => openPanel("lessons")}>
+              <LibraryIcon />
+              {t("header.lessons")}
+            </DropdownMenuItem>
+            <DropdownMenuSeparator />
             <DropdownMenuItem onClick={handlePreview} disabled={busy !== null}>
               <EyeIcon />
               {t("header.preview")}
@@ -2193,6 +2502,24 @@ export default function EditorPage() {
               </button>
             </TooltipTrigger>
             <TooltipContent>{t("header.helpTooltip")}</TooltipContent>
+          </Tooltip>
+          {/* The way back to everything else this device is holding. It sits
+              with the actions rather than in the document panel because it is
+              about which lesson you're in, not about the one you're in. */}
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant="ghost"
+                onClick={() => openPanel("lessons")}
+                className={headerGhostButton}
+              >
+                <LibraryIcon data-icon="inline-start" />
+                {t("header.lessons")}
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent className="max-w-xs">
+              {t("header.lessonsTooltip")}
+            </TooltipContent>
           </Tooltip>
           <Button
             variant="ghost"
@@ -2775,50 +3102,6 @@ export default function EditorPage() {
         </DialogContent>
       </Dialog>
 
-      {/* Overwrite warning: opening a published lesson for editing replaces the
-          working doc (and its auto-saved draft). Confirm before discarding it. */}
-      <Dialog
-        open={Boolean(pendingEdit)}
-        onOpenChange={(next) => !next && setPendingEdit(null)}
-      >
-        <DialogContent className="sm:max-w-xs">
-          <DialogHeader>
-            <DialogTitle>{t("overwriteDialog.title")}</DialogTitle>
-          </DialogHeader>
-          <p className="text-sm text-muted-foreground">
-            <Trans
-              i18nKey={
-                pendingEdit?.mode === "fork"
-                  ? "overwriteDialog.forkBody"
-                  : pendingEdit?.mode === "import"
-                    ? "overwriteDialog.importBody"
-                    : "overwriteDialog.editBody"
-              }
-              ns="editor"
-              values={{
-                title: pendingEdit?.title || t("overwriteDialog.thisLesson"),
-              }}
-              components={{ strong: <strong /> }}
-            />
-          </p>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setPendingEdit(null)}>
-              {t("overwriteDialog.keepMyWork")}
-            </Button>
-            <Button
-              variant="destructive"
-              onClick={() => applyEdit(pendingEdit)}
-            >
-              {pendingEdit?.mode === "fork"
-                ? t("overwriteDialog.replaceAndFork")
-                : pendingEdit?.mode === "import"
-                  ? t("overwriteDialog.replaceAndImport")
-                  : t("overwriteDialog.replaceAndEdit")}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
       {/* Hidden picker for Word import, triggered from the warning dialog. */}
       <input
         ref={importInputRef}
@@ -2924,6 +3207,22 @@ export default function EditorPage() {
         initialJoinCode={joinCode}
         trusted={doc.trustedCollaborators || []}
         onTrustedChange={setTrustedCollaborators}
+      />
+
+      {/* Every lesson this device is holding. Switching between them is the one
+          thing the editor could not do before: there was a single working
+          document, and opening anything meant overwriting it. */}
+      <LessonsDialog
+        open={lessonsOpen}
+        onClose={() => openPanel(null)}
+        lessons={localLessons}
+        currentId={localId}
+        onRefresh={refreshLocalLessons}
+        onOpen={openLocalLesson}
+        onCreate={startNewLesson}
+        onDuplicate={duplicateLocalLesson}
+        onDelete={removeLocalLesson}
+        onRename={renameLocalLesson}
       />
 
       {/* Variations: the other branches of this lesson's repository, as an author

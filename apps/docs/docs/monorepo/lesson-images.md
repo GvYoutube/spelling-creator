@@ -54,7 +54,8 @@ curl -X POST https://<worker-host>/admin/migrate-images \
   -d '{"cursor": 0, "limit": 25}'
 ```
 
-Local drafts migrate automatically on first load (old `localStorage` doc → IndexedDB).
+Local lessons migrate automatically on first load (old `localStorage` doc →
+IndexedDB → the [lesson library](/web-app/local-lessons)).
 Readers tolerate legacy base64 throughout, so the backfill can run any time after
 deploy. Deploy order: deploy the Worker (so `/images` exists) → ship the web build
 → run the backfill.

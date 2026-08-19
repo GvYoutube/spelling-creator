@@ -30,6 +30,7 @@ import {
   FileTextIcon,
   HouseIcon,
   IdCardIcon,
+  LibraryIcon,
   LogOutIcon,
   MoonIcon,
   PlusIcon,
@@ -203,19 +204,37 @@ export default function AppSidebar() {
             <SidebarMenu>
               {/* The one action rather than a destination, so it leads and
                   carries the app's accent — this is a lesson-making tool
-                  before it is a place to browse. */}
+                  before it is a place to browse.
+
+                  `?new=1` rather than plain /editor, and it is the difference
+                  between a button that means what it says and one that doesn't:
+                  the editor holds a library of lessons now, so opening it
+                  resumes whichever you last had open. This asks for another one.
+                  (Pressing it while already in an empty lesson stays put rather
+                  than stacking up untitled empties — see EditorPage.) */}
               <SidebarMenuItem>
                 <SidebarMenuButton
                   asChild
                   tooltip={t("nav.newLesson")}
                   className="bg-primary text-primary-foreground hover:bg-primary/90 hover:text-primary-foreground active:bg-primary/90 active:text-primary-foreground"
                 >
-                  <RouterLink to="/editor" className="no-underline">
+                  <RouterLink to="/editor?new=1" className="no-underline">
                     <PlusIcon />
                     <span>{t("nav.newLesson")}</span>
                   </RouterLink>
                 </SidebarMenuButton>
               </SidebarMenuItem>
+
+              {/* Straight to the library panel, which is the list of what this
+                  browser is holding. Deliberately a link to the panel rather
+                  than the titles inline: the editor rewrites a lesson's title as
+                  it is typed, and a copy of it in the sidebar would spend the
+                  whole session one keystroke behind. */}
+              <NavItem
+                to="/editor/lessons"
+                icon={LibraryIcon}
+                label={t("nav.onThisDevice")}
+              />
 
               <NavItem to="/" icon={HouseIcon} label={t("nav.home")} />
               <NavItem
