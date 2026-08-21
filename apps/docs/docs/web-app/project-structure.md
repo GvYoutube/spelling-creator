@@ -45,7 +45,7 @@ src/
     RichTextToolbar.jsx   its shadcn ToggleGroup toolbar (bold/italic/underline/lists/link/etc.)
     RichText.jsx          renders a stored comment/bio: sanitized HTML, or plain text for pre-rich-text values
     LiveField.jsx          debounced LiveInput/LiveTextarea (commit ~200ms after typing pauses, hold off remote updates while focused)
-    LessonView.jsx        read-only renderer for the lesson page and the editor's preview dialog (blocks straight to React, lazy images, drawn in the app's theme)
+    LessonView.jsx        read-only renderer for the lesson page and the editor's preview mode (blocks straight to React, lazy images, drawn in the app's theme)
     LessonSummary.jsx     on-device AI summary card on the lesson page (hidden unless the browser supports it)
     InteractiveLesson.jsx full-screen step-by-step walkthrough of a lesson, with a field per question and optional read-aloud (see interactive-mode.md)
     MyLessonAnswers.jsx   the reader's own saved answers on the lesson page — private to them, rendered for nobody else

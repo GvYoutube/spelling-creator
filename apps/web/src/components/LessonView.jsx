@@ -1,5 +1,5 @@
 // Read-only renderer for a lesson document, used by the public lesson page and
-// by the editor's preview dialog.
+// by the editor's preview mode.
 //
 // This replaces the old docx→mammoth preview pipeline: instead of building a
 // full Word document in memory, fetching+transcoding every image up front and
@@ -262,7 +262,18 @@ export default function LessonView({ doc }) {
       <style>{LESSON_STYLES}</style>
       <h1>{doc?.title || t("lessonView.untitledLesson")}</h1>
       {sections.map((section, si) => (
-        <section key={section.id || si}>
+        // data-section-id and scroll-mt are the same anchor contract SectionCard
+        // publishes in the editor, so the section outline can scroll to a
+        // section here without knowing which of the two surfaces it is looking
+        // at — see SectionOutline. The two never coexist: preview replaces the
+        // editing panes rather than sitting beside them, so one id matches one
+        // element. On the public lesson page nothing queries these, and an
+        // unused data attribute costs nothing.
+        <section
+          key={section.id || si}
+          data-section-id={section.id}
+          className="scroll-mt-(--header-h)"
+        >
           <h2>{section.name || t("lessonView.untitledSection")}</h2>
           {(section.blocks || []).map((block, bi) => (
             <Block key={block.id || bi} block={block} />

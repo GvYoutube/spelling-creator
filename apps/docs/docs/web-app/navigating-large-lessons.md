@@ -293,6 +293,16 @@ Three deliberate limits:
 A collapsed section shows "hidden" instead of its block count: folded away in
 the document, the outline is the only place it appears at all.
 
+The same outline stands beside the editor's **Preview**, with `readOnly` set:
+collapse-all and add-section drop away, and the list keeps working unchanged.
+It can, because it addresses a section by `data-section-id` and `LessonView`
+publishes that attribute — with the same `scroll-mt-(--header-h)` — on each
+`<section>` it renders, exactly as `SectionCard` does in the editor. The two
+surfaces never coexist (preview replaces the panes rather than sitting beside
+them), so one id always matches one element. A 37-screen lesson is no easier to
+move around in when you are reading it back than when you are writing it, which
+is the whole reason the preview gets an outline at all.
+
 ## What isn't solved yet
 
 The section outline above was one of the answers this page called for. One

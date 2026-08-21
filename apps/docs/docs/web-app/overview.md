@@ -48,6 +48,11 @@ PDF printing.
   block keeps it under the pointer instead of flinging the page, and returning
   to the editor puts you back at the block you were last editing (see
   [Navigating large lessons](./navigating-large-lessons.md)).
+- **Preview** - a toggle, not a window. Pressing **Preview** replaces the editing
+  panes with the lesson exactly as a reader sees it, in the same place and at the
+  same width, with the section outline still beside it and still navigating;
+  pressing it again returns you to editing. Nothing is built to show it — see
+  [How the export pipeline works](./export-pipeline.md).
 - **Collapse sections** - fold any section to its header, or the whole lesson at
   once, turning 37 screens into 1.5. A folded section still says what's inside
   it, still reorders, still takes a dragged block (dwell over it and it springs

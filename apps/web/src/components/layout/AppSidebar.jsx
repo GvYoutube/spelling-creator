@@ -355,9 +355,22 @@ export default function AppSidebar() {
             {!enabled ? null : user ? (
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
+                  {/* size="lg" drops the button's padding entirely in the rail
+                      (`group-data-[collapsible=icon]:p-0!`), which is right for
+                      the header above, where a size-8 tile fills the 32px
+                      button edge to edge. Here the child is a bare 16px icon,
+                      so p-0 left it pinned to the button's left edge at half
+                      the weight of the utility icons directly above it —
+                      small and visibly off-centre. Centring it and taking it
+                      to 24px in the rail only; expanded, it stays 16px beside
+                      the name and email, where it is a label and not a target.
+                      The `[&>svg]` override outranks the variant's own
+                      `[&>svg]:size-4` on specificity, being nested inside the
+                      group selector. */}
                   <SidebarMenuButton
                     size="lg"
                     tooltip={displayName || t("nav.account")}
+                    className="group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:[&>svg]:size-6"
                   >
                     <CircleUserIcon />
                     {/* Hidden in the rail for the same reason as the header's —

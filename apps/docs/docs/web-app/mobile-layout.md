@@ -168,7 +168,7 @@ actions in an overflow menu. The sidebar holds one copy at any width.
 `100vh` is the _large_ viewport: it ignores the browser's retractable address
 bar, so a `max-h-[90vh]` dialog can be taller than what's actually on screen.
 Page wrappers use `min-h-dvh` and the tall dialogs (history, merge,
-collaborate, lesson preview) use `max-h-[85dvh]`/`max-h-[90dvh]`.
+collaborate) use `max-h-[85dvh]`/`max-h-[90dvh]`.
 
 `HomePage`'s hero deliberately keeps `min-h-[70vh] md:min-h-[78vh]`: `dvh` there
 would resize the hero as the address bar hides and shows during scroll, which

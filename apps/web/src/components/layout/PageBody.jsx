@@ -19,7 +19,7 @@
 //              lesson text wider.
 //
 // Anything that needs neither (the marketing hero's full-bleed gradient, the
-// editor's three panes) doesn't use this and says why where it opts out.
+// editor's panes) doesn't use this and says why where it opts out.
 
 import { cn } from "../../lib/utils.js";
 
