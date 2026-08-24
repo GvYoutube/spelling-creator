@@ -2689,20 +2689,6 @@ export default function EditorPage() {
         </div>
       </PageBar>
 
-      {/* The reader's view, in the editor's own place. Not a dialog and not a
-          rail: both were the same mistake in different directions — a window
-          over the lesson, or a 22rem column beside it — and both showed the
-          lesson at a width no reader will ever see it at, which is the one
-          thing a preview exists to get right. Here it takes the page.
-
-          It is deliberately just the lesson. No outline (its scroll targets are
-          the editor's section cards, which aren't rendered here), no add-section
-          FAB, no drag handles. The eyebrow says which mode you are in; the
-          pressed toggle in the bar says how to leave it, and is sticky, so it
-          is always in reach. The button beside the eyebrow is the narrow-screen
-          copy of that same exit — below `md` the labelled cluster is inside the
-          overflow menu, and a mode you can only leave through a hidden menu is
-          a trap. */}
       {/* Two panes: the section outline and the document. The outline appears
           once there is room for it and drops away when there isn't — it is
           extra room to spend, not a layout the editor depends on.
