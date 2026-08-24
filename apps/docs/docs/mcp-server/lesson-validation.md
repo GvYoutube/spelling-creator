@@ -25,21 +25,23 @@ same thing.
 
 ## Errors — the write is rejected
 
-| Code                      | What tripped it                                                                                                                                                     |
-| ------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `E_GROUNDING_SINGLE`      | A green (`single`) answer does not appear, word for word, in its own section's passage.                                                                             |
-| `E_GROUNDING_MULTIPLE`    | A multi-word orange (`multiple`) answer is not in its own section's passage.                                                                                        |
-| `E_ORANGE_PARAPHRASED`    | A single-word orange answer is not in the passage — usually paraphrase ("HOT" for "superheated") or general knowledge, which belongs in a `background` question.    |
-| `E_GROUNDING_NUMBER_FILL` | A fill-in-the-blank `number` answer (one with no `steps`) is not in the passage.                                                                                    |
-| `E_BACKGROUND_IN_TEXT`    | A blue (`background`) answer **does** appear in its own passage, defeating the point of the type.                                                                   |
-| `E_BACKGROUND_NO_CONTEXT` | A `background` question has no `background` field.                                                                                                                  |
-| `E_SPELLING_LENGTH`       | A spelling word is outside 6–9 letters.                                                                                                                             |
-| `E_SPELLING_DUPLICATE`    | A spelling word is used in two sections (or twice in one).                                                                                                          |
-| `E_SPELLING_COLLISION`    | A spelling word appears **inside** an answer anywhere in the lesson — `PRISON` within "the prisoner's dilemma". Matched as a raw substring, which is the point.     |
-| `E_ANSWER_WORD_REUSED`    | The same answer word answers two different questions, anywhere in the lesson and at any length. Also fires when a one-word answer reappears inside a longer answer. |
-| `E_NUMBER_DUPLICATE`      | Two questions resolve to the same number.                                                                                                                           |
-| `E_OPEN_HAS_ANSWER`       | An `open` question carries `answer`, `answers` or `exampleAnswer`.                                                                                                  |
-| `E_RETIRED_STEM`          | A pink question uses the retired "…one word that comes to mind…" stem.                                                                                              |
+| Code                        | What tripped it                                                                                                                                                                            |
+| --------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `E_GROUNDING_SINGLE`        | A green (`single`) answer does not appear, word for word, in its own section's passage.                                                                                                    |
+| `E_GROUNDING_MULTIPLE`      | A multi-word orange (`multiple`) answer is not in its own section's passage.                                                                                                               |
+| `E_ORANGE_PARAPHRASED`      | A single-word orange answer is not in the passage — usually paraphrase ("HOT" for "superheated") or general knowledge, which belongs in a `background` question.                           |
+| `E_ORANGE_ANSWER_IN_PROMPT` | An orange prompt contains one of its own accepted answers. The prompt quotes the passage's sentence with the list **blanked out**; writing the list into the prompt hands the answer over. |
+| `E_ORANGE_NOT_A_LIST`       | An orange question's answers are all in the passage, but never together as one explicit list — the question was reverse-engineered out of prose that has none.                             |
+| `E_GROUNDING_NUMBER_FILL`   | A fill-in-the-blank `number` answer (one with no `steps`) is not in the passage.                                                                                                           |
+| `E_BACKGROUND_IN_TEXT`      | A blue (`background`) answer **does** appear in its own passage, defeating the point of the type.                                                                                          |
+| `E_BACKGROUND_NO_CONTEXT`   | A `background` question has no `background` field.                                                                                                                                         |
+| `E_SPELLING_LENGTH`         | A spelling word is outside 6–9 letters.                                                                                                                                                    |
+| `E_SPELLING_DUPLICATE`      | A spelling word is used in two sections (or twice in one).                                                                                                                                 |
+| `E_SPELLING_COLLISION`      | A spelling word appears **inside** an answer anywhere in the lesson — `PRISON` within "the prisoner's dilemma". Matched as a raw substring, which is the point.                            |
+| `E_ANSWER_WORD_REUSED`      | The same answer word answers two different questions, anywhere in the lesson and at any length. Also fires when a one-word answer reappears inside a longer answer.                        |
+| `E_NUMBER_DUPLICATE`        | Two questions resolve to the same number.                                                                                                                                                  |
+| `E_OPEN_HAS_ANSWER`         | An `open` question carries `answer`, `answers` or `exampleAnswer`.                                                                                                                         |
+| `E_RETIRED_STEM`            | A pink question uses the retired "…one word that comes to mind…" stem.                                                                                                                     |
 
 A rejection names the section, the offending value and the fix, because the model reads it
 and resubmits — `"validation failed"` buys a guess, a specific message buys a correction in
@@ -126,3 +128,32 @@ really is inside `PRISONER'S`.
 
 Passages are flattened out of rich text first, so a lesson round-tripped through the web
 editor (which stores HTML) is compared on its words rather than its markup.
+
+## Why an orange question is checked against the passage's punctuation
+
+`E_ORANGE_NOT_A_LIST` is the one check that reads the prose as prose. An orange question
+retrieves a list the passage states — "The blast sent out red-hot rock, choking gas, and
+clouds of ash" — so its answers have to appear **in one sentence, as one series**. The
+passage is therefore re-read a second way for this check alone: split into sentences, and
+normalised with commas and semicolons **kept** as tokens, since the comma is exactly what
+separates a real list from a noun phrase.
+
+Two answers count as adjacent members of a list when a comma or an `and`/`or` sits between
+them and no more than four other words do. That is what tells the three failures apart:
+
+| Passage                                                  | Options        | Verdict                                     |
+| -------------------------------------------------------- | -------------- | ------------------------------------------- |
+| `rock, choking gas, and clouds of ash`                   | ROCK, GAS, ASH | A list — separators, items close together.  |
+| `the Pacific Ocean`                                      | PACIFIC, OCEAN | Nothing between them: one noun phrase.      |
+| `a scale called the VEI, the Volcanic Explosivity Index` | SCALE, INDEX   | A comma, but six words apart: not a series. |
+
+A two-item list joined by `and` alone passes — commas aren't required, a series is.
+
+The check is skipped unless every accepted answer is a single word already found in the
+passage, so it never piles onto a question that `E_ORANGE_PARAPHRASED` or
+`E_GROUNDING_MULTIPLE` has already rejected.
+
+The rule is an error rather than a warning because the standard requires the list to exist
+in the prose: an orange question without one is not a lesson written to the standard but a
+question forced onto text that can't support it. The fix is upstream — **write the list
+into the passage**, then quote that sentence with it blanked out.

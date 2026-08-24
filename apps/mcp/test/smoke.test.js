@@ -22,6 +22,7 @@ import { buildDoc } from "../src/doc.js";
 import { applyPatch } from "../src/patch.js";
 import { registerTools, SERVER_INFO } from "../src/tools.js";
 import { validateLesson } from "../src/validate.js";
+import { resolveWikimediaImage } from "../src/wikimedia.js";
 
 test("buildDoc maps every block type to the stored shape with ids", () => {
   const doc = buildDoc({
@@ -942,4 +943,96 @@ test("patch_lesson fetches, applies the diff, and PUTs the result", async () => 
 
   await client.close();
   await server.close();
+});
+
+// Commons is stubbed to answer with a thumbnail of `width` at a size the caller
+// chooses, so a test can put a heavy rendering in front of resolveWikimediaImage
+// and watch what it does about it.
+function stubCommons(sizes) {
+  const requested = [];
+  return {
+    requested,
+    fetch: async (url) => {
+      const u = String(url);
+      if (u.includes("commons.wikimedia.org")) {
+        const width = Number(new URL(u).searchParams.get("iiurlwidth"));
+        requested.push(width);
+        const scalable = Object.hasOwn(sizes, width);
+        return new Response(
+          JSON.stringify({
+            query: {
+              pages: {
+                7: {
+                  title: "File:Map.png",
+                  imageinfo: [
+                    {
+                      thumburl: scalable
+                        ? `https://upload.wikimedia.org/map-${width}.png`
+                        : undefined,
+                      url: "https://upload.wikimedia.org/map.png",
+                      thumbwidth: scalable ? width : undefined,
+                      width: 5000,
+                      mime: "image/png",
+                      extmetadata: { LicenseShortName: { value: "CC0" } },
+                    },
+                  ],
+                },
+              },
+            },
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        );
+      }
+      const width = Number(u.match(/map-(\d+)\.png$/)?.[1]) || 0;
+      return new Response(new Uint8Array(sizes[width] ?? sizes.original), {
+        status: 200,
+        headers: { "Content-Type": "image/png" },
+      });
+    },
+  };
+}
+
+test("add_image downscales again when the first rendering is still heavy", async () => {
+  // The hub re-encodes uploads inside a Worker, and pixels are what that costs —
+  // so a 1600px rendering that is still megabytes gets one more, smaller pass
+  // rather than being handed over to fail as a Cloudflare 1102.
+  const commons = stubCommons({ 1600: 2 * 1024 * 1024, 1000: 64 });
+  const realFetch = globalThis.fetch;
+  globalThis.fetch = commons.fetch;
+  try {
+    const resolved = await resolveWikimediaImage("File:Map.png");
+    assert.deepEqual(commons.requested, [1600, 1000]);
+    assert.equal(resolved.bytes.length, 64);
+    assert.equal(resolved.width, 1000);
+  } finally {
+    globalThis.fetch = realFetch;
+  }
+});
+
+test("add_image takes a small rendering as it is, without a second request", async () => {
+  const commons = stubCommons({ 1600: 512, 1000: 64 });
+  const realFetch = globalThis.fetch;
+  globalThis.fetch = commons.fetch;
+  try {
+    const resolved = await resolveWikimediaImage("File:Map.png");
+    assert.deepEqual(commons.requested, [1600]);
+    assert.equal(resolved.bytes.length, 512);
+    assert.equal(resolved.width, 1600);
+  } finally {
+    globalThis.fetch = realFetch;
+  }
+});
+
+test("add_image refuses a file no rendering brings under the upload limit", async () => {
+  // Commons can't scale this one at all (no thumburl at any width), so the
+  // original arrives — and it is over the hub's 8 MB cap. Say so here, where
+  // picking another candidate is still an option.
+  const commons = stubCommons({ original: 9 * 1024 * 1024 });
+  const realFetch = globalThis.fetch;
+  globalThis.fetch = commons.fetch;
+  try {
+    await assert.rejects(() => resolveWikimediaImage("File:Map.png"), /8 MB/);
+  } finally {
+    globalThis.fetch = realFetch;
+  }
 });

@@ -64,7 +64,11 @@ const blockSchema = z
     prompt: z
       .string()
       .optional()
-      .describe('For type "question": the question text.'),
+      .describe(
+        'For type "question": the question text. A "multiple" (orange) prompt quotes the passage sentence ' +
+          'holding its list with the list BLANKED OUT — "The blast sent out ______. Name one thing the eruption ' +
+          'threw out." — never with the list spelled out, which hands the answer over and is rejected on save.',
+      ),
     answer: z
       .union([z.string(), z.number()])
       .optional()
@@ -74,10 +78,13 @@ const blockSchema = z
       .optional()
       .describe(
         'Accepted answers for a "multiple" (orange) question: 2-4 of them, each a SINGLE WORD appearing verbatim ' +
-          'in that section\'s passage. These are simple retrieval — "Name a material used to build the dam" -> ' +
-          'CONCRETE, STEEL, ROCK. Don\'t paraphrase (if the text says "superheated", HOT is not an accepted ' +
-          "answer), don't ask general knowledge (\"name an ocean\" is a background question), and don't use long " +
-          "evidence phrases — a speller pointing at a letterboard has to spell every word.",
+          "in that section's passage. Orange questions are list retrieval, so the answers must be the items of an " +
+          'explicit list the passage states — write "The blast sent out red-hot rock, choking gas, and clouds of ' +
+          'ash" into the prose, then accept ROCK, GAS, ASH. Answers that never appear together as a list are ' +
+          'rejected: "the Pacific Ocean" is one noun phrase, not PACIFIC and OCEAN. Don\'t paraphrase (if the ' +
+          'text says "superheated", HOT is not an accepted answer), don\'t ask general knowledge ("name an ocean" ' +
+          "is a background question), and don't use long evidence phrases — a speller pointing at a letterboard " +
+          "has to spell every word.",
       ),
     steps: z
       .array(z.string())
@@ -138,13 +145,14 @@ const sectionSchema = z.object({
     .describe(
       "The blocks in this section, in order. By default a section is: an optional image " +
         "block first (see the image tool note above), then TWO text paragraphs (ALL-CAPS " +
-        "words = the harder learning vocabulary, kept separate from the spelling list), " +
+        "words = the harder learning vocabulary, kept separate from the spelling list, and " +
+        'TWO explicit "X, Y, and Z" lists planted for the orange questions to retrieve), ' +
         "then a spelling block of 4 words (6-9 letters, thematically related but NOT drawn " +
         "from the passage's ALL-CAPS vocabulary), then 15 question blocks about THIS " +
         "section's content, in this fixed order: 3 single, 1 number (fill-in-the-blank), " +
-        "1 number (word problem, with steps), 2 multiple (2-4 single-word answers each), " +
-        "1 background, 4 open (tight — easy everyday one-word answers), 3 open (extended — " +
-        "full-sentence answers). Every section ends " +
+        "1 number (word problem, with steps), 2 multiple (one per planted list, 2-4 " +
+        "single-word answers each), 1 background, 4 open (tight — easy everyday one-word " +
+        "answers), 3 open (extended — full-sentence answers). Every section ends " +
         "with its own questions — do not collect them into a separate quiz section at the end.",
     ),
 });
@@ -863,10 +871,9 @@ export function registerTools(server, ctx) {
         "`index: 0` rather than relying on the default. Prefer images that do double duty — reinforcing an answer " +
         "as well as illustrating — and diagrams that carry an argument over decorative photos; a letter-frequency " +
         "chart IS the reason a Caesar cipher fails, a stock padlock photo is not. Check the image doesn't " +
-        "contradict the passage (a diagram showing a left shift under text describing A -> D will confuse). Source " +
-        'files roughly 1000-1900px wide upload reliably; a much larger one can fail with a Cloudflare "Worker ' +
-        'exceeded resource limits" error, which is a size problem rather than a transient one — pick a smaller ' +
-        "candidate instead of retrying the same file.",
+        "contradict the passage (a diagram showing a left shift under text describing A -> D will confuse). " +
+        "Choose on content, not on file size: this tool downloads a downscaled rendering of whatever you pick, so " +
+        "a large source is fine.",
       inputSchema: {
         lessonId: z
           .string()
@@ -1035,5 +1042,5 @@ export function registerTools(server, ctx) {
 // every client UI and bug report.
 export const SERVER_INFO = {
   name: "spelling-creator-hub",
-  version: "0.3.0",
+  version: "0.6.0",
 };

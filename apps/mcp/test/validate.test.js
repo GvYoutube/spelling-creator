@@ -26,44 +26,50 @@ import {
 // A section written to the standard: 2 paragraphs holding every answer the
 // questions ask for, 4 spelling words that appear in no answer, and 15 questions
 // in the fixed order.
+//
+// Each section's prose carries the TWO explicit "X, Y, and Z" lists its orange
+// questions retrieve, because that is the rule — an orange question can only ask
+// for a list the passage already states, so a fixture without planted lists would
+// not be a lesson written to the standard at all.
 const SECTIONS = [
   {
     name: "Rivers",
     paragraphs: [
-      "A river begins as a TRICKLE high in the hills. It carries gravel and silt down the slope, " +
-        "shouldering past every boulder in its way. The water cuts a channel through soft ground, and " +
-        "that channel deepens a little more each year.",
-      "Near the sea the river slows and spreads into a delta. A heron stands in the shallows and a " +
-        "willow leans out over the bank. The delta here is 7 kilometres wide, and it is still growing " +
-        "as the SEDIMENT settles.",
+      "A river begins as a TRICKLE high in the hills. Sort what the water carries and it comes out as " +
+        "boulder, cobble, and silt, each size dropped where the flow can no longer lift it. The stream " +
+        "cuts a channel through soft ground, shifting the gravel in its bed, and that channel deepens a " +
+        "little more each year.",
+      "Near the sea the river slows and spreads into a delta. Along the bank stand willow, alder, and " +
+        "hazel, their roots holding the mud in place. The delta here is 7 kilometres wide, and it is " +
+        "still growing as the SEDIMENT settles.",
     ],
     spelling: ["torrent", "meander", "estuary", "tributary"],
     greens: ["gravel", "channel", "delta"],
     fill: 7,
     problem: { answer: 350, steps: ["50 x 7 = 350"] },
     oranges: [
-      ["boulder", "silt"],
-      ["heron", "willow"],
+      ["boulder", "cobble", "silt"],
+      ["willow", "alder", "hazel"],
     ],
     background: "ocean",
   },
   {
     name: "Mountains",
     paragraphs: [
-      "A mountain ridge is built and then taken apart. Frost splits the granite, and the broken pieces " +
-        "slide down as scree until the slope below is buried in it. The ALPINE air is thin enough that " +
-        "climbers move slowly.",
+      "A mountain ridge is built and then taken apart. Frost prises the rock apart — granite, schist, " +
+        "and slate all split the same way — and the pieces slide down until the slope below is buried " +
+        "in them. The ALPINE air is thin enough that climbers move slowly.",
       "Between two peaks sits a saddle, the low crossing point every path uses. Higher up, the summit " +
-        "holds snow for 4 months of the year. A marmot whistles from the rocks, and lichen clings to " +
-        "the stone where nothing else will GERMINATE.",
+        "holds snow for 4 months of the year. Above the treeline the marmot, the ibex, and the chough " +
+        "make a living where lichen is the only crop that will GERMINATE.",
     ],
     spelling: ["crevasse", "altitude", "plateau", "avalanche"],
     greens: ["ridge", "saddle", "summit"],
     fill: 4,
     problem: { answer: 128, steps: ["2 to the power of 7 = 128"] },
     oranges: [
-      ["scree", "granite"],
-      ["marmot", "lichen"],
+      ["granite", "schist", "slate"],
+      ["marmot", "ibex", "chough"],
     ],
     background: "compass",
   },
@@ -71,39 +77,40 @@ const SECTIONS = [
     name: "Deserts",
     paragraphs: [
       "A dune moves. Wind lifts the grains up the gentle side and drops them down the steep one, so the " +
-        "whole ridge of sand walks slowly downwind. Underneath lies sandstone, and in places a seam of " +
-        "gypsum so soft it can be scratched with a fingernail.",
+        "whole ridge of sand walks slowly downwind. Underneath it lie beds of sandstone, gypsum, and " +
+        "shale, the middle one soft enough to scratch with a fingernail.",
       "Where water reaches the surface an oasis appears, and everything living crowds around it. A " +
-        "cactus stores what it can. A scorpion waits out the heat under a stone, and a gecko runs across " +
-        "sand that is 12 degrees hotter than the air above it. The land looks ARID but it is not empty.",
+        "cactus stores what it can. The scorpion, the gecko, and the jerboa wait out the heat below " +
+        "ground, on sand that is 12 degrees hotter than the air above it. The land looks ARID but it " +
+        "is not empty.",
     ],
     spelling: ["aquifer", "drought", "sirocco", "erosion"],
     greens: ["dune", "oasis", "cactus"],
     fill: 12,
     problem: { answer: 96, steps: ["12 x 8 = 96"] },
     oranges: [
-      ["scorpion", "gecko"],
-      ["sandstone", "gypsum"],
+      ["scorpion", "gecko", "jerboa"],
+      ["sandstone", "gypsum", "shale"],
     ],
     background: "camel",
   },
   {
     name: "Forests",
     paragraphs: [
-      "The canopy takes the light first, and everything below lives on what gets past it. A maple and a " +
-        "cedar can stand side by side and reach it by different routes. Rain runs down the bark in " +
-        "channels worn by a century of it.",
-      "On the floor, a fungus breaks down what falls. Moss holds water like a sponge, and a beetle works " +
-        "through the dead wood. A single fallen trunk can feed the soil for 30 years, which is why a " +
-        "cleared forest is so hard to REPLICATE.",
+      "The canopy takes the light first, and everything below lives on what gets past it. A maple, a " +
+        "cedar, and a birch can stand side by side and reach it by different routes. Rain runs down the " +
+        "bark in channels worn by a century of it.",
+      "On the floor, a fungus breaks down what falls. Dead wood is worked over by beetle, woodlouse, " +
+        "and millipede, with moss holding the water above them like a sponge. A single fallen trunk can " +
+        "feed the soil for 30 years, which is why a cleared forest is so hard to REPLICATE.",
     ],
     spelling: ["seedling", "thicket", "humidity", "sapwood"],
     greens: ["canopy", "fungus", "bark"],
     fill: 30,
     problem: { answer: 720, steps: ["30 x 24 = 720"] },
     oranges: [
-      ["beetle", "moss"],
-      ["maple", "cedar"],
+      ["beetle", "woodlouse", "millipede"],
+      ["maple", "cedar", "birch"],
     ],
     background: "chlorophyll",
   },
@@ -111,39 +118,40 @@ const SECTIONS = [
     name: "Oceans",
     paragraphs: [
       "A current is a river inside the sea, and it does not mix with the water it runs through. Plankton " +
-        "drifts wherever it is carried, and everything larger follows. A dolphin hunts along the edge of " +
-        "one, where the food is densest.",
-      "Closer in, a reef builds itself out of its own skeletons. Kelp anchors to rock and grows toward " +
-        "the light. A barnacle cements itself head-first and never moves again; an urchin grazes the " +
-        "rock bare. The shelf here runs out to 200 metres before the floor drops into the PELAGIC dark.",
+        "drifts wherever it is carried, and everything larger follows. The dolphin, the tuna, and the " +
+        "gannet all hunt along its edge, where the food is densest.",
+      "Closer in, a reef builds itself out of its own skeletons. Whatever lives on bare rock has to hold " +
+        "on to it: barnacle, kelp, and urchin each manage it differently. The shelf here runs out to " +
+        "200 metres before the floor drops into the PELAGIC dark.",
     ],
     spelling: ["seabed", "trawler", "buoyancy", "salinity"],
     greens: ["current", "plankton", "reef"],
     fill: 200,
     problem: { answer: 1500, steps: ["200 x 7.5 = 1500"] },
     oranges: [
-      ["barnacle", "kelp"],
-      ["dolphin", "urchin"],
+      ["barnacle", "kelp", "urchin"],
+      ["dolphin", "tuna", "gannet"],
     ],
     background: "tsunami",
   },
   {
     name: "Volcanoes",
     paragraphs: [
-      "Magma is rock that has given up being solid. Where it reaches the surface through a fissure it " +
-        "runs out as INCANDESCENT sheets and cools into basalt, dark and heavy. Where it arrives full of " +
-        "gas it comes apart into pumice, light enough to float.",
-      "A crater sits at the top of the vent. When a chamber empties, the roof above it drops and leaves a " +
-        "caldera far wider than the mountain ever was. Ash travels furthest of all — a single eruption " +
-        "can put it 900 kilometres downwind, which is why the record of one is so hard to MISREAD.",
+      "Magma is rock that has given up being solid. Where it reaches the surface it runs out as " +
+        "INCANDESCENT sheets, and what cools out of it can be basalt, pumice, or obsidian, depending on " +
+        "how much gas it was carrying.",
+      "A volcano wears its history on the surface: vent, fissure, and caldera each mark a different way " +
+        "the mountain has let go. A crater sits at the top of the youngest one. Ash travels furthest of " +
+        "all — a single blast can put it 900 kilometres downwind, which is why the record of one is so " +
+        "hard to MISREAD.",
     ],
     spelling: ["eruption", "volcanic", "tectonic", "sulphur"],
     greens: ["magma", "crater", "ash"],
     fill: 900,
     problem: { answer: 2700, steps: ["900 x 3 = 2700"] },
     oranges: [
-      ["basalt", "pumice"],
-      ["fissure", "caldera"],
+      ["basalt", "pumice", "obsidian"],
+      ["vent", "fissure", "caldera"],
     ],
     background: "seismograph",
   },
@@ -187,10 +195,13 @@ function sectionInput(spec) {
         answer: spec.problem.answer,
         steps: spec.problem.steps,
       },
+      // The prompt quotes the passage's sentence with the list blanked out, so
+      // the speller recalls it — an orange prompt holding its own answers is a
+      // defect in its own right.
       ...spec.oranges.map((answers, i) => ({
         type: "question",
         questionType: "multiple",
-        prompt: `Name one of these (${i + 1}).`,
+        prompt: `The passage lists three of them — ______. Name one (${i + 1}).`,
         answers,
       })),
       {
@@ -312,6 +323,47 @@ test("a multi-word orange answer that isn't in the passage warns and errors sepa
   assert.deepEqual(codes(errors), ["E_GROUNDING_MULTIPLE"]);
   assert.match(errors[0].message, /Match the passage's own wording/);
   assert.deepEqual(codes(warnings), ["W_ORANGE_MULTIWORD"]);
+});
+
+test("an orange prompt that hands over its own answers is rejected", () => {
+  const { errors } = check((input) => {
+    question(input, 0, 5).prompt =
+      "The river carries boulder, cobble, and silt. Name one.";
+  });
+  assert.deepEqual(codes(errors), ["E_ORANGE_ANSWER_IN_PROMPT"]);
+  assert.match(errors[0].message, /"boulder", "cobble", "silt"/);
+  assert.match(errors[0].message, /______/);
+});
+
+test("orange answers that never appear together as a list are rejected", () => {
+  // The canonical fake list: one noun phrase split into two "options". Both
+  // words are in the passage, so only the list check can catch it.
+  const { errors } = check((input) => {
+    input.sections[2].blocks[0].text +=
+      " Beyond the last dune lies the Pacific Ocean.";
+    question(input, 2, 5).answers = ["pacific", "ocean"];
+  });
+  assert.deepEqual(codes(errors), ["E_ORANGE_NOT_A_LIST"]);
+  assert.match(errors[0].message, /not together as one list/);
+  assert.match(errors[0].message, /rewrite the passage/);
+});
+
+test("a list needs its items adjacent, not merely in the same sentence", () => {
+  const separated = check((input) => {
+    input.sections[2].blocks[0].text +=
+      " The survey used a scale called the VEI, the Volcanic Explosivity Index.";
+    question(input, 2, 5).answers = ["scale", "index"];
+  });
+  assert.deepEqual(codes(separated.errors), ["E_ORANGE_NOT_A_LIST"]);
+
+  // And a genuine two-item list joined by "and" alone is fine — a list does not
+  // have to carry commas to be one.
+  const pair = check((input) => {
+    input.sections[2].blocks[0].text +=
+      " The wind arrives carrying dust and grit.";
+    question(input, 2, 5).answers = ["dust", "grit"];
+  });
+  assert.deepEqual(codes(pair.errors), []);
 });
 
 test("an orange question outside 2-4 answers warns without blocking", () => {
@@ -721,10 +773,10 @@ test("a patch that renumbers sections doesn't resurrect pre-existing findings", 
 test("rich-text passages are flattened before grounding", () => {
   const { errors } = check((input) => {
     input.sections[0].blocks[0].text =
-      "<p>The river carries <strong>gravel</strong> past a boulder.</p>" +
-      "<p>It cuts a channel and drops silt.</p>";
+      "<p>The river sorts its load into <strong>boulder</strong>, cobble, and silt.</p>" +
+      "<p>It cuts a channel and drags gravel along the bed.</p>";
     input.sections[0].blocks[1].text =
-      "<p>A heron waits by a willow near the delta, 7 kilometres wide.</p>";
+      "<p>Willow, alder, and hazel line the delta, 7 kilometres wide.</p>";
   });
   assert.deepEqual(codes(errors), []);
 });

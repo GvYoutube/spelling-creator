@@ -119,7 +119,7 @@ it — including problems inherited from the lesson it fetched. See
 
 By default (unless you ask for something different), the assistant builds **6 sections**, each
 one an optional image, 2 text paragraphs, 4 spelling words, and 15 questions in a fixed order —
-covering verbatim-in-text, fill-in-the-blank, word-problem, single-word retrieval,
+covering verbatim-in-text, fill-in-the-blank, word-problem, list-retrieval,
 background-knowledge, and open-ended question types. This default (and the rest of the authoring conventions — spelling-
 word rules, math `steps`, image placement, tone) is sent to the connecting assistant as the
 server's MCP `instructions`, so most clients apply it automatically. Not every client surfaces
@@ -142,7 +142,8 @@ A lesson is **sections** of **blocks**. Block types:
 - **`question`** — a quiz question with a `questionType`:
   - `number` → `answer` (numeric), plus optional `steps` (array of worked-solution steps, in order)
   - `single` → `answer` (one text answer)
-  - `multiple` → `answers` (array of accepted answers)
+  - `multiple` → `answers` (array of accepted answers — the items of a list the passage
+    states explicitly, with the prompt quoting that sentence with the list blanked out)
   - `open` → free response (no answer field; just the `prompt`)
   - `background` → `background` + `answer` (needs prior knowledge)
 
@@ -163,3 +164,14 @@ A lesson is **sections** of **blocks**. Block types:
 3. If none of the above are given, the image is inserted at the end of the **last**
    section's prose, just before any trailing question block(s) — never buried after
    the quiz.
+
+The standard puts a section's image **first**, above both paragraphs, so a lesson written
+to it passes `sectionId`/`sectionIndex` with `index: 0` rather than relying on the default.
+
+`add_image` downloads a **downscaled rendering** (Commons is asked for a thumbnail ~1600px
+wide, and again at ~1000px if that one is still heavy) rather than the original file, so
+the assistant chooses a candidate on its content and never on its file size. This is not
+only bandwidth: the hub re-encodes PNG/JPEG uploads to WEBP inside a Worker, and a
+full-size scan used to exhaust that Worker's resources — a failure no retry could fix. A
+file that stays over the 8 MB upload limit even at the smallest rendering Commons will
+produce is refused with a message saying to pick a different candidate.
