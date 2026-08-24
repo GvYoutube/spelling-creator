@@ -15,6 +15,7 @@
     "preview": "Preview",
     "backToEditing": "Back to editing",
     "previewTooltip": "See the lesson exactly as a reader sees it",
+    "backToEditingTooltip": "Return to the editor and keep working",
     "exportDocx": "Export DOCX",
     "exportJson": "Export JSON",
     "exportJsonHint": "Re-importable lesson file",
