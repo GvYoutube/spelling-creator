@@ -34,4 +34,5 @@ Always update the docs if necessary when changing or adding code. If the docs al
 When applicable, try to use `shadcn` skeletons instead of spinners.
 
 ## Heredocs
+
 DO NOT USE HEREDOCS TO EDIT FILES! This can corrupt them. Use your tools instead.
