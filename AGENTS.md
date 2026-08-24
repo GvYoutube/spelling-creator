@@ -18,8 +18,8 @@ Always lint and format:
 pnpm run fmt && pnpm run lint
 ```
 
-Formatting is [oxfmt](https://oxc.rs/docs/guide/usage/formatter) (`.oxfmtrc.json`)
-and linting is [oxlint](https://oxc.rs/docs/guide/usage/linter) (`.oxlintrc.json`).
+Formatting is [oxfmt](https://oxc.rs/docs/guide/usage/formatter.md) (`.oxfmtrc.json`)
+and linting is [oxlint](https://oxc.rs/docs/guide/usage/linter.md) (`.oxlintrc.json`).
 Both replaced Prettier and ESLint, so there is no `eslint.config.js`,
 `.prettierrc` or `.prettierignore` any more.
 
@@ -32,3 +32,6 @@ Always update the docs if necessary when changing or adding code. If the docs al
 ## Try to avoid spinners
 
 When applicable, try to use `shadcn` skeletons instead of spinners.
+
+## Heredocs
+DO NOT USE HEREDOCS TO EDIT FILES! This can corrupt them. Use your tools instead.
