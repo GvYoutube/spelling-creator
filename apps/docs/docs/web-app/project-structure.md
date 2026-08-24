@@ -33,7 +33,8 @@ src/
       PageBody.jsx        the content column, in two documented widths (wide / reading). Exports PAGE_WIDTHS for the two things that need the width but can't be the column
       EditorShell.jsx     the editor's nested routes behind one lazy import; mounts no chrome of its own
     editor/
-      SectionOutline.jsx  the editor's left-hand section list (52rem+ of page column) — jump to a section, collapse them all
+      SectionOutline.jsx  the editor's left-hand section list (52rem+ of page column) — jump to a section, collapse them all; `readOnly` reuses it beside the preview
+      LessonPreview.jsx   what the editor's document column holds while Preview is on — the eyebrow, the narrow-screen exit, and LessonView in a panel frame
     InstallAppButton.jsx  the "install app" button in the sidebar footer; renders nothing unless the app is installable (see pwa-and-offline.md)
     NotificationBell.jsx  sidebar bell that polls for and shows the user's notifications
     DisplayNameGate.jsx   makes a signed-in user pick a display name before using the app
@@ -45,7 +46,7 @@ src/
     RichTextToolbar.jsx   its shadcn ToggleGroup toolbar (bold/italic/underline/lists/link/etc.)
     RichText.jsx          renders a stored comment/bio: sanitized HTML, or plain text for pre-rich-text values
     LiveField.jsx          debounced LiveInput/LiveTextarea (commit ~200ms after typing pauses, hold off remote updates while focused)
-    LessonView.jsx        read-only renderer for the lesson page and the editor's preview dialog (blocks straight to React, lazy images, drawn in the app's theme)
+    LessonView.jsx        read-only renderer for the lesson page and the editor's preview mode (blocks straight to React, lazy images, drawn in the app's theme)
     LessonSummary.jsx     on-device AI summary card on the lesson page (hidden unless the browser supports it)
     InteractiveLesson.jsx full-screen step-by-step walkthrough of a lesson, with a field per question and optional read-aloud (see interactive-mode.md)
     MyLessonAnswers.jsx   the reader's own saved answers on the lesson page — private to them, rendered for nobody else

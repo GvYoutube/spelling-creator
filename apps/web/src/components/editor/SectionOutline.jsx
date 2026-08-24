@@ -12,6 +12,14 @@
 // same thing, and the cards' way is the one that keeps the scroll position
 // stable (see useScrollAnchor).
 //
+// Navigating and nothing else is also what lets it stand beside the editor's
+// preview unchanged. `readOnly` drops the two controls that edit — collapse-all
+// and add-section — and what is left already works, because it addresses
+// sections by `data-section-id` and LessonView publishes the same attribute the
+// section cards do. A long lesson is exactly as hard to move around in when you
+// are reading it back as when you are writing it, so the preview would need an
+// outline of its own otherwise; this is that outline, not a copy of it.
+//
 // It appears once the editor's page column passes 52rem — AppShell's
 // @container/page, not the viewport, so collapsing the sidebar can bring it in
 // without the window changing size. Below that the editor is a single column
@@ -36,13 +44,16 @@ export default function SectionOutline({
   allCollapsed,
   onToggleAll,
   onAddSection,
+  readOnly = false,
 }) {
   const { t } = useTranslation("editor");
 
   const goTo = (id) => {
     const el = document.querySelector(idSelector("data-section-id", id));
-    // SectionCard sets scroll-mt-(--header-h) on itself, so "start" already
-    // lands clear of the sticky bar — no offset arithmetic here.
+    // Whichever surface is mounted answers to the same attribute: SectionCard
+    // in the editor, <section> in LessonView under preview. Both set
+    // scroll-mt-(--header-h) on themselves, so "start" already lands clear of
+    // the sticky bar — no offset arithmetic here.
     scrollToElement(el, { block: "start" });
   };
 
@@ -52,7 +63,7 @@ export default function SectionOutline({
         <p className="text-xs font-semibold tracking-wide text-muted-foreground uppercase">
           {t("outline.heading")}
         </p>
-        {sections.length > 0 && (
+        {!readOnly && sections.length > 0 && (
           <Button
             variant="ghost"
             size="icon"
@@ -107,15 +118,17 @@ export default function SectionOutline({
         </ol>
       )}
 
-      <Button
-        variant="outline"
-        size="sm"
-        className="mt-3 w-full justify-start"
-        onClick={onAddSection}
-      >
-        <PlusIcon data-icon="inline-start" />
-        {t("emptyState.addSection")}
-      </Button>
+      {!readOnly && (
+        <Button
+          variant="outline"
+          size="sm"
+          className="mt-3 w-full justify-start"
+          onClick={onAddSection}
+        >
+          <PlusIcon data-icon="inline-start" />
+          {t("emptyState.addSection")}
+        </Button>
+      )}
     </aside>
   );
 }

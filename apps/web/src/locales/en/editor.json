@@ -13,6 +13,9 @@
     "actionsAriaLabel": "lesson actions",
     "actionsTooltip": "Lesson actions",
     "preview": "Preview",
+    "backToEditing": "Back to editing",
+    "previewTooltip": "See the lesson exactly as a reader sees it",
+    "backToEditingTooltip": "Return to the editor and keep working",
     "exportDocx": "Export DOCX",
     "exportJson": "Export JSON",
     "exportJsonHint": "Re-importable lesson file",
@@ -83,9 +86,9 @@
     "cancel": "Cancel",
     "add": "Add"
   },
-  "previewDialog": {
-    "title": "Preview",
-    "close": "Close"
+  "preview": {
+    "eyebrow": "Preview",
+    "note": "This is the lesson as a reader sees it. Nothing here can be edited — use Back to editing to make a change."
   },
   "wordImportWarning": {
     "title": "Import a Word document",

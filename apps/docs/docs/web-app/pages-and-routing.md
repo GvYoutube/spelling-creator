@@ -66,7 +66,7 @@ column — the lesson's sticky tab bar and a Suspense fallback — import
 `PAGE_WIDTHS` rather than restating the number.
 
 Two places opt out and say so where they do: the marketing hero (a full-bleed
-gradient) and the editor's three panes.
+gradient) and the editor's panes.
 
 ## Laying out against the container
 
@@ -76,27 +76,28 @@ off a `lg:`/`xl:` viewport breakpoint.
 
 This matters because the sidebar is 16rem open and 3rem collapsed, so how much
 room a page has is not a function of the window's width. The editor's outline
-pane appears once the page column passes 52rem and its preview pane at 70rem; the
-lesson's "About" rail moves alongside the lesson at 52rem. Collapse the sidebar
-and those thresholds are crossed immediately, with no change to the window:
+pane appears once the page column passes 52rem; the lesson's "About" rail moves
+alongside the lesson at the same 52rem. Collapse the sidebar and the threshold
+is crossed immediately, with no change to the window:
 
-| Window | Sidebar | Page column | Outline | Preview |
-| ------ | ------- | ----------- | ------- | ------- |
-| 1440px | open    | 1184px      | yes     | yes     |
-| 1280px | open    | 1024px      | yes     | no      |
-| 1280px | rail    | 1232px      | yes     | **yes** |
-| 1100px | rail    | 1052px      | yes     | no      |
+| Window | Sidebar | Page column | Outline |
+| ------ | ------- | ----------- | ------- |
+| 1440px | open    | 1184px      | yes     |
+| 1280px | open    | 1024px      | yes     |
+| 1024px | open    | 768px       | no      |
+| 1024px | rail    | 976px       | **yes** |
 
 That is what lets one sidebar configuration serve the editor as well as every
-other page. Viewport breakpoints could not: at 1280px they have no way to know
-whether 256px of the screen is currently a sidebar or not.
+other page. Viewport breakpoints could not: at 1024px they have no way to know
+whether 256px of the screen is currently a sidebar or not — the last two rows
+are the same window, and only one of them has room for an outline.
 
 ## The routes
 
 | Route                      | Page                    | What it does                                                                                                                                                                                          |
 | -------------------------- | ----------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `/`                        | **Home**                | Landing page. Signed out: a marketing splash (animated floating words + feature blurbs). Signed in: a dashboard (latest-lessons feed, your activity, activity from people you follow, notifications). |
-| `/editor`                  | **Editor**              | The lesson builder. Three panes — section outline, document, live preview — each appearing once the page column has room for it.                                                                      |
+| `/editor`                  | **Editor**              | The lesson builder. Two panes — section outline and document — the outline appearing once the page column has room for it. **Preview** toggles the document pane for the reader's view of the lesson. |
 | `/editor/lessons`          | **Editor**              | The [lessons this device holds](./local-lessons.md), over the editor — switch between them, copy, rename or delete one.                                                                               |
 | `/editor/history`          | **Editor**              | The version-history panel, over the editor.                                                                                                                                                           |
 | `/editor/variations`       | **Editor**              | The [variations](./lesson-variations.md) panel, over the editor.                                                                                                                                      |

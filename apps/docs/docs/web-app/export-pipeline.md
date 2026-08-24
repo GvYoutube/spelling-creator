@@ -18,7 +18,7 @@ title: How the export pipeline works
 ## Building a Word file is for Word files only
 
 Those four are the whole list. Nothing else in the app touches `docx` or
-`mammoth`; in particular, **preview does not**. The editor's preview dialog
+`mammoth`; in particular, **preview does not**. The editor's preview mode
 renders the lesson model directly with `LessonView` — the same component the
 public `/hub/:id` page uses — so previewing builds no document, waits on no
 chunk, and shows exactly what a reader will see. (It used to build a docx and
@@ -30,8 +30,8 @@ not the export pipeline.
 ### On screen it follows the theme
 
 `LessonView` draws a lesson in the app's own theme, light or dark, on both
-surfaces that show one — the public lesson page and the editor's preview dialog
-— exactly as [interactive mode](./interactive-mode.md#what-it-looks-like) does.
+surfaces that show one — the public lesson page and the editor's preview mode —
+exactly as [interactive mode](./interactive-mode.md#what-it-looks-like) does.
 It keeps the export's measurements (the `fitWithin` image maths against
 `DOCX_MAX_IMAGE_WIDTH`, the heading sizes, the spacing), so a lesson keeps the
 shape it will print in; only the colours and the typeface are the theme's.
