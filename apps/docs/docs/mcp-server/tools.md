@@ -178,8 +178,9 @@ Pass **`lessonId`** (and **`sectionIndex`**, when the picture belongs to a parti
 section) whenever the assistant already knows where the image is going. The button on each
 card then calls `add_image` itself — over the same authenticated connection, placing the
 picture first in that section as the standard asks — so the user's choice becomes an image
-in the lesson without another turn. Without a `lessonId` the card still works: picking one
-tells the assistant which `ref` to use, and it places the image as usual.
+in the lesson without another turn. Without a `lessonId` — or on a client that won't carry
+a tool call on the view's behalf — the card still works: picking one tells the assistant
+which `ref` to use, and it places the image as usual.
 
 The same search answers a client that renders nothing at all with exactly the text result
 it always did; the picker reads the identical payload.

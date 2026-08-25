@@ -49,6 +49,17 @@ function metaLine(image) {
   return [image.license, image.author].filter(Boolean).join(" · ");
 }
 
+// Whether a click can place the image itself. That needs both a lesson to place
+// it in and a host willing to proxy `tools/call` back to the server — the second
+// is a capability the host declares, and not every one does. Without it the card
+// falls back to the same route it takes when there's no lesson yet: tell the
+// assistant which file was chosen and let it do the placing. A picker that can't
+// place an image is still a far better way to choose one than a list of prose
+// descriptions, so the fallback is the whole point rather than a consolation.
+function canPlaceDirectly() {
+  return Boolean(state.lessonId && app.getHostCapabilities()?.serverTools);
+}
+
 /** Tell the model what the user just did, so its next turn knows. */
 function reportChoice(image, added) {
   const what = added
@@ -71,10 +82,11 @@ function reportChoice(image, added) {
 }
 
 async function choose(image, card, button) {
+  const placing = canPlaceDirectly();
   button.disabled = true;
-  setStatus(state.lessonId ? "Adding…" : "Passing your pick along…");
+  setStatus(placing ? "Adding…" : "Passing your pick along…");
   try {
-    if (state.lessonId) {
+    if (placing) {
       const result = await app.callServerTool({
         name: "add_image",
         arguments: {
@@ -124,7 +136,7 @@ function card(image) {
   const chooseBtn = el(
     "button",
     "choose",
-    state.lessonId ? "Add to lesson" : "Use this one",
+    canPlaceDirectly() ? "Add to lesson" : "Use this one",
   );
   chooseBtn.addEventListener("click", () => choose(image, wrap, chooseBtn));
   actions.append(chooseBtn);
@@ -150,7 +162,7 @@ function render() {
     el("strong", null, state.query),
   );
   setStatus(
-    state.lessonId
+    canPlaceDirectly()
       ? ""
       : "Picking one tells the assistant which file to use — it places the image.",
   );

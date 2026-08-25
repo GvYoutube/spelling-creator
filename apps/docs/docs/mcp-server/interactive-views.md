@@ -13,9 +13,11 @@ another tab, after the conversation.
 [MCP Apps](https://modelcontextprotocol.io/extensions/apps/overview) closes that gap. It
 is the first official MCP extension (SEP-1865, stable 2026-01-26), and it lets a server
 return a small **interactive interface** alongside a tool's result: the host fetches an
-HTML resource the server declares and renders it in a sandboxed iframe, inline in the
-conversation. Claude supports it on web, desktop and mobile, for custom connectors as
-well as directory ones, over both of this server's transports.
+HTML resource the server declares and renders it inline in the conversation — in a
+sandboxed iframe on web and desktop, and in a native WebView on mobile, which is the same
+sandbox from the view's side but not the same renderer. Claude supports it for custom
+connectors as well as directory ones, and over both of this server's transports: a
+[remote](./remote-mode.md) connection, and a local stdio one in the desktop app.
 
 The point is not decoration. It's that the parts of authoring that are genuinely visual —
 choosing a photograph, reading a diff, seeing which of fifteen questions failed
@@ -62,6 +64,11 @@ and attribution as one from the model. Nothing new to authorise, and no second a
 to keep safe. The picker calls the ordinary `add_image` this way; a tool that existed
 only to serve a view could go further and declare `visibility: ["app"]`, which hides it
 from the model altogether so it never takes up room in the context.
+
+Proxying is a capability the host declares (`serverTools`), though, and a view has to read
+it rather than assume it — the picker checks before it offers a button that would place an
+image, and falls back to telling the assistant which file was chosen when the host won't
+carry the call.
 
 **What the user does in the view goes back to the model.** A view can push a note into
 the model's context (`ui/update-model-context`) or send a follow-up turn
@@ -116,10 +123,16 @@ while loading — the same rule the [web app](/web-app/overview) follows.
 
 ## Trying one without a host
 
-A view can't be exercised from the test suite — that needs something to render it — so
-`test/views.test.js` pins down the wiring a host silently refuses to render without (the
-resource, its mime type, the tool's link to it, the origin, the CSP entry) and the view
-itself is checked against a host. The two ways to get one:
+A view can't be exercised from the test suite — that needs something to render it. So
+`test/views.test.js` covers the half that a connection can see, through an in-memory MCP
+client: that the `ui://` resource is listed and readable, under the mime type hosts look
+for, self-contained, carrying the origin and the CSP entry, with the tool's `_meta`
+pointing at it. That's the wiring a host silently refuses to render without, and all of it
+is checkable without ever rendering anything.
+
+The view's own behaviour — that it draws the candidates, that a click calls `add_image`
+with the right arguments, that it degrades when the host won't proxy that call — is
+checked by hand against a host. The two ways to get one:
 
 - **A stub host.** A page that iframes the built HTML, answers `ui/initialize` with a
   `hostContext`, then sends the tool result as a `ui/notifications/tool-result`
