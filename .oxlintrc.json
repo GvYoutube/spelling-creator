@@ -73,6 +73,15 @@
       "env": { "node": true }
     },
 
+    // ...except `views/`, which is the source of the MCP Apps views: browser code
+    // that is bundled into an HTML resource and runs in the host's sandboxed
+    // iframe, never in Node. Anything in the server proper that reached for the
+    // DOM is still a lint error, which is the point of splitting it out.
+    {
+      "files": ["apps/mcp/views/**/*.js"],
+      "env": { "browser": true }
+    },
+
     // Shared core — runtime-neutral by default, so it stays importable from the
     // Worker and the MCP server as well as the browser. `worker` is the narrowest
     // env that covers the Web-standard globals it leans on (crypto, URL, Blob).

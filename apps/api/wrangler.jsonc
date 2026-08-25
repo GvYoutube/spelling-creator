@@ -10,10 +10,11 @@
 		"enabled": true,
 	},
 
-	// The MCP server's authoring standard is a markdown document
-	// (apps/mcp/src/standards.md) imported as a string; .md isn't one of the
-	// bundler's default Text globs, so it's declared here.
-	"rules": [{ "type": "Text", "globs": ["**/*.md"], "fallthrough": true }],
+	// Two of the MCP server's assets are imported as strings: its authoring
+	// standard (apps/mcp/src/standards.md) and the built MCP Apps views
+	// (apps/mcp/src/views/*.html, served as `ui://` resources). Neither .md nor
+	// .html is one of the bundler's default Text globs, so both are declared here.
+	"rules": [{ "type": "Text", "globs": ["**/*.md", "**/*.html"], "fallthrough": true }],
 
 	"vars": {
 		"ALLOWED_HOSTNAMES": "spellingcreator.org",

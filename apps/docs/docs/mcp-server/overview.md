@@ -20,6 +20,11 @@ That's the only route into a lesson somebody else wrote, and the one to use when
 you'd rather check the assistant's work before it goes live. See
 [Proposing changes instead of making them](./tools.md#proposing-changes-instead-of-making-them).
 
+On a client that renders [MCP Apps](./interactive-views.md) — Claude on web, desktop and
+mobile — some results come back as a small interface rather than as text: `search_images`
+shows the Commons candidates as pictures, and the one the user clicks goes into the
+lesson. Everywhere else the same tools answer in text, exactly as before.
+
 Two ways to connect:
 
 - **[Remote (hosted) mode](./remote-mode.md)** (recommended) — point your

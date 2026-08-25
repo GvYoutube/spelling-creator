@@ -10,12 +10,14 @@
 // the hub — reusing the Worker's own validation, author attribution, and ban
 // checks (we never set the author; the Worker derives it from the token).
 
+import { registerAppTool } from "@modelcontextprotocol/ext-apps/server";
 import { z } from "zod";
 import { buildDoc, buildLessonFile, QUESTION_TYPES } from "./doc.js";
 import { forkLesson, proposeChanges } from "./git.js";
 import { applyPatch, findBlock } from "./patch.js";
 import { searchWikimediaImages, resolveWikimediaImage } from "./wikimedia.js";
 import { LESSON_STANDARDS } from "./standards.js";
+import { IMAGE_PICKER_URI, registerViews } from "./views.js";
 import {
   inputBlocksFromOperations,
   inputBlocksFromSections,
@@ -222,6 +224,39 @@ const operationSchema = z
   })
   .describe("One edit operation, addressing sections/blocks by their id.");
 
+// What search_images returns, declared so the same payload can travel as
+// `structuredContent` for the image picker view to render (see views.js).
+// Deliberately loose: every field but the `ref` is whatever Commons happened to
+// have on the file, and a candidate missing an author is still a candidate.
+const imageSearchOutputSchema = {
+  query: z.string(),
+  count: z.number(),
+  images: z.array(
+    z
+      .object({
+        ref: z.string(),
+        description: z.string().optional(),
+        caption: z.string().optional(),
+        author: z.string().optional(),
+        license: z.string().optional(),
+        width: z.number().optional(),
+        height: z.number().optional(),
+        mime: z.string().optional(),
+        previewURL: z.string().optional(),
+        source: z.string().optional(),
+      })
+      .passthrough(),
+  ),
+  lessonId: z.string().optional(),
+  placement: z
+    .object({
+      sectionIndex: z.number().optional(),
+      index: z.number().optional(),
+    })
+    .optional(),
+  note: z.string().optional(),
+};
+
 // Render a value as a text content result (the MCP content shape).
 function text(value) {
   const body =
@@ -310,6 +345,11 @@ function checkStandard({
  */
 export function registerTools(server, ctx) {
   const { api, config } = ctx;
+
+  // The `ui://` resources behind the tools that have a view. Registered
+  // unconditionally: a host that doesn't do MCP Apps simply never reads them.
+  registerViews(server, config);
+
   const hubUrl = (id) => `${config.apiUrl}/hub/${id}`;
   const proposalUrl = (lessonId, pullId) =>
     `${hubUrl(lessonId)}/proposals/${pullId}`;
@@ -808,7 +848,14 @@ export function registerTools(server, ctx) {
     }),
   );
 
-  server.registerTool(
+  // The one tool whose results are pictures rather than words. On a host that
+  // renders MCP Apps the candidates come back as a picker the user scrolls and
+  // clicks (see views.js); the click calls add_image over this same connection,
+  // so the image lands in the lesson without a further turn. Everywhere else
+  // this is the text result it has always been — the structured payload the
+  // view reads is the same object the text block spells out.
+  registerAppTool(
+    server,
     "search_images",
     {
       title: "Search images",
@@ -819,7 +866,10 @@ export function registerTools(server, ctx) {
         "Pick the most relevant result and call add_image with its `ref` to download it, store it, and place it in a " +
         "lesson. Pixabay is not available over MCP (it needs a human verification step); only Wikimedia Commons is. " +
         "If the user doesn't like a chosen image, swap it later with add_image (after remove_block) or replace it in " +
-        "the web editor, which keeps it in the same place.",
+        "the web editor, which keeps it in the same place.\n\n" +
+        "Pass `lessonId` (and `sectionIndex`, if the picture is for a particular section) whenever you already know " +
+        "where the image is going. A client that can show the candidates as pictures then lets the user pick one " +
+        "outright, which is both quicker and a better choice than one made from descriptions.",
       inputSchema: {
         query: z
           .string()
@@ -831,24 +881,53 @@ export function registerTools(server, ctx) {
           .int()
           .optional()
           .describe("How many candidates to return (default 12, max 30)."),
+        lessonId: z
+          .string()
+          .optional()
+          .describe(
+            "The lesson the picture is for, if you know it. Lets a user picking from the candidates add the image " +
+              "themselves; you still get the same list back either way.",
+          ),
+        sectionIndex: z
+          .number()
+          .int()
+          .optional()
+          .describe(
+            "0-based section the picture belongs to, used with lessonId. The image is placed first in that " +
+              "section, above its paragraphs, as the standard asks.",
+          ),
       },
+      outputSchema: imageSearchOutputSchema,
+      _meta: { ui: { resourceUri: IMAGE_PICKER_URI } },
     },
-    tool(async ({ query, limit }) => {
+    tool(async ({ query, limit, lessonId, sectionIndex }) => {
       const perPage = Math.max(3, Math.min(Number(limit) || 12, 30));
       const hits = await searchWikimediaImages(query, { perPage });
       if (!hits.length) {
-        return text(
-          `No images found on Wikimedia Commons for "${query}". Try more general or different terms.`,
-        );
+        const empty = { query, count: 0, images: [] };
+        return {
+          content: [
+            {
+              type: "text",
+              text: `No images found on Wikimedia Commons for "${query}". Try more general or different terms.`,
+            },
+          ],
+          structuredContent: empty,
+        };
       }
-      return text({
+      const result = {
         query,
         count: hits.length,
         images: hits,
+        ...(lessonId ? { lessonId } : {}),
+        ...(lessonId && Number.isInteger(sectionIndex)
+          ? { placement: { sectionIndex, index: 0 } }
+          : {}),
         note:
           "Choose the best `ref` and call add_image to insert it. The `caption` carries the licence attribution " +
           "Commons requires — keep it on the image.",
-      });
+      };
+      return { ...text(result), structuredContent: result };
     }),
   );
 
@@ -1042,5 +1121,5 @@ export function registerTools(server, ctx) {
 // every client UI and bug report.
 export const SERVER_INFO = {
   name: "spelling-creator-hub",
-  version: "0.6.0",
+  version: "0.7.0",
 };

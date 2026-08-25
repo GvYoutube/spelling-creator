@@ -17,6 +17,7 @@ Full documentation lives on the docs site under **MCP Server**:
 
 - [Overview](https://spellingcreator.org/docs/mcp-server/overview)
 - [Tools](https://spellingcreator.org/docs/mcp-server/tools) — including patch vs. replace and the lesson shape
+- [Interactive views (MCP Apps)](https://spellingcreator.org/docs/mcp-server/interactive-views) — the picker `search_images` renders in Claude
 - [Install as a one-click bundle (.mcpb)](https://spellingcreator.org/docs/mcp-server/install-bundle)
 - [Setup (manual / for development)](https://spellingcreator.org/docs/mcp-server/setup)
 - [Configuration](https://spellingcreator.org/docs/mcp-server/configuration)

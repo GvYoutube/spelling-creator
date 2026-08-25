@@ -6,7 +6,7 @@ title: Packaging the bundle
 
 ```bash
 pnpm --filter @spelling-creator/mcp validate   # check manifest.json against the MCPB schema
-pnpm --filter @spelling-creator/mcp pack       # build dist/spelling-creator-hub.mcpb
+pnpm --filter @spelling-creator/mcp run pack   # build dist/spelling-creator-hub.mcpb
 ```
 
 `pack` stages a clean copy of the runtime files and vendors **production**
@@ -55,7 +55,7 @@ trigger some older notes describe does nothing.
 
    ```bash
    pnpm --filter @spelling-creator/mcp validate
-   pnpm --filter @spelling-creator/mcp pack
+   pnpm --filter @spelling-creator/mcp run pack
    ```
 
    `pack` also leaves an `npm pack` tarball in the repo root as a side effect of

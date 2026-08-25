@@ -20,7 +20,9 @@
 // loudly if it ever stops holding — better than shipping a bundle that throws
 // MODULE_NOT_FOUND on someone's machine.
 //
-// Run with: pnpm --filter @spelling-creator/mcp pack
+// Run with: pnpm --filter @spelling-creator/mcp run pack
+// (`run` is not optional: pnpm has a built-in `pack` command that would shadow
+// this script and produce an npm tarball instead of the .mcpb bundle.)
 
 import { execFileSync } from "node:child_process";
 import {
