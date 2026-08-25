@@ -1,0 +1,285 @@
+<!doctype html>
+<!--
+  Source markup for the search_images view (see ../scripts/build-views.mjs, which
+  inlines the bundled script where the BUNDLE comment is and writes the result to
+  src/views/imagePicker.html). Edit this file, not the built one.
+
+  Every colour, size and radius below comes from a host style variable, because
+  the host ships its own palette to the view and swaps it when the user changes
+  theme — hardcoding anything would leave the picker looking like a foreign web
+  page in half the conversations it appears in.
+
+  Each of those has a local fallback (--fb-*) rather than a literal, and the
+  fallbacks come in both themes, keyed off the `data-theme` attribute the SDK
+  sets and off prefers-color-scheme. A host that reports a dark theme without
+  sending variables would otherwise get black text on a card the browser paints
+  dark: readable in neither.
+-->
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Image picker</title>
+    <style>
+      :root {
+        color-scheme: light dark;
+
+        --fb-text: #141413;
+        --fb-text-secondary: #3d3d3a;
+        --fb-text-tertiary: #73726c;
+        --fb-text-inverse: #ffffff;
+        --fb-text-disabled: rgba(20, 20, 19, 0.5);
+        --fb-text-danger: #7f2c28;
+        --fb-card: #f5f4ed;
+        --fb-well: #faf9f5;
+        --fb-inverse: #141413;
+        --fb-disabled: rgba(255, 255, 255, 0.5);
+        --fb-border: rgba(31, 30, 29, 0.15);
+        --fb-success: #437426;
+        --fb-ring: rgba(20, 20, 19, 0.7);
+      }
+
+      /* Dark, both ways a host can ask for it. */
+      :root[data-theme="dark"],
+      :root:not([data-theme="light"]) {
+        --fb-text: #faf9f5;
+        --fb-text-secondary: #c2c0b6;
+        --fb-text-tertiary: #9c9a92;
+        --fb-text-inverse: #141413;
+        --fb-text-disabled: rgba(250, 249, 245, 0.5);
+        --fb-text-danger: #ee8884;
+        --fb-card: #262624;
+        --fb-well: #141413;
+        --fb-inverse: #faf9f5;
+        --fb-disabled: rgba(48, 48, 46, 0.5);
+        --fb-border: rgba(222, 220, 209, 0.15);
+        --fb-success: #599130;
+        --fb-ring: rgba(250, 249, 245, 0.7);
+      }
+
+      /* …but only follow the system when the host hasn't said. The rule above is
+         written as :not([data-theme="light"]) so an explicit light theme wins;
+         this media query is what keeps the unstated case in step with the OS. */
+      @media (prefers-color-scheme: light) {
+        :root:not([data-theme="dark"]) {
+          --fb-text: #141413;
+          --fb-text-secondary: #3d3d3a;
+          --fb-text-tertiary: #73726c;
+          --fb-text-inverse: #ffffff;
+          --fb-text-disabled: rgba(20, 20, 19, 0.5);
+          --fb-text-danger: #7f2c28;
+          --fb-card: #f5f4ed;
+          --fb-well: #faf9f5;
+          --fb-inverse: #141413;
+          --fb-disabled: rgba(255, 255, 255, 0.5);
+          --fb-border: rgba(31, 30, 29, 0.15);
+          --fb-success: #437426;
+          --fb-ring: rgba(20, 20, 19, 0.7);
+        }
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        font-family: var(--font-sans, system-ui, sans-serif);
+        font-size: var(--font-text-sm-size, 14px);
+        line-height: var(--font-text-sm-line-height, 1.4);
+        color: var(--color-text-primary, var(--fb-text));
+        background: transparent;
+      }
+
+      .picker {
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+      }
+
+      .heading {
+        display: flex;
+        align-items: baseline;
+        justify-content: space-between;
+        gap: 8px;
+        color: var(--color-text-secondary, var(--fb-text-secondary));
+      }
+
+      .heading strong {
+        color: var(--color-text-primary, var(--fb-text));
+        font-weight: var(--font-weight-semibold, 600);
+      }
+
+      /* Horizontal scroll only: a vertical drag inside an inline view belongs to
+         the conversation behind it, not to us. */
+      .rail {
+        display: flex;
+        gap: 8px;
+        overflow-x: auto;
+        overflow-y: hidden;
+        padding-bottom: 4px;
+        scroll-snap-type: x proximity;
+      }
+
+      .card {
+        flex: 0 0 180px;
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+        padding: 8px;
+        scroll-snap-align: start;
+        border: var(--border-width-regular, 0.5px) solid
+          var(--color-border-tertiary, var(--fb-border));
+        border-radius: var(--border-radius-md, 8px);
+        background: var(--color-background-secondary, var(--fb-card));
+      }
+
+      .thumb {
+        width: 100%;
+        height: 104px;
+        object-fit: cover;
+        border-radius: var(--border-radius-sm, 6px);
+        background: var(--color-background-tertiary, var(--fb-well));
+      }
+
+      .title {
+        font-weight: var(--font-weight-medium, 500);
+        display: -webkit-box;
+        -webkit-line-clamp: 2;
+        -webkit-box-orient: vertical;
+        overflow: hidden;
+      }
+
+      .meta {
+        font-size: var(--font-text-xs-size, 12px);
+        color: var(--color-text-tertiary, var(--fb-text-tertiary));
+        display: -webkit-box;
+        -webkit-line-clamp: 2;
+        -webkit-box-orient: vertical;
+        overflow: hidden;
+      }
+
+      /* Stacked, not side by side: at card width, two labels sharing a row wrap
+         to three lines each and the card turns into a wall of text. */
+      .actions {
+        margin-top: auto;
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+      }
+
+      button {
+        font: inherit;
+        cursor: pointer;
+        white-space: nowrap;
+        border-radius: var(--border-radius-sm, 6px);
+        border: var(--border-width-regular, 0.5px) solid transparent;
+        padding: 6px 10px;
+        min-height: 32px;
+      }
+
+      /* Touch: on phones the host renders this in a WebView, where anything
+         under ~44pt is a mis-tap waiting to happen. */
+      @media (pointer: coarse) {
+        button {
+          min-height: 44px;
+        }
+      }
+
+      button:focus-visible {
+        outline: 2px solid var(--color-ring-primary, var(--fb-ring));
+        outline-offset: 1px;
+      }
+
+      .choose {
+        background: var(--color-background-inverse, var(--fb-inverse));
+        color: var(--color-text-inverse, var(--fb-text-inverse));
+        font-weight: var(--font-weight-semibold, 600);
+      }
+
+      .choose[disabled] {
+        cursor: default;
+        background: var(--color-background-disabled, var(--fb-disabled));
+        color: var(--color-text-disabled, var(--fb-text-disabled));
+        border-color: var(--color-border-tertiary, var(--fb-border));
+      }
+
+      .source {
+        background: transparent;
+        font-size: var(--font-text-xs-size, 12px);
+        color: var(--color-text-secondary, var(--fb-text-secondary));
+        border-color: var(--color-border-tertiary, var(--fb-border));
+      }
+
+      .chosen .thumb {
+        outline: 2px solid var(--color-border-success, var(--fb-success));
+        outline-offset: -2px;
+      }
+
+      .status {
+        min-height: 18px;
+        font-size: var(--font-text-xs-size, 12px);
+        color: var(--color-text-secondary, var(--fb-text-secondary));
+      }
+
+      .status.error {
+        color: var(--color-text-danger, var(--fb-text-danger));
+      }
+
+      /* Skeletons, not spinners — the same rule the web app follows. */
+      .skeleton .thumb,
+      .skeleton .line {
+        background: var(--color-background-tertiary, var(--fb-well));
+        animation: pulse 1.4s ease-in-out infinite;
+      }
+
+      .skeleton .line {
+        height: 10px;
+        border-radius: var(--border-radius-xs, 4px);
+      }
+
+      .skeleton .line.short {
+        width: 60%;
+      }
+
+      @keyframes pulse {
+        50% {
+          opacity: 0.55;
+        }
+      }
+
+      @media (prefers-reduced-motion: reduce) {
+        .skeleton .thumb,
+        .skeleton .line {
+          animation: none;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main class="picker" id="picker">
+      <div class="heading">
+        <span id="summary">Searching Wikimedia Commons…</span>
+      </div>
+      <div class="rail" id="rail">
+        <div class="card skeleton">
+          <div class="thumb"></div>
+          <div class="line"></div>
+          <div class="line short"></div>
+        </div>
+        <div class="card skeleton">
+          <div class="thumb"></div>
+          <div class="line"></div>
+          <div class="line short"></div>
+        </div>
+        <div class="card skeleton">
+          <div class="thumb"></div>
+          <div class="line"></div>
+          <div class="line short"></div>
+        </div>
+      </div>
+      <p class="status" id="status"></p>
+    </main>
+    <!-- BUNDLE -->
+  </body>
+</html>

@@ -13,6 +13,12 @@
     // Vendored agent skills — third-party content, formatted upstream.
     ".agents/skills/**",
 
+    // The MCP server's built views (apps/mcp/scripts/build-views.mjs). Generated
+    // artifacts holding a minified bundle: reformatting them only produces a diff
+    // the next build undoes, and the source they come from — apps/mcp/views/ — is
+    // formatted normally.
+    "apps/mcp/src/views/*.html",
+
     "**/dist/**",
     "**/dist-ssr/**",
     "**/build/**",

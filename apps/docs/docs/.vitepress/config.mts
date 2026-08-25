@@ -166,6 +166,10 @@ export default defineConfig({
           { text: "Overview", link: "/mcp-server/overview" },
           { text: "Tools", link: "/mcp-server/tools" },
           {
+            text: "Interactive views (MCP Apps)",
+            link: "/mcp-server/interactive-views",
+          },
+          {
             text: "Lesson validation (errors & warnings)",
             link: "/mcp-server/lesson-validation",
           },

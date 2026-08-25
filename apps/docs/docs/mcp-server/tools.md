@@ -4,23 +4,23 @@ title: Tools
 
 # Tools
 
-| Tool                    | What it does                                                                  |
-| ----------------------- | ----------------------------------------------------------------------------- |
-| `whoami`                | Confirm the session is valid and show the publishing display name.            |
-| `create_lesson`         | Build and save a new lesson (draft by default; `published: true` to share).   |
-| `create_lesson_file`    | Build an importable lesson file offline, with no account or network.          |
-| `patch_lesson`          | Edit a lesson with a small diff (id-addressed ops) instead of a full replace. |
-| `update_lesson`         | Replace a lesson's whole title/content (author only).                         |
-| `fork_lesson`           | Copy a lesson into a private draft of your own, keeping its version history.  |
-| `propose_changes`       | Offer a fork's changes back to the original, for a human to review and merge. |
-| `list_lesson_proposals` | List the proposals against a lesson, and whether yours have been resolved.    |
-| `get_lesson`            | Fetch one lesson with its full content (read before editing / as a template). |
-| `list_my_lessons`       | List your own lessons (drafts + published).                                   |
-| `list_hub_lessons`      | Browse published lessons for inspiration / de-duplication.                    |
-| `set_lesson_published`  | Toggle a lesson between public and private draft.                             |
-| `delete_lesson`         | Permanently delete one of your lessons.                                       |
-| `search_images`         | Search Wikimedia Commons for freely-licensed images to illustrate a lesson.   |
-| `add_image`             | Download a searched image and insert it as an image block in a lesson.        |
+| Tool                    | What it does                                                                                    |
+| ----------------------- | ----------------------------------------------------------------------------------------------- |
+| `whoami`                | Confirm the session is valid and show the publishing display name.                              |
+| `create_lesson`         | Build and save a new lesson (draft by default; `published: true` to share).                     |
+| `create_lesson_file`    | Build an importable lesson file offline, with no account or network.                            |
+| `patch_lesson`          | Edit a lesson with a small diff (id-addressed ops) instead of a full replace.                   |
+| `update_lesson`         | Replace a lesson's whole title/content (author only).                                           |
+| `fork_lesson`           | Copy a lesson into a private draft of your own, keeping its version history.                    |
+| `propose_changes`       | Offer a fork's changes back to the original, for a human to review and merge.                   |
+| `list_lesson_proposals` | List the proposals against a lesson, and whether yours have been resolved.                      |
+| `get_lesson`            | Fetch one lesson with its full content (read before editing / as a template).                   |
+| `list_my_lessons`       | List your own lessons (drafts + published).                                                     |
+| `list_hub_lessons`      | Browse published lessons for inspiration / de-duplication.                                      |
+| `set_lesson_published`  | Toggle a lesson between public and private draft.                                               |
+| `delete_lesson`         | Permanently delete one of your lessons.                                                         |
+| `search_images`         | Search Wikimedia Commons for freely-licensed images — as a picker, where a client can show one. |
+| `add_image`             | Download a searched image and insert it as an image block in a lesson.                          |
 
 ## Proposing changes instead of making them
 
@@ -167,6 +167,23 @@ A lesson is **sections** of **blocks**. Block types:
 
 The standard puts a section's image **first**, above both paragraphs, so a lesson written
 to it passes `sectionId`/`sectionIndex` with `index: 0` rather than relying on the default.
+
+## Letting the user pick the picture
+
+Candidates are photographs, and an assistant can only describe them. On a client that
+renders [interactive views](./interactive-views.md), `search_images` shows them instead:
+the results come back as a row of cards the user scrolls, and choosing one is a click.
+
+Pass **`lessonId`** (and **`sectionIndex`**, when the picture belongs to a particular
+section) whenever the assistant already knows where the image is going. The button on each
+card then calls `add_image` itself — over the same authenticated connection, placing the
+picture first in that section as the standard asks — so the user's choice becomes an image
+in the lesson without another turn. Without a `lessonId` — or on a client that won't carry
+a tool call on the view's behalf — the card still works: picking one tells the assistant
+which `ref` to use, and it places the image as usual.
+
+The same search answers a client that renders nothing at all with exactly the text result
+it always did; the picker reads the identical payload.
 
 `add_image` downloads a **downscaled rendering** (Commons is asked for a thumbnail ~1600px
 wide, and again at ~1000px if that one is still heavy) rather than the original file, so
