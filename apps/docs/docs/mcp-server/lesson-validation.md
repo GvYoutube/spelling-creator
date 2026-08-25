@@ -17,7 +17,7 @@ The split between the two halves of the standard lives in two files:
 
 | File                        | Holds                                                                                                                                                     |
 | --------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `apps/mcp/src/standards.js` | The rules that need judgement — tone, difficulty, what makes a tight open easy. Sent as MCP `instructions` and embedded in `create_lesson`'s description. |
+| `apps/mcp/src/standards.md` | The rules that need judgement — tone, difficulty, what makes a tight open easy. Sent as MCP `instructions` and embedded in `create_lesson`'s description. |
 | `apps/mcp/src/validate.js`  | The rules a script can decide. Enforced on write, whatever the client showed the model.                                                                   |
 
 Keep them in step: a rule stated in one that the other also covers should describe the

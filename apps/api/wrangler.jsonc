@@ -10,6 +10,11 @@
 		"enabled": true,
 	},
 
+	// The MCP server's authoring standard is a markdown document
+	// (apps/mcp/src/standards.md) imported as a string; .md isn't one of the
+	// bundler's default Text globs, so it's declared here.
+	"rules": [{ "type": "Text", "globs": ["**/*.md"], "fallthrough": true }],
+
 	"vars": {
 		"ALLOWED_HOSTNAMES": "spellingcreator.org",
 		"SUPABASE_URL": "https://hfkgrqihawgosalltjpy.supabase.co",

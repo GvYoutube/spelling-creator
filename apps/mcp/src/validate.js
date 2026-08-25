@@ -1,7 +1,7 @@
 // Lesson-standard validation — the mechanically checkable half of the authoring
-// standard stated in standards.js.
+// standard stated in standards.md.
 //
-// The split between the two files is deliberate. standards.js carries the rules
+// The split between the two files is deliberate. standards.md carries the rules
 // that need judgement ("a tight open must be answerable instantly"), and it only
 // reaches the model if the client surfaces server instructions or tool
 // descriptions. This module decides the rules a script can decide on its own, on
@@ -21,7 +21,7 @@
 
 import { richTextToPlain } from "@spelling-creator/core/richText";
 
-/** The default lesson shape (see standards.js). Deviations are warnings. */
+/** The default lesson shape (see standards.md). Deviations are warnings. */
 export const SECTION_COUNT = 6;
 export const SPELLING_WORDS_PER_SECTION = 4;
 export const SPELLING_MIN_LETTERS = 6;
