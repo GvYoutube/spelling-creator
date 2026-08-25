@@ -25,21 +25,24 @@ same thing.
 
 ## Errors — the write is rejected
 
-| Code                      | What tripped it                                                                                                                                                     |
-| ------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `E_GROUNDING_SINGLE`      | A green (`single`) answer does not appear, word for word, in its own section's passage.                                                                             |
-| `E_GROUNDING_MULTIPLE`    | A multi-word orange (`multiple`) answer is not in its own section's passage.                                                                                        |
-| `E_ORANGE_PARAPHRASED`    | A single-word orange answer is not in the passage — usually paraphrase ("HOT" for "superheated") or general knowledge, which belongs in a `background` question.    |
-| `E_GROUNDING_NUMBER_FILL` | A fill-in-the-blank `number` answer (one with no `steps`) is not in the passage.                                                                                    |
-| `E_BACKGROUND_IN_TEXT`    | A blue (`background`) answer **does** appear in its own passage, defeating the point of the type.                                                                   |
-| `E_BACKGROUND_NO_CONTEXT` | A `background` question has no `background` field.                                                                                                                  |
-| `E_SPELLING_LENGTH`       | A spelling word is outside 6–9 letters.                                                                                                                             |
-| `E_SPELLING_DUPLICATE`    | A spelling word is used in two sections (or twice in one).                                                                                                          |
-| `E_SPELLING_COLLISION`    | A spelling word appears **inside** an answer anywhere in the lesson — `PRISON` within "the prisoner's dilemma". Matched as a raw substring, which is the point.     |
-| `E_ANSWER_WORD_REUSED`    | The same answer word answers two different questions, anywhere in the lesson and at any length. Also fires when a one-word answer reappears inside a longer answer. |
-| `E_NUMBER_DUPLICATE`      | Two questions resolve to the same number.                                                                                                                           |
-| `E_OPEN_HAS_ANSWER`       | An `open` question carries `answer`, `answers` or `exampleAnswer`.                                                                                                  |
-| `E_RETIRED_STEM`          | A pink question uses the retired "…one word that comes to mind…" stem.                                                                                              |
+| Code                        | What tripped it                                                                                                                                                                            |
+| --------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `E_GROUNDING_SINGLE`        | A green (`single`) answer does not appear, word for word, in its own section's passage.                                                                                                    |
+| `E_GROUNDING_MULTIPLE`      | A multi-word orange (`multiple`) answer is not in its own section's passage.                                                                                                               |
+| `E_ORANGE_PARAPHRASED`      | A single-word orange answer is not in the passage — usually paraphrase ("HOT" for "superheated") or general knowledge, which belongs in a `background` question.                           |
+| `E_ORANGE_ANSWER_IN_PROMPT` | An orange prompt contains one of its own accepted answers. The prompt quotes the passage's sentence with the list **blanked out**; writing the list into the prompt hands the answer over. |
+| `E_ORANGE_NOT_A_LIST`       | An orange question's answers are all in the passage, but never together as one explicit list — the question was reverse-engineered out of prose that has none.                             |
+| `E_ORANGE_PARTIAL_LIST`     | An orange question accepts only part of the list its passage states — the prose lists three things and the question accepts two, so a speller who names the third is marked wrong.         |
+| `E_GROUNDING_NUMBER_FILL`   | A fill-in-the-blank `number` answer (one with no `steps`) is not in the passage.                                                                                                           |
+| `E_BACKGROUND_IN_TEXT`      | A blue (`background`) answer **does** appear in its own passage, defeating the point of the type.                                                                                          |
+| `E_BACKGROUND_NO_CONTEXT`   | A `background` question has no `background` field.                                                                                                                                         |
+| `E_SPELLING_LENGTH`         | A spelling word is outside 6–9 letters.                                                                                                                                                    |
+| `E_SPELLING_DUPLICATE`      | A spelling word is used in two sections (or twice in one).                                                                                                                                 |
+| `E_SPELLING_COLLISION`      | A spelling word appears **inside** an answer anywhere in the lesson — `PRISON` within "the prisoner's dilemma". Matched as a raw substring, which is the point.                            |
+| `E_ANSWER_WORD_REUSED`      | The same answer word answers two different questions, anywhere in the lesson and at any length. Also fires when a one-word answer reappears inside a longer answer.                        |
+| `E_NUMBER_DUPLICATE`        | Two questions resolve to the same number.                                                                                                                                                  |
+| `E_OPEN_HAS_ANSWER`         | An `open` question carries `answer`, `answers` or `exampleAnswer`.                                                                                                                         |
+| `E_RETIRED_STEM`            | A pink question uses the retired "…one word that comes to mind…" stem.                                                                                                                     |
 
 A rejection names the section, the offending value and the fix, because the model reads it
 and resubmits — `"validation failed"` buys a guess, a specific message buys a correction in
@@ -63,17 +66,18 @@ Returned as a `warnings` array on the successful result:
 }
 ```
 
-| Code                    | What it flags                                                                                                                                   |
-| ----------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
-| `W_SECTION_COUNT`       | The lesson isn't 6 sections. Lesson-wide, so it carries no `section`.                                                                           |
-| `W_QUESTION_SHAPE`      | A section's question types or order differ from 3 `single`, 2 `number`, 2 `multiple`, 1 `background`, 7 `open`.                                 |
-| `W_NO_QUESTION`         | A section has no questions at all.                                                                                                              |
-| `W_OPEN_SPLIT`          | A section's 7 pink questions don't read as 4 tight opens followed by 3 extended ones.                                                           |
-| `W_ORANGE_MULTIWORD`    | An orange accepted answer is more than one word.                                                                                                |
-| `W_ORANGE_ANSWER_COUNT` | An orange question accepts fewer than 2 or more than 4 answers.                                                                                 |
-| `W_SPELLING_COUNT`      | A section doesn't have exactly 4 spelling words.                                                                                                |
-| `W_NUMBER_NO_STEPS`     | A section's word problem has no `steps`.                                                                                                        |
-| `W_SPELLING_IN_CAPS`    | A spelling word is also ALL-CAPS learning vocabulary in the same passage. A warning rather than an error because acronyms trip it legitimately. |
+| Code                    | What it flags                                                                                                                                                                                                                       |
+| ----------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `W_SECTION_COUNT`       | The lesson isn't 6 sections. Lesson-wide, so it carries no `section`.                                                                                                                                                               |
+| `W_QUESTION_SHAPE`      | A section's question types or order differ from 3 `single`, 2 `number`, 2 `multiple`, 1 `background`, 7 `open`.                                                                                                                     |
+| `W_NO_QUESTION`         | A section has no questions at all.                                                                                                                                                                                                  |
+| `W_OPEN_SPLIT`          | A section's 7 pink questions don't read as 4 tight opens followed by 3 extended ones.                                                                                                                                               |
+| `W_ORANGE_MULTIWORD`    | An orange accepted answer is more than one word.                                                                                                                                                                                    |
+| `W_ORANGE_ANSWER_COUNT` | An orange question accepts fewer than 2 or more than 4 answers.                                                                                                                                                                     |
+| `W_ORANGE_NO_BLANK`     | An orange prompt has no `______` where the passage's list was. A section has two orange questions, so a bare "Name one." doesn't say which list is meant. A warning because a prompt can identify its list without a literal blank. |
+| `W_SPELLING_COUNT`      | A section doesn't have exactly 4 spelling words.                                                                                                                                                                                    |
+| `W_NUMBER_NO_STEPS`     | A section's word problem has no `steps`.                                                                                                                                                                                            |
+| `W_SPELLING_IN_CAPS`    | A spelling word is also ALL-CAPS learning vocabulary in the same passage. A warning rather than an error because acronyms trip it legitimately.                                                                                     |
 
 These are warnings and not errors because a legitimate lesson can trip each one: a user who
 asks for four sections gets `W_SECTION_COUNT` and should not be blocked by it.
@@ -126,3 +130,64 @@ really is inside `PRISONER'S`.
 
 Passages are flattened out of rich text first, so a lesson round-tripped through the web
 editor (which stores HTML) is compared on its words rather than its markup.
+
+## Why an orange question is checked against the passage's punctuation
+
+`E_ORANGE_NOT_A_LIST` is the one check that reads the prose as prose. An orange question
+retrieves a list the passage states — "The blast sent out red-hot rock, choking gas, and
+clouds of ash" — so its answers have to appear **in one sentence, as one series**. The
+passage is therefore re-read a second way for this check alone: split into sentences, and
+normalised with commas and semicolons **kept** as tokens, since the comma is exactly what
+separates a real list from a noun phrase.
+
+Two answers count as adjacent members of a list when a comma or an `and`/`or` sits between
+them and no more than four other words do. That is what tells the three failures apart:
+
+| Passage                                                  | Options        | Verdict                                     |
+| -------------------------------------------------------- | -------------- | ------------------------------------------- |
+| `rock, choking gas, and clouds of ash`                   | ROCK, GAS, ASH | A list — separators, items close together.  |
+| `the Pacific Ocean`                                      | PACIFIC, OCEAN | Nothing between them: one noun phrase.      |
+| `a scale called the VEI, the Volcanic Explosivity Index` | SCALE, INDEX   | A comma, but six words apart: not a series. |
+
+A two-item list joined by `and` alone passes — commas aren't required, a series is.
+
+### One question, one whole list
+
+Finding the answers inside a series isn't enough on its own: they have to be **all** of it.
+Where the passage says `boulder, cobble, and silt` and the question accepts only `boulder`
+and `cobble`, a speller who answers SILT has read exactly what they were told to read and
+is marked wrong. That is `E_ORANGE_PARTIAL_LIST`.
+
+An English series closes with `and X` / `or X`, so the check looks just past the last
+accepted answer for a conjunction with an item attached — `boulder, cobble` is unfinished
+in front of `and silt`. It looks there regardless of any conjunction _inside_ the run,
+since `cats and dogs and rabbits` has one in both places.
+
+The difficulty is that the same conjunction joins clauses: `rock, gas, and ash, and the
+valley went dark` ends its list at ASH. Nothing short of parsing the sentence separates the
+two for certain, so **length decides** — an item is a word or two before the next separator
+or the sentence's end, and anything longer reads as a clause:
+
+| After the last accepted answer         | Read as            | Result   |
+| -------------------------------------- | ------------------ | -------- |
+| `and silt,`                            | item               | partial  |
+| `and rabbits.`                         | item               | partial  |
+| `and the valley went dark.`            | clause             | complete |
+| `, all of them steel` (no conjunction) | not a continuation | complete |
+| nothing — sentence ends                | series ended here  | complete |
+
+Two shapes are therefore left alone that a stricter reading would reject: a complete series
+with no conjunction at all (`rope, hammer, pitons`), and a clause coordinated onto a
+finished list. The cost is a subset whose sentence carries on unpunctuated past the final
+item, which goes unreported — along with a subset that happens to include the final item.
+Both are the safe direction to miss in: this runs on a write path, where a false positive
+blocks an author who did nothing wrong.
+
+The check is skipped unless every accepted answer is a single word already found in the
+passage, so it never piles onto a question that `E_ORANGE_PARAPHRASED` or
+`E_GROUNDING_MULTIPLE` has already rejected.
+
+The rule is an error rather than a warning because the standard requires the list to exist
+in the prose: an orange question without one is not a lesson written to the standard but a
+question forced onto text that can't support it. The fix is upstream — **write the list
+into the passage**, then quote that sentence with it blanked out.

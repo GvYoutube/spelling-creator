@@ -56,6 +56,27 @@ const ORANGE_MAX_ANSWERS = 4;
 const DECIMAL_MARK = "\u0001";
 const PUNCTUATION = new RegExp(`[^\\p{L}\\p{N}${DECIMAL_MARK}]+`, "gu");
 
+// The orange list check needs the one piece of punctuation every other check
+// throws away — the comma that turns two nouns into a series — so it gets its own
+// stand-in and its own strip. See listTokens().
+const COMMA_MARK = "\u0002";
+const LIST_PUNCTUATION = new RegExp(
+  `[^\\p{L}\\p{N}${DECIMAL_MARK}${COMMA_MARK}]+`,
+  "gu",
+);
+// What separates one member of a list from the next: a comma or semicolon (both
+// become COMMA_MARK) and the conjunctions. Anything else between two items means
+// they were never written as a series.
+const LIST_SEPARATORS = new Set([COMMA_MARK, "AND", "OR"]);
+// How much prose may sit between two list items. "red-hot rock, choking gas, and
+// clouds of ash" needs two ("clouds of"; the comma and "and" are separators);
+// "a scale called the VEI, the Volcanic Explosivity Index" needs six, and is not
+// a list.
+const MAX_LIST_GAP_WORDS = 4;
+// The blank an orange prompt puts where the passage's list was. Three underscores
+// is the floor; lessons in practice write five or six.
+const ORANGE_BLANK = /_{3,}/;
+
 // Retired because it was overused to the point of becoming a tic. Matched
 // loosely so rephrasings ("name a word that comes to mind") are caught too.
 const RETIRED_STEM = /\bwords?\s+that\s+comes?\s+to\s+mind\b/i;
@@ -134,6 +155,105 @@ function sectionPassage(blocks) {
       .map((b) => richTextToPlain(b.text || ""))
       .join(" "),
   );
+}
+
+// One sentence's worth of tokens for the orange list check, with commas and
+// semicolons kept as tokens of their own. Everything else matches normalizeText,
+// so an option that compares equal to the passage there compares equal here.
+function listTokens(sentence) {
+  return sentence
+    .replace(/(\d),(?=\d{3}(?!\d))/g, "$1") // "3,776" is a number, not a list
+    .toUpperCase()
+    .replace(/(\d)\.(\d)/g, `$1${DECIMAL_MARK}$2`)
+    .replace(/[,;]/g, ` ${COMMA_MARK} `)
+    .replace(LIST_PUNCTUATION, " ")
+    .split(/\s+/)
+    .filter(Boolean)
+    .map((token) => token.split(DECIMAL_MARK).join("."));
+}
+
+// The section's passage as tokenised sentences. A list lives inside one sentence
+// — "rock, gas, and ash" — so the split is what stops two items that merely share
+// a paragraph from reading as a series. Sentence enders only count when followed
+// by a space, which leaves "12.5" whole.
+function passageSentences(blocks) {
+  return blocks
+    .filter((b) => b?.type === "text")
+    .map((b) => richTextToPlain(b.text || ""))
+    .join(" ")
+    .split(/[.!?]+(?=\s|$)/)
+    .map(listTokens)
+    .filter((tokens) => tokens.length);
+}
+
+// Are these two token positions adjacent members of a list? They must be joined
+// by a separator (a comma or an "and"/"or") and sit within a few words of each
+// other. Nothing between them is what "the Pacific Ocean" looks like; a clause
+// between them is what "a scale called the VEI, the Volcanic Explosivity Index"
+// looks like. Neither is a list.
+function listSeparated(tokens, from, to) {
+  const gap = tokens.slice(from + 1, to);
+  if (!gap.some((t) => LIST_SEPARATORS.has(t))) return false;
+  return (
+    gap.filter((t) => !LIST_SEPARATORS.has(t)).length <= MAX_LIST_GAP_WORDS
+  );
+}
+
+// Do all of `options` appear in one sentence as a single explicit series? Walks
+// the option occurrences in text order and breaks the walk wherever two of them
+// aren't list-separated, so a run has to be a real list to survive — and returns
+// the first run that covers every option, or null if none does.
+function findListRun(tokens, options) {
+  const wanted = new Set(options);
+  const hits = [];
+  tokens.forEach((token, at) => {
+    if (wanted.has(token)) hits.push({ token, at });
+  });
+  let run = [];
+  const runCoversAll = () =>
+    new Set(run.map((h) => h.token)).size === wanted.size;
+  for (const [i, hit] of hits.entries()) {
+    if (i > 0 && listSeparated(tokens, hits[i - 1].at, hit.at)) {
+      run.push(hit);
+      continue;
+    }
+    if (run.length && runCoversAll()) return run;
+    run = [hit];
+  }
+  return run.length > 0 && runCoversAll() ? run : null;
+}
+
+const CONJUNCTIONS = new Set(["AND", "OR"]);
+// How many words a list item may run to before what follows a conjunction reads
+// as a clause instead. "and silt" and "and the chough" are items; "and the
+// valley went dark" is a sentence carrying on.
+const MAX_ITEM_WORDS = 2;
+
+// The next item of the series after `at`, or null if the series ends there. An
+// English series closes with "and X" / "or X", so what marks a run of accepted
+// answers as unfinished is a conjunction after it with an item attached:
+// "boulder, cobble" is unfinished in front of "and silt".
+//
+// The hard part is that the same conjunction also joins clauses — "…rock, gas,
+// and ash, and the valley went dark" ends its list at ASH. Nothing short of
+// parsing the sentence separates the two for certain, so length decides: an item
+// is a word or two before the next separator or the sentence's end, a clause
+// runs on. That misses a subset whose sentence continues unpunctuated past the
+// last item, which is the safe direction to miss in — a false positive here
+// blocks an author who did nothing wrong.
+function nextListItemAfter(tokens, at) {
+  const tail = tokens.slice(at + 1, at + 4 + MAX_LIST_GAP_WORDS);
+  if (!tail.length || !LIST_SEPARATORS.has(tail[0])) return null;
+  const conjunction = tail.findIndex((t) => CONJUNCTIONS.has(t));
+  if (conjunction === -1) return null;
+
+  const item = [];
+  for (const token of tokens.slice(at + 2 + conjunction)) {
+    if (LIST_SEPARATORS.has(token)) break;
+    item.push(token);
+  }
+  if (!item.length || item.length > MAX_ITEM_WORDS) return null;
+  return item.join(" ");
 }
 
 // The ALL-CAPS learning vocabulary a passage teaches. Two letters minimum so
@@ -235,6 +355,9 @@ export function validateLesson(doc) {
       label: sectionLabel(section, i),
       blocks,
       passage: sectionPassage(blocks),
+      // The same prose again, kept in sentences and with its commas, because the
+      // orange list check needs both and no other check may have either.
+      sentences: passageSentences(blocks),
       caps: capsVocabulary(blocks),
       spelling: spellingWordsOf(blocks),
       questions: blocks.filter((b) => b?.type === "question"),
@@ -326,6 +449,107 @@ export function validateLesson(doc) {
                   "Match the passage's own wording, and prefer a single concrete word the speller can find in the text.",
               );
             }
+          }
+
+          // The prompt is meant to quote the passage's sentence with the list
+          // BLANKED OUT, so the speller recalls it. A prompt carrying its own
+          // answers hands them over and tests nothing — the commonest orange
+          // defect, and invisible unless something looks for it.
+          const promptNorm = normalizeText(block.prompt || "");
+          const given = answers.filter((a) =>
+            containsPhrase(promptNorm, normalizeText(a)),
+          );
+          if (given.length) {
+            error(
+              "E_ORANGE_ANSWER_IN_PROMPT",
+              `${questionId}:${given.map(normalizeText).sort().join("|")}`,
+              ctx.number,
+              `${where}: the prompt contains its own accepted answer${given.length === 1 ? "" : "s"} ` +
+                `(${given.map((a) => `"${a}"`).join(", ")}), so there is nothing for the speller to recall. ` +
+                'Blank the list out of the quoted sentence instead: not "Cats travelled with the Roman army, ' +
+                'traders, and settlers — name one", but "Cats travelled with the Roman ______ — name one group."',
+            );
+          }
+
+          // The prompt is also what tells the speller WHICH of the section's two
+          // lists is being asked for. Quoting the sentence with its list blanked
+          // out does that; "Name one." leaves them guessing. A prompt can
+          // identify its list without a literal blank ("Which three trees line
+          // the bank?"), so this one advises rather than blocks.
+          if (!ORANGE_BLANK.test(block.prompt || "")) {
+            warn(
+              "W_ORANGE_NO_BLANK",
+              questionId,
+              ctx.number,
+              `${where}: the prompt doesn't quote the passage's sentence with its list blanked out ` +
+                '("The blast sent out ______. Name one thing the eruption threw out."). A section has two orange ' +
+                'questions, so a bare "Name one." doesn\'t tell the speller which list is meant.',
+            );
+          }
+
+          // An orange question is retrieval of a list the passage actually
+          // contains. Options that never co-occur as a series were reverse-
+          // engineered out of prose that has no list — and the fix for that is in
+          // the passage, not in the question.
+          const options = answers
+            .map((a) => normalizeText(a))
+            .filter(
+              (norm) => isSingleWord(norm) && containsPhrase(ctx.passage, norm),
+            );
+          const distinct = [...new Set(options)];
+          if (
+            distinct.length < ORANGE_MIN_ANSWERS ||
+            distinct.length !== answers.length
+          ) {
+            break;
+          }
+
+          // One question, one WHOLE list. A run that covers every accepted answer
+          // but stops before the series does means the passage lists an item the
+          // question won't accept — so a speller who names it, having read exactly
+          // what they were told to read, is marked wrong.
+          const key = [...distinct].sort().join("|");
+          let partial = null;
+          let complete = false;
+          for (const tokens of ctx.sentences) {
+            const run = findListRun(tokens, distinct);
+            if (!run) continue;
+            // The series has to end where the accepted answers do — checked at
+            // the run's last item, wherever the conjunctions inside it fell, so
+            // "cats and dogs" is caught in front of "and rabbits".
+            const nextItem = nextListItemAfter(tokens, run[run.length - 1].at);
+            if (!nextItem) {
+              complete = true;
+              break;
+            }
+            partial ??= nextItem;
+          }
+
+          if (complete) break;
+          if (partial) {
+            error(
+              "E_ORANGE_PARTIAL_LIST",
+              `${questionId}:${key}`,
+              ctx.number,
+              `${ctx.label}: the passage's list runs on past the accepted answers ` +
+                `${answers.map((a) => `"${a}"`).join(", ")} — it goes on to "${partial}". The accepted answers ` +
+                "must be EVERY item of the one list the question blanks out, or a speller who names the item you " +
+                "left out is marked wrong for reading the passage properly. Accept the remaining item(s), or take " +
+                "them out of the list in the prose.",
+            );
+          } else {
+            error(
+              "E_ORANGE_NOT_A_LIST",
+              `${questionId}:${key}`,
+              ctx.number,
+              `${ctx.label}: the accepted answers ${answers.map((a) => `"${a}"`).join(", ")} appear in that ` +
+                "section's passage, but not together as one list. An orange question retrieves a list the prose " +
+                'already states — write it in as an explicit series ("The blast sent out red-hot rock, choking ' +
+                'gas, and clouds of ash"), then quote that sentence with the list blanked out. Do not build the ' +
+                'question out of words that are not a series: "the Pacific Ocean" is one noun phrase, not PACIFIC ' +
+                "and OCEAN. When an orange question is weak the fix is almost always to rewrite the passage, not " +
+                "the question.",
+            );
           }
           break;
         }

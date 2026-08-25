@@ -29,7 +29,7 @@ import {
 // just "node", which trips this, especially from shared/datacenter egress (e.g.
 // the Cloudflare Worker this server also runs on for remote MCP connections).
 const USER_AGENT =
-  "SpellingCreatorMCP/0.1.3 (https://spellingcreator.org; MCP server for the Spelling Creator hub)";
+  "SpellingCreatorMCP/0.6.0 (https://spellingcreator.org; MCP server for the Spelling Creator hub)";
 
 /**
  * Search the Commons File namespace for images matching `query`. Returns
@@ -80,10 +80,105 @@ export async function searchWikimediaImages(query, opts = {}) {
   return hits;
 }
 
+// Commons scales on request, so we take a thumbnail rather than the original —
+// 1600px is more than a lesson page ever shows. Downscaling here is not just a
+// bandwidth saving: the hub re-encodes PNG/JPEG uploads to WEBP inside a
+// Cloudflare Worker (apps/api/src/imageConvert.js), a WASM decode-and-encode
+// whose cost is all pixels, and a full-size scan used to kill that Worker
+// outright ("Error 1102: Worker exceeded resource limits" — a size failure no
+// retry fixes). Authors used to have to learn that by picking a smaller
+// candidate; the server picks one for them instead.
+const THUMB_WIDTH = 1600;
+// A thumbnail that is still heavy at 1600px (a detailed map, a scan of a page)
+// gets one more, smaller pass rather than being pushed at the converter.
+const HEAVY_BYTES = 1.5 * 1024 * 1024;
+const SMALL_THUMB_WIDTH = 1000;
+// The hub's own PUT limit (apps/api/src/lib/images.js MAX_IMAGE_BYTES). Past
+// this the upload is refused, so say so here where the fix — a different
+// candidate — is still available.
+const MAX_UPLOAD_BYTES = 8 * 1024 * 1024;
+
+// Image metadata for one File: title, including the URL of a thumbnail scaled to
+// `width`. Commons returns the original's URL as `thumburl` when it can't scale
+// (some formats, some very large files), which is why callers check the size of
+// what they actually got rather than trusting the request.
+async function imageInfo(title, width) {
+  const pages = await commonsQuery(
+    {
+      action: "query",
+      titles: title,
+      prop: "imageinfo",
+      iiprop: "url|size|mime|extmetadata",
+      iiurlwidth: String(width),
+      iiextmetadatafilter: "Artist|LicenseShortName|LicenseUrl",
+      iiextmetadatalanguage: "en",
+    },
+    { userAgent: USER_AGENT },
+  );
+  return pages[0] && pages[0].imageinfo && pages[0].imageinfo[0];
+}
+
+// Download at most `limit` bytes. Commons hands back the original file whenever
+// it can't scale one, and originals run to hundreds of megabytes — buffering the
+// whole body before measuring it would exhaust the isolate this server shares
+// with the hub (a Worker gets 128 MB) long before any size check could speak. So
+// the body is read a chunk at a time against a running total and abandoned the
+// moment it passes the limit: `{ oversize: true }` comes back instead of bytes,
+// and the caller decides whether a smaller rendering is worth asking for.
+async function downloadImage(src, limit) {
+  let res;
+  try {
+    res = await fetch(src, { headers: { "User-Agent": USER_AGENT } });
+  } catch (e) {
+    throw new Error("Could not download the selected image.", { cause: e });
+  }
+  if (!res.ok) throw new Error("Could not download the selected image.");
+
+  const mime = res.headers.get("Content-Type") || "";
+  // Commons sends Content-Length, so the usual oversize case costs no transfer
+  // at all: cancel before reading a byte.
+  const declared = Number(res.headers.get("Content-Length"));
+  if (Number.isFinite(declared) && declared > limit) {
+    await res.body?.cancel();
+    return { oversize: true, size: declared, mime };
+  }
+  if (!res.body) {
+    // No stream to meter (a stubbed or bodyless response); the buffered read is
+    // all that's available, and the limit is still enforced on the result.
+    const bytes = new Uint8Array(await res.arrayBuffer());
+    return bytes.byteLength > limit
+      ? { oversize: true, size: bytes.byteLength, mime }
+      : { bytes, mime };
+  }
+
+  const reader = res.body.getReader();
+  const chunks = [];
+  let total = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    total += value.byteLength;
+    if (total > limit) {
+      await reader.cancel();
+      return { oversize: true, size: null, mime };
+    }
+    chunks.push(value);
+  }
+
+  const bytes = new Uint8Array(total);
+  let offset = 0;
+  for (const chunk of chunks) {
+    bytes.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return { bytes, mime };
+}
+
 /**
  * Download a Commons image for embedding by its "File:…" title, plus the
- * attribution caption. Asks for a thumbnail capped at ~1600px (crisp enough for a
- * lesson, comfortably under the 8 MB upload cap) rather than the full original.
+ * attribution caption. Fetches a downscaled thumbnail rather than the original
+ * (see THUMB_WIDTH), so the caller never has to size-shop for a candidate that
+ * will survive the upload.
  * @param {string} ref  A "File:…" title from searchWikimediaImages (hit.ref).
  * @returns {Promise<{ bytes: Uint8Array, mime: string, width: number, height: number, caption: string, source: string }>}
  */
@@ -94,19 +189,7 @@ export async function resolveWikimediaImage(ref) {
       "Provide the image `ref` (the File: title from search_images).",
     );
 
-  const pages = await commonsQuery(
-    {
-      action: "query",
-      titles: title,
-      prop: "imageinfo",
-      iiprop: "url|size|mime|extmetadata",
-      iiurlwidth: "1600",
-      iiextmetadatafilter: "Artist|LicenseShortName|LicenseUrl",
-      iiextmetadatalanguage: "en",
-    },
-    { userAgent: USER_AGENT },
-  );
-  const info = pages[0] && pages[0].imageinfo && pages[0].imageinfo[0];
+  let info = await imageInfo(title, THUMB_WIDTH);
   if (!info) {
     throw new Error(
       `No Wikimedia Commons image found for "${title}". Use a "ref" value returned by search_images.`,
@@ -116,19 +199,44 @@ export async function resolveWikimediaImage(ref) {
   const src = info.thumburl || info.url;
   if (!src) throw new Error("That image could not be downloaded.");
 
-  let imgRes;
-  try {
-    imgRes = await fetch(src, { headers: { "User-Agent": USER_AGENT } });
-  } catch (e) {
-    throw new Error("Could not download the selected image.", { cause: e });
-  }
-  if (!imgRes.ok) throw new Error("Could not download the selected image.");
+  // Read no more than the hub would accept anyway: past that the upload is
+  // refused, so the extra bytes buy nothing and cost memory.
+  let download = await downloadImage(src, MAX_UPLOAD_BYTES);
 
-  const bytes = new Uint8Array(await imgRes.arrayBuffer());
+  // Too heavy — either for the converter or for the upload cap outright? Come
+  // back for a smaller rendering. Keep it only if it actually is smaller: when
+  // Commons couldn't scale the file, the second request answers with the same
+  // one.
+  if (download.oversize || download.bytes.byteLength > HEAVY_BYTES) {
+    const smaller = await imageInfo(title, SMALL_THUMB_WIDTH);
+    if (smaller?.thumburl) {
+      const retry = await downloadImage(smaller.thumburl, MAX_UPLOAD_BYTES);
+      if (
+        !retry.oversize &&
+        (download.oversize ||
+          retry.bytes.byteLength < download.bytes.byteLength)
+      ) {
+        info = smaller;
+        download = retry;
+      }
+    }
+  }
+
+  if (download.oversize) {
+    const size = download.size
+      ? `${Math.round(download.size / (1024 * 1024))} MB`
+      : "over 8 MB";
+    throw new Error(
+      `"${title}" is ${size} even at the smallest rendering Commons will produce, which is past the 8 MB ` +
+        "upload limit. This is a property of the file, not a transient failure — pick a different candidate " +
+        "from search_images rather than retrying this one.",
+    );
+  }
+
   const { caption } = extmetaCaption(info.extmetadata);
   return {
-    bytes,
-    mime: imgRes.headers.get("Content-Type") || info.mime || "image/jpeg",
+    bytes: download.bytes,
+    mime: download.mime || info.mime || "image/jpeg",
     width: info.thumbwidth || info.width,
     height: info.thumbheight || info.height,
     caption,
