@@ -16,6 +16,14 @@
     "paceOption_one": "Normal speed",
     "paceOption_other": "{{rate}} times normal speed"
   },
+  "answers": {
+    "show": "Show answers",
+    "hide": "Hide answers",
+    "label": "Answer",
+    "labelPlural": "Answers",
+    "working": "Working",
+    "none": "This question has no set answer."
+  },
   "step": {
     "noQuestionText": "(no question text)",
     "yourAnswer": "Your answer",

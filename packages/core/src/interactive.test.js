@@ -5,7 +5,9 @@ import {
   buildInteractiveSteps,
   collectResponses,
   countInteractiveQuestions,
+  hasRevealableAnswers,
   isInteractivePlayable,
+  questionAnswer,
   stepSpeechText,
   validateResponses,
 } from "./interactive.js";
@@ -160,6 +162,118 @@ describe("stepSpeechText", () => {
 
   it("returns nothing for a missing step", () => {
     expect(stepSpeechText(null)).toBe("");
+  });
+});
+
+describe("questionAnswer", () => {
+  it("reads a single or background question's answer", () => {
+    expect(
+      questionAnswer({
+        type: "question",
+        questionType: "single",
+        answer: " Italy ",
+      }),
+    ).toEqual({ answer: "Italy", answers: [], steps: [] });
+    expect(
+      questionAnswer({
+        type: "question",
+        questionType: "background",
+        answer: "Tectonic plates",
+      }),
+    ).toEqual({ answer: "Tectonic plates", answers: [], steps: [] });
+  });
+
+  it("reads a number question's answer and its working", () => {
+    expect(
+      questionAnswer({
+        type: "question",
+        questionType: "number",
+        answer: "12",
+        steps: [{ text: "4 × 3" }, { text: "  " }],
+      }),
+    ).toEqual({ answer: "12", answers: [], steps: ["4 × 3"] });
+  });
+
+  it("reveals working even when the total was left blank", () => {
+    expect(
+      questionAnswer({
+        type: "question",
+        questionType: "number",
+        steps: [{ text: "Count the syllables" }],
+      }),
+    ).toEqual({ answer: "", answers: [], steps: ["Count the syllables"] });
+  });
+
+  it("reads every accepted answer of a multiple question", () => {
+    expect(
+      questionAnswer({
+        type: "question",
+        questionType: "multiple",
+        answers: [{ text: "lava" }, { text: "" }, { text: "magma" }],
+      }),
+    ).toEqual({ answer: "", answers: ["lava", "magma"], steps: [] });
+  });
+
+  it("has nothing to reveal for an open question, a blank one, or a non-question", () => {
+    expect(
+      questionAnswer({
+        type: "question",
+        questionType: "open",
+        answer: "ignored",
+      }),
+    ).toBeNull();
+    expect(
+      questionAnswer({
+        type: "question",
+        questionType: "single",
+        answer: "  ",
+      }),
+    ).toBeNull();
+    expect(
+      questionAnswer({
+        type: "question",
+        questionType: "multiple",
+        answers: [],
+      }),
+    ).toBeNull();
+    expect(questionAnswer({ type: "text", text: "Not a question" })).toBeNull();
+    expect(questionAnswer(null)).toBeNull();
+  });
+});
+
+describe("hasRevealableAnswers", () => {
+  it("is true when any question has an answer behind it", () => {
+    expect(hasRevealableAnswers(buildInteractiveSteps(doc))).toBe(true);
+  });
+
+  it("is false for a lesson whose questions are all open or unanswered", () => {
+    const steps = buildInteractiveSteps({
+      sections: [
+        {
+          id: "s1",
+          blocks: [
+            {
+              id: "b1",
+              type: "question",
+              questionType: "open",
+              prompt: "Why?",
+            },
+            {
+              id: "b2",
+              type: "question",
+              questionType: "single",
+              prompt: "Who?",
+            },
+          ],
+        },
+      ],
+    });
+    expect(hasRevealableAnswers(steps)).toBe(false);
+  });
+
+  it("is false for a lesson with no questions at all", () => {
+    expect(hasRevealableAnswers([])).toBe(false);
+    expect(hasRevealableAnswers(undefined)).toBe(false);
   });
 });
 
