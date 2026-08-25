@@ -335,6 +335,42 @@ test("an orange prompt that hands over its own answers is rejected", () => {
   assert.match(errors[0].message, /______/);
 });
 
+test("a prompt naming another question's answer is rejected", () => {
+  // The real defect this came from: a green question answered BRITAIN, and the
+  // section's fill-in prompt then said "…cats reached Britain around the year
+  // ___". The speller reads the answer off the neighbouring prompt.
+  const { errors } = check((input) => {
+    question(input, 0, 3).prompt = "The delta is ___ kilometres wide.";
+  });
+  assert.deepEqual(codes(errors), ["E_ANSWER_REVEALED_CROSS"]);
+  assert.match(errors[0].message, /"delta" \(the answer to question 3\)/);
+  assert.match(errors[0].message, /British Isles/);
+});
+
+test("a pink prompt naming another question's answer only warns", () => {
+  // An extended open has to name the section's subject to be worth answering,
+  // and the section's subject is usually a green answer, so this one is flagged
+  // rather than blocked.
+  const { errors, warnings } = check((input) => {
+    question(input, 0, 12).prompt =
+      "In your own words, explain how a delta forms.";
+  });
+  assert.deepEqual(codes(errors), []);
+  assert.deepEqual(codes(warnings), ["W_ANSWER_REVEALED_OPEN"]);
+  assert.match(warnings[0].message, /"delta" \(the answer to question 3\)/);
+});
+
+test("a prompt may name a word no other question asks the speller to recall", () => {
+  // The rule is only about green answers and orange options. "ocean" is the
+  // section's blue answer — prior knowledge, nothing to copy — and a topic word
+  // whose own question wants a number back is fine for the same reason.
+  const { errors, warnings } = check((input) => {
+    question(input, 0, 0).prompt = "Beyond the river mouth lies the ocean — ?";
+  });
+  assert.deepEqual(codes(errors), []);
+  assert.deepEqual(codes(warnings), []);
+});
+
 test("orange answers that never appear together as a list are rejected", () => {
   // The canonical fake list: one noun phrase split into two "options". Both
   // words are in the passage, so only the list check can catch it.
@@ -762,7 +798,7 @@ test("shape deviations warn rather than block", () => {
 test("pink questions that don't split 4 tight + 3 extended warn", () => {
   const { errors, warnings } = check((input) => {
     question(input, 0, 8).prompt =
-      "In your own words, explain how a delta forms over many centuries.";
+      "In your own words, explain how this forms over many centuries.";
   });
   assert.deepEqual(codes(errors), []);
   assert.deepEqual(codes(warnings), ["W_OPEN_SPLIT"]);

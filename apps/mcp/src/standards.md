@@ -41,6 +41,16 @@ Per section, always in this exact order (15 total):
 
 3 questions; each answer appears VERBATIM in this section's passage.
 
+Verbatim is necessary but NOT SUFFICIENT: a green answer must also be a HARD FACT the passage
+states outright, with one right answer. The test is whether a reasonable speller could give a
+different, equally valid answer — if they could, it isn't green. "What was the goddess called? ->
+BASTET" is a fact and nothing else is right. "What is a cat called when it purrs on a lap? ->
+COMPANION" is interpretation: pet, friend and lap-cat are all just as fair, and COMPANION only
+looks right because the passage happened to use that word. Don't dress a soft, one-of-many answer
+up as factual retrieval just because the word is in the text — either make it a pink open
+question, or replace it with a fact the passage states outright ("Which animal does the cat now
+rival as the most popular pet? -> THE DOG").
+
 ### 4 · `number` (purple)
 
 Fill-in-the-blank; the number appears in the passage.
@@ -126,6 +136,23 @@ astonishing? Defend your answer."
 
 "open" questions carry no answer, answers, or exampleAnswer field at all — just the "prompt".
 
+## No prompt gives away another question's answer
+
+Within a section, no question's prompt may contain a word another question expects the speller to
+RETRIEVE — that is, a green answer or an orange option. A speller who can read the word off a
+neighbouring prompt is copying, not recalling. Real case: the green question "Which land did cats
+reach? -> BRITAIN", followed by a purple prompt reading "...cats reached Britain around the year
+___", which hands BRITAIN over; the fix was "...reached the British Isles...". Naming an orange
+option in a green prompt does the same thing ("such as Siamese or Persian").
+
+Two things are fine. A prompt may name a topic word whose own question wants a NUMBER back: "more
+than ___ mummies at Bubastis" doesn't help anyone produce BUBASTIS for its own question, and
+scrubbing every such mention makes prompts clumsy for no gain. And a pink prompt may name the
+section's subject even when it is also a green answer, because an extended open exists to make the
+speller talk about that subject — "In your own words, explain how a delta forms" can't avoid DELTA
+without going vague. Everywhere else, a prompt that names another question's recall answer is
+rejected on save; on a pink prompt it is only flagged, so reword it if the naming wasn't necessary.
+
 ## One answer word, one question
 
 No answer word may be used by more than one question anywhere in the lesson, at ANY length — not
@@ -189,6 +216,8 @@ Rejected (errors):
 - an orange question that accepts only part of the list its passage states (the prose lists three
   things, the question accepts two)
 - a fill-in-the-blank purple answer (a number question with no steps) that is not in the passage
+- a green, orange, purple or blue prompt that names another question's recall answer (a green
+  answer or an orange option) from the same section — rephrase around the word
 - a blue (background) answer that DOES appear in its own section's passage, or a blue question
   with no "background" field
 - a spelling word outside 6-9 letters, repeated in another section, or appearing inside any answer
@@ -202,7 +231,8 @@ section with no questions at all, a section whose 15 questions differ in type or
 list above, pink questions that don't read as 4 tight + 3 extended, a multi-word orange answer, an
 orange question with fewer than 2 or more than 4 answers, an orange prompt that doesn't blank out
 the list it is asking about, a section without exactly 4 spelling words, a word problem with no
-steps, and a spelling word that is also ALL-CAPS vocabulary in the same section.
+steps, a pink prompt that names another question's recall answer, and a spelling word that is also
+ALL-CAPS vocabulary in the same section.
 
 If the user deliberately wants a lesson the standard forbids — a 3-section lesson, questions in a
 different order — pass "skipValidation": true, which turns the errors off. Don't reach for it to
@@ -213,6 +243,8 @@ get around a defect you should just fix.
 Things validation cannot decide for you:
 
 - every fact a math problem depends on is stated in the passage
+- every green answer is a hard fact with one right answer, not an interpretation the passage
+  happened to word that way
 - tight opens are easy everyday recall — not abstract, not vocabulary puzzles, not lesson-dependent
 - each section's prose carries the two genuine lists its orange questions blank out, and the items
   in them are parallel — the same kind of thing, one word each

@@ -618,6 +618,86 @@ export function validateLesson(doc) {
       }
     });
 
+    // --- One prompt must not hand over another question's answer -----------
+    //
+    // Green answers and orange options are the words the speller is meant to
+    // retrieve. Writing one into a different question's prompt in the same
+    // section lets them copy it across instead: a green question answered
+    // BRITAIN, followed by a fill-in reading "…cats reached Britain around the
+    // year ___", gives the green answer away. The fix is a rephrasing — "the
+    // British Isles".
+    //
+    // Only recall answers count, which is why this reads green and orange and
+    // nothing else. A prompt may freely name a topic word whose own question
+    // wants a number back — "more than ___ mummies at Bubastis" does not help
+    // anyone produce BUBASTIS — and circumlocuting every such mention would make
+    // prompts clumsy for no gain.
+    const recall = [];
+    ctx.questions.forEach((block, qi) => {
+      const type = block?.questionType;
+      if (type !== "single" && type !== "multiple") return;
+      for (const answer of answersOf(block)) {
+        recall.push({
+          answer,
+          norm: normalizeText(answer),
+          owner: block?.id || `${ctx.id}#q${qi}`,
+          number: qi + 1,
+        });
+      }
+    });
+    ctx.questions.forEach((block, qi) => {
+      const questionId = block?.id || `${ctx.id}#q${qi}`;
+      const promptNorm = normalizeText(block?.prompt || "");
+      if (!promptNorm) return;
+      // A prompt carrying its own orange answers is E_ORANGE_ANSWER_IN_PROMPT's
+      // business, so the owning question is skipped here rather than reported
+      // twice under two codes.
+      const leaked = [];
+      for (const entry of recall) {
+        if (entry.owner === questionId) continue;
+        if (!containsPhrase(promptNorm, entry.norm)) continue;
+        if (leaked.some((seen) => seen.norm === entry.norm)) continue;
+        leaked.push(entry);
+      }
+      if (!leaked.length) return;
+      const named = leaked
+        .map(
+          (entry) =>
+            `"${entry.answer}" (the answer to question ${entry.number})`,
+        )
+        .join(", ");
+      const key = `${questionId}:${leaked
+        .map((entry) => entry.norm)
+        .sort()
+        .join("|")}`;
+      // A pink prompt is the one place the leak is not always a defect. An
+      // extended open exists to make the speller talk about the section's
+      // subject, and the section's subject is usually a green answer — "In your
+      // own words, explain how a delta forms" cannot avoid DELTA without
+      // becoming vague. Worth flagging, never worth blocking.
+      if (block.questionType === "open") {
+        warn(
+          "W_ANSWER_REVEALED_OPEN",
+          key,
+          ctx.number,
+          `${ctx.label}, question ${qi + 1}: this pink prompt names ${named}, so the speller can read that ` +
+            "answer off it. Fine when the open question genuinely has to name the section's subject; worth " +
+            "rewording if it doesn't.",
+        );
+        return;
+      }
+      error(
+        "E_ANSWER_REVEALED_CROSS",
+        key,
+        ctx.number,
+        `${ctx.label}, question ${qi + 1}: the prompt names ${named}. ` +
+          "A prompt must not contain a word another question in the same section expects the speller to " +
+          "retrieve — they can copy it across instead of recalling it. Rephrase around it: a green answer of " +
+          'BRITAIN followed by a prompt reading "…cats reached Britain around the year ___" is fixed by ' +
+          'writing "the British Isles".',
+      );
+    });
+
     // --- Section shape -----------------------------------------------------
 
     if (!ctx.questions.length) {

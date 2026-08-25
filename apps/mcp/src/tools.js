@@ -57,7 +57,12 @@ const blockSchema = z
       .describe(
         'For type "question": number (numeric answer), single (one text answer), multiple (several accepted ' +
           "answers), open (free response), background (needs prior knowledge). Every answer except a background " +
-          "one must appear, word for word, in that section's own passage; a background answer must NOT. Of the 7 " +
+          "one must appear, word for word, in that section's own passage; a background answer must NOT. A single " +
+          "(green) answer must also be a HARD FACT with one right answer — being in the passage is not enough. " +
+          '"What was the goddess called? → BASTET" is a fact; "What is a cat called when it purrs on a lap? → ' +
+          'COMPANION" is interpretation, because pet, friend and lap-cat are all just as fair and COMPANION only ' +
+          "looks right because the passage used that word. If a reasonable speller could answer differently and " +
+          "still be right, make it an open question or ask for a fact the passage states outright. Of the 7 " +
           "open questions in a section, the first 4 are TIGHT OPENS — open-ended but answerable in ONE WORD from " +
           "the speller's own everyday world, and crucially EASY, with no hard thinking, nothing abstract, and no " +
           'reference to the lesson ("Name a color of a crayon", "Name something found in a hospital"). The last 3 ' +
@@ -69,7 +74,11 @@ const blockSchema = z
       .describe(
         'For type "question": the question text. A "multiple" (orange) prompt quotes the passage sentence ' +
           'holding its list with the list BLANKED OUT — "The blast sent out ______. Name one thing the eruption ' +
-          'threw out." — never with the list spelled out, which hands the answer over and is rejected on save.',
+          'threw out." — never with the list spelled out, which hands the answer over and is rejected on save. ' +
+          "No prompt may name a word another question in the same section expects the speller to retrieve (a green " +
+          'answer or an orange option): a green answer of BRITAIN and a later prompt reading "…cats reached ' +
+          'Britain around the year ___" gives the green answer away, and is fixed by writing "the British Isles". ' +
+          "Naming a topic word whose own question wants a number back is fine.",
       ),
     answer: z
       .union([z.string(), z.number()])
