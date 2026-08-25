@@ -26,6 +26,10 @@ The lesson can also be **read aloud** with the browser's built-in speech
 synthesis, on the reader's own device. See
 [Reading aloud](#reading-aloud-text-to-speech).
 
+Someone presenting a lesson to a class can turn on
+[show answers](#showing-the-answers-for-whoever-is-presenting) to see the
+author's answer to each question alongside it.
+
 ## Every existing lesson already works
 
 There is no "interactive lesson" document type and nothing to switch on when
@@ -62,13 +66,38 @@ is the same blocks.
 A progress bar across the top counts the steps and how many questions you've
 answered so far.
 
+## Showing the answers (for whoever is presenting)
+
+The eye button in the top bar turns on **show answers**, and each question then
+displays the answer its author wrote, under the field you type into. It's there
+for the person running the lesson at the front of a room, who would otherwise
+keep the lesson open in a second window to see what they're walking a class
+towards.
+
+- It starts **off every time interactive mode opens**. Unlike the speech
+  settings it isn't remembered, so a learner's own run-through never begins with
+  the answers on screen.
+- The button is only rendered when the lesson has an answer to reveal
+  _somewhere_ — a lesson of purely open-ended questions has nothing behind it.
+- Each question type shows what it stores: the answer for a single, number or
+  background question, the working steps as well for a number question, and
+  every accepted answer for a multiple-answer one. An open-ended question — which
+  by design has no author's answer — says so rather than leaving a gap.
+- The reveal also applies to the **end-of-lesson summary**, where the author's
+  answer sits under the one you wrote. Useful for going back over the questions
+  as a class.
+- Answers are still **never spoken** — see [Reading aloud](#reading-aloud-text-to-speech).
+
+Showing an answer is not marking one; see below.
+
 ## What it deliberately doesn't do
 
-**It doesn't mark your answers.** A question block carries the author's own
-answer, and interactive mode never shows it, never speaks it, and never compares
-it against what you typed. Spelling is about the learner producing the
-response; a right/wrong verdict from a string comparison would be wrong a lot of
-the time and the wrong shape of feedback even when it wasn't.
+**It doesn't mark your answers.** Nothing you type is ever compared against the
+author's answer, and no verdict is ever drawn — not while answering, not on the
+summary, and not with the reveal above turned on, which only puts the two side
+by side. Spelling is about the learner producing the response; a right/wrong
+verdict from a string comparison would be wrong a lot of the time and the wrong
+shape of feedback even when it wasn't.
 
 **It doesn't save partial work.** Answers are held in the browser while you work
 and sent once, when you finish. A half-finished run-through is never stored as a
@@ -121,7 +150,12 @@ With it on:
 - the settings popover picks a **voice** from the ones the browser offers and a
   **pace** from 0.7× to 1.5×.
 
-A question's answer is never spoken, for the same reason it's never shown.
+A question's answer is never spoken, even with
+[show answers](#showing-the-answers-for-whoever-is-presenting) on: speech is a
+learner's setting as often as a presenter's, and saying the answer out loud the
+moment a question appears would give it away to the one person meant to be
+working it out. Revealing it on screen is a deliberate act; speaking it would be
+a side effect of one.
 
 Your choice of on/off, voice and pace is remembered in `localStorage`, so someone
 who needs speech doesn't re-enable it on every lesson. On a browser with no
@@ -183,11 +217,11 @@ The full schema, with the reasoning in comments, is `apps/api/schema.sql`.
 
 ## Where the code lives
 
-| File                                            | What it does                                                       |
-| ----------------------------------------------- | ------------------------------------------------------------------ |
-| `packages/core/src/interactive.js`              | Turns a document into steps; shared limits and validation.         |
-| `packages/core/src/lessonResponses.js`          | Client for the three endpoints above.                              |
-| `apps/api/src/routes/lessonResponses.js`        | The endpoints, and the privacy scoping.                            |
-| `apps/web/src/components/InteractiveLesson.jsx` | The full-screen walkthrough.                                       |
-| `apps/web/src/components/MyLessonAnswers.jsx`   | The private "Your answers" panel on the lesson page.               |
-| `apps/web/src/lib/useSpeech.js`                 | Web Speech API wrapper, preferences, and the platform workarounds. |
+| File                                            | What it does                                                           |
+| ----------------------------------------------- | ---------------------------------------------------------------------- |
+| `packages/core/src/interactive.js`              | Turns a document into steps; the answer reveal; limits and validation. |
+| `packages/core/src/lessonResponses.js`          | Client for the three endpoints above.                                  |
+| `apps/api/src/routes/lessonResponses.js`        | The endpoints, and the privacy scoping.                                |
+| `apps/web/src/components/InteractiveLesson.jsx` | The full-screen walkthrough.                                           |
+| `apps/web/src/components/MyLessonAnswers.jsx`   | The private "Your answers" panel on the lesson page.                   |
+| `apps/web/src/lib/useSpeech.js`                 | Web Speech API wrapper, preferences, and the platform workarounds.     |

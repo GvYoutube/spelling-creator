@@ -145,9 +145,11 @@ export function isInteractivePlayable(doc) {
  * useSpeech hook). Reading order matches what's on screen: the section name
  * first, then each block's words.
  *
- * Deliberately excluded: a question's *answer*. The block carries the author's
- * answer, and interactive mode never shows it — reading it aloud would be a
- * louder way of giving it away.
+ * Deliberately excluded: a question's *answer*. Interactive mode can show the
+ * author's answer on screen when whoever is presenting turns the reveal on (see
+ * questionAnswer below), but it is never spoken: speech is a learner's setting
+ * as often as a presenter's, and saying the answer out loud the moment a
+ * question appears would give it away to the one person meant to work it out.
  *
  * @param {object} step  A step from buildInteractiveSteps.
  * @returns {string} Plain text, one utterance per line.
@@ -179,6 +181,67 @@ export function stepSpeechText(step) {
   }
 
   return lines.join("\n");
+}
+
+/**
+ * The author's answer to a question block, flattened into the one shape
+ * interactive mode's "show answers" reveal renders.
+ *
+ * Each question type keeps its answer somewhere different — `single` and
+ * `background` in `answer`, `number` in `answer` plus optional working `steps`,
+ * `multiple` in an `answers` list, and `open` nowhere at all, by design — so
+ * this is derived once here rather than re-derived per type at every call site.
+ *
+ * Returns null when there is nothing to reveal: an open-ended question, a type
+ * we don't know, or one whose author left the answer blank. That is deliberately
+ * distinct from an empty answer, so a presenter is told the question has no set
+ * answer instead of being shown a gap and left wondering.
+ *
+ * @param {object} block  A question block.
+ * @returns {{ answer: string, answers: string[], steps: string[] } | null}
+ */
+export function questionAnswer(block) {
+  if (!isQuestionBlock(block)) return null;
+
+  const trimmed = (value) => String(value ?? "").trim();
+  const texts = (list) =>
+    (Array.isArray(list) ? list : [])
+      .map((entry) => trimmed(entry?.text))
+      .filter(Boolean);
+
+  switch (block.questionType) {
+    case "multiple": {
+      const answers = texts(block.answers);
+      return answers.length ? { answer: "", answers, steps: [] } : null;
+    }
+    case "number": {
+      // A number question can carry its working with it, and a half-filled one
+      // (working but no total, or the reverse) is still worth revealing.
+      const answer = trimmed(block.answer);
+      const steps = texts(block.steps);
+      return answer || steps.length ? { answer, answers: [], steps } : null;
+    }
+    case "single":
+    case "background": {
+      const answer = trimmed(block.answer);
+      return answer ? { answer, answers: [], steps: [] } : null;
+    }
+    default:
+      return null;
+  }
+}
+
+/**
+ * Whether a walkthrough has any author's answer to reveal at all — i.e. whether
+ * offering the reveal would lead anywhere. False for a lesson with no questions,
+ * and for one whose questions are all open-ended or left unanswered.
+ * @param {Array<object>} steps  Steps from buildInteractiveSteps.
+ * @returns {boolean}
+ */
+export function hasRevealableAnswers(steps) {
+  return (Array.isArray(steps) ? steps : []).some(
+    (step) => step?.kind === "question" && questionAnswer(step.block) !== null,
+  );
 }
 
 /**

@@ -24,13 +24,19 @@
 // the privacy note in the Worker's routes/lessonResponses.js). The lesson's
 // author never sees it.
 //
+// A question block carries the author's own answer, and the eye button in the
+// top bar reveals it — for whoever is running the lesson at the front of a room,
+// who otherwise has to keep the lesson open in a second window to see what they
+// are walking a class towards. It starts off every time interactive mode opens,
+// so a learner's own run-through never begins with the answers on screen.
+//
 // Two things this deliberately does NOT do:
 //
-//   Mark answers. A question block carries the author's answer, and it is never
-//   shown or compared against — not while answering, not on the summary. Spelling
-//   lessons are about the learner producing the response, and a right/wrong
-//   verdict from a string comparison would be both wrong a lot of the time and
-//   the wrong shape of feedback.
+//   Mark answers. Revealing the author's answer is a presenter putting it on
+//   screen deliberately; it is never compared against what the learner typed and
+//   no verdict is ever drawn. Spelling lessons are about the learner producing
+//   the response, and a right/wrong verdict from a string comparison would be
+//   both wrong a lot of the time and the wrong shape of feedback.
 //
 //   Save partial work. Nothing is stored until the last step is done, so a
 //   half-finished run-through never shows up as a completed one.
@@ -44,6 +50,8 @@ import {
   ArrowRightIcon,
   CheckIcon,
   CircleCheckIcon,
+  EyeIcon,
+  EyeOffIcon,
   PlayIcon,
   RotateCcwIcon,
   SettingsIcon,
@@ -75,11 +83,14 @@ import {
   answerKey,
   buildInteractiveSteps,
   collectResponses,
+  hasRevealableAnswers,
+  questionAnswer,
   stepSpeechText,
 } from "@spelling-creator/core/interactive";
 import { questionMeta } from "@spelling-creator/core/questions";
 import { saveLessonResponses } from "@spelling-creator/core/lessonResponses";
 import { hasApi } from "@spelling-creator/core/config";
+import { cn } from "../lib/utils.js";
 import { useImageSrc } from "../lib/useImageSrc.js";
 import { SPEECH_RATES, useSpeech } from "../lib/useSpeech.js";
 import { useAuth } from "../lib/auth.jsx";
@@ -210,6 +221,90 @@ function SpeechControls({ speech, onReplay }) {
   );
 }
 
+// The presenter's reveal, sat beside the speech controls in the top bar. Only
+// rendered when the lesson has an answer to reveal somewhere — a lesson of
+// open-ended questions has nothing behind this button, and the same reasoning
+// that keeps SpeechControls off a browser without speech keeps it off here.
+function AnswerToggle({ shown, onToggle }) {
+  const { t } = useTranslation("interactive");
+  const label = shown ? t("answers.hide") : t("answers.show");
+
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <Button
+          variant={shown ? "secondary" : "ghost"}
+          size="icon-sm"
+          aria-pressed={shown}
+          aria-label={label}
+          onClick={() => onToggle(!shown)}
+        >
+          {shown ? <EyeIcon /> : <EyeOffIcon />}
+        </Button>
+      </TooltipTrigger>
+      <TooltipContent>{label}</TooltipContent>
+    </Tooltip>
+  );
+}
+
+// The author's answer to one question, while the reveal is on. Framed and
+// labelled rather than dropped in under the prompt: this often goes up on a
+// projector next to the learner's own field, and which of the two is which has
+// to be obvious from the back of the room. A question with nothing to reveal
+// says so — an open-ended question has no set answer, and leaving a blank space
+// would read as the reveal being broken.
+function AnswerReveal({ block, className }) {
+  const { t } = useTranslation("interactive");
+  const revealed = questionAnswer(block);
+
+  const label = (text) => (
+    <p className="text-xs font-semibold tracking-wide text-muted-foreground uppercase">
+      {text}
+    </p>
+  );
+
+  return (
+    <div
+      className={cn(
+        "flex flex-col gap-3 rounded-panel border border-dashed border-primary/60 bg-primary/5 px-4 py-3",
+        className,
+      )}
+    >
+      {!revealed && (
+        <p className="text-muted-foreground italic">{t("answers.none")}</p>
+      )}
+      {revealed?.answer && (
+        <div>
+          {label(t("answers.label"))}
+          <p className="mt-1 text-lg font-medium">{revealed.answer}</p>
+        </div>
+      )}
+      {revealed?.answers.length > 0 && (
+        <div>
+          {label(t("answers.labelPlural"))}
+          <ul className="mt-1 list-disc pl-5">
+            {revealed.answers.map((answer, index) => (
+              <li key={index} className="text-lg font-medium">
+                {answer}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+      {revealed?.steps.length > 0 && (
+        <div>
+          {label(t("answers.working"))}
+          <ol className="mt-1 list-decimal pl-5">
+            {revealed.steps.map((step, index) => (
+              <li key={index}>{step}</li>
+            ))}
+          </ol>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // A text block, at reading size. Each newline is its own paragraph, matching how
 // the lesson page and the export both treat a text block.
 function TextBlock({ block }) {
@@ -317,9 +412,9 @@ function ContentStep({ step, speech }) {
   );
 }
 
-// One question, with the field the learner types into. The author's own answer
-// is never rendered here — see the note at the top of this file.
-function QuestionStep({ step, value, onChange }) {
+// One question, with the field the learner types into — and, under it, the
+// author's answer while the presenter's reveal is on.
+function QuestionStep({ step, value, onChange, showAnswers }) {
   const { t } = useTranslation("interactive");
   const meta = questionMeta(step.block.questionType);
   const fieldId = `interactive-answer-${answerKey(step)}`;
@@ -351,12 +446,25 @@ function QuestionStep({ step, value, onChange }) {
           onChange={(event) => onChange(event.target.value)}
         />
       </Field>
+      {showAnswers && <AnswerReveal block={step.block} />}
     </div>
   );
 }
 
-// The end of a run-through: everything the learner wrote, and what happened to it.
-function SummaryStep({ responses, saveState, error, onRetry, signedIn }) {
+// The end of a run-through: everything the learner wrote, and what happened to
+// it. With the reveal on, each answer the author wrote sits under the one the
+// learner did — going back over the questions as a class is the other half of
+// the job the reveal exists for. Still no marking: the two are put side by side,
+// never compared.
+function SummaryStep({
+  responses,
+  saveState,
+  error,
+  onRetry,
+  signedIn,
+  showAnswers,
+  blockFor,
+}) {
   const { t } = useTranslation("interactive");
   const answered = responses.filter((response) =>
     response.answer.trim(),
@@ -387,6 +495,12 @@ function SummaryStep({ responses, saveState, error, onRetry, signedIn }) {
                   </span>
                 )}
               </p>
+              {showAnswers && blockFor(response.blockId) && (
+                <AnswerReveal
+                  block={blockFor(response.blockId)}
+                  className="mt-3"
+                />
+              )}
             </div>
           ))}
         </div>
@@ -466,6 +580,21 @@ export default function InteractiveLesson({
   const [phase, setPhase] = useState("running");
   const [saveState, setSaveState] = useState("idle");
   const [saveError, setSaveError] = useState("");
+  // The presenter's reveal — see the note at the top of this file for why it is
+  // plain state rather than a remembered preference like the speech settings.
+  const [showAnswers, setShowAnswers] = useState(false);
+
+  // Whether the reveal has anywhere to go, and the block behind each answer, so
+  // the summary can reveal alongside a stored response (which carries a snapshot
+  // of the prompt, deliberately, but never the author's answer).
+  const revealable = useMemo(() => hasRevealableAnswers(steps), [steps]);
+  const questionBlocks = useMemo(() => {
+    const blocks = new Map();
+    for (const s of steps) {
+      if (s.kind === "question") blocks.set(answerKey(s), s.block);
+    }
+    return blocks;
+  }, [steps]);
 
   const step = steps[index] || null;
   const questionSteps = steps.filter((s) => s.kind === "question");
@@ -484,6 +613,7 @@ export default function InteractiveLesson({
     setPhase("running");
     setSaveState("idle");
     setSaveError("");
+    setShowAnswers(false);
     savedFingerprint.current = null;
   }, [open]);
 
@@ -628,6 +758,9 @@ export default function InteractiveLesson({
                     : step?.sectionName || t("untitledSection")}
               </p>
             </div>
+            {revealable && (
+              <AnswerToggle shown={showAnswers} onToggle={setShowAnswers} />
+            )}
             <SpeechControls
               speech={speech}
               onReplay={() => step && speech.speak(stepSpeechText(step))}
@@ -681,12 +814,15 @@ export default function InteractiveLesson({
                 error={saveError}
                 onRetry={() => save(responses)}
                 signedIn={Boolean(user)}
+                showAnswers={showAnswers}
+                blockFor={(blockId) => questionBlocks.get(blockId)}
               />
             ) : step.kind === "content" ? (
               <ContentStep step={step} speech={speech} />
             ) : (
               <QuestionStep
                 step={step}
+                showAnswers={showAnswers}
                 value={answers[answerKey(step)] || ""}
                 onChange={(value) =>
                   setAnswers((current) => ({
