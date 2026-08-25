@@ -948,10 +948,13 @@ test("patch_lesson fetches, applies the diff, and PUTs the result", async () => 
 // Commons is stubbed to answer with a thumbnail of `width` at a size the caller
 // chooses, so a test can put a heavy rendering in front of resolveWikimediaImage
 // and watch what it does about it.
-function stubCommons(sizes) {
+function stubCommons(sizes, { declareLength = false } = {}) {
   const requested = [];
+  // How many bytes of each rendering the downloader actually pulled.
+  const pulled = {};
   return {
     requested,
+    pulled,
     fetch: async (url) => {
       const u = String(url);
       if (u.includes("commons.wikimedia.org")) {
@@ -984,10 +987,26 @@ function stubCommons(sizes) {
         );
       }
       const width = Number(u.match(/map-(\d+)\.png$/)?.[1]) || 0;
-      return new Response(new Uint8Array(sizes[width] ?? sizes.original), {
-        status: 200,
-        headers: { "Content-Type": "image/png" },
+      const size = sizes[width] ?? sizes.original;
+      // Served in chunks, without Content-Length, so a test can watch how much
+      // of an oversized body the downloader actually pulls before giving up.
+      const CHUNK = 64 * 1024;
+      let sent = 0;
+      const body = new ReadableStream({
+        pull(controller) {
+          if (sent >= size) {
+            controller.close();
+            return;
+          }
+          const n = Math.min(CHUNK, size - sent);
+          sent += n;
+          pulled[width] = sent;
+          controller.enqueue(new Uint8Array(n));
+        },
       });
+      const headers = { "Content-Type": "image/png" };
+      if (declareLength) headers["Content-Length"] = String(size);
+      return new Response(body, { status: 200, headers });
     },
   };
 }
@@ -1018,6 +1037,51 @@ test("add_image takes a small rendering as it is, without a second request", asy
     assert.deepEqual(commons.requested, [1600]);
     assert.equal(resolved.bytes.length, 512);
     assert.equal(resolved.width, 1600);
+  } finally {
+    globalThis.fetch = realFetch;
+  }
+});
+
+test("add_image abandons an oversized rendering instead of buffering it", async () => {
+  // The failure this guards against is memory, not bandwidth: a Commons original
+  // can be hundreds of megabytes, and buffering one to measure it would exhaust
+  // the isolate (a Worker gets 128 MB) before any size check could run. The read
+  // has to stop near the limit, and the smaller rendering still has to be tried.
+  const commons = stubCommons({ 1600: 64 * 1024 * 1024, 1000: 64 });
+  const realFetch = globalThis.fetch;
+  globalThis.fetch = commons.fetch;
+  try {
+    const resolved = await resolveWikimediaImage("File:Map.png");
+    assert.deepEqual(commons.requested, [1600, 1000]);
+    assert.equal(resolved.bytes.length, 64, "the small rendering is used");
+    assert.equal(resolved.width, 1000);
+    assert.ok(
+      commons.pulled[1600] <= 9 * 1024 * 1024,
+      `stopped reading near the 8 MB limit, not at ${commons.pulled[1600]} bytes`,
+    );
+  } finally {
+    globalThis.fetch = realFetch;
+  }
+});
+
+test("add_image skips an oversized rendering on its declared length alone", async () => {
+  // Commons sends Content-Length, so the usual oversize case costs no transfer:
+  // the body is cancelled before a byte of it is read.
+  const commons = stubCommons(
+    { 1600: 64 * 1024 * 1024, 1000: 64 },
+    { declareLength: true },
+  );
+  const realFetch = globalThis.fetch;
+  globalThis.fetch = commons.fetch;
+  try {
+    const resolved = await resolveWikimediaImage("File:Map.png");
+    assert.equal(resolved.bytes.length, 64);
+    // At most the one chunk the stream itself queues ahead of any reader — the
+    // body is cancelled without the downloader consuming any of it.
+    assert.ok(
+      (commons.pulled[1600] ?? 0) <= 64 * 1024,
+      `body was cancelled unread, but ${commons.pulled[1600]} bytes were produced`,
+    );
   } finally {
     globalThis.fetch = realFetch;
   }

@@ -348,6 +348,61 @@ test("orange answers that never appear together as a list are rejected", () => {
   assert.match(errors[0].message, /rewrite the passage/);
 });
 
+test("accepting only part of the passage's list is rejected", () => {
+  // The speller is told to name one item listed. If the passage lists three and
+  // the question accepts two, naming the third — having read exactly what they
+  // were told to read — marks them wrong.
+  const { errors } = check((input) => {
+    question(input, 0, 5).answers = ["boulder", "cobble"];
+  });
+  assert.deepEqual(codes(errors), ["E_ORANGE_PARTIAL_LIST"]);
+  assert.match(errors[0].message, /runs on past/);
+  assert.match(errors[0].message, /"SILT"/);
+
+  // Same defect without the Oxford comma, where the run ends at the conjunction
+  // itself rather than at a comma.
+  const noOxford = check((input) => {
+    input.sections[0].blocks[0].text = input.sections[0].blocks[0].text.replace(
+      "boulder, cobble, and silt",
+      "boulder, cobble and silt",
+    );
+    question(input, 0, 5).answers = ["boulder", "cobble"];
+  });
+  assert.deepEqual(codes(noOxford.errors), ["E_ORANGE_PARTIAL_LIST"]);
+});
+
+test("a complete list is accepted however it closes", () => {
+  // A series with no conjunction at all is still a complete list when every item
+  // is accepted, and a trailing clause after it is not a fourth item. Both would
+  // be false rejections, which cost more than a missed defect.
+  const noConjunction = check((input) => {
+    input.sections[0].blocks[0].text = input.sections[0].blocks[0].text.replace(
+      "boulder, cobble, and silt",
+      "boulder, cobble, silt",
+    );
+  });
+  assert.deepEqual(codes(noConjunction.errors), []);
+
+  const trailingClause = check((input) => {
+    input.sections[0].blocks[0].text = input.sections[0].blocks[0].text.replace(
+      "boulder, cobble, and silt",
+      "boulder, cobble, silt, all of it moving",
+    );
+  });
+  assert.deepEqual(codes(trailingClause.errors), []);
+});
+
+test("an orange prompt with no blanked-out list warns without blocking", () => {
+  // Two orange questions per section, so "Name one." doesn't say which list. It
+  // is a warning because a prompt can name its list without a literal blank.
+  const { errors, warnings } = check((input) => {
+    question(input, 0, 5).prompt = "Name one.";
+  });
+  assert.deepEqual(codes(errors), []);
+  assert.deepEqual(codes(warnings), ["W_ORANGE_NO_BLANK"]);
+  assert.match(warnings[0].message, /which list is meant/);
+});
+
 test("a list needs its items adjacent, not merely in the same sentence", () => {
   const separated = check((input) => {
     input.sections[2].blocks[0].text +=

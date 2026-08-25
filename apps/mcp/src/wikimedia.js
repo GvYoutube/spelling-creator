@@ -118,7 +118,14 @@ async function imageInfo(title, width) {
   return pages[0] && pages[0].imageinfo && pages[0].imageinfo[0];
 }
 
-async function downloadImage(src) {
+// Download at most `limit` bytes. Commons hands back the original file whenever
+// it can't scale one, and originals run to hundreds of megabytes — buffering the
+// whole body before measuring it would exhaust the isolate this server shares
+// with the hub (a Worker gets 128 MB) long before any size check could speak. So
+// the body is read a chunk at a time against a running total and abandoned the
+// moment it passes the limit: `{ oversize: true }` comes back instead of bytes,
+// and the caller decides whether a smaller rendering is worth asking for.
+async function downloadImage(src, limit) {
   let res;
   try {
     res = await fetch(src, { headers: { "User-Agent": USER_AGENT } });
@@ -126,10 +133,45 @@ async function downloadImage(src) {
     throw new Error("Could not download the selected image.", { cause: e });
   }
   if (!res.ok) throw new Error("Could not download the selected image.");
-  return {
-    bytes: new Uint8Array(await res.arrayBuffer()),
-    mime: res.headers.get("Content-Type") || "",
-  };
+
+  const mime = res.headers.get("Content-Type") || "";
+  // Commons sends Content-Length, so the usual oversize case costs no transfer
+  // at all: cancel before reading a byte.
+  const declared = Number(res.headers.get("Content-Length"));
+  if (Number.isFinite(declared) && declared > limit) {
+    await res.body?.cancel();
+    return { oversize: true, size: declared, mime };
+  }
+  if (!res.body) {
+    // No stream to meter (a stubbed or bodyless response); the buffered read is
+    // all that's available, and the limit is still enforced on the result.
+    const bytes = new Uint8Array(await res.arrayBuffer());
+    return bytes.byteLength > limit
+      ? { oversize: true, size: bytes.byteLength, mime }
+      : { bytes, mime };
+  }
+
+  const reader = res.body.getReader();
+  const chunks = [];
+  let total = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    total += value.byteLength;
+    if (total > limit) {
+      await reader.cancel();
+      return { oversize: true, size: null, mime };
+    }
+    chunks.push(value);
+  }
+
+  const bytes = new Uint8Array(total);
+  let offset = 0;
+  for (const chunk of chunks) {
+    bytes.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return { bytes, mime };
 }
 
 /**
@@ -157,27 +199,37 @@ export async function resolveWikimediaImage(ref) {
   const src = info.thumburl || info.url;
   if (!src) throw new Error("That image could not be downloaded.");
 
-  let download = await downloadImage(src);
+  // Read no more than the hub would accept anyway: past that the upload is
+  // refused, so the extra bytes buy nothing and cost memory.
+  let download = await downloadImage(src, MAX_UPLOAD_BYTES);
 
-  // Still heavy? Come back for a smaller rendering. Keep it only if it actually
-  // is smaller — when Commons couldn't scale the file the second request returns
-  // the same bytes as the first.
-  if (download.bytes.byteLength > HEAVY_BYTES) {
+  // Too heavy — either for the converter or for the upload cap outright? Come
+  // back for a smaller rendering. Keep it only if it actually is smaller: when
+  // Commons couldn't scale the file, the second request answers with the same
+  // one.
+  if (download.oversize || download.bytes.byteLength > HEAVY_BYTES) {
     const smaller = await imageInfo(title, SMALL_THUMB_WIDTH);
     if (smaller?.thumburl) {
-      const retry = await downloadImage(smaller.thumburl);
-      if (retry.bytes.byteLength < download.bytes.byteLength) {
+      const retry = await downloadImage(smaller.thumburl, MAX_UPLOAD_BYTES);
+      if (
+        !retry.oversize &&
+        (download.oversize ||
+          retry.bytes.byteLength < download.bytes.byteLength)
+      ) {
         info = smaller;
         download = retry;
       }
     }
   }
 
-  if (download.bytes.byteLength > MAX_UPLOAD_BYTES) {
+  if (download.oversize) {
+    const size = download.size
+      ? `${Math.round(download.size / (1024 * 1024))} MB`
+      : "over 8 MB";
     throw new Error(
-      `"${title}" is ${Math.round(download.bytes.byteLength / (1024 * 1024))} MB even at the smallest ` +
-        "rendering Commons will produce, which is over the 8 MB upload limit. This is a property of the file, " +
-        "not a transient failure — pick a different candidate from search_images rather than retrying this one.",
+      `"${title}" is ${size} even at the smallest rendering Commons will produce, which is past the 8 MB ` +
+        "upload limit. This is a property of the file, not a transient failure — pick a different candidate " +
+        "from search_images rather than retrying this one.",
     );
   }
 

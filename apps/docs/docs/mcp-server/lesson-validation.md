@@ -32,6 +32,7 @@ same thing.
 | `E_ORANGE_PARAPHRASED`      | A single-word orange answer is not in the passage — usually paraphrase ("HOT" for "superheated") or general knowledge, which belongs in a `background` question.                           |
 | `E_ORANGE_ANSWER_IN_PROMPT` | An orange prompt contains one of its own accepted answers. The prompt quotes the passage's sentence with the list **blanked out**; writing the list into the prompt hands the answer over. |
 | `E_ORANGE_NOT_A_LIST`       | An orange question's answers are all in the passage, but never together as one explicit list — the question was reverse-engineered out of prose that has none.                             |
+| `E_ORANGE_PARTIAL_LIST`     | An orange question accepts only part of the list its passage states — the prose lists three things and the question accepts two, so a speller who names the third is marked wrong.         |
 | `E_GROUNDING_NUMBER_FILL`   | A fill-in-the-blank `number` answer (one with no `steps`) is not in the passage.                                                                                                           |
 | `E_BACKGROUND_IN_TEXT`      | A blue (`background`) answer **does** appear in its own passage, defeating the point of the type.                                                                                          |
 | `E_BACKGROUND_NO_CONTEXT`   | A `background` question has no `background` field.                                                                                                                                         |
@@ -65,17 +66,18 @@ Returned as a `warnings` array on the successful result:
 }
 ```
 
-| Code                    | What it flags                                                                                                                                   |
-| ----------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
-| `W_SECTION_COUNT`       | The lesson isn't 6 sections. Lesson-wide, so it carries no `section`.                                                                           |
-| `W_QUESTION_SHAPE`      | A section's question types or order differ from 3 `single`, 2 `number`, 2 `multiple`, 1 `background`, 7 `open`.                                 |
-| `W_NO_QUESTION`         | A section has no questions at all.                                                                                                              |
-| `W_OPEN_SPLIT`          | A section's 7 pink questions don't read as 4 tight opens followed by 3 extended ones.                                                           |
-| `W_ORANGE_MULTIWORD`    | An orange accepted answer is more than one word.                                                                                                |
-| `W_ORANGE_ANSWER_COUNT` | An orange question accepts fewer than 2 or more than 4 answers.                                                                                 |
-| `W_SPELLING_COUNT`      | A section doesn't have exactly 4 spelling words.                                                                                                |
-| `W_NUMBER_NO_STEPS`     | A section's word problem has no `steps`.                                                                                                        |
-| `W_SPELLING_IN_CAPS`    | A spelling word is also ALL-CAPS learning vocabulary in the same passage. A warning rather than an error because acronyms trip it legitimately. |
+| Code                    | What it flags                                                                                                                                                                                                                       |
+| ----------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `W_SECTION_COUNT`       | The lesson isn't 6 sections. Lesson-wide, so it carries no `section`.                                                                                                                                                               |
+| `W_QUESTION_SHAPE`      | A section's question types or order differ from 3 `single`, 2 `number`, 2 `multiple`, 1 `background`, 7 `open`.                                                                                                                     |
+| `W_NO_QUESTION`         | A section has no questions at all.                                                                                                                                                                                                  |
+| `W_OPEN_SPLIT`          | A section's 7 pink questions don't read as 4 tight opens followed by 3 extended ones.                                                                                                                                               |
+| `W_ORANGE_MULTIWORD`    | An orange accepted answer is more than one word.                                                                                                                                                                                    |
+| `W_ORANGE_ANSWER_COUNT` | An orange question accepts fewer than 2 or more than 4 answers.                                                                                                                                                                     |
+| `W_ORANGE_NO_BLANK`     | An orange prompt has no `______` where the passage's list was. A section has two orange questions, so a bare "Name one." doesn't say which list is meant. A warning because a prompt can identify its list without a literal blank. |
+| `W_SPELLING_COUNT`      | A section doesn't have exactly 4 spelling words.                                                                                                                                                                                    |
+| `W_NUMBER_NO_STEPS`     | A section's word problem has no `steps`.                                                                                                                                                                                            |
+| `W_SPELLING_IN_CAPS`    | A spelling word is also ALL-CAPS learning vocabulary in the same passage. A warning rather than an error because acronyms trip it legitimately.                                                                                     |
 
 These are warnings and not errors because a legitimate lesson can trip each one: a user who
 asks for four sections gets `W_SECTION_COUNT` and should not be blocked by it.
@@ -148,6 +150,27 @@ them and no more than four other words do. That is what tells the three failures
 | `a scale called the VEI, the Volcanic Explosivity Index` | SCALE, INDEX   | A comma, but six words apart: not a series. |
 
 A two-item list joined by `and` alone passes — commas aren't required, a series is.
+
+### One question, one whole list
+
+Finding the answers inside a series isn't enough on its own: they have to be **all** of it.
+Where the passage says `boulder, cobble, and silt` and the question accepts only `boulder`
+and `cobble`, a speller who answers SILT has read exactly what they were told to read and
+is marked wrong. That is `E_ORANGE_PARTIAL_LIST`.
+
+An English series closes with `and X` / `or X`, so the test is whether the run of accepted
+items ever crosses a conjunction. If it doesn't, the series is checked for a continuation —
+a separator, then a conjunction, then a word — and only that continuation makes it partial.
+Two cases would otherwise be false rejections, and both are left alone:
+
+- `rope, hammer, pitons` — a complete series that simply has no conjunction. Nothing
+  follows it, so nothing is missing.
+- `rope, hammer, pitons, all of them steel` — a trailing clause after the list, not a
+  fourth item, because no conjunction introduces it.
+
+The asymmetric case is a subset that includes the final item (`cobble, and silt` out of
+`boulder, cobble, and silt`), which passes. That is deliberate: it errs toward missing a
+defect rather than blocking a lesson that has none.
 
 The check is skipped unless every accepted answer is a single word already found in the
 passage, so it never piles onto a question that `E_ORANGE_PARAPHRASED` or

@@ -55,7 +55,9 @@ QUESTIONS per section, always in this exact order (15 total):
                                ash"; (b) the question QUOTES THAT SENTENCE WITH THE LIST BLANKED OUT
                                and asks the speller to name one item listed — "The blast sent out
                                ______. Name one thing the eruption threw out."; (c) the accepted
-                               answers are exactly the items of that one list -> ROCK, GAS, ASH.
+                               answers are EVERY item of that one list -> ROCK, GAS, ASH. Accepting
+                               only some of them is rejected: a speller who names the item you left
+                               out has read the passage exactly as told and would be marked wrong.
                                2-4 answers, each a SINGLE WORD appearing verbatim in this section's
                                text. NEVER WRITE THE LIST INTO THE PROMPT: "Cats travelled with the
                                Roman army, traders, and settlers — name one" hands the answer over
@@ -156,6 +158,8 @@ Rejected (errors):
   the sentence you quote
 - an orange question whose accepted answers do not appear together in the passage as one explicit
   list — the fix is to write the list into the prose, not to reword the question
+- an orange question that accepts only part of the list its passage states (the prose lists three
+  things, the question accepts two)
 - a fill-in-the-blank purple answer (a number question with no steps) that is not in the passage
 - a blue (background) answer that DOES appear in its own section's passage, or a blue question
   with no "background" field
@@ -167,9 +171,9 @@ Rejected (errors):
 Flagged but allowed (warnings, returned with the saved lesson): a section count other than 6, a
 section with no questions at all, a section whose 15 questions differ in type or order from the
 list above, pink questions that don't read as 4 tight + 3 extended, a multi-word orange answer, an
-orange question with fewer than 2 or more than 4 answers, a section without exactly 4 spelling
-words, a word problem with no steps, and a spelling word that is also ALL-CAPS vocabulary in the
-same section.
+orange question with fewer than 2 or more than 4 answers, an orange prompt that doesn't blank out
+the list it is asking about, a section without exactly 4 spelling words, a word problem with no
+steps, and a spelling word that is also ALL-CAPS vocabulary in the same section.
 
 If the user deliberately wants a lesson the standard forbids — a 3-section lesson, questions in a
 different order — pass "skipValidation": true, which turns the errors off. Don't reach for it to

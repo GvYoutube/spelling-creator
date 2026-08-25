@@ -73,6 +73,9 @@ const LIST_SEPARATORS = new Set([COMMA_MARK, "AND", "OR"]);
 // "a scale called the VEI, the Volcanic Explosivity Index" needs six, and is not
 // a list.
 const MAX_LIST_GAP_WORDS = 4;
+// The blank an orange prompt puts where the passage's list was. Three underscores
+// is the floor; lessons in practice write five or six.
+const ORANGE_BLANK = /_{3,}/;
 
 // Retired because it was overused to the point of becoming a tic. Matched
 // loosely so rephrasings ("name a word that comes to mind") are caught too.
@@ -198,9 +201,9 @@ function listSeparated(tokens, from, to) {
 
 // Do all of `options` appear in one sentence as a single explicit series? Walks
 // the option occurrences in text order and breaks the walk wherever two of them
-// aren't list-separated, so a run has to be a real list to survive — and then
-// asks whether any surviving run covers every option.
-function sentenceHoldsList(tokens, options) {
+// aren't list-separated, so a run has to be a real list to survive — and returns
+// the first run that covers every option, or null if none does.
+function findListRun(tokens, options) {
   const wanted = new Set(options);
   const hits = [];
   tokens.forEach((token, at) => {
@@ -214,10 +217,38 @@ function sentenceHoldsList(tokens, options) {
       run.push(hit);
       continue;
     }
-    if (run.length && runCoversAll()) return true;
+    if (run.length && runCoversAll()) return run;
     run = [hit];
   }
-  return run.length > 0 && runCoversAll();
+  return run.length > 0 && runCoversAll() ? run : null;
+}
+
+const CONJUNCTIONS = new Set(["AND", "OR"]);
+
+// Does this run of accepted items reach the end of the series it sits in? An
+// English series closes with "and X" / "or X", so a run that never crosses a
+// conjunction has stopped short — unless nothing follows it, in which case the
+// series simply had no conjunction and the run is the whole of it.
+function runReachesLastItem(tokens, run) {
+  for (const [i, hit] of run.entries()) {
+    if (i === 0) continue;
+    const gap = tokens.slice(run[i - 1].at + 1, hit.at);
+    if (gap.some((t) => CONJUNCTIONS.has(t))) return true;
+  }
+  return !listContinuesAfter(tokens, run[run.length - 1].at);
+}
+
+// Does the series carry on past `at` to an item this question doesn't accept?
+// Looks only as far as one more list member could reach, and insists on finding
+// the closing conjunction with a word after it — so "boulder, cobble, and silt"
+// reads as unfinished after COBBLE, while "rope, hammer, pitons, all of them
+// steel" (a trailing clause, not another item) does not.
+function listContinuesAfter(tokens, at) {
+  const tail = tokens.slice(at + 1, at + 4 + MAX_LIST_GAP_WORDS);
+  if (!tail.length || !LIST_SEPARATORS.has(tail[0])) return false;
+  const conjunction = tail.findIndex((t) => CONJUNCTIONS.has(t));
+  if (conjunction === -1) return false;
+  return tail.slice(conjunction + 1).some((t) => !LIST_SEPARATORS.has(t));
 }
 
 // The ALL-CAPS learning vocabulary a passage teaches. Two letters minimum so
@@ -435,6 +466,22 @@ export function validateLesson(doc) {
             );
           }
 
+          // The prompt is also what tells the speller WHICH of the section's two
+          // lists is being asked for. Quoting the sentence with its list blanked
+          // out does that; "Name one." leaves them guessing. A prompt can
+          // identify its list without a literal blank ("Which three trees line
+          // the bank?"), so this one advises rather than blocks.
+          if (!ORANGE_BLANK.test(block.prompt || "")) {
+            warn(
+              "W_ORANGE_NO_BLANK",
+              questionId,
+              ctx.number,
+              `${where}: the prompt doesn't quote the passage's sentence with its list blanked out ` +
+                '("The blast sent out ______. Name one thing the eruption threw out."). A section has two orange ' +
+                'questions, so a bare "Name one." doesn\'t tell the speller which list is meant.',
+            );
+          }
+
           // An orange question is retrieval of a list the passage actually
           // contains. Options that never co-occur as a series were reverse-
           // engineered out of prose that has no list — and the fix for that is in
@@ -446,13 +493,47 @@ export function validateLesson(doc) {
             );
           const distinct = [...new Set(options)];
           if (
-            distinct.length >= ORANGE_MIN_ANSWERS &&
-            distinct.length === answers.length &&
-            !ctx.sentences.some((tokens) => sentenceHoldsList(tokens, distinct))
+            distinct.length < ORANGE_MIN_ANSWERS ||
+            distinct.length !== answers.length
           ) {
+            break;
+          }
+
+          // One question, one WHOLE list. A run that covers every accepted answer
+          // but stops before the series does means the passage lists an item the
+          // question won't accept — so a speller who names it, having read exactly
+          // what they were told to read, is marked wrong.
+          const key = [...distinct].sort().join("|");
+          let partial = null;
+          let complete = false;
+          for (const tokens of ctx.sentences) {
+            const run = findListRun(tokens, distinct);
+            if (!run) continue;
+            if (runReachesLastItem(tokens, run)) {
+              complete = true;
+              break;
+            }
+            partial ??= tokens
+              .slice(run[run.length - 1].at + 1, run[run.length - 1].at + 4)
+              .filter((t) => !LIST_SEPARATORS.has(t))[0];
+          }
+
+          if (complete) break;
+          if (partial) {
+            error(
+              "E_ORANGE_PARTIAL_LIST",
+              `${questionId}:${key}`,
+              ctx.number,
+              `${ctx.label}: the passage's list runs on past the accepted answers ` +
+                `${answers.map((a) => `"${a}"`).join(", ")} — it goes on to "${partial}". The accepted answers ` +
+                "must be EVERY item of the one list the question blanks out, or a speller who names the item you " +
+                "left out is marked wrong for reading the passage properly. Accept the remaining item(s), or take " +
+                "them out of the list in the prose.",
+            );
+          } else {
             error(
               "E_ORANGE_NOT_A_LIST",
-              `${questionId}:${[...distinct].sort().join("|")}`,
+              `${questionId}:${key}`,
               ctx.number,
               `${ctx.label}: the accepted answers ${answers.map((a) => `"${a}"`).join(", ")} appear in that ` +
                 "section's passage, but not together as one list. An orange question retrieves a list the prose " +
