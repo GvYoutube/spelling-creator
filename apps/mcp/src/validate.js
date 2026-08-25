@@ -224,31 +224,36 @@ function findListRun(tokens, options) {
 }
 
 const CONJUNCTIONS = new Set(["AND", "OR"]);
+// How many words a list item may run to before what follows a conjunction reads
+// as a clause instead. "and silt" and "and the chough" are items; "and the
+// valley went dark" is a sentence carrying on.
+const MAX_ITEM_WORDS = 2;
 
-// Does this run of accepted items reach the end of the series it sits in? An
-// English series closes with "and X" / "or X", so a run that never crosses a
-// conjunction has stopped short — unless nothing follows it, in which case the
-// series simply had no conjunction and the run is the whole of it.
-function runReachesLastItem(tokens, run) {
-  for (const [i, hit] of run.entries()) {
-    if (i === 0) continue;
-    const gap = tokens.slice(run[i - 1].at + 1, hit.at);
-    if (gap.some((t) => CONJUNCTIONS.has(t))) return true;
-  }
-  return !listContinuesAfter(tokens, run[run.length - 1].at);
-}
-
-// Does the series carry on past `at` to an item this question doesn't accept?
-// Looks only as far as one more list member could reach, and insists on finding
-// the closing conjunction with a word after it — so "boulder, cobble, and silt"
-// reads as unfinished after COBBLE, while "rope, hammer, pitons, all of them
-// steel" (a trailing clause, not another item) does not.
-function listContinuesAfter(tokens, at) {
+// The next item of the series after `at`, or null if the series ends there. An
+// English series closes with "and X" / "or X", so what marks a run of accepted
+// answers as unfinished is a conjunction after it with an item attached:
+// "boulder, cobble" is unfinished in front of "and silt".
+//
+// The hard part is that the same conjunction also joins clauses — "…rock, gas,
+// and ash, and the valley went dark" ends its list at ASH. Nothing short of
+// parsing the sentence separates the two for certain, so length decides: an item
+// is a word or two before the next separator or the sentence's end, a clause
+// runs on. That misses a subset whose sentence continues unpunctuated past the
+// last item, which is the safe direction to miss in — a false positive here
+// blocks an author who did nothing wrong.
+function nextListItemAfter(tokens, at) {
   const tail = tokens.slice(at + 1, at + 4 + MAX_LIST_GAP_WORDS);
-  if (!tail.length || !LIST_SEPARATORS.has(tail[0])) return false;
+  if (!tail.length || !LIST_SEPARATORS.has(tail[0])) return null;
   const conjunction = tail.findIndex((t) => CONJUNCTIONS.has(t));
-  if (conjunction === -1) return false;
-  return tail.slice(conjunction + 1).some((t) => !LIST_SEPARATORS.has(t));
+  if (conjunction === -1) return null;
+
+  const item = [];
+  for (const token of tokens.slice(at + 2 + conjunction)) {
+    if (LIST_SEPARATORS.has(token)) break;
+    item.push(token);
+  }
+  if (!item.length || item.length > MAX_ITEM_WORDS) return null;
+  return item.join(" ");
 }
 
 // The ALL-CAPS learning vocabulary a passage teaches. Two letters minimum so
@@ -509,13 +514,15 @@ export function validateLesson(doc) {
           for (const tokens of ctx.sentences) {
             const run = findListRun(tokens, distinct);
             if (!run) continue;
-            if (runReachesLastItem(tokens, run)) {
+            // The series has to end where the accepted answers do — checked at
+            // the run's last item, wherever the conjunctions inside it fell, so
+            // "cats and dogs" is caught in front of "and rabbits".
+            const nextItem = nextListItemAfter(tokens, run[run.length - 1].at);
+            if (!nextItem) {
               complete = true;
               break;
             }
-            partial ??= tokens
-              .slice(run[run.length - 1].at + 1, run[run.length - 1].at + 4)
-              .filter((t) => !LIST_SEPARATORS.has(t))[0];
+            partial ??= nextItem;
           }
 
           if (complete) break;

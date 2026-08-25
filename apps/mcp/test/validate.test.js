@@ -371,6 +371,46 @@ test("accepting only part of the passage's list is rejected", () => {
   assert.deepEqual(codes(noOxford.errors), ["E_ORANGE_PARTIAL_LIST"]);
 });
 
+test("a repeated conjunction doesn't hide the rest of the list", () => {
+  // "cats and dogs and rabbits" has a conjunction inside the accepted run as
+  // well as after it, so a run that merely crosses one conjunction proves
+  // nothing — the series has to end where the answers do.
+  const { errors } = check((input) => {
+    input.sections[0].blocks[0].text +=
+      " The bank held cats and dogs and rabbits.";
+    question(input, 0, 5).answers = ["cats", "dogs"];
+  });
+  assert.deepEqual(codes(errors), ["E_ORANGE_PARTIAL_LIST"]);
+  assert.match(errors[0].message, /"RABBITS"/);
+
+  const whole = check((input) => {
+    input.sections[0].blocks[0].text +=
+      " The bank held cats and dogs and rabbits.";
+    question(input, 0, 5).answers = ["cats", "dogs", "rabbits"];
+  });
+  assert.deepEqual(codes(whole.errors), []);
+});
+
+test("a clause coordinated onto a finished list is not another item", () => {
+  // The same "and" joins clauses, and a list that ends properly is often
+  // followed by one. Reading those as a missing item would reject lessons that
+  // are correct, which costs more than the subset this misses.
+  const afterFullList = check((input) => {
+    input.sections[0].blocks[0].text = input.sections[0].blocks[0].text.replace(
+      "boulder, cobble, and silt, each size dropped where the flow can no longer lift it",
+      "boulder, cobble, and silt, and the bed shifts a little each winter",
+    );
+  });
+  assert.deepEqual(codes(afterFullList.errors), []);
+
+  const afterPair = check((input) => {
+    input.sections[0].blocks[0].text +=
+      " The wind carries dust and grit and never lets up.";
+    question(input, 0, 5).answers = ["dust", "grit"];
+  });
+  assert.deepEqual(codes(afterPair.errors), []);
+});
+
 test("a complete list is accepted however it closes", () => {
   // A series with no conjunction at all is still a complete list when every item
   // is accepted, and a trailing clause after it is not a fourth item. Both would

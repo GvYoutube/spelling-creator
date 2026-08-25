@@ -158,19 +158,30 @@ Where the passage says `boulder, cobble, and silt` and the question accepts only
 and `cobble`, a speller who answers SILT has read exactly what they were told to read and
 is marked wrong. That is `E_ORANGE_PARTIAL_LIST`.
 
-An English series closes with `and X` / `or X`, so the test is whether the run of accepted
-items ever crosses a conjunction. If it doesn't, the series is checked for a continuation —
-a separator, then a conjunction, then a word — and only that continuation makes it partial.
-Two cases would otherwise be false rejections, and both are left alone:
+An English series closes with `and X` / `or X`, so the check looks just past the last
+accepted answer for a conjunction with an item attached — `boulder, cobble` is unfinished
+in front of `and silt`. It looks there regardless of any conjunction _inside_ the run,
+since `cats and dogs and rabbits` has one in both places.
 
-- `rope, hammer, pitons` — a complete series that simply has no conjunction. Nothing
-  follows it, so nothing is missing.
-- `rope, hammer, pitons, all of them steel` — a trailing clause after the list, not a
-  fourth item, because no conjunction introduces it.
+The difficulty is that the same conjunction joins clauses: `rock, gas, and ash, and the
+valley went dark` ends its list at ASH. Nothing short of parsing the sentence separates the
+two for certain, so **length decides** — an item is a word or two before the next separator
+or the sentence's end, and anything longer reads as a clause:
 
-The asymmetric case is a subset that includes the final item (`cobble, and silt` out of
-`boulder, cobble, and silt`), which passes. That is deliberate: it errs toward missing a
-defect rather than blocking a lesson that has none.
+| After the last accepted answer         | Read as            | Result   |
+| -------------------------------------- | ------------------ | -------- |
+| `and silt,`                            | item               | partial  |
+| `and rabbits.`                         | item               | partial  |
+| `and the valley went dark.`            | clause             | complete |
+| `, all of them steel` (no conjunction) | not a continuation | complete |
+| nothing — sentence ends                | series ended here  | complete |
+
+Two shapes are therefore left alone that a stricter reading would reject: a complete series
+with no conjunction at all (`rope, hammer, pitons`), and a clause coordinated onto a
+finished list. The cost is a subset whose sentence carries on unpunctuated past the final
+item, which goes unreported — along with a subset that happens to include the final item.
+Both are the safe direction to miss in: this runs on a write path, where a false positive
+blocks an author who did nothing wrong.
 
 The check is skipped unless every accepted answer is a single word already found in the
 passage, so it never piles onto a question that `E_ORANGE_PARAPHRASED` or
