@@ -31,6 +31,39 @@ Each app keeps its own environment file:
 
 Both are gitignored.
 
+### AI providers
+
+`generateWithFallback` (`apps/api/src/lib/ai/index.js`) tries each provider in
+order, skipping any that isn't configured, and within a provider tries its models
+in order. `AI_PROVIDER_ORDER` overrides the order; the default is
+`gemini, openai, anthropic, groq, openai-compatible, workers-ai`.
+
+The last two go last because neither needs a hosted API key, which makes them
+fallbacks rather than competitors for priority with the better models.
+
+**`openai-compatible`** is the one an instance with no hosted keys and no
+Cloudflare bindings can use. Ollama, llama.cpp's server, vLLM, LM Studio, LiteLLM
+and most hosted gateways all expose the OpenAI chat-completions shape, so one
+provider covers all of them — including a model running on the same machine as
+the app.
+
+| Variable                    | Required | Meaning                                                  |
+| --------------------------- | -------- | -------------------------------------------------------- |
+| `OPENAI_COMPATIBLE_URL`     | yes      | Base URL, e.g. `http://ollama:11434/v1`. `/v1` optional. |
+| `OPENAI_COMPATIBLE_MODELS`  | yes      | Comma-separated, tried in order.                         |
+| `OPENAI_COMPATIBLE_API_KEY` | no       | Most local runtimes want no auth.                        |
+| `OPENAI_COMPATIBLE_JSON`    | no       | `schema` if the server enforces JSON Schema.             |
+
+Structured output defaults to the weaker `json_object` mode, with the shape
+described in the prompt — the same thing the Groq provider does, and for the same
+reason: whether a server honours `json_schema` depends on which runtime it is and
+which version, and a wrong guess fails every question suggestion with a 400. Set
+`OPENAI_COMPATIBLE_JSON=schema` if you know yours enforces schemas.
+
+A self-hosted instance that would rather use its local model _first_ — for
+privacy, or because it has no hosted keys worth spending — sets
+`AI_PROVIDER_ORDER=openai-compatible` rather than being told what it wants.
+
 ## Documentation site
 
 This site is [VitePress](https://vitepress.dev). Pages are plain Markdown under

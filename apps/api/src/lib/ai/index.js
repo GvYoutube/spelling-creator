@@ -9,6 +9,7 @@ import * as gemini from './providers/gemini.js';
 import * as openai from './providers/openai.js';
 import * as anthropic from './providers/anthropic.js';
 import * as groq from './providers/groq.js';
+import * as openaiCompatible from './providers/openai-compatible.js';
 import * as workersAi from './providers/workers-ai.js';
 
 const PROVIDERS = {
@@ -16,12 +17,18 @@ const PROVIDERS = {
 	[openai.id]: openai,
 	[anthropic.id]: anthropic,
 	[groq.id]: groq,
+	[openaiCompatible.id]: openaiCompatible,
 	[workersAi.id]: workersAi,
 };
-// workers-ai last: it needs no API key, so it's always "configured" once the
-// AI binding exists — ordering it last keeps it a no-external-dependency
-// fallback rather than competing for priority with the hosted models.
-const DEFAULT_ORDER = ['gemini', 'openai', 'anthropic', 'groq', 'workers-ai'];
+// The two that need no hosted API key go last, so they act as fallbacks rather
+// than competing for priority with the higher-quality hosted models:
+// openai-compatible is configured by a URL (a local Ollama or vLLM), and
+// workers-ai is always "configured" once the AI binding exists.
+//
+// A self-hosted instance that would rather use its local model first — for
+// privacy, or because it has no hosted keys worth spending — reorders this with
+// AI_PROVIDER_ORDER rather than being told what it wants.
+const DEFAULT_ORDER = ['gemini', 'openai', 'anthropic', 'groq', 'openai-compatible', 'workers-ai'];
 
 function resolveOrder(env) {
 	const raw = env.AI_PROVIDER_ORDER;
@@ -50,7 +57,9 @@ export async function generateWithFallback({ prompt, schema, env }) {
 	}
 	throw (
 		lastErr ??
-		new Error('No AI provider is configured (set at least one of GEMINI_API_KEY, OPENAI_API_KEY, ANTHROPIC_API_KEY, GROQ_API_KEY)')
+		new Error(
+			'No AI provider is configured (set at least one of GEMINI_API_KEY, OPENAI_API_KEY, ANTHROPIC_API_KEY, GROQ_API_KEY, or OPENAI_COMPATIBLE_URL + OPENAI_COMPATIBLE_MODELS)',
+		)
 	);
 }
 
