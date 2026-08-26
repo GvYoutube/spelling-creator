@@ -1,7 +1,11 @@
-// Tests run inside the real Workers runtime (workerd) rather than Node, because the
-// code under test uses runtime globals Node doesn't have — notably HTMLRewriter, which
-// the rich-text sanitizer is built on (src/lib/richtext.js). Testing that against a
-// Node-shaped fake would prove nothing about what actually runs in production.
+// Tests run inside the real Workers runtime (workerd) rather than Node, because
+// some of the code under test only exists there.
+//
+// That used to include the rich-text sanitizer, which was built on HTMLRewriter; it
+// parses with parse5 now and would run anywhere. What still pins this to workerd is
+// the platform adapters — src/platform/cloudflare.test.js runs the conformance suite
+// against real R2 and KV, and a Node-shaped fake of those would only assert our own
+// assumptions back at us.
 //
 // The same goes double for CollabRoom: it's a Durable Object holding the live session's
 // Yjs document in SQLite and handing it to late joiners, so the only test worth having

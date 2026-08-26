@@ -219,8 +219,14 @@ host.
 
 The seam covers storage, not compute. Durable Objects (live collaboration and the
 remote MCP session), Browser Rendering (crawler prerendering and og-image
-screenshots), Workers AI and `HTMLRewriter` are all still Cloudflare-specific and
-are not behind it.
+screenshots) and Workers AI are all still Cloudflare-specific and are not behind
+it.
+
+The rich-text sanitizer used to be on that list — it was built on `HTMLRewriter`
+— and is no longer: it parses with parse5, which runs in every runtime. That one
+was solved by removing the coupling rather than by abstracting over it, which is
+the better answer whenever it is available. See
+[Rich text](../web-app/rich-text.md).
 
 Nor does it make the API run on Node today — the entry point is still a Worker.
 It removes the part of the coupling that was spread across every route, so that

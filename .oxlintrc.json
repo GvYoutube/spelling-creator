@@ -59,11 +59,11 @@
       "files": ["apps/api/**/*.js"],
       "env": { "worker": true, "node": true },
       "globals": {
-        // Cloudflare-specific runtime globals: Durable Object WebSockets, and the
-        // streaming HTML parser the rich-text sanitizer is built on (lib/richtext.js).
+        // Cloudflare-specific runtime globals, used by the Durable Objects.
+        // HTMLRewriter used to be here too, for the rich-text sanitizer; that now
+        // parses with parse5 so it runs on any host (see lib/richtext.js).
         "WebSocketPair": "readonly",
-        "WebSocketRequestResponsePair": "readonly",
-        "HTMLRewriter": "readonly"
+        "WebSocketRequestResponsePair": "readonly"
       }
     },
 

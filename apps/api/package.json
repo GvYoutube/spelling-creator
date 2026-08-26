@@ -19,6 +19,7 @@
 		"agents": "^0.20.1",
 		"glin-profanity": "^3.3.0",
 		"hono": "^4.13.2",
+		"parse5": "^8.0.1",
 		"yjs": "^13.6.32"
 	},
 	"devDependencies": {

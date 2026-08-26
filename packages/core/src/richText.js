@@ -2,11 +2,11 @@
 // carry, shared by the two places that enforce them.
 //
 // Both sanitizers are deliberately NOT here. The Worker sanitizes on write with
-// HTMLRewriter (the runtime's native streaming parser) and the browser sanitizes
-// again at render time with DOMPurify, because the render path uses
-// dangerouslySetInnerHTML and a reader's safety should not depend on every stored
-// row having been written by the current version of the Worker. Those are two
-// real parsers for two runtimes and neither can run in the other.
+// parse5 and the browser sanitizes again at render time with DOMPurify, because
+// the render path uses dangerouslySetInnerHTML and a reader's safety should not
+// depend on every stored row having been written by the current version of the
+// Worker. They are two real parsers doing two different jobs — deciding what may
+// be stored, and defending what is read — not one policy written twice.
 //
 // What CAN drift between them, and previously did, is everything they agree on:
 // which tags survive, which link schemes are real links, what a link is rewritten

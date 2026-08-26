@@ -82,8 +82,9 @@ The repo uses the [Oxc](https://oxc.rs) toolchain — `oxfmt` for formatting and
   `correctness` category as errors, mirroring the old flat config's
   `js/recommended` + `eslint-plugin-react` + `eslint-plugin-react-hooks` setup.
   Per-app `overrides` supply the right globals for each runtime: browser for
-  `apps/web`, worker + Node (plus `WebSocketPair`, `WebSocketRequestResponsePair`
-  and `HTMLRewriter`) for `apps/api`, and Node for `apps/mcp`. `packages/core` is
+  `apps/web`, worker + Node (plus `WebSocketPair` and
+  `WebSocketRequestResponsePair`, the Durable Objects' globals) for `apps/api`,
+  and Node for `apps/mcp`. `packages/core` is
   linted against the `worker` env — the narrowest of the three — so that anything
   reaching for a browser-only global there fails the lint rather than breaking at
   runtime inside the Worker. The modules that legitimately need the DOM

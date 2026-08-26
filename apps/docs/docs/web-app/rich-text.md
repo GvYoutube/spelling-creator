@@ -31,15 +31,18 @@ document.
 | ------------------------------------------------- | ------------------------------------------------------------------------- |
 | `@spelling-creator/core/richText`                 | **The policy.** Allow-list, link schemes, link `rel`/`target`, HTML→text. |
 | `packages/core/src/richText.test.js`              | Its tests — link safety, the allow-list, the browser-side helpers.        |
-| `apps/api/src/lib/richtext.js`                    | **The boundary.** Sanitizes on write (HTMLRewriter).                      |
+| `apps/api/src/lib/richtext.js`                    | **The boundary.** Sanitizes on write (parse5).                            |
 | `apps/api/src/lib/richtext.test.js`               | Its tests — media, XSS, links, legacy values.                             |
 | `apps/web/src/components/RichTextInput.jsx`       | The editor (toolbar, limits, no media affordances).                       |
 | `apps/web/src/components/RichText.jsx`            | The renderer, for both rich text and legacy plain text.                   |
 | `@spelling-creator/core/browser/sanitizeRichText` | Render-time sanitizing (DOMPurify).                                       |
 
-The two sanitizers are deliberately separate — HTMLRewriter is the Workers
-runtime's native streaming parser and DOMPurify needs a real DOM, so neither can
-run where the other does. What they **agree** on is shared: which tags survive,
+The two sanitizers are deliberately separate, but not for the reason they
+originally were. The write-side one used to be built on HTMLRewriter, which only
+exists in the Workers runtime; it parses with parse5 now and would run anywhere.
+What keeps them apart is what they are _for_: the write-side pass decides what
+may be stored, and the render-side DOMPurify pass is defence in depth against
+rows written by an older server. What they **agree** on is shared: which tags survive,
 which link schemes are real links, what a surviving link is rewritten to carry,
 and how markup flattens to text. Those used to be two hand-maintained copies
 under different names (`richTextToPlain` on the Worker, `richTextToPlainText` in
@@ -66,11 +69,23 @@ in four places, only the third of which is load-bearing:
    code. Rows predating rich text, or written by some future path that forgets to
    sanitize, are caught here.
 
-The sanitizer is built on
-[HTMLRewriter](https://developers.cloudflare.com/workers/runtime-apis/html-rewriter/),
-the Workers runtime's native streaming HTML parser. A real parser sees the same tag
-soup a browser would; a regex-based "sanitizer" is the classic way to ship an XSS
-hole (`<img/src=x onerror=…>`, `<scr<script>ipt>`). It also means no dependency.
+The sanitizer is built on [parse5](https://github.com/inikulin/parse5), a
+WHATWG-conformant HTML parser. Using a real parser is the non-negotiable part: it
+sees the same tag soup a browser would, where a regex-based "sanitizer" is the
+classic way to ship an XSS hole (`<img/src=x onerror=…>`, `<scr<script>ipt>`).
+
+It was HTMLRewriter, the Workers runtime's own streaming parser, until
+self-hosting made that a problem: HTMLRewriter runs in one runtime, so any other
+host would have needed a second sanitizer — and two implementations of a security
+boundary that have to agree is a worse thing to own than a dependency, because
+the drift would be silent and it would be an XSS hole.
+
+Swapping a streaming parser for a tree-building one brought one new concern with
+it. The routes cap raw input at 20,000 characters and `<b>` is three of them, so
+a caller can send a tree nearly 7,000 levels deep — enough to exhaust the stack
+in any tree-shaped walk. The walk is iterative, and nesting past 100 levels is
+flattened to its text, the same thing that happens to unrecognised markup
+everywhere else. The editor's deepest possible output is five.
 
 ### Links
 
