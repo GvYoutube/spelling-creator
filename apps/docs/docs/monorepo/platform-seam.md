@@ -147,6 +147,49 @@ than a real server: this one rejects an unsigned request, so every test also
 asserts that the request was signed, and it stores metadata as the raw header
 bytes it received, so the encoding round trip is exercised rather than assumed.
 
+## The Postgres key-value store
+
+`src/platform/postgrestKv.js` is a `KvStore` over a `(key, value, expires_at)`
+table, reached through PostgREST.
+
+```js
+import { postgrestKv } from "./platform/postgrestKv.js";
+
+const kv = postgrestKv({
+  url: process.env.SUPABASE_URL, // or any PostgREST server
+  apiKey: process.env.SUPABASE_SERVICE_ROLE_KEY,
+});
+```
+
+Through PostgREST rather than through `pg` on purpose. Everything else this API
+reads or writes already goes over PostgREST with the service-role key, so this
+needs no new dependency, no connection pool and no second set of credentials —
+and it keeps working in the Workers runtime, which cannot open a raw TCP
+connection to Postgres at all. A direct-SQL adapter can be written later behind
+the same interface if the extra hop ever matters; for a store whose callers
+already accepted an eventually-consistent KV, it does not.
+
+The table is in `apps/api/schema.sql`. Creating it on the hosted instance too is
+harmless — nothing writes to it there.
+
+**Expiry is enforced on read**, not by the database. PostgREST offers no TTL, and
+depending on `pg_cron` being installed would make a self-host fail in a way that
+looks like a rate limiter that never resets. A row past its expiry reads as
+absent and is swept on the way past, so correctness never depends on the periodic
+sweep running; that only reclaims rows nobody asks for again. `schema.sql`
+carries the `pg_cron` snippet for instances that can run it.
+
+Nothing in the table is authoritative — every row is small, short-lived, and has
+an expiry past which its absence is the right answer. That is what lets it be an
+ordinary table with no locking and no transactions: the rate limiters are
+read-modify-write token buckets that tolerate a lost update, and the worst one
+costs is a single extra request served.
+
+A failed read returns `null` rather than throwing, so an unreachable database
+degrades to a cache miss instead of taking the route down with it. A failed
+_write_ does throw — silently not recording a rate-limit charge is not a
+degradation, it is a hole.
+
 ## Adding a host
 
 Write one module that returns the shape above, and put it on `env.PLATFORM`
