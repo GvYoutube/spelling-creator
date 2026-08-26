@@ -2,6 +2,7 @@
 // label, and looking up the moderation role. Roles are always re-derived from the
 // database server-side — never trusted from the client.
 
+import { clientIp as platformClientIp } from '../platform/index.js';
 import { supabaseHeaders, verifySupabaseUser } from './supabase.js';
 
 /**
@@ -26,12 +27,18 @@ export function authorFromUser(user) {
 }
 
 /**
- * The client IP a request arrived from, per Cloudflare's `cf-connecting-ip`
- * header (the same source the rate limiter uses). Recorded on new content so an
- * admin can later ban that address, and checked against `banned_ips`.
+ * The client IP a request arrived from (the same source the rate limiter uses).
+ * Recorded on new content so an admin can later ban that address, and checked
+ * against `banned_ips`.
+ *
+ * Which header carries it is the host's business, not this module's: Cloudflare
+ * sets `cf-connecting-ip` and overwrites any client-supplied copy, where a
+ * self-hosted instance behind its own proxy has a different trusted header. So
+ * the answer comes from the platform seam — and it takes `env` for that reason,
+ * not because identity has anything to do with bindings.
  */
-export function clientIp(request) {
-	return request.headers.get('cf-connecting-ip') || '';
+export function clientIp(env, request) {
+	return platformClientIp(env, request);
 }
 
 /**

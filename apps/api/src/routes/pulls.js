@@ -62,6 +62,7 @@ import {
 import { profanityFilter } from '../lib/profanity.js';
 import { supabaseBase, supabaseConfigured, supabaseHeaders, verifySupabaseUser } from '../lib/supabase.js';
 import { textResponse, jsonResponse } from '../lib/http.js';
+import { gitStore } from '../platform/index.js';
 import { createNotification } from './notifications.js';
 // The same limits the submission form counts against, so the two can't drift.
 import { MAX_PULL_REVISIONS, PULL_BODY_MAX, PULL_TITLE_MAX } from '@spelling-creator/core/pulls';
@@ -171,8 +172,9 @@ function canReview(row, user) {
 
 /** The commit the lesson's stored history currently points at, or null. */
 async function storedLessonHead(env, lessonId) {
-	if (!env.LESSON_GIT) return null;
-	const object = await env.LESSON_GIT.get(refsKey(lessonId));
+	const store = gitStore(env);
+	if (!store) return null;
+	const object = await store.get(refsKey(lessonId));
 	if (!object) return null;
 	const refs = await object.json().catch(() => null);
 	return refs && refs.head ? refs.head : null;
@@ -395,7 +397,7 @@ async function openPull(request, env, base, lessonId, cors) {
 		base: OID_RE.test(baseOid) ? baseOid : null,
 		ready: false,
 		status: 'open',
-		author_ip: clientIp(request) || null,
+		author_ip: clientIp(env, request) || null,
 	};
 
 	let res;
@@ -493,7 +495,8 @@ export function planPullUpload(pull, head, now = new Date().toISOString()) {
  * own, which they could always have closed and reopened instead.
  */
 async function putPullPack(request, env, base, lessonId, pullId, cors) {
-	if (!env.LESSON_GIT) return textResponse('Lesson history is not configured.', 500, cors);
+	const store = gitStore(env);
+	if (!store) return textResponse('Lesson history is not configured.', 500, cors);
 
 	const user = await verifySupabaseUser(env, bearerToken(request));
 	if (!user) return textResponse('Please sign in before proposing changes.', 401, cors);
@@ -521,9 +524,9 @@ async function putPullPack(request, env, base, lessonId, pullId, cors) {
 	if (bytes.byteLength > MAX_PACK_BYTES) return textResponse('This proposal has too much history to store.', 413, cors);
 	if (!isPackfile(bytes)) return textResponse('That is not a packfile.', 400, cors);
 
-	await env.LESSON_GIT.put(pullPackKey(pullId), bytes, {
-		httpMetadata: { contentType: 'application/x-git-packfile' },
-		customMetadata: { head },
+	await store.put(pullPackKey(pullId), bytes, {
+		contentType: 'application/x-git-packfile',
+		metadata: { head },
 	});
 
 	// The pack is stored before the row is flipped: `ready` means "there is
@@ -599,7 +602,8 @@ async function putPullPack(request, env, base, lessonId, pullId, cors) {
  * commits they share, and merges from there.
  */
 async function getPullPack(request, env, base, lessonId, pullId, cors) {
-	if (!env.LESSON_GIT) return textResponse('Lesson history is not configured.', 500, cors);
+	const store = gitStore(env);
+	if (!store) return textResponse('Lesson history is not configured.', 500, cors);
 
 	const lesson = await fetchLessonRow(env, base, lessonId);
 	if (!lesson) return textResponse('Lesson not found.', 404, cors);
@@ -610,7 +614,7 @@ async function getPullPack(request, env, base, lessonId, pullId, cors) {
 	const pull = await fetchPull(env, base, lessonId, pullId);
 	if (!pull || !pull.ready) return textResponse('Proposal not found.', 404, cors);
 
-	const object = await env.LESSON_GIT.get(pullPackKey(pullId));
+	const object = await store.get(pullPackKey(pullId));
 	if (!object) return textResponse('This proposal’s changes are no longer stored.', 404, cors);
 
 	const headers = new Headers(cors);
@@ -625,11 +629,11 @@ async function getPullPack(request, env, base, lessonId, pullId, cors) {
 	// either way (a proposal only ever moves forward), so serving the row's head
 	// with them hands a reviewer exactly the revision the proposal claims to be,
 	// whichever way that write went.
-	const head = pull.head || object.customMetadata?.head || '';
+	const head = pull.head || object.metadata.head || '';
 	if (head) headers.set('X-Git-Head', head);
 	// The SPA reads X-Git-Head cross-origin, which needs it explicitly exposed.
 	headers.set('Access-Control-Expose-Headers', 'X-Git-Head');
-	if (object.httpEtag) headers.set('ETag', object.httpEtag);
+	if (object.etag) headers.set('ETag', object.etag);
 	return new Response(object.body, { status: 200, headers });
 }
 

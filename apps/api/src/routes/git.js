@@ -27,7 +27,7 @@
 //   git/<lessonId>/pack        the packfile bytes
 //   git/<lessonId>/refs.json   { head, refs, size, updatedAt }
 //
-// The pack carries its own tip *and* its branch map in customMetadata (echoed in
+// The pack carries its own tip *and* its branch map in its object metadata (echoed in
 // the X-Git-Head and X-Git-Refs response headers). A clone therefore reads both
 // from the *same object* as the bytes, so it can never pair a new refs.json with
 // a stale pack.
@@ -94,10 +94,11 @@ import {
 } from '../lib/lessonGit.js';
 import { supabaseBase, supabaseConfigured, verifySupabaseUser } from '../lib/supabase.js';
 import { textResponse, jsonResponse } from '../lib/http.js';
+import { gitStore } from '../platform/index.js';
 
 /** What we currently hold for a lesson: `{ head, refs }`, or null with no history. */
 async function stored(env, lessonId) {
-	const object = await env.LESSON_GIT.get(refsKey(lessonId));
+	const object = await gitStore(env).get(refsKey(lessonId));
 	if (!object) return null;
 	const value = await object.json().catch(() => null);
 	if (!value || !value.head) return null;
@@ -188,7 +189,8 @@ async function readable(request, env, base, row, cors) {
  * "/refs" or "/pack".
  */
 export async function handleGit(request, env, lessonId, rest, cors) {
-	if (!env.LESSON_GIT) {
+	const store = gitStore(env);
+	if (!store) {
 		return textResponse('Lesson history is not configured.', 500, cors);
 	}
 	if (!supabaseConfigured(env)) {
@@ -208,7 +210,7 @@ export async function handleGit(request, env, lessonId, rest, cors) {
 		const denied = await readable(request, env, base, row, cors);
 		if (denied) return denied;
 
-		const object = await env.LESSON_GIT.get(refsKey(lessonId));
+		const object = await store.get(refsKey(lessonId));
 		if (!object) return textResponse('This lesson has no history.', 404, cors);
 
 		const refs = await object.json().catch(() => null);
@@ -225,7 +227,7 @@ export async function handleGit(request, env, lessonId, rest, cors) {
 		const denied = await readable(request, env, base, row, cors);
 		if (denied) return denied;
 
-		const object = await env.LESSON_GIT.get(packKey(lessonId));
+		const object = await store.get(packKey(lessonId));
 		if (!object) return textResponse('This lesson has no history.', 404, cors);
 
 		const headers = new Headers(cors);
@@ -233,16 +235,16 @@ export async function handleGit(request, env, lessonId, rest, cors) {
 		// The pack is replaced in place whenever the author saves, so it must not be
 		// cached: a stale pack would be missing the commits refs advertises.
 		headers.set('Cache-Control', 'no-store');
-		const head = object.customMetadata?.head || '';
+		const head = object.metadata.head || '';
 		if (head) headers.set('X-Git-Head', head);
 		// The branch map comes off the *same object* as the bytes, for the reason the
 		// head does: a map read from refs.json a moment later could name a tip this
 		// pack doesn't contain.
-		const refs = object.customMetadata?.refs || '';
+		const refs = object.metadata.refs || '';
 		if (refs) headers.set('X-Git-Refs', refs);
 		// The SPA reads these cross-origin, which needs them explicitly exposed.
 		headers.set('Access-Control-Expose-Headers', 'X-Git-Head, X-Git-Refs');
-		if (object.httpEtag) headers.set('ETag', object.httpEtag);
+		if (object.etag) headers.set('ETag', object.etag);
 		return new Response(object.body, { status: 200, headers });
 	}
 
@@ -356,7 +358,7 @@ export async function handleGit(request, env, lessonId, rest, cors) {
 		// Already there — the client is re-pushing exactly what we hold, branches and
 		// all. Nothing to write.
 		if (current && current === head && serializeRefMap(applied.refs) === serializeRefMap(held.refs)) {
-			const object = await env.LESSON_GIT.get(refsKey(lessonId));
+			const object = await store.get(refsKey(lessonId));
 			const existing = object ? await object.json().catch(() => null) : null;
 			if (existing) return jsonResponse(existing, 200, cors);
 		}
@@ -381,13 +383,13 @@ export async function handleGit(request, env, lessonId, rest, cors) {
 		// pack write fails, refs still names the previous (complete) pack, and a
 		// clone of the old history beats a clone of a half-written one.
 		const map = serializeRefMap(applied.refs);
-		await env.LESSON_GIT.put(packKey(lessonId), bytes, {
-			httpMetadata: { contentType: 'application/x-git-packfile' },
-			customMetadata: { head, refs: map },
+		await store.put(packKey(lessonId), bytes, {
+			contentType: 'application/x-git-packfile',
+			metadata: { head, refs: map },
 		});
 		const refs = { head, refs: applied.refs, size: bytes.byteLength, updatedAt: new Date().toISOString() };
-		await env.LESSON_GIT.put(refsKey(lessonId), JSON.stringify(refs), {
-			httpMetadata: { contentType: 'application/json' },
+		await store.put(refsKey(lessonId), JSON.stringify(refs), {
+			contentType: 'application/json',
 		});
 
 		return jsonResponse(refs, 200, cors);

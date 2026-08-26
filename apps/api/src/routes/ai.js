@@ -5,6 +5,7 @@
 
 import { generateWithFallback, QUESTION_SCHEMAS, QUESTION_LABELS, QUESTION_INSTRUCTIONS, LESSON_IDEA_SCHEMA } from '../lib/ai/index.js';
 import { cacheKey } from '../lib/cache.js';
+import { clientIp, rateLimitStore } from '../platform/index.js';
 import { verifyTurnstile } from '../lib/turnstile.js';
 import { textResponse } from '../lib/http.js';
 
@@ -127,12 +128,14 @@ async function handleImageFetch(rawUrl, okHeaders, cors) {
 export async function handleAi(request, env, cors, allowedHostnames) {
 	const LIMIT = 60;
 	const WINDOW = 60;
-	const ip = request.headers.get('cf-connecting-ip') || 'unknown';
+	const ip = clientIp(env, request) || 'unknown';
 	const rlKey = `rl:${ip}`;
 
-	// KV guard
-	if (!env || !env.RATE_LIMIT_KV) {
-		return new Response('Server misconfiguration: RATE_LIMIT_KV not bound', { status: 500, headers: cors });
+	// Key-value store guard — the rate limiter and the answer cache both live in
+	// it, so there is no useful degraded mode without one.
+	const kv = rateLimitStore(env);
+	if (!kv) {
+		return new Response('Server misconfiguration: no rate-limit store configured', { status: 500, headers: cors });
 	}
 
 	// Read the request JSON. `mode` selects the suggester: "text" (default)
@@ -186,7 +189,7 @@ export async function handleAi(request, env, cors, allowedHostnames) {
 	// elapsed time, but defer the decrement until after the cache check so a
 	// cache hit costs nothing against the limit.
 	const now = Math.floor(Date.now() / 1000);
-	const entryRaw = await env.RATE_LIMIT_KV.get(rlKey);
+	const entryRaw = await kv.get(rlKey);
 	let entry = entryRaw ? JSON.parse(entryRaw) : { tokens: LIMIT, last: now };
 	const elapsed = now - entry.last;
 	const refill = (elapsed * LIMIT) / WINDOW;
@@ -213,7 +216,7 @@ export async function handleAi(request, env, cors, allowedHostnames) {
 	// so it neither consumes a token nor can be rejected by the limiter.
 	const cKey = mode === 'text' ? await cacheKey(['text', subject, documentName]) : null;
 	if (cKey) {
-		const cached = await env.RATE_LIMIT_KV.get(cKey);
+		const cached = await kv.get(cKey);
 		if (cached) {
 			return new Response(cached, { status: 200, headers: okHeaders() });
 		}
@@ -228,7 +231,7 @@ export async function handleAi(request, env, cors, allowedHostnames) {
 		return new Response('Too Many Requests', { status: 429, headers });
 	}
 	entry.tokens -= 1;
-	await env.RATE_LIMIT_KV.put(rlKey, JSON.stringify(entry), { expirationTtl: WINDOW * 2 });
+	await kv.put(rlKey, JSON.stringify(entry), { expirationTtl: WINDOW * 2 });
 
 	// Pixabay image search/fetch. The Worker holds the API key and proxies
 	// the request (Pixabay's CDN sends no CORS headers, so the browser can't
@@ -314,7 +317,7 @@ export async function handleAi(request, env, cors, allowedHostnames) {
 		const text = aiResponse.text;
 
 		const payload = JSON.stringify({ text });
-		await env.RATE_LIMIT_KV.put(cKey, payload, { expirationTtl: CACHE_TTL });
+		await kv.put(cKey, payload, { expirationTtl: CACHE_TTL });
 		return new Response(payload, { status: 200, headers: okHeaders() });
 	} catch (err) {
 		return new Response('Upstream AI error', { status: 502, headers: cors });

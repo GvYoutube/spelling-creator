@@ -5,6 +5,7 @@
 
 import { verifySupabaseUser } from '../lib/supabase.js';
 import { cacheKey } from '../lib/cache.js';
+import { rateLimitStore } from '../platform/index.js';
 import { textResponse, jsonResponse } from '../lib/http.js';
 
 /**
@@ -22,8 +23,9 @@ import { textResponse, jsonResponse } from '../lib/http.js';
  */
 export async function handleTextFeedback(request, env, cors) {
 	if (request.method !== 'POST') return textResponse('Method not allowed.', 405, cors);
-	if (!env || !env.RATE_LIMIT_KV) {
-		return textResponse('Server misconfiguration: RATE_LIMIT_KV not bound', 500, cors);
+	const kv = rateLimitStore(env);
+	if (!kv) {
+		return textResponse('Server misconfiguration: no rate-limit store configured', 500, cors);
 	}
 	if (!env.SUPABASE_URL || !env.SUPABASE_SERVICE_ROLE_KEY) {
 		return textResponse('Server misconfiguration: Supabase is not configured', 500, cors);
@@ -49,7 +51,7 @@ export async function handleTextFeedback(request, env, cors) {
 	// put in the AI route) and drop it. Deleting a missing key is a no-op, so a
 	// stale or already-expired entry still reports success.
 	const cKey = await cacheKey(['text', subject, documentName]);
-	await env.RATE_LIMIT_KV.delete(cKey);
+	await kv.delete(cKey);
 
 	return jsonResponse({ ok: true }, 200, cors);
 }

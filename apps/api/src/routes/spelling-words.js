@@ -9,6 +9,7 @@
 // carries `generatedAt` so a client (or a curious human) can see how stale it is.
 
 import { supabaseHeaders } from '../lib/supabase.js';
+import { rateLimitStore } from '../platform/index.js';
 import { jsonResponse, textResponse } from '../lib/http.js';
 
 // How often the aggregate is allowed to change. The KV entry is written with this
@@ -99,15 +100,16 @@ export async function handleSpellingWords(request, env, url, cors) {
 	// Browsers/CDNs may also hold the response for the refresh window.
 	headers.set('Cache-Control', `public, max-age=${REFRESH_SECONDS}`);
 
-	// 1) Serve the cached payload if the KV entry is still alive.
-	if (env.RATE_LIMIT_KV) {
-		const cached = await env.RATE_LIMIT_KV.get(CACHE_KEY).catch(() => null);
+	// 1) Serve the cached payload if the entry is still alive.
+	const kv = rateLimitStore(env);
+	if (kv) {
+		const cached = await kv.get(CACHE_KEY).catch(() => null);
 		if (cached) {
 			return new Response(cached, { status: 200, headers });
 		}
 	}
 
-	// 2) Cache miss (or no KV binding): rebuild from Supabase.
+	// 2) Cache miss (or no key-value store): rebuild from Supabase.
 	let payload = null;
 	if (env.SUPABASE_URL && env.SUPABASE_SERVICE_ROLE_KEY) {
 		const base = env.SUPABASE_URL.replace(/\/$/, '');
@@ -121,9 +123,9 @@ export async function handleSpellingWords(request, env, url, cors) {
 	}
 
 	const body = JSON.stringify(payload);
-	if (env.RATE_LIMIT_KV) {
+	if (kv) {
 		// Expire after the refresh window so the next request past it rebuilds.
-		await env.RATE_LIMIT_KV.put(CACHE_KEY, body, { expirationTtl: REFRESH_SECONDS }).catch(() => {});
+		await kv.put(CACHE_KEY, body, { expirationTtl: REFRESH_SECONDS }).catch(() => {});
 	}
 	return new Response(body, { status: 200, headers });
 }

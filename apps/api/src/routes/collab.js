@@ -5,6 +5,7 @@
 
 import { verifySupabaseUser } from '../lib/supabase.js';
 import { displayNameOf } from '../lib/auth.js';
+import { rateLimitStore } from '../platform/index.js';
 
 /**
  * Live-collaboration WebSocket entry. A browser opens
@@ -36,8 +37,9 @@ export async function handleCollab(request, env, url, cors) {
 	}
 	const create = url.searchParams.get('create') === '1';
 
-	if (!env.RATE_LIMIT_KV) {
-		return new Response('Server misconfiguration: RATE_LIMIT_KV not bound', { status: 500, headers: cors });
+	const kv = rateLimitStore(env);
+	if (!kv) {
+		return new Response('Server misconfiguration: no rate-limit store configured', { status: 500, headers: cors });
 	}
 
 	// Connection rate limit (token bucket): at most 5 joins/min per user.
@@ -45,7 +47,7 @@ export async function handleCollab(request, env, url, cors) {
 	const JOIN_WINDOW = 60;
 	const now = Math.floor(Date.now() / 1000);
 	const rlKey = `collab-rl:${user.id}`;
-	const raw = await env.RATE_LIMIT_KV.get(rlKey);
+	const raw = await kv.get(rlKey);
 	let entry = raw ? JSON.parse(raw) : { tokens: JOIN_LIMIT, last: now };
 	entry.tokens = Math.min(JOIN_LIMIT, entry.tokens + ((now - entry.last) * JOIN_LIMIT) / JOIN_WINDOW);
 	entry.last = now;
@@ -57,21 +59,21 @@ export async function handleCollab(request, env, url, cors) {
 		});
 	}
 	entry.tokens -= 1;
-	await env.RATE_LIMIT_KV.put(rlKey, JSON.stringify(entry), { expirationTtl: JOIN_WINDOW * 2 });
+	await kv.put(rlKey, JSON.stringify(entry), { expirationTtl: JOIN_WINDOW * 2 });
 
 	// Concurrent-room cap: a user may host at most 6 live sessions at once. The
 	// counter is incremented here on create and decremented by the DO when the
 	// host disconnects; the TTL lets a leaked count self-heal.
 	if (create) {
 		const roomsKey = `collab-rooms:${user.id}`;
-		const rooms = parseInt((await env.RATE_LIMIT_KV.get(roomsKey)) || '0', 10) || 0;
+		const rooms = parseInt((await kv.get(roomsKey)) || '0', 10) || 0;
 		if (rooms >= 6) {
 			return new Response('You already have the maximum number of active collaboration sessions.', {
 				status: 429,
 				headers: cors,
 			});
 		}
-		await env.RATE_LIMIT_KV.put(roomsKey, String(rooms + 1), { expirationTtl: 7200 });
+		await kv.put(roomsKey, String(rooms + 1), { expirationTtl: 7200 });
 	}
 
 	// Forward the upgrade to the room's Durable Object with the verified identity.

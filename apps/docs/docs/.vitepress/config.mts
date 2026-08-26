@@ -81,6 +81,7 @@ export default defineConfig({
             text: "Version history (git, by content block)",
             link: "/monorepo/version-history",
           },
+          { text: "The platform seam", link: "/monorepo/platform-seam" },
           { text: "Frontend migration", link: "/monorepo/frontend-migration" },
         ],
       },

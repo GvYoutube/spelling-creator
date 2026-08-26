@@ -1,11 +1,12 @@
 // One-time admin backfills, gated by a secret X-Admin-Token header. One converts
-// existing lessons' inline base64 images into R2 objects + hash refs; the other
-// re-compresses pre-existing R2 images to WEBP.
+// existing lessons' inline base64 images into stored objects + hash refs; the
+// other re-compresses pre-existing stored images to WEBP.
 
 import { supabaseHeaders } from '../lib/supabase.js';
 import { sha256Hex, extFromMime, decodeDataUrl, putImageObject } from '../lib/images.js';
 import { convertImageToWebp } from '../imageConvert.js';
 import { textResponse, jsonResponse } from '../lib/http.js';
+import { imageStore, responseCache } from '../platform/index.js';
 
 // Constant-time string compare so the admin token check doesn't leak length/
 // content via timing.
@@ -53,7 +54,7 @@ export async function handleAdminMigrateImages(request, env, cors) {
 	if (!env.SUPABASE_URL || !env.SUPABASE_SERVICE_ROLE_KEY) {
 		return textResponse('Server misconfiguration: Supabase is not configured', 500, cors);
 	}
-	if (!env.IMAGES) return textResponse('Image store is not configured.', 500, cors);
+	if (!imageStore(env)) return textResponse('Image store is not configured.', 500, cors);
 
 	const provided = request.headers.get('X-Admin-Token') || '';
 	if (!timingSafeEqual(provided, env.ADMIN_MIGRATE_TOKEN)) {
@@ -116,13 +117,14 @@ export async function handleAdminMigrateImages(request, env, cors) {
  * its cache evicts. We best-effort delete the current colo's cache entry; the
  * bytes are visually identical regardless, so this only delays the size win.
  *
- *   body: { cursor?: string (R2 list cursor), limit?: number (default 10) }
+ *   body: { cursor?: string (object-store list cursor), limit?: number (default 10) }
  *   ->    { processed, converted, skipped, nextCursor }  (nextCursor null at end)
  */
 export async function handleAdminBackfillWebp(request, env, ctx, cors) {
 	if (request.method !== 'POST') return textResponse('Method not allowed.', 405, cors);
 	if (!env.ADMIN_MIGRATE_TOKEN) return textResponse('Server misconfiguration: ADMIN_MIGRATE_TOKEN not set', 500, cors);
-	if (!env.IMAGES) return textResponse('Image store is not configured.', 500, cors);
+	const images = imageStore(env);
+	if (!images) return textResponse('Image store is not configured.', 500, cors);
 
 	const provided = request.headers.get('X-Admin-Token') || '';
 	if (!timingSafeEqual(provided, env.ADMIN_MIGRATE_TOKEN)) {
@@ -141,7 +143,7 @@ export async function handleAdminBackfillWebp(request, env, ctx, cors) {
 
 	let listing;
 	try {
-		listing = await env.IMAGES.list({ limit, cursor, include: ['httpMetadata'] });
+		listing = await images.list({ limit, cursor });
 	} catch (e) {
 		return textResponse('Could not list the image store.', 502, cors);
 	}
@@ -149,27 +151,27 @@ export async function handleAdminBackfillWebp(request, env, ctx, cors) {
 	let converted = 0;
 	let skipped = 0;
 	for (const obj of listing.objects) {
-		const contentType = (obj.httpMetadata?.contentType || '').toLowerCase();
+		const contentType = (obj.contentType || '').toLowerCase();
 		// Only raster formats convertImageToWebp knows how to decode; everything
 		// else (already-webp, gif, svg, bmp, unknown) is left as-is.
 		if (contentType !== 'image/png' && contentType !== 'image/jpeg' && contentType !== 'image/jpg') {
 			skipped += 1;
 			continue;
 		}
-		const stored = await env.IMAGES.get(obj.key);
+		const stored = await images.get(obj.key);
 		if (!stored) {
 			skipped += 1;
 			continue;
 		}
-		const bytes = new Uint8Array(await stored.arrayBuffer());
+		const bytes = await stored.bytes();
 		const result = await convertImageToWebp(bytes, contentType);
 		// convertImageToWebp returns the original (same bytes) when WEBP wasn't
 		// smaller or decoding failed — only rewrite when it actually shrank.
 		if (result.contentType === 'image/webp') {
-			await env.IMAGES.put(obj.key, result.bytes, { httpMetadata: { contentType: 'image/webp' } });
-			// Best-effort: drop this colo's cached (pre-conversion) copy.
-			const cacheKey = new Request(new URL(`/images/${obj.key}`, request.url).toString());
-			ctx.waitUntil(caches.default.delete(cacheKey));
+			await images.put(obj.key, result.bytes, { contentType: 'image/webp' });
+			// Best-effort: drop the cached (pre-conversion) copy.
+			const cacheKey = new URL(`/images/${obj.key}`, request.url).toString();
+			ctx.waitUntil(responseCache(env).delete(cacheKey));
 			converted += 1;
 		} else {
 			skipped += 1;

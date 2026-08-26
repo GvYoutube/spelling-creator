@@ -47,6 +47,8 @@
 import { DurableObject } from 'cloudflare:workers';
 import * as Y from 'yjs';
 
+import { rateLimitStore } from './platform/index.js';
+
 const T = {
 	HELLO: 0,
 	UPDATE: 1,
@@ -474,12 +476,13 @@ export class CollabRoom extends DurableObject {
 	// Best-effort decrement of the host's concurrent-room counter that the Worker
 	// incremented when the session was created.
 	async releaseRoom(uid) {
-		if (!uid || !this.env.RATE_LIMIT_KV) return;
+		const kv = rateLimitStore(this.env);
+		if (!uid || !kv) return;
 		try {
 			const key = `collab-rooms:${uid}`;
-			const n = parseInt((await this.env.RATE_LIMIT_KV.get(key)) || '0', 10) || 0;
-			if (n <= 1) await this.env.RATE_LIMIT_KV.delete(key);
-			else await this.env.RATE_LIMIT_KV.put(key, String(n - 1), { expirationTtl: 7200 });
+			const n = parseInt((await kv.get(key)) || '0', 10) || 0;
+			if (n <= 1) await kv.delete(key);
+			else await kv.put(key, String(n - 1), { expirationTtl: 7200 });
 		} catch {
 			/* best-effort; the TTL lets a stale count expire on its own */
 		}

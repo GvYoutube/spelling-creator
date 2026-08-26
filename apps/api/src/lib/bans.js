@@ -50,7 +50,7 @@ export async function isNameBanned(env, base, name) {
  * are clear to proceed. Kept in one place so every write path bans identically.
  */
 export async function bannedResponse(env, base, request, user, cors) {
-	if (await isIpBanned(env, base, clientIp(request))) {
+	if (await isIpBanned(env, base, clientIp(env, request))) {
 		return textResponse('Your access has been suspended.', 403, cors);
 	}
 	if (await isNameBanned(env, base, authorFromUser(user))) {

@@ -26,6 +26,13 @@ export default defineWorkersConfig({
 					durableObjects: {
 						COLLAB_ROOM: { className: 'CollabRoom', useSQLite: true },
 					},
+					// A bucket and a namespace for the platform-adapter conformance suite
+					// (src/platform/cloudflare.test.js) to run against. Deliberately not
+					// named after the production bindings: these exist to exercise the
+					// adapters, and reusing IMAGES/RATE_LIMIT_KV here would invite a test
+					// to reach for a binding instead of the seam in front of it.
+					r2Buckets: ['TEST_BLOBS'],
+					kvNamespaces: ['TEST_KV'],
 				},
 			},
 		},

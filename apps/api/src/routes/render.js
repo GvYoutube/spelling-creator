@@ -13,6 +13,7 @@
 
 import puppeteer from '@cloudflare/puppeteer';
 import { textResponse } from '../lib/http.js';
+import { responseCache } from '../platform/index.js';
 import { serverRender, shouldServerRender } from './ssr.js';
 
 // User-Agents of crawlers/scrapers worth prerendering for: search engines and
@@ -46,10 +47,10 @@ export function shouldPrerender(request, url) {
 // Render the page with headless Chromium and return its serialized HTML. Results
 // are cached (keyed by path) so repeat crawler hits don't each spin up a browser.
 async function prerender(request, env, ctx, url) {
-	const cache = caches.default;
+	const cache = responseCache(env);
 	// Cache under a synthetic key so a prerendered snapshot is never accidentally
 	// served to a real user requesting the same path.
-	const cacheKey = new Request(`${url.origin}${url.pathname}?${PRERENDER_BYPASS}=cache`, { method: 'GET' });
+	const cacheKey = `${url.origin}${url.pathname}?${PRERENDER_BYPASS}=cache`;
 	const hit = await cache.match(cacheKey);
 	if (hit) return hit;
 
@@ -119,8 +120,8 @@ export async function ogImage(request, env, ctx, url) {
 	if (!path.startsWith('/') || path.startsWith('//')) path = '/';
 	path = path.split(/[?#]/)[0];
 
-	const cache = caches.default;
-	const cacheKey = new Request(`${url.origin}/og-image?path=${encodeURIComponent(path)}`, { method: 'GET' });
+	const cache = responseCache(env);
+	const cacheKey = `${url.origin}/og-image?path=${encodeURIComponent(path)}`;
 	const hit = await cache.match(cacheKey);
 	if (hit) return hit;
 

@@ -43,5 +43,13 @@ The same split is what a change of frontend framework would rest on — see the
 [frontend migration](./frontend-migration.md) record, which weighs the options
 and is a proposal rather than a commitment.
 
+## Storage, and the platform seam
+
+The Worker's storage — lesson images and packed histories in R2, rate-limit
+buckets in KV, cached renders in `caches.default` — sits behind three small
+interfaces in `apps/api/src/platform/` rather than being called as bindings from
+each route. See [the platform seam](./platform-seam.md) for the interfaces, the
+executable conformance suite that defines them, and what it takes to add a host.
+
 See the [Web App](../web-app/overview.md) docs for full app documentation, and the
 [MCP Server](../mcp-server/overview.md) docs for connecting an AI assistant to the hub.

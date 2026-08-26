@@ -1,8 +1,10 @@
-// Content-addressed image storage helpers. Lesson images live in R2 keyed by the
-// SHA-256 of their (pre-conversion) bytes; the browser computes the same hash
-// (web/src/lib/imageStore.js), so an object key is verifiable from its bytes.
+// Content-addressed image storage helpers. Lesson images live in the object
+// store keyed by the SHA-256 of their (pre-conversion) bytes; the browser
+// computes the same hash (web/src/lib/imageStore.js), so an object key is
+// verifiable from its bytes.
 
 import { convertImageToWebp } from '../imageConvert.js';
+import { imageStore } from '../platform/index.js';
 
 // A valid image object key is a 64-char lowercase hex SHA-256.
 export const IMAGE_HASH_RE = /^[0-9a-f]{64}$/;
@@ -17,17 +19,18 @@ export async function sha256Hex(bytes) {
 	return [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, '0')).join('');
 }
 
-// Store image bytes in R2 under their content-hash key, first compressing them
-// to WEBP (convertImageToWebp falls back to the original bytes for formats it
-// can't transcode or when WEBP wouldn't be smaller). The key stays the ORIGINAL
-// hash — lesson docs reference images by the hash of their pre-conversion bytes,
-// so only the stored bytes and Content-Type change, transparently to readers.
+// Store image bytes under their content-hash key, first compressing them to WEBP
+// (convertImageToWebp falls back to the original bytes for formats it can't
+// transcode or when WEBP wouldn't be smaller). The key stays the ORIGINAL hash —
+// lesson docs reference images by the hash of their pre-conversion bytes, so only
+// the stored bytes and Content-Type change, transparently to readers.
 // Idempotent: an object already at this key holds a prior (converted) upload, so
 // skip both the conversion work and the write.
 export async function putImageObject(env, hash, bytes, mime) {
-	if (await env.IMAGES.head(hash)) return;
+	const images = imageStore(env);
+	if (await images.head(hash)) return;
 	const converted = await convertImageToWebp(bytes, mime);
-	await env.IMAGES.put(hash, converted.bytes, { httpMetadata: { contentType: converted.contentType } });
+	await images.put(hash, converted.bytes, { contentType: converted.contentType });
 }
 
 // docx ext rules, mirroring web/src/lib/imageRef.js extFromMime.
