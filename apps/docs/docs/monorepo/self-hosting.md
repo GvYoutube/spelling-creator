@@ -27,23 +27,26 @@ gateway around the app.
 ```bash
 cp .env.example .env      # then edit it; the defaults are not secrets
 docker compose up -d
-
-# Wait for the auth service to create auth.users on its first run — every hub
-# table references it, so applying the schema before that fails.
-until docker compose exec -T postgres \
-  psql -U postgres -d spelling -tAc "select to_regclass('auth.users')" | grep -q auth; do sleep 2; done
-
-docker compose exec -T postgres psql -U postgres -d spelling < apps/api/schema.sql
 ```
 
-PostgREST builds its view of the database once, at startup, so tables created
-after it started are invisible to it — which the app reports as
-`Could not load lessons.` with a 502, a long way from the cause. The stack
-installs the same `pgrst_watch` event trigger Supabase ships, so any DDL tells
-PostgREST to re-read; if you ever suspect it has gone stale anyway,
+That is the whole of it — there is no schema step to remember, because the
+ordering it depends on is not something to leave to a reader. A one-shot
+`schema` service waits for GoTrue to create `auth.users` on its first migration,
+then applies `apps/api/schema.sql` with `ON_ERROR_STOP`, and the app waits for it
+to finish.
+
+Both halves of that matter. Every hub table references `auth.users`, so applying
+the schema before auth has migrated fails _every_ statement — and `psql` walks
+past errors and exits 0, so the failure is silent. What you get is an empty
+database, PostgREST reporting `0 Relations`, and the app answering 502.
+
+The related trap is PostgREST's schema cache, which it builds once at startup: a
+table created afterwards is invisible to it. The stack installs the same
+`pgrst_watch` event trigger Supabase ships, so any DDL tells PostgREST to
+re-read. If you ever suspect it has gone stale anyway,
 `docker compose restart postgrest` settles it.
 
-The first step is not optional. Every credential is declared as a required
+Filling in `.env` is not optional. Every credential is declared as a required
 variable, so `docker compose up` without a filled-in `.env` stops and names what
 is missing rather than standing the stack up with blank passwords. The SMTP
 settings are the exception and default to empty: the stack comes up so you can

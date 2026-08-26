@@ -3,11 +3,10 @@
 #
 #   cp .env.example .env     # then edit it — the defaults are not secrets
 #   docker compose up -d
-#   # then apply apps/api/schema.sql once, AFTER the auth service has started:
-#   # every hub table references auth.users, which GoTrue creates on its first
-#   # migration, so running the schema before that fails. See
-#   # /docs/monorepo/self-hosting for a command that waits for it.
-#   docker compose exec -T postgres psql -U postgres -d spelling < apps/api/schema.sql
+#
+# There is no schema step to run by hand: the `schema` service below waits for
+# GoTrue to create auth.users, applies apps/api/schema.sql, and exits, and the
+# app waits for it to finish.
 #
 # The shape to understand before adapting: the app expects ONE origin that serves
 # both `/rest/v1/*` (PostgREST) and `/auth/v1/*` (GoTrue), because that is how
@@ -60,10 +59,51 @@ services:
       # OPENAI_COMPATIBLE_MODELS: llama3.2
       # AI_PROVIDER_ORDER: openai-compatible
     depends_on:
+      # Both of these run once and exit, so the app starts against a database
+      # that has its tables and an object store that has its buckets, rather
+      # than racing them and failing the first few requests.
+      schema:
+        condition: service_completed_successfully
+      minio-init:
+        condition: service_completed_successfully
+
+  # Applies apps/api/schema.sql once, then exits.
+  #
+  # This is a service rather than a step in the README because of an ordering
+  # trap that is very easy to lose an evening to. Every table in the schema
+  # references auth.users, which GoTrue creates on its first migration — so the
+  # schema cannot be applied until auth has started, and applying it early fails
+  # *every* statement. `psql` walks straight past errors and exits 0, so that
+  # failure is silent: you get an empty database, PostgREST reporting "0
+  # Relations", and the app answering 502 with no clue why.
+  #
+  # Hence both halves below: wait for auth.users to exist, and run with
+  # ON_ERROR_STOP so a real failure stops here and says so.
+  schema:
+    image: postgres:17-alpine
+    restart: "no"
+    environment:
+      PGPASSWORD: ${POSTGRES_PASSWORD:?missing, see .env.example}
+    volumes:
+      - ./apps/api/schema.sql:/schema.sql:ro
+    depends_on:
       postgres:
         condition: service_healthy
-      minio:
-        condition: service_healthy
+      auth:
+        condition: service_started
+    # List form with a literal block, so the script is one argument and needs no
+    # quote-escaping — the folded `sh -c "..."` spelling has to escape the inner
+    # quotes and is easy to get subtly wrong.
+    entrypoint:
+      - sh
+      - -c
+      - |
+        echo 'waiting for auth.users (GoTrue creates it on its first migration)...'
+        until psql -h postgres -U postgres -d spelling -tAc "select to_regclass('auth.users')" | grep -q auth; do
+          sleep 2
+        done
+        echo 'applying schema.sql'
+        psql -v ON_ERROR_STOP=1 -h postgres -U postgres -d spelling -f /schema.sql
 
   # Joins PostgREST and GoTrue under one origin, and fronts the app. This is the
   # piece with no Supabase equivalent to install — it is just a reverse proxy.
@@ -189,16 +229,26 @@ services:
   # Creates the two buckets and exits. Idempotent, so it is safe on every `up`.
   minio-init:
     image: minio/mc:latest
+    restart: "no"
     depends_on:
       minio:
         condition: service_healthy
-    entrypoint: >
-      /bin/sh -c "
-      mc alias set local http://minio:9000 ${MINIO_ROOT_USER:?missing, see .env.example} ${MINIO_ROOT_PASSWORD:?missing, see .env.example} &&
-      mc mb --ignore-existing local/lesson-images &&
-      mc mb --ignore-existing local/lesson-git
-      "
-    restart: "no"
+    # The credentials arrive as environment variables and are read by the script,
+    # rather than being pasted into the command line by compose: a password
+    # containing a space, a quote or a dollar sign would otherwise be split or
+    # mangled before the shell ever ran. The doubled dollars below are compose's
+    # escape for a literal one, so what the shell sees is $MINIO_USER.
+    environment:
+      MINIO_USER: ${MINIO_ROOT_USER:?missing, see .env.example}
+      MINIO_PASS: ${MINIO_ROOT_PASSWORD:?missing, see .env.example}
+    entrypoint:
+      - sh
+      - -c
+      - |
+        set -e
+        mc alias set local http://minio:9000 "$$MINIO_USER" "$$MINIO_PASS"
+        mc mb --ignore-existing local/lesson-images
+        mc mb --ignore-existing local/lesson-git
 
   # Optional: a local model for the AI helpers, so no request leaves the machine.
   # Pull one after starting it: `docker compose exec ollama ollama pull llama3.2`
