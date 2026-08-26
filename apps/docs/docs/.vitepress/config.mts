@@ -82,6 +82,7 @@ export default defineConfig({
             link: "/monorepo/version-history",
           },
           { text: "The platform seam", link: "/monorepo/platform-seam" },
+          { text: "Self-hosting", link: "/monorepo/self-hosting" },
           { text: "Frontend migration", link: "/monorepo/frontend-migration" },
         ],
       },

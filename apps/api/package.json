@@ -14,11 +14,13 @@
 		"dev": "pnpm --filter @spelling-creator/web build:ssr && wrangler dev",
 		"start": "pnpm --filter @spelling-creator/web build:ssr && wrangler dev",
 		"test": "vitest run",
-		"bundle": "wrangler deploy --dry-run --outdir dist"
+		"bundle": "wrangler deploy --dry-run --outdir dist",
+		"start:node": "node src/node/server.js"
 	},
 	"dependencies": {
 		"@cloudflare/puppeteer": "^1.3.0",
 		"@cloudflare/workers-oauth-provider": "^0.10.3",
+		"@hono/node-server": "^2.1.1",
 		"@jsquash/jpeg": "^1.6.0",
 		"@jsquash/png": "^3.1.1",
 		"@jsquash/webp": "^1.5.0",

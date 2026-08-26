@@ -11,9 +11,13 @@
 // package.json and src/codecs/): wrangler's bundler on Workers, a read and
 // compile off disk in Node.
 
-import encodeWebp, { init as initWebpEncode } from '@jsquash/webp/encode';
-import decodePng, { init as initPngDecode } from '@jsquash/png/decode';
-import decodeJpeg, { init as initJpegDecode } from '@jsquash/jpeg/decode';
+// The `.js` extensions are required, not stylistic: @jsquash ships no `exports`
+// map, so these resolve as plain files — and Node's ESM resolver does not guess
+// an extension the way a bundler does. Without them this module loads under
+// wrangler and vitest and fails at startup under plain `node`.
+import encodeWebp, { init as initWebpEncode } from '@jsquash/webp/encode.js';
+import decodePng, { init as initPngDecode } from '@jsquash/png/decode.js';
+import decodeJpeg, { init as initJpegDecode } from '@jsquash/jpeg/decode.js';
 
 import { jpegDecoderWasm, pngDecoderWasm, webpEncoderWasm } from '#image-codec-wasm';
 

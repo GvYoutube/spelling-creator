@@ -228,6 +228,8 @@ was solved by removing the coupling rather than by abstracting over it, which is
 the better answer whenever it is available. See
 [Rich text](../web-app/rich-text.md).
 
-Nor does it make the API run on Node today — the entry point is still a Worker.
-It removes the part of the coupling that was spread across every route, so that
-what remains is concentrated in a few named places.
+What it does do is concentrate the coupling: the part that was spread across
+every route is gone, and what remains sits in a few named places. That is what
+made a second entry point possible — see [Self-hosting](./self-hosting.md) for
+the Node one, which is `createApp()` from `src/app.js` plus a platform built by
+`src/node/platform.js`.

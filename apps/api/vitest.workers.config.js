@@ -34,7 +34,13 @@ export default defineWorkersConfig({
 		// and vitest's default list is what keeps node_modules out. Dropping it
 		// hands the runner every test file in every installed dependency.
 		include: ['src/**/*.test.js'],
-		exclude: [...configDefaults.exclude, 'src/imageConvert.test.js'],
+		exclude: [
+			...configDefaults.exclude,
+			'src/imageConvert.test.js',
+			// The Node entry point and its filesystem-backed asset server. There is
+			// nothing here for workerd to run — this host is the other one.
+			'src/node/**',
+		],
 		poolOptions: {
 			workers: {
 				main: './src/collab-room.test-worker.js',
