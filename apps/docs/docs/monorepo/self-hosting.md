@@ -21,8 +21,14 @@ built SPA from disk, and server-rendered HTML for the public read routes.
 ## With Docker
 
 The repository ships a `Dockerfile` and an example `docker-compose.yml` that
-stands the whole thing up — Postgres, PostgREST, GoTrue, MinIO and a Caddy
+stands the whole thing up — Postgres, PostgREST, GoTrue, RustFS and a Caddy
 gateway around the app.
+
+The object store is RustFS rather than MinIO, whose community edition is no
+longer somewhere to point self-hosters. Nothing in the app knows which it is —
+it speaks plain S3 — so Garage, SeaweedFS, Ceph RGW or real S3 are a change of
+image and endpoint and nothing else. The service is named `storage` for its role
+rather than its implementation to keep that swap a one-line edit.
 
 ```bash
 cp .env.example .env      # then edit it; the defaults are not secrets
@@ -125,7 +131,7 @@ when a dependency hiccups makes an orchestrator restart a process that was fine.
 | Runtime        | Cloudflare Workers            | Node ≥ 20                                     |
 | Database       | Supabase Postgres             | Postgres + [PostgREST](https://postgrest.org) |
 | Identity       | Supabase Auth                 | [GoTrue](https://github.com/supabase/auth)    |
-| Object storage | R2                            | MinIO, Garage, Ceph RGW, SeaweedFS, B2, S3    |
+| Object storage | R2                            | RustFS, Garage, Ceph RGW, SeaweedFS, B2, S3   |
 | Expiring KV    | Workers KV                    | a table in the same Postgres                  |
 | Response cache | `caches.default`              | your reverse proxy                            |
 | AI             | Gemini/OpenAI/… or Workers AI | the same, or a local Ollama / vLLM            |
@@ -174,7 +180,7 @@ once — it creates the hub tables and the `kv_store` table this host needs.
 
 | Variable               | Required | Meaning                                                 |
 | ---------------------- | -------- | ------------------------------------------------------- |
-| `S3_ENDPOINT`          | yes      | e.g. `http://minio:9000`                                |
+| `S3_ENDPOINT`          | yes      | e.g. `http://storage:9000`                              |
 | `S3_ACCESS_KEY_ID`     | yes      |                                                         |
 | `S3_SECRET_ACCESS_KEY` | yes      |                                                         |
 | `S3_BUCKET_IMAGES`     | yes      | Lesson images, keyed by content hash.                   |

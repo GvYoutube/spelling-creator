@@ -41,11 +41,14 @@ services:
       SUPABASE_SERVICE_ROLE_KEY: ${SERVICE_ROLE_KEY:?missing, see .env.example}
       SUPABASE_ANON_KEY: ${ANON_KEY:?missing, see .env.example}
 
-      S3_ENDPOINT: http://minio:9000
-      S3_ACCESS_KEY_ID: ${MINIO_ROOT_USER:?missing, see .env.example}
-      S3_SECRET_ACCESS_KEY: ${MINIO_ROOT_PASSWORD:?missing, see .env.example}
+      S3_ENDPOINT: http://storage:9000
+      S3_ACCESS_KEY_ID: ${S3_ACCESS_KEY:?missing, see .env.example}
+      S3_SECRET_ACCESS_KEY: ${S3_SECRET_KEY:?missing, see .env.example}
       S3_BUCKET_IMAGES: lesson-images
       S3_BUCKET_GIT: lesson-git
+      # Must match whatever the store signs against — SigV4 includes the region,
+      # so a mismatch is a 403 that looks like bad credentials.
+      S3_REGION: us-east-1
 
       ALLOWED_HOSTNAMES: ${PUBLIC_HOSTNAME:?missing, see .env.example}
       # One proxy (the gateway) sits in front of this process, so the client IP
@@ -70,7 +73,7 @@ services:
       # than racing them and failing the first few requests.
       schema:
         condition: service_completed_successfully
-      minio-init:
+      storage-init:
         condition: service_completed_successfully
 
   # Applies apps/api/schema.sql once, then exits.
@@ -264,46 +267,75 @@ services:
       postgres:
         condition: service_healthy
 
-  # Object storage for lesson images and packed lesson histories. Garage, Ceph
-  # RGW or SeaweedFS drop in here unchanged — the API speaks plain S3.
-  minio:
-    image: minio/minio:latest
+  # Object storage for lesson images and packed lesson histories.
+  #
+  # RustFS rather than MinIO: MinIO's community edition is no longer somewhere to
+  # point self-hosters. Nothing in the app knows which this is — it speaks plain
+  # S3 with SigV4 (apps/api/src/platform/s3.js) — so Garage, SeaweedFS, Ceph RGW
+  # or real S3 are a change of image and endpoint and nothing else. The service is
+  # named for its role rather than its implementation so that swap stays a
+  # one-line edit.
+  storage:
+    image: rustfs/rustfs:latest
     restart: unless-stopped
-    command: server /data --console-address ":9001"
     environment:
-      MINIO_ROOT_USER: ${MINIO_ROOT_USER:?missing, see .env.example}
-      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:?missing, see .env.example}
+      RUSTFS_ACCESS_KEY: ${S3_ACCESS_KEY:?missing, see .env.example}
+      RUSTFS_SECRET_KEY: ${S3_SECRET_KEY:?missing, see .env.example}
+      RUSTFS_VOLUMES: /data
+      RUSTFS_ADDRESS: ":9000"
     volumes:
-      - minio-data:/data
-    healthcheck:
-      test: ["CMD", "mc", "ready", "local"]
-      interval: 5s
-      timeout: 5s
-      retries: 20
+      - storage-data:/data
 
-  # Creates the two buckets and exits. Idempotent, so it is safe on every `up`.
-  minio-init:
-    image: minio/mc:latest
+  # Creates the two buckets and exits. Idempotent — it checks before creating, so
+  # it is safe on every `up`.
+  storage-init:
+    image: amazon/aws-cli:latest
     restart: "no"
     depends_on:
-      minio:
-        condition: service_healthy
-    # The credentials arrive as environment variables and are read by the script,
-    # rather than being pasted into the command line by compose: a password
-    # containing a space, a quote or a dollar sign would otherwise be split or
-    # mangled before the shell ever ran. The doubled dollars below are compose's
-    # escape for a literal one, so what the shell sees is $MINIO_USER.
+      - storage
+    # The AWS CLI rather than a vendor's own client, because it speaks to any of
+    # them: swapping the implementation above should not mean rewriting this too.
+    #
+    # Credentials arrive as environment variables and are read by the script
+    # rather than pasted into a command line by compose, so a secret containing a
+    # space, a quote or a dollar sign cannot be split or mangled before the shell
+    # runs. The doubled dollars are compose's escape for a literal one.
     environment:
-      MINIO_USER: ${MINIO_ROOT_USER:?missing, see .env.example}
-      MINIO_PASS: ${MINIO_ROOT_PASSWORD:?missing, see .env.example}
+      AWS_ACCESS_KEY_ID: ${S3_ACCESS_KEY:?missing, see .env.example}
+      AWS_SECRET_ACCESS_KEY: ${S3_SECRET_KEY:?missing, see .env.example}
+      AWS_DEFAULT_REGION: us-east-1
+      S3_ENDPOINT: http://storage:9000
     entrypoint:
-      - sh
+      - /bin/sh
       - -c
       - |
         set -e
-        mc alias set local http://minio:9000 "$$MINIO_USER" "$$MINIO_PASS"
-        mc mb --ignore-existing local/lesson-images
-        mc mb --ignore-existing local/lesson-git
+        echo 'waiting for the object store to accept a signed request...'
+        attempt=0
+        # Waits on list-buckets rather than on a port being open, because that
+        # proves the credentials work too — a store that is up but rejecting our
+        # signature would otherwise fail later, at the first upload, as a 403 with
+        # no obvious cause.
+        until aws --endpoint-url "$$S3_ENDPOINT" s3api list-buckets >/dev/null 2>&1; do
+          attempt=$$((attempt + 1))
+          if [ "$$attempt" -ge 60 ]; then
+            echo 'GAVE UP: the object store never accepted a signed request.'
+            echo 'Its own error follows; check S3_ACCESS_KEY / S3_SECRET_KEY match'
+            echo 'what the storage service was started with.'
+            aws --endpoint-url "$$S3_ENDPOINT" s3api list-buckets || true
+            echo 'Then: docker compose logs storage'
+            exit 1
+          fi
+          sleep 2
+        done
+        for bucket in lesson-images lesson-git; do
+          if aws --endpoint-url "$$S3_ENDPOINT" s3api head-bucket --bucket "$$bucket" 2>/dev/null; then
+            echo "bucket $$bucket already exists"
+          else
+            echo "creating bucket $$bucket"
+            aws --endpoint-url "$$S3_ENDPOINT" s3api create-bucket --bucket "$$bucket"
+          fi
+        done
 
   # Optional: a local model for the AI helpers, so no request leaves the machine.
   # Pull one after starting it: `docker compose exec ollama ollama pull llama3.2`
@@ -389,5 +421,5 @@ configs:
 
 volumes:
   postgres-data:
-  minio-data:
+  storage-data:
   # ollama-data:
