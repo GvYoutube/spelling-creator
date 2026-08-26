@@ -99,7 +99,24 @@ services:
       - -c
       - |
         echo 'waiting for auth.users (GoTrue creates it on its first migration)...'
-        until psql -h postgres -U postgres -d spelling -tAc "select to_regclass('auth.users')" | grep -q auth; do
+        attempt=0
+        # Bounded, and loud about why it gave up. An unbounded wait cannot tell
+        # "not migrated yet" from "cannot reach the database at all", and both
+        # look identical from outside: a container that never finishes and an
+        # app that never starts. psql's own errors are left on stderr so they
+        # land in `docker compose logs schema`.
+        until [ "$(psql -h postgres -U postgres -d spelling -tAc "select to_regclass('auth.users')" | tr -d '[:space:]')" = "auth.users" ]; do
+          attempt=$$((attempt + 1))
+          if [ "$$attempt" -ge 60 ]; then
+            echo 'GAVE UP: auth.users did not appear within two minutes.'
+            echo 'Either the auth service has not run its first migration, or this'
+            echo 'container cannot reach postgres — any psql errors above say which.'
+            echo 'Check: docker compose logs auth'
+            exit 1
+          fi
+          if [ $$((attempt % 5)) -eq 0 ]; then
+            echo "  still waiting ($$((attempt * 2))s)"
+          fi
           sleep 2
         done
         echo 'applying schema.sql'
@@ -278,6 +295,14 @@ configs:
         grant all on tables to service_role;
       alter default privileges in schema public
         grant all on sequences to service_role;
+
+      -- Extensions GoTrue's migrations expect to exist. They are created here,
+      -- as the superuser this script runs as, because CREATE EXTENSION needs
+      -- privileges supabase_auth_admin does not have — and a migration that
+      -- fails on one leaves auth.users uncreated, which strands everything
+      -- downstream waiting for a table that is never coming.
+      create extension if not exists "uuid-ossp";
+      create extension if not exists pgcrypto;
 
       -- GoTrue owns its own schema and migrates it itself on first start.
       create user supabase_auth_admin noinherit createrole login password '${POSTGRES_PASSWORD:?missing, see .env.example}';
