@@ -90,6 +90,63 @@ missing key reading as `null` rather than throwing, metadata surviving a round
 trip, `delete([])` being a no-op rather than an error or a bulk wipe, `truncated`
 and `cursor` agreeing on the last page of a listing.
 
+## The S3 blob store
+
+`src/platform/s3.js` is a `BlobStore` over any S3-compatible object store —
+MinIO, Garage, Ceph RGW, SeaweedFS, Backblaze B2, or AWS itself.
+
+```js
+import { s3Blobs } from "./platform/s3.js";
+
+const images = s3Blobs({
+  endpoint: "http://minio:9000",
+  bucket: "spelling-creator-images",
+  accessKeyId: process.env.S3_ACCESS_KEY_ID,
+  secretAccessKey: process.env.S3_SECRET_ACCESS_KEY,
+  region: "us-east-1", // what MinIO and Garage expect
+});
+```
+
+It is built on `fetch` and a hand-written SigV4 signer (`src/platform/sigv4.js`)
+rather than on `@aws-sdk/client-s3`. The SDK is tens of megabytes and assumes
+Node; signing is a page of well-specified arithmetic that runs unchanged in
+workerd, in Node, and anywhere else with `fetch` and `crypto.subtle`. Only five
+operations are needed and none of them is complicated.
+
+Signing is the kind of code that is either exactly right or quietly wrong for a
+subset of inputs — a key with a space in it, a query string in the wrong order.
+So `sigv4.test.js` checks it against AWS's own published examples, asserting the
+canonical request and the string-to-sign as well as the final signature, which
+localises a mistake to one line instead of one digest.
+
+Two places where S3 and R2 genuinely differ, both absorbed by the adapter:
+
+- **Metadata is ASCII.** `x-amz-meta-*` headers are ASCII by specification, where
+  R2's `customMetadata` takes arbitrary strings. Values are percent-encoded on
+  the way out and decoded on the way in, so the round trip is lossless without
+  depending on a server tolerating bytes it was never promised.
+- **Listings carry no content type.** A `ListObjectsV2` response has keys, sizes
+  and ETags but not content types, where R2's listing has them. Rather than
+  weaken the contract — the WEBP backfill filters on content type straight off
+  the listing — the adapter pays with a `HEAD` per listed object. The only caller
+  pages in batches of at most 50 and then reads and rewrites every object it
+  didn't skip, so the extra request is small next to the work it saves.
+
+**Addressing** defaults to path style (`http://host:9000/bucket/key`), which is
+what a self-hosted MinIO or Garage serves without wildcard DNS. Pass
+`forcePathStyle: false` for AWS-style virtual hosts.
+
+**Bulk deletes** are issued as parallel `DELETE`s, eight at a time, rather than
+through S3's `DeleteObjects` POST. That API is the one smaller S3
+implementations most often lack, and building and signing an XML body would save
+nothing at the sizes this sees.
+
+`s3.test.js` runs the shared conformance suite against an in-process S3 built
+over a `Map`. A stub rather than a container in CI — and a stub can be stricter
+than a real server: this one rejects an unsigned request, so every test also
+asserts that the request was signed, and it stores metadata as the raw header
+bytes it received, so the encoding round trip is exercised rather than assumed.
+
 ## Adding a host
 
 Write one module that returns the shape above, and put it on `env.PLATFORM`
@@ -100,8 +157,8 @@ that can't say so, and it's the fallback.
 ```js
 // A non-Cloudflare entry point, once at startup:
 env.PLATFORM = {
-  images: s3Blobs(client, "spelling-creator-images"),
-  lessonGit: s3Blobs(client, "spelling-creator-git"),
+  images: s3Blobs({ endpoint, bucket: "spelling-creator-images", ...creds }),
+  lessonGit: s3Blobs({ endpoint, bucket: "spelling-creator-git", ...creds }),
   rateLimit: postgresKv(pool),
   oauthState: postgresKv(pool),
   cache: noopCache,

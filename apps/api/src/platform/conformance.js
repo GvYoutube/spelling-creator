@@ -98,6 +98,29 @@ export function testBlobStore({ store, prefix, vitest: { describe, it, expect } 
 			expect((await s.get(key('bare'))).metadata).toEqual({});
 		});
 
+		it('round-trips a metadata value that is not ASCII', async () => {
+			// Nothing stored today needs this — a pack's metadata is git oids and
+			// branch names, and branch names are ASCII by validation. It is in the
+			// contract anyway because the alternative is an adapter that mangles a
+			// value nobody notices until something else starts using the field: S3
+			// metadata headers are ASCII by specification, so a store over them has
+			// to encode, and that is the kind of thing to settle once rather than
+			// discover.
+			const s = store();
+			await s.put(key('unicode-meta'), enc.encode('x'), { metadata: { note: 'variación — ok' } });
+			expect((await s.get(key('unicode-meta'))).metadata.note).toBe('variación — ok');
+		});
+
+		it('round-trips a key that needs escaping', async () => {
+			// Keys are hashes and UUID-shaped paths today, so this is guarding the
+			// seam rather than a live case — but a store whose signing or path
+			// building is subtly wrong usually still works for [a-z0-9/] and fails
+			// only here.
+			const s = store();
+			await s.put(key('odd key/with+chars~'), enc.encode('found'), { contentType: 'text/plain' });
+			expect(await (await s.get(key('odd key/with+chars~'))).text()).toBe('found');
+		});
+
 		it('deletes one key, and deleting an absent key is not an error', async () => {
 			const s = store();
 			await s.put(key('single-delete'), enc.encode('x'));
