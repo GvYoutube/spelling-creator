@@ -759,8 +759,9 @@ export function registerTools(server, ctx) {
         "(or a trusted collaborator) merges it from the web app, block by block, or declines it. Tell the user the " +
         "returned `url` — that is the page where they read the diff and decide. Their answer is theirs to give: " +
         "don't tell them it is done, and don't try to merge it yourself.\n\n" +
-        "The proposal carries ONE commit holding the fork as it now stands, so make all your edits before calling " +
-        "this.\n\n" +
+        "The proposal carries the fork's history — a version per edit you made to it — against the commit the fork " +
+        "and the lesson last shared, so the reviewer reads your work as a sequence rather than as one lump. Still " +
+        "finish the change before calling this: a proposal is somebody's queue, not a draft.\n\n" +
         "Calling it AGAIN from the same fork while a proposal is still open UPDATES that proposal rather than " +
         "opening another — same request, same discussion, new contents — which is what you want after the human " +
         "asks for a change. The title and body you pass are then ignored, since the ones already there are what " +
