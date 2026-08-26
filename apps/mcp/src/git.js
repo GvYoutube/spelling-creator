@@ -1,42 +1,49 @@
-// Forking a lesson and proposing changes back, for an AI assistant.
+// Version history for an AI assistant: committing its edits, forking a lesson,
+// and proposing changes back.
 //
 // This is the assistant's version of what the editor does in the browser (see
 // packages/core/src/browser/git/sync.js, which is the same flow bound to
-// LightningFS). The rule it exists to respect is the hub's, not ours: nobody
-// writes a lesson from a fork. Work travels back through a proposal, which a
-// human reads and merges. So an assistant asked to change a lesson does not save
-// over it — it forks, edits its own copy, and opens a proposal.
+// LightningFS). Two rules it exists to respect, both the hub's rather than ours:
+//
+//   - Every edit is a commit. A lesson is a real git repository (see
+//     docs monorepo/version-history), and the editor commits as the user works,
+//     so the History tab is the record of how the lesson got here. An assistant
+//     writing over MCP is one more writer, and its edits belong in that record
+//     alongside the rest — attributed, diffable, and revertable.
+//   - Nobody writes a lesson from a fork. Work travels back through a proposal,
+//     which a human reads and merges. So an assistant asked to change somebody
+//     else's lesson does not save over it — it forks, edits its own copy, and
+//     opens a proposal.
 //
 // ---- Why there is no state between calls ------------------------------------
 //
 // A repository here lives in memory (core/git/memfs.js) and is thrown away when
-// the tool call returns. It doesn't need to survive, because the fork is a real
-// hub lesson with its own stored history: the durable state is the fork's row
-// (its document) and its packfile in R2. Each call rebuilds exactly what it
-// needs by cloning that pack, which means a fork survives the server restarting,
-// a conversation being resumed days later, and the remote transport moving a
-// connection between Worker instances.
-//
-// It also means the assistant edits its fork with the ordinary tools —
-// patch_lesson, add_image, update_lesson — and only pays for git at the two
-// moments that need it: forking, and proposing.
+// the tool call returns. It doesn't need to survive, because the durable state is
+// the lesson's row (its document) and its packfile in R2. Each call rebuilds
+// exactly what it needs by cloning that pack, which means the history survives
+// the server restarting, a conversation being resumed days later, and the remote
+// transport moving a connection between Worker instances.
 //
 // ---- What a proposal contains -----------------------------------------------
 //
-// One commit, made when the proposal is opened, holding the fork's document as
-// it then stands. The intermediate patches aren't separate commits — nothing was
-// watching to record them — so the reviewer sees a single change against the
-// commit the fork and the lesson diverged from. That diff is the thing being
-// reviewed, and it's exact; the fork's own history is what makes it a true
-// three-way merge rather than a guess.
+// The fork's history as it stands: the commits recordLessonHistory made as the
+// assistant edited it, against the commit the fork and the lesson diverged from.
+// That diff is the thing being reviewed, and it's exact; the shared ancestry is
+// what makes it a true three-way merge rather than a guess.
 
 import { stripLocalFields } from "@spelling-creator/core/git/doc";
 import { memRepo } from "@spelling-creator/core/git/memfs";
-import { describeOp } from "@spelling-creator/core/git/ops";
+import {
+  describeOp,
+  describeOps,
+  diffDocs,
+  summaryOf,
+} from "@spelling-creator/core/git/ops";
 import {
   cloneFromPack,
   contains,
   fetchRemotePack,
+  mergeBase,
   packRepo,
 } from "@spelling-creator/core/git/pack";
 import { DEFAULT_BRANCH } from "@spelling-creator/core/git/refs";
@@ -44,7 +51,9 @@ import {
   UPSTREAM_REF,
   authorFrom,
   commitDoc,
+  headOid,
   pendingOps,
+  readDocAt,
 } from "@spelling-creator/core/git/repo";
 import { PULL_BODY_MAX, PULL_TITLE_MAX } from "@spelling-creator/core/pulls";
 
@@ -53,7 +62,7 @@ import { PULL_BODY_MAX, PULL_TITLE_MAX } from "@spelling-creator/core/pulls";
  *
  * The hub attributes everything to the account whose token this is — the
  * assistant acts as the signed-in user, and there is no separate identity to
- * claim. So the commit carries that user's name, and `proposalBody` below is
+ * claim. So the commit carries that user's name, and `assistantNote` below is
  * where the fact that an assistant wrote it is recorded.
  */
 async function commitAuthor(api) {
@@ -71,25 +80,31 @@ function clamp(value, limit) {
   return `${(space > limit * 0.8 ? cut.slice(0, space) : cut).trimEnd()}…`;
 }
 
-// A client's self-reported name is used in the proposal's provenance note, so it
-// is bounded before it gets there: it is arbitrary text from the connecting
-// client, and an absurd one must not crowd out the body it is annotating.
+// A client's self-reported name is used in the provenance notes below, so it is
+// bounded before it gets there: it is arbitrary text from the connecting client,
+// and an absurd one must not crowd out the text it is annotating.
 const CLIENT_NAME_MAX = 80;
 
 /**
- * The proposal's body, with a note saying which assistant wrote it.
+ * One line saying an assistant did this, and which client it came through.
  *
- * Worth the line: the hub records the proposal against the account it was opened
- * with, so on a self-proposal the reviewer would otherwise see their own name
- * against changes they didn't write. `client` is the MCP client's own reported
- * name (Claude Desktop, claude.ai, Cursor, …), which is the closest thing to an
- * honest answer available — we know what connected, not what model it drove.
+ * Worth the line wherever it appears. The hub attributes everything to the
+ * account whose token this is, so without it the user sees their own name
+ * against a commit they didn't write and a proposal they didn't make. `client`
+ * is the MCP client's own reported name (Claude Desktop, claude.ai, Cursor, …),
+ * which is the closest thing to an honest answer available — we know what
+ * connected, not what model it drove.
  */
-export function proposalBody(body, client) {
+function assistantNote(client, verb) {
   const named = clamp(client, CLIENT_NAME_MAX);
-  const note = named
-    ? `Proposed by an AI assistant via ${named} (Spelling Creator MCP).`
-    : "Proposed by an AI assistant via the Spelling Creator MCP server.";
+  return named
+    ? `${verb} by an AI assistant via ${named} (Spelling Creator MCP).`
+    : `${verb} by an AI assistant via the Spelling Creator MCP server.`;
+}
+
+/** The proposal's body, with a note saying which assistant wrote it. */
+export function proposalBody(body, client) {
+  const note = assistantNote(client, "Proposed");
   const text = (body || "").trim();
   if (!text) return note;
   // Keep the whole note: it's the provenance, and it's what tells a reviewer to
@@ -118,17 +133,145 @@ async function cloneRepo(pack, { keepVariations = true } = {}) {
 }
 
 /**
+ * What the compare-and-swap on a push should claim about each branch.
+ *
+ * The pack we just downloaded is what the hub held a moment ago, so its branch
+ * map is exactly what we believe. A pack stored before variations existed
+ * advertises no map, which reads as the one branch it has. No pack at all means
+ * a lesson with no history yet, and an empty claim says "all of this is new".
+ */
+function believedRefs(pack) {
+  if (!pack) return {};
+  return pack.refs || { [DEFAULT_BRANCH]: pack.head };
+}
+
+/**
+ * Commit a lesson's document into its stored history, so an edit made here shows
+ * up in the lesson's History tab beside the ones made in the editor.
+ *
+ * ---- Why the writing tools call this ----------------------------------------
+ *
+ * The hub's row and the hub's repository are two separate stores, and saving a
+ * document only writes the first. The browser editor writes both — it commits as
+ * the user works and pushes on save — so a lesson only ever touched there has a
+ * history that explains it. An assistant that wrote the row alone left the
+ * History tab saying nothing had happened, which is worse than unhelpful: it is
+ * the record the user checks to see what an assistant did to their lesson, and
+ * there is nothing to revert to if they don't like it.
+ *
+ * ---- Two commits, not one ---------------------------------------------------
+ *
+ * The row can be ahead of the history: a lesson edited over MCP before this
+ * existed, or one whose earlier push failed, has content in its document that no
+ * commit accounts for. Committing the new document straight on top would fold
+ * that drift into the assistant's commit and attribute it there. So the document
+ * as it stood *before* this edit is committed first, plainly labelled, and the
+ * assistant's commit is then the diff a reader expects it to be. Both are no-ops
+ * in the ordinary case — commitDoc compares trees and declines to write an empty
+ * commit — so the usual result is the one commit the edit deserves.
+ *
+ * ---- Never throws -----------------------------------------------------------
+ *
+ * The document is already saved by the time this runs, and no failure here can
+ * unsave it. A conflict (someone saved the lesson from the editor in between), a
+ * lesson whose history is stored under an id we may not write, an R2 hiccup — all
+ * of them mean "the edit stands but the history didn't move", which is reported
+ * rather than raised. The tool result carries it so the assistant can say so.
+ *
+ * @param {object} args.doc          The document as it now stands (already saved).
+ * @param {object} [args.previousDoc] The document as it stood before this edit.
+ * @param {string} [args.summary]    Overrides the derived commit summary line.
+ * @param {string} [args.client]     The MCP client's name, for the provenance note.
+ * @returns {Promise<{ recorded: boolean, commit?: string, summary?: string,
+ *          seeded?: boolean, caughtUp?: boolean, reason?: string }>}
+ */
+export async function recordLessonHistory(
+  api,
+  { lessonId, doc: nextDoc, previousDoc, summary, client },
+) {
+  try {
+    const doc = stripLocalFields(nextDoc);
+    // Read the history *after* the document has been written, not before, which
+    // is the opposite of forking (see forkLesson) and right for the opposite
+    // reason. Nothing here is being paired with the document — it is already
+    // saved — so the only thing the timing affects is the compare-and-swap below,
+    // and the later this is read the smaller the window in which somebody else's
+    // push can land between reading and pushing.
+    const pack = await api.fetchLessonPack(lessonId);
+    const ctx = pack ? await cloneRepo(pack) : memRepo();
+    const author = await commitAuthor(api);
+
+    // The catch-up commit described above. A lesson with no stored history at all
+    // gets the same treatment for the same reason: its existing content becomes
+    // the starting point, so what follows reads as this edit and not as the
+    // lesson appearing from nowhere.
+    const before = previousDoc ? stripLocalFields(previousDoc) : null;
+    const base = before
+      ? await commitDoc({
+          ...ctx,
+          doc: before,
+          author,
+          message: pack
+            ? "Record the lesson as it was last saved\n\nBrings the history up to the lesson's stored document, which had changes no commit accounted for.\n"
+            : "Record the lesson as it was last saved\n\nThis lesson had no stored history, so its existing content starts one.\n",
+        })
+      : null;
+
+    // Derived from the previous commit rather than from the tool's own arguments:
+    // what the history should say is what actually changed, which is not always
+    // what the assistant asked for (a patch can set a field to the value it
+    // already had). An empty list means this edit changed nothing git stores.
+    const ops = await pendingOps({ ...ctx, doc });
+    const note = assistantNote(client, "Made");
+    const message = ops.length
+      ? summary
+        ? `${clamp(summary, 72)}\n\n${ops.map(describeOp).join("\n")}\n\n${note}\n`
+        : `${describeOps(ops)}\n${note}\n`
+      : null;
+    const commit = message
+      ? await commitDoc({ ...ctx, doc, author, message })
+      : null;
+
+    if (!commit && !base) return { recorded: false, reason: "unchanged" };
+
+    const packed = await packRepo(ctx);
+    await api.pushLessonPack(lessonId, {
+      packfile: packed.packfile,
+      head: packed.head,
+      // The compare-and-swap: the tip we just downloaded. If the lesson has moved
+      // on since — a collaborator saving from the editor — the hub refuses, and it
+      // is right to: our pack does not contain their commits.
+      parent: pack?.head || null,
+      // Every branch we hold, because a push that named only the lesson's own
+      // would leave the hub advertising variations this pack no longer carries.
+      refs: packed.refs,
+      expected: believedRefs(pack),
+    });
+
+    return {
+      recorded: true,
+      commit: (commit || base).oid,
+      summary: summaryOf(message || "Record the lesson as it was last saved"),
+      seeded: !pack,
+      caughtUp: Boolean(base),
+    };
+  } catch (err) {
+    return { recorded: false, reason: err.message };
+  }
+}
+
+/**
  * Fork a lesson into a new private draft owned by the caller.
  *
  * The fork is a genuine clone wherever it can be: its repository is the source
  * lesson's, downloaded and re-uploaded under the new id, with the original's tip
  * recorded at refs/remotes/upstream/main so the fork knows where it came from.
  *
- * A lesson with no stored history (one written before version history, or only
- * ever written over MCP) can't be cloned, so the fork's history is seeded from
- * its document instead. That fork still works — it just shares no commit with
- * the original, so a later merge compares two sides rather than three. The
- * result says which happened, because it changes what a reviewer will see.
+ * A lesson with no stored history (one written before version history existed)
+ * can't be cloned, so the fork's history is seeded from its document instead.
+ * That fork still works — it just shares no commit with the original, so a later
+ * merge compares two sides rather than three. The result says which happened,
+ * because it changes what a reviewer will see.
  *
  * @returns {Promise<{ lesson: object, head: string, clonedHistory: boolean }>}
  */
@@ -172,11 +315,12 @@ export async function forkLesson(api, { lessonId, title }) {
     // anything new.
     await fetchRemotePack({ ...ctx, ...pack, ref: UPSTREAM_REF });
 
-    // The row's document and the history's tip can disagree — a lesson edited
-    // over MCP is saved without committing, so its stored pack lags. Commit the
-    // difference now, under the fork, so the fork is self-consistent from the
-    // start and the proposal's diff later shows only what the assistant changed.
-    // A no-op when they already agree, which is the normal case.
+    // The row's document and the history's tip can disagree — an edit whose
+    // history push failed, or one made over MCP before edits were committed,
+    // leaves the stored pack lagging. Commit the difference now, under the fork,
+    // so the fork is self-consistent from the start and the proposal's diff later
+    // shows only what the assistant changed. A no-op when they already agree,
+    // which is the normal case.
     await commitDoc({
       ...ctx,
       doc: { ...doc, title: forkTitle },
@@ -264,37 +408,46 @@ export async function proposeChanges(
     );
   }
 
-  // Commit the fork's document as it now stands. This is the change being
-  // proposed: everything the assistant did to the fork since it was created,
-  // as one commit against the shared history.
   const ctx = await cloneRepo(forkPack);
   const doc = stripLocalFields(fork.doc);
 
-  // Read the operations before committing so the commit message can itemise them
-  // — the proposal's title, then a line per change, which is what the reviewer's
-  // history view renders.
-  const ops = await pendingOps({ ...ctx, doc });
-  if (!ops.length) {
-    throw new Error(
-      "This fork is identical to what has already been proposed — there is nothing to propose. " +
-        "Edit the fork first (patch_lesson on the fork's id), then try again.",
-    );
+  // The fork's edits were committed as they were made (recordLessonHistory), so
+  // its history usually already holds this document and there is nothing to add.
+  // Commit when it doesn't: an edit whose history push failed leaves the row
+  // ahead of the repository, and what a reviewer reads has to be the document the
+  // fork actually has. Titled with the proposal's own title, since that is what
+  // the assistant is saying about this change.
+  const pending = await pendingOps({ ...ctx, doc });
+  if (pending.length) {
+    await commitDoc({
+      ...ctx,
+      doc,
+      author: await commitAuthor(api),
+      message: `${clamp(title, PULL_TITLE_MAX)}\n\n${pending.map(describeOp).join("\n")}\n\n${assistantNote(client, "Made")}\n`,
+    });
   }
 
-  const author = await commitAuthor(api);
-  const commit = await commitDoc({
-    ...ctx,
-    doc,
-    author,
-    message: `${clamp(title, PULL_TITLE_MAX)}\n\n${ops.map(describeOp).join("\n")}\n`,
-  });
-  // `ops` says the documents differ; commitDoc says the *trees* do, which is the
-  // stricter question (a field git doesn't store can differ without changing the
-  // tree). Nothing has been sent yet, so bail here rather than dereferencing a
-  // null commit further down, once the proposal is already live.
-  if (!commit) {
+  // Re-establish the pointer home. fork_lesson recorded the original's tip at
+  // refs/remotes/upstream/main, but a packfile carries branches and nothing else,
+  // so that ref did not survive the round trip through the hub. Fetching the
+  // target's history again puts it back — and, more to the point, puts its
+  // objects in the same store as ours, which is what lets findMergeBase walk both
+  // sides back to the commit they share. Best-effort: without it the whole
+  // document reads as the change, which is a worse summary but not a wrong one,
+  // and no reason to refuse a proposal.
+  const targetPack = await api.fetchLessonPack(target).catch(() => null);
+  if (targetPack) {
+    await fetchRemotePack({ ...ctx, ...targetPack, ref: UPSTREAM_REF });
+  }
+
+  // What the reviewer will see: this fork against the commit it diverged from,
+  // which is the diff the proposal actually asks for — not merely whatever the
+  // last edit did. A fork of a lesson that had no history shares no ancestor with
+  // it, so there the whole document is the change.
+  const changes = await proposedOps(ctx, doc);
+  if (!changes.length) {
     throw new Error(
-      "This fork's document is already committed, so there is nothing to propose. " +
+      "This fork is identical to the lesson it came from — there is nothing to propose. " +
         "Edit the fork first (patch_lesson on the fork's id), then try again.",
     );
   }
@@ -325,6 +478,17 @@ export async function proposeChanges(
     .catch(() => null);
 
   if (existing) {
+    // Nothing has happened to the fork since the reviewer last looked. An upload
+    // that didn't move the tip would bump the revision number on a proposal whose
+    // contents are identical, which tells the reviewer to read a diff that isn't
+    // there — and would let the assistant report a change it hasn't made.
+    if (proposed.head === existing.head) {
+      throw new Error(
+        `Proposal ${existing.id} already holds exactly these changes, so there is nothing to add to it. ` +
+          "Edit the fork first (patch_lesson on the fork's id), then try again.",
+      );
+    }
+
     // An update may only move the proposal *forward*: the new tip has to contain
     // the one it already points at. Usually it does — the fork's history is one
     // branch advancing — but not always. If an earlier proposal's history push
@@ -354,8 +518,8 @@ export async function proposeChanges(
     return {
       pull: updated || existing,
       lessonId: target,
-      commit: commit.oid,
-      changes: ops.map(describeOp),
+      commit: proposed.head,
+      changes: changes.map(describeOp),
       historyPushed: await pushForkHistory(api, forkLessonId, packed, forkPack),
       updated: true,
     };
@@ -387,14 +551,12 @@ export async function proposeChanges(
 
   // Only now advance the fork's own stored history, and don't let it fail the
   // call. The proposal does not depend on it — its pack is stored separately, and
-  // that is what a reviewer merges — so this is bookkeeping: it keeps the fork's
-  // History tab honest and gives the next proposal this commit to build on.
+  // that is what a reviewer merges — so this is bookkeeping: it usually has
+  // nothing to do at all, since each edit committed itself, and it exists for the
+  // catch-up commit above and for the edit whose own push failed.
   //
-  // The order matters. Pushing first would mean a failure anywhere below left the
-  // fork's document equal to its own history, so the retry would find no pending
-  // operations and refuse — the changes safe but unproposable without making a
-  // further edit. Pushing last, a failed proposal leaves the fork exactly as it
-  // was and the retry simply works.
+  // Still last, and for the same reason as before: a failure anywhere above
+  // leaves the fork exactly as it was, so the retry simply works.
   const historyPushed = await pushForkHistory(
     api,
     forkLessonId,
@@ -405,11 +567,30 @@ export async function proposeChanges(
   return {
     pull: ready || pull,
     lessonId: target,
-    commit: commit.oid,
-    changes: ops.map(describeOp),
+    commit: proposed.head,
+    changes: changes.map(describeOp),
     historyPushed,
     updated: false,
   };
+}
+
+/**
+ * The operations a proposal is asking for: the fork's document against the
+ * commit it and the lesson last had in common.
+ *
+ * The merge base rather than either tip, because that is the comparison the
+ * reviewer's three-way merge makes — a change the lesson has made since the fork
+ * left is not something this proposal is asking for. Null when the two share no
+ * ancestry (a fork of a lesson that had no history), where a reviewer sees the
+ * whole document as the change and so does this.
+ */
+async function proposedOps(ctx, doc) {
+  const ours = await headOid(ctx);
+  const theirs = await headOid({ ...ctx, ref: UPSTREAM_REF });
+  const base =
+    ours && theirs ? await mergeBase({ ...ctx, ours, theirs }) : null;
+  const baseDoc = base ? await readDocAt({ ...ctx, oid: base }) : null;
+  return diffDocs(baseDoc, doc);
 }
 
 /**
@@ -420,6 +601,11 @@ export async function proposeChanges(
  * honest and gives the next proposal this commit to build on.
  */
 async function pushForkHistory(api, forkLessonId, packed, forkPack) {
+  // The ordinary case now that each edit commits itself: this call added nothing,
+  // so the hub already holds what we would send. Only the lesson's own branch can
+  // have moved here — the clone is the only thing that touched this repository.
+  if (packed.head === forkPack.head) return true;
+
   try {
     await api.pushLessonPack(forkLessonId, {
       packfile: packed.packfile,
@@ -430,7 +616,7 @@ async function pushForkHistory(api, forkLessonId, packed, forkPack) {
       // they are named here too — a push that mentioned only the lesson's own
       // branch would leave the hub advertising tips this pack no longer carries.
       refs: packed.refs,
-      expected: forkPack.refs,
+      expected: believedRefs(forkPack),
     });
     return true;
   } catch {

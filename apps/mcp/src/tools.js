@@ -13,7 +13,7 @@
 import { registerAppTool } from "@modelcontextprotocol/ext-apps/server";
 import { z } from "zod";
 import { buildDoc, buildLessonFile, QUESTION_TYPES } from "./doc.js";
-import { forkLesson, proposeChanges } from "./git.js";
+import { forkLesson, proposeChanges, recordLessonHistory } from "./git.js";
 import { applyPatch, findBlock } from "./patch.js";
 import { searchWikimediaImages, resolveWikimediaImage } from "./wikimedia.js";
 import { LESSON_STANDARDS } from "./standards.js";
@@ -364,9 +364,10 @@ export function registerTools(server, ctx) {
     `${hubUrl(lessonId)}/proposals/${pullId}`;
 
   // Which MCP client is connected, by its own account of itself — recorded on a
-  // proposal so a reviewer can see the changes came from an assistant rather
-  // than from them (see proposalBody in git.js). Only known once the client has
-  // initialised, and not every client sends it, so this is best-effort.
+  // commit and on a proposal so the user can see the changes came from an
+  // assistant rather than from them (see assistantNote in git.js). Only known
+  // once the client has initialised, and not every client sends it, so this is
+  // best-effort.
   const clientName = () => {
     try {
       return server.server.getClientVersion()?.name || "";
@@ -382,6 +383,63 @@ export function registerTools(server, ctx) {
       return await handler(args || {});
     } catch (err) {
       return errorResult(err);
+    }
+  };
+
+  /**
+   * Commit a saved document into the lesson's version history, and say what
+   * happened in terms the assistant can pass on.
+   *
+   * Every tool that writes a document calls this straight after the write. The
+   * hub's row and the hub's repository are separate stores (see git.js), so a
+   * save that didn't come through here would leave the lesson's History tab
+   * denying the edit ever happened — the one place the user looks to see what an
+   * assistant did to their lesson, and the only way back if they don't like it.
+   *
+   * It never throws: the document is saved either way, and a history that didn't
+   * move is worth reporting but not worth failing a completed write over.
+   */
+  const recordHistory = async ({ lessonId, doc, previousDoc, summary }) => {
+    const result = await recordLessonHistory(api, {
+      lessonId,
+      doc,
+      previousDoc,
+      summary,
+      client: clientName(),
+    });
+    if (result.recorded) {
+      return {
+        recorded: true,
+        commit: result.commit,
+        summary: result.summary,
+        ...(result.seeded
+          ? {
+              note: "This lesson had no version history before; one was started from its previous content.",
+            }
+          : {}),
+      };
+    }
+    return {
+      recorded: false,
+      note:
+        result.reason === "unchanged"
+          ? "Nothing the version history stores actually changed, so no new version was recorded."
+          : `The lesson is saved, but this change could not be added to its version history, so it won't ` +
+            `appear in the History tab and can't be reverted from there. (${result.reason})`,
+    };
+  };
+
+  /**
+   * The lesson as it stands, for the tools that need a before-picture to hand to
+   * recordHistory but can do their job without one. Tolerant on purpose: a read
+   * that fails must not stop a write the user asked for — it only costs the
+   * catch-up commit, which is a tidiness in the history rather than the edit.
+   */
+  const currentDoc = async (id) => {
+    try {
+      return (await api.getLesson(id))?.doc || null;
+    } catch {
+      return null;
     }
   };
 
@@ -453,6 +511,13 @@ export function registerTools(server, ctx) {
       const result = {
         ...lesson,
         url: hubUrl(lesson.id),
+        // A new lesson has nothing before it, so the first commit is the lesson
+        // arriving — named for what it is rather than as ninety separate adds.
+        history: await recordHistory({
+          lessonId: lesson.id,
+          doc,
+          summary: `Create "${doc.title}"`,
+        }),
         note: published
           ? "Published to the public hub."
           : "Saved as a private draft. Call set_lesson_published to share it.",
@@ -518,7 +583,9 @@ export function registerTools(server, ctx) {
         "The result is checked against the same authoring standard as create_lesson (see that tool's description) " +
         "and rejected if it breaks it. Because this replaces everything, you own every defect in the result — " +
         "including ones already in the lesson you fetched. Prefer patch_lesson for a small edit: it only holds you " +
-        "to the problems your edit introduces.",
+        "to the problems your edit introduces.\n\n" +
+        "The edit is committed to the lesson's version history, so the user can read the diff and revert it from " +
+        "the lesson's History tab. `history` in the result says what was recorded.",
       inputSchema: {
         id: z.string().describe("The id of the lesson to update."),
         title: z.string().describe("The (possibly unchanged) lesson title."),
@@ -540,12 +607,20 @@ export function registerTools(server, ctx) {
         rawBlocks: inputBlocksFromSections(sections),
         skipValidation,
       });
+      // Read before writing, purely so the version history has a before-picture
+      // to diff against — this tool doesn't otherwise need one. Only the write
+      // below decides whether the call succeeds.
+      const previousDoc = await currentDoc(id);
       const lesson = await api.updateLesson(id, {
         title: doc.title,
         doc,
         published,
       });
-      const result = { ...lesson, url: hubUrl(lesson.id) };
+      const result = {
+        ...lesson,
+        url: hubUrl(lesson.id),
+        history: await recordHistory({ lessonId: id, doc, previousDoc }),
+      };
       if (warnings.length) result.warnings = warnings;
       return text(result);
     }),
@@ -573,7 +648,9 @@ export function registerTools(server, ctx) {
         "`block`/`blocks` use the same shape as create_lesson. `index` is 0-based; omit it to append.\n\n" +
         "The patched lesson is checked against the authoring standard (see create_lesson), but only the defects " +
         "your edit introduces are held against you — pre-existing problems in a lesson written elsewhere won't " +
-        "block a small tweak.",
+        "block a small tweak.\n\n" +
+        "Each patch is committed to the lesson's version history as its own version, so the user can read the diff " +
+        "and revert it from the lesson's History tab. `history` in the result says what was recorded.",
       inputSchema: {
         id: z.string().describe("The id of the lesson to patch."),
         operations: z
@@ -607,7 +684,15 @@ export function registerTools(server, ctx) {
         doc,
         published,
       });
-      const result = { ...lesson, url: hubUrl(lesson.id) };
+      const result = {
+        ...lesson,
+        url: hubUrl(lesson.id),
+        history: await recordHistory({
+          lessonId: id,
+          doc,
+          previousDoc: current.doc,
+        }),
+      };
       if (warnings.length) result.warnings = warnings;
       return text(result);
     }),
@@ -626,8 +711,8 @@ export function registerTools(server, ctx) {
         "USE THIS INSTEAD OF EDITING DIRECTLY when either applies:\n" +
         "• The lesson was written by someone else. You cannot save over it at all — a proposal is the only route.\n" +
         "• The user wants to look over your changes before they go live. Editing their lesson with patch_lesson " +
-        "  overwrites it immediately and there is nothing to review; forking leaves the lesson untouched until " +
-        "  they merge, and they can decline.\n\n" +
+        "  overwrites it immediately — recorded in the lesson's history, so it can be reverted afterwards, but " +
+        "  nobody got to decide first; forking leaves the lesson untouched until they merge, and they can decline.\n\n" +
         "Prefer editing directly (patch_lesson) for a small correction to the user's own lesson that they have " +
         "asked for outright — a typo, a wrong answer — where a review step is just friction.\n\n" +
         "Forks count against your private-draft limit; delete_lesson the fork once its proposal is merged or " +
@@ -674,8 +759,9 @@ export function registerTools(server, ctx) {
         "(or a trusted collaborator) merges it from the web app, block by block, or declines it. Tell the user the " +
         "returned `url` — that is the page where they read the diff and decide. Their answer is theirs to give: " +
         "don't tell them it is done, and don't try to merge it yourself.\n\n" +
-        "The proposal carries ONE commit holding the fork as it now stands, so make all your edits before calling " +
-        "this.\n\n" +
+        "The proposal carries the fork's history — a version per edit you made to it — against the commit the fork " +
+        "and the lesson last shared, so the reviewer reads your work as a sequence rather than as one lump. Still " +
+        "finish the change before calling this: a proposal is somebody's queue, not a draft.\n\n" +
         "Calling it AGAIN from the same fork while a proposal is still open UPDATES that proposal rather than " +
         "opening another — same request, same discussion, new contents — which is what you want after the human " +
         "asks for a change. The title and body you pass are then ignored, since the ones already there are what " +
@@ -1112,6 +1198,11 @@ export function registerTools(server, ctx) {
         return text({
           ...lesson,
           url: hubUrl(lesson.id),
+          history: await recordHistory({
+            lessonId,
+            doc,
+            previousDoc: current.doc,
+          }),
           caption: finalCaption,
           source: resolved.source,
           note:
@@ -1130,5 +1221,5 @@ export function registerTools(server, ctx) {
 // every client UI and bug report.
 export const SERVER_INFO = {
   name: "spelling-creator-hub",
-  version: "0.7.0",
+  version: "0.9.0",
 };
