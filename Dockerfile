@@ -25,6 +25,14 @@ FROM node:24-alpine AS builder
 
 ENV PNPM_HOME=/pnpm
 ENV PATH=$PNPM_HOME:$PATH
+
+# A build has no terminal, and pnpm asks before it removes a modules directory —
+# which the --prod install below has to do, since it is switching the installed
+# set rather than adding to it. Without this it aborts with
+# ERR_PNPM_ABORTED_REMOVE_MODULES_DIR_NO_TTY. Set once for the whole stage
+# because none of these steps can answer a prompt.
+ENV CI=true
+
 RUN corepack enable
 
 WORKDIR /app
@@ -63,15 +71,18 @@ ENV VITE_API_URL=$VITE_API_URL \
 RUN pnpm --filter @spelling-creator/web build \
  && pnpm --filter @spelling-creator/docs build
 
-# Drop the build-only dependencies now that the bundles exist — wrangler, vite,
-# vitepress and the rest are several hundred megabytes the runtime never opens.
-# Done here rather than by reinstalling in the runtime stage so the workspace's
-# symlink layout is built once and copied whole.
+# Drop the build-only dependencies now that the bundles exist — wrangler pulls in
+# workerd, and vite, vitepress and the rest are several hundred megabytes the
+# runtime never opens. Done here rather than by reinstalling in the runtime stage
+# so the workspace's symlink layout is built once and copied whole.
 #
-# The store is mounted again for this step: pnpm relinks the packages it is
-# keeping, and without the store it would refetch every one of them over the
-# network to do it.
-RUN --mount=type=cache,id=pnpm,target=/pnpm/store pnpm install --frozen-lockfile --prod --ignore-scripts
+# This is a purge and reinstall, not a trim: pnpm empties node_modules and lays
+# down the production set. Two consequences. The store is mounted again, or every
+# package being *kept* would be refetched over the network to relink it. And
+# install scripts are deliberately NOT skipped — with a purge, --ignore-scripts
+# would leave a kept dependency unbuilt, and `allowBuilds` in pnpm-workspace.yaml
+# already constrains which packages may run one.
+RUN --mount=type=cache,id=pnpm,target=/pnpm/store pnpm install --frozen-lockfile --prod
 
 # ---------------------------------------------------------------------------
 # Run.

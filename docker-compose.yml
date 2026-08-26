@@ -3,7 +3,10 @@
 #
 #   cp .env.example .env     # then edit it — the defaults are not secrets
 #   docker compose up -d
-#   # apply apps/api/schema.sql once, e.g.:
+#   # then apply apps/api/schema.sql once, AFTER the auth service has started:
+#   # every hub table references auth.users, which GoTrue creates on its first
+#   # migration, so running the schema before that fails. See
+#   # /docs/monorepo/self-hosting for a command that waits for it.
 #   docker compose exec -T postgres psql -U postgres -d spelling < apps/api/schema.sql
 #
 # The shape to understand before adapting: the app expects ONE origin that serves

@@ -27,6 +27,12 @@ gateway around the app.
 ```bash
 cp .env.example .env      # then edit it; the defaults are not secrets
 docker compose up -d
+
+# Wait for the auth service to create auth.users on its first run — every hub
+# table references it, so applying the schema before that fails.
+until docker compose exec -T postgres \
+  psql -U postgres -d spelling -tAc "select to_regclass('auth.users')" | grep -q auth; do sleep 2; done
+
 docker compose exec -T postgres psql -U postgres -d spelling < apps/api/schema.sql
 ```
 
