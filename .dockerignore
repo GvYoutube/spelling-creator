@@ -1,0 +1,32 @@
+# Everything the image builds for itself, plus everything it has no use for.
+# Keeping node_modules out matters most: the builder installs its own, and
+# copying a host's — with native binaries built for a different platform — is
+# both slow and wrong.
+
+node_modules
+**/node_modules
+
+# Build output. Regenerated inside the image; a stale copy from the host would
+# be shadowed at best and shipped at worst.
+apps/web/dist
+apps/web/dist-ssr
+apps/docs/doc_build
+apps/api/dist
+
+.git
+.github
+.agents
+.claude
+
+# Local configuration and secrets. These are runtime environment for the
+# container, never build input.
+**/.env
+**/.env.*
+**/.dev.vars
+.wrangler
+
+# Editor and OS noise.
+.DS_Store
+*.log
+.vscode
+.idea

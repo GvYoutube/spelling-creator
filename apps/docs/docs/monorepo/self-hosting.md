@@ -18,6 +18,38 @@ That serves the whole route table from
 history, proposals, moderation, notifications, profiles, feeds, the AI flow — the
 built SPA from disk, and server-rendered HTML for the public read routes.
 
+## With Docker
+
+The repository ships a `Dockerfile` and an example `docker-compose.yml` that
+stands the whole thing up — Postgres, PostgREST, GoTrue, MinIO and a Caddy
+gateway around the app.
+
+```bash
+cp .env.example .env      # then edit it; the defaults are not secrets
+docker compose up -d
+docker compose exec -T postgres psql -U postgres -d spelling < apps/api/schema.sql
+```
+
+Two things about it are worth understanding before adapting it.
+
+**One origin serves both `/rest/v1/*` and `/auth/v1/*`.** That is how Supabase
+presents PostgREST and GoTrue, and this API was written against it. Nothing in
+the compose file is Supabase — the `gateway` service is an ordinary reverse proxy
+joining the two upstream projects under one origin, doing the job Kong does on
+Supabase's own hosting. It is also the proxy that should sit in front of the app
+anyway.
+
+**The `VITE_*` values are build arguments, not runtime environment.** Vite
+substitutes them into the SPA bundle at build time, so they are baked into the
+image: an instance pointed at a different public URL needs `docker compose
+build`, not just a restart. That is a property of shipping a static SPA rather
+than a choice made here.
+
+The compose file terminates no TLS and takes its credentials from `.env` with
+example values, both deliberately. It is a starting point, not a deployment — a
+compose file that pretended otherwise would be worse than one that is obviously
+an example.
+
 ## What you need
 
 | Piece          | Hosted instance               | Self-hosted                                   |
