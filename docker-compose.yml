@@ -8,8 +8,6 @@
 #   # migration, so running the schema before that fails. See
 #   # /docs/monorepo/self-hosting for a command that waits for it.
 #   docker compose exec -T postgres psql -U postgres -d spelling < apps/api/schema.sql
-#   # ...then `docker compose restart postgrest`, which caches the schema at
-#   # startup and has not heard of the tables that were just created.
 #
 # The shape to understand before adapting: the app expects ONE origin that serves
 # both `/rest/v1/*` (PostgREST) and `/auth/v1/*` (GoTrue), because that is how
@@ -113,6 +111,12 @@ services:
       PGRST_DB_ANON_ROLE: anon
       PGRST_JWT_SECRET: ${JWT_SECRET:?missing, see .env.example}
       PGRST_DB_USE_LEGACY_GUCS: "false"
+      # Listen for the reload that the pgrst_watch event trigger sends on any
+      # DDL (see the roles-sql config). Both are already the defaults; they are
+      # written out because the schema cache going stale is invisible from here
+      # and shows up as a 502 in the app, which is a long way from the cause.
+      PGRST_DB_CHANNEL_ENABLED: "true"
+      PGRST_DB_CHANNEL: pgrst
     depends_on:
       postgres:
         condition: service_healthy
@@ -219,7 +223,7 @@ configs:
       create role authenticator noinherit login password '${POSTGRES_PASSWORD:?missing, see .env.example}';
       grant anon, authenticated, service_role to authenticator;
 
-      grant usage on schema public to anon, authenticated, service_role;
+      grant usage on schema public to anon, authenticated, service_role, authenticator;
       alter default privileges in schema public
         grant all on tables to service_role;
       alter default privileges in schema public
@@ -232,6 +236,26 @@ configs:
       -- The application's tables reference auth.users(id), so every role that
       -- reads them needs to be able to see that table exists.
       grant usage on schema auth to anon, authenticated, service_role;
+
+      -- Tell PostgREST to re-read the schema whenever the schema changes.
+      --
+      -- PostgREST builds its view of the database once, at startup. Everything
+      -- here is created before it has any tables to find, and schema.sql is
+      -- applied later still — so without this, every request answers
+      -- "Could not find the table 'public.lessons' in the schema cache" until
+      -- somebody restarts it, and the app reports a 502. This is the same
+      -- event trigger Supabase ships, and it turns an ordering trap into
+      -- something that simply works whenever the schema is applied.
+      -- The body is a quoted literal rather than the usual dollar-quoted form,
+      -- and there is deliberately not a dollar sign anywhere in this config:
+      -- compose interpolates the content before Postgres ever sees it, and it
+      -- reads a doubled dollar as the escape for a single literal one. A
+      -- dollar-quoted body would arrive with its delimiters halved and fail to
+      -- parse.
+      create or replace function public.pgrst_watch() returns event_trigger
+        language plpgsql as 'begin notify pgrst, ''reload schema''; end;';
+      drop event trigger if exists pgrst_watch;
+      create event trigger pgrst_watch on ddl_command_end execute procedure public.pgrst_watch();
 
   caddyfile:
     content: |

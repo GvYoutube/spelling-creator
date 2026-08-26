@@ -34,11 +34,14 @@ until docker compose exec -T postgres \
   psql -U postgres -d spelling -tAc "select to_regclass('auth.users')" | grep -q auth; do sleep 2; done
 
 docker compose exec -T postgres psql -U postgres -d spelling < apps/api/schema.sql
-
-# PostgREST caches the schema when it starts, so it has not heard of the tables
-# that were just created. Until it re-reads them every hub request 404s.
-docker compose restart postgrest
 ```
+
+PostgREST builds its view of the database once, at startup, so tables created
+after it started are invisible to it — which the app reports as
+`Could not load lessons.` with a 502, a long way from the cause. The stack
+installs the same `pgrst_watch` event trigger Supabase ships, so any DDL tells
+PostgREST to re-read; if you ever suspect it has gone stale anyway,
+`docker compose restart postgrest` settles it.
 
 The first step is not optional. Every credential is declared as a required
 variable, so `docker compose up` without a filled-in `.env` stops and names what
