@@ -8,6 +8,8 @@
 #   # migration, so running the schema before that fails. See
 #   # /docs/monorepo/self-hosting for a command that waits for it.
 #   docker compose exec -T postgres psql -U postgres -d spelling < apps/api/schema.sql
+#   # ...then `docker compose restart postgrest`, which caches the schema at
+#   # startup and has not heard of the tables that were just created.
 #
 # The shape to understand before adapting: the app expects ONE origin that serves
 # both `/rest/v1/*` (PostgREST) and `/auth/v1/*` (GoTrue), because that is how
@@ -123,6 +125,14 @@ services:
     environment:
       GOTRUE_API_HOST: 0.0.0.0
       PORT: 9999
+      # Not a typo, and not GOTRUE_-prefixed: a handful of GoTrue's settings are
+      # read under their bare name, and this one is required — without it the
+      # container exits at startup with "required key API_EXTERNAL_URL missing
+      # value" and restarts forever. It is the public origin GoTrue builds email
+      # links against, so it is the gateway's address rather than its own: a
+      # magic link points at ${PUBLIC_URL}/auth/v1/verify, which the gateway
+      # routes back here.
+      API_EXTERNAL_URL: ${PUBLIC_URL:?missing, see .env.example}
       GOTRUE_DB_DRIVER: postgres
       GOTRUE_DB_DATABASE_URL: postgres://supabase_auth_admin:${POSTGRES_PASSWORD:?missing, see .env.example}@postgres:5432/spelling
       GOTRUE_SITE_URL: ${PUBLIC_URL:?missing, see .env.example}
@@ -131,6 +141,12 @@ services:
       GOTRUE_JWT_EXP: 3600
       GOTRUE_JWT_AUD: authenticated
       GOTRUE_JWT_DEFAULT_GROUP_NAME: authenticated
+      # Which role claim may call the /auth/v1/admin/* endpoints. The API reads
+      # display names and bios through them with the service-role key (see
+      # lib/supabase.js), so without this every profile and moderation lookup
+      # comes back 403 — the app would look like it works until someone opened a
+      # profile.
+      GOTRUE_JWT_ADMIN_ROLES: service_role
       GOTRUE_DISABLE_SIGNUP: "false"
       GOTRUE_EXTERNAL_EMAIL_ENABLED: "true"
       # Sign-in is by magic link, so mail delivery is not optional — without a
