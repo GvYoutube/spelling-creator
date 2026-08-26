@@ -22,6 +22,42 @@ title: Tools
 | `search_images`         | Search Wikimedia Commons for freely-licensed images — as a picker, where a client can show one. |
 | `add_image`             | Download a searched image and insert it as an image block in a lesson.                          |
 
+## Every edit is a version
+
+A lesson is a [real git repository](/monorepo/version-history), and the web editor
+commits as you type. The MCP server does the same: `create_lesson`, `update_lesson`,
+`patch_lesson` and `add_image` each save the document **and** commit it, so an
+assistant's work turns up in the lesson's **History** tab beside your own — one entry
+per tool call, with the diff, and revertable from there if you don't like it.
+
+Every write returns a `history` object saying what was recorded:
+
+```json
+{ "recorded": true, "commit": "8f1c…", "summary": "Edit 1 text block" }
+```
+
+Some things worth knowing:
+
+- **The commit says an assistant made it.** The hub attributes writes to the account
+  whose token the server is using — yours — so a commit that said nothing more would
+  put your name against changes you didn't write. The message carries a line naming the
+  connecting client (`Made by an AI assistant via Claude Desktop`), the same provenance
+  a proposal's body gets.
+- **A lesson whose document had run ahead of its history catches up first**, in a commit
+  of its own labelled as such. That happens to a lesson last saved when a history push
+  failed, and to every lesson edited over MCP before this existed: the row holds content
+  no commit accounts for. Committing it separately keeps it out of the assistant's diff
+  rather than attributing it there. A lesson with no history at all gets one started the
+  same way, from its previous content.
+- **A failed commit never fails the write.** The document and the repository are two
+  stores, and the document is saved first. If the history push is refused — most often
+  because you saved the lesson from the editor in between, which the
+  [compare-and-swap](/monorepo/version-history) is there to catch — the edit still
+  stands, and `history.recorded` comes back `false` with the reason, for the assistant
+  to pass on.
+- **Nothing is committed when nothing changed.** An edit that leaves the stored content
+  identical records no version, rather than an empty one.
+
 ## Proposing changes instead of making them
 
 An assistant can change a lesson two ways, and which one it should use is a question
@@ -53,9 +89,13 @@ Some mechanics worth knowing:
   block. A lesson with no stored history can still be forked, but the fork shares no
   ancestor with it, so the whole document reads as the change. `fork_lesson` says which
   happened.
-- **A proposal is one commit**, made when it's opened, holding the fork as it then
-  stands. Intermediate `patch_lesson` calls aren't separate commits, so make all the
-  edits first.
+- **A proposal carries the fork's history**, which is the commits the edits to it made
+  (see above) against the commit the fork and the lesson last shared. So the reviewer
+  reads the change as a sequence, not as one lump, and `changes` in the result is stated
+  against the lesson rather than against whatever the last edit happened to do.
+- **Proposing after the fork stopped moving is refused.** There is nothing to add to a
+  proposal that already holds exactly these changes, and bumping its revision would send
+  the reviewer back to a diff that hasn't changed.
 - **Proposing again updates the proposal already open** from that fork, rather than
   stacking a second one beside it — same request, same discussion, new contents, with
   the version number recorded. That's what you want after the human asks for a change;

@@ -1,13 +1,14 @@
 // Forking a lesson and proposing changes back (src/git.js), against a fake hub.
 //
-// The point of these is the git, not the HTTP: the fake hub stores packfiles the
-// way the Worker's R2 bucket does (bytes plus a head, with the same
-// compare-and-swap on write), so what's under test is whether the repository the
+// The point of these is the git, not the HTTP: the fake hub (test/fake-hub.js)
+// stores packfiles the way the Worker's R2 bucket does, with the same
+// compare-and-swap on write, so what's under test is whether the repository the
 // assistant builds is a real clone — whether the proposal's pack shares ancestry
 // with the lesson it targets. Without that a reviewer's three-way merge has no
 // base and the whole flow degrades to "replace the lesson with mine".
 //
-// The in-memory filesystem those repositories are built on is tested in
+// Committing an ordinary edit (recordLessonHistory) is tested in history.test.js,
+// and the in-memory filesystem these repositories are built on in
 // packages/core/src/git/memfs.test.js.
 
 import assert from "node:assert/strict";
@@ -18,166 +19,16 @@ import {
   cloneFromPack,
   contains,
   mergeBase,
-  packRepo,
 } from "@spelling-creator/core/git/pack";
-import { commitDoc, headOid, readDocAt } from "@spelling-creator/core/git/repo";
+import { headOid, readDocAt } from "@spelling-creator/core/git/repo";
 
-import { forkLesson, proposalBody, proposeChanges } from "../src/git.js";
-
-const AUTHOR = { name: "Teacher", email: "teacher@example.com" };
-
-function lessonDoc(title, text) {
-  return {
-    title,
-    sections: [
-      {
-        id: "s1",
-        name: "Reading",
-        blocks: [
-          { id: "b1", type: "text", text },
-          { id: "b2", type: "spelling", words: ["BECAUSE", "FRIEND"] },
-        ],
-      },
-    ],
-  };
-}
-
-/**
- * A stand-in for the hub: lesson rows, packfiles keyed by lesson id, and
- * proposals. Records every call so a test can assert on what was sent, and
- * enforces the two rules the real Worker enforces — the pack compare-and-swap,
- * and a proposal's pack matching the head it was opened with.
- */
-function fakeHub() {
-  const lessons = new Map();
-  const packs = new Map();
-  const pullPacks = new Map();
-  const pulls = [];
-  let nextId = 1;
-
-  const clone = (value) => JSON.parse(JSON.stringify(value));
-
-  const api = {
-    async whoami() {
-      return { id: "u1", email: AUTHOR.email, displayName: AUTHOR.name };
-    },
-
-    async getLesson(id) {
-      const lesson = lessons.get(id);
-      if (!lesson) throw new Error("Lesson not found.");
-      return clone(lesson);
-    },
-
-    async createLesson({ title, doc, published, forkedFrom }) {
-      const id = `lesson-${nextId++}`;
-      const lesson = {
-        id,
-        title,
-        doc: clone(doc),
-        published: Boolean(published),
-        forkedFrom: forkedFrom || null,
-      };
-      lessons.set(id, lesson);
-      // The real POST /lessons returns the row without its document.
-      const { doc: _omitted, ...row } = lesson;
-      return row;
-    },
-
-    async fetchLessonPack(id) {
-      const pack = packs.get(id);
-      return pack ? { packfile: pack.packfile, head: pack.head } : null;
-    },
-
-    async fetchLessonHead(id) {
-      return packs.get(id)?.head || null;
-    },
-
-    async pushLessonPack(id, { packfile, head, parent }) {
-      const current = packs.get(id);
-      // The Worker's compare-and-swap: refuse a push built on a head that is no
-      // longer the lesson's, because accepting it would drop someone's commits.
-      if ((current?.head || null) !== (parent || null)) {
-        throw new Error(
-          "This lesson’s history has moved on since you last synced.",
-        );
-      }
-      packs.set(id, { packfile, head });
-      return { head };
-    },
-
-    async createPull(lessonId, fields) {
-      const pull = {
-        id: `pull-${nextId++}`,
-        lessonId,
-        status: "open",
-        ready: false,
-        ...fields,
-      };
-      pulls.push(pull);
-      return clone(pull);
-    },
-
-    async listPulls(lessonId) {
-      return {
-        pulls: pulls.filter((p) => p.lessonId === lessonId).map(clone),
-        canReview: false,
-      };
-    },
-
-    // Mirrors the Worker's planPullUpload: the first upload has to match the head
-    // the row was opened with; a later one records a revision.
-    async uploadPullPack(lessonId, pullId, { packfile, head }) {
-      const pull = pulls.find((p) => p.id === pullId);
-      if (!pull) throw new Error("Proposal not found.");
-      // The Worker refuses an upload to a proposal that is no longer open, and a
-      // fake that accepted one would hide a caller that had stopped checking.
-      if (pull.status !== "open")
-        throw new Error("This proposal is no longer open.");
-      if (pull.ready) {
-        assert.notEqual(head, pull.head, "an update has to actually move");
-        pull.previousHead = pull.head;
-        pull.head = head;
-        pull.revision = (pull.revision || 1) + 1;
-      } else {
-        assert.equal(
-          head,
-          pull.head,
-          "the pack must match the head opened with",
-        );
-        pull.ready = true;
-      }
-      pullPacks.set(pullId, { packfile, head });
-      return clone(pull);
-    },
-
-    async closePull(lessonId, pullId) {
-      const pull = pulls.find((p) => p.id === pullId);
-      if (pull) pull.status = "closed";
-      pullPacks.delete(pullId);
-      return pull ? clone(pull) : null;
-    },
-  };
-
-  return { api, lessons, packs, pullPacks, pulls };
-}
-
-/** Seed a lesson that has a real published history, as the editor leaves it. */
-async function seedLesson(hub, { id = "original", title, text }) {
-  const doc = lessonDoc(title, text);
-  hub.lessons.set(id, {
-    id,
-    title,
-    doc,
-    published: true,
-    forkedFrom: null,
-  });
-
-  const ctx = memRepo("seed");
-  const first = await commitDoc({ ...ctx, doc, author: AUTHOR });
-  const packed = await packRepo(ctx);
-  hub.packs.set(id, { packfile: packed.packfile, head: packed.head });
-  return { id, doc, head: first.oid };
-}
+import {
+  forkLesson,
+  proposalBody,
+  proposeChanges,
+  recordLessonHistory,
+} from "../src/git.js";
+import { fakeHub, lessonDoc, seedLesson } from "./fake-hub.js";
 
 test("forking clones the lesson's history under a new private draft", async () => {
   const hub = fakeHub();
@@ -317,8 +168,9 @@ test("proposing sends a pack that shares ancestry with the target lesson", async
   });
   const { lesson: fork } = await forkLesson(hub.api, { lessonId: source.id });
 
-  // The assistant edits its fork — the ordinary patch_lesson path, which saves
-  // the document without committing anything.
+  // The assistant edits its fork, and the edit's own history push fails — so the
+  // fork's document is ahead of its repository, and proposing has to commit the
+  // difference before it can offer anything.
   hub.lessons.get(fork.id).doc.sections[0].blocks[0].text =
     "A volcano ERUPTS when MAGMA reaches the surface.";
 
@@ -380,6 +232,73 @@ test("proposing sends a pack that shares ancestry with the target lesson", async
   // And the fork's own history moved forward with it, so proposing again builds
   // on this commit rather than remaking it.
   assert.equal(hub.packs.get(fork.id).head, uploaded.head);
+});
+
+test("a fork whose edits are already committed proposes those commits", async () => {
+  // The ordinary path now: patch_lesson commits as it goes, so by propose time
+  // the fork's history already holds the change and there is nothing left to
+  // commit. Proposing has to offer what is there rather than insisting on one
+  // more commit it cannot make.
+  const hub = fakeHub();
+  const source = await seedLesson(hub, {
+    title: "Volcanoes",
+    text: "A volcano ERUPTS.",
+  });
+  const { lesson: fork } = await forkLesson(hub.api, { lessonId: source.id });
+
+  const edited = lessonDoc(
+    "Volcanoes",
+    "A volcano ERUPTS when MAGMA reaches the surface.",
+  );
+  const previousDoc = hub.lessons.get(fork.id).doc;
+  hub.lessons.get(fork.id).doc = edited;
+  const recorded = await recordLessonHistory(hub.api, {
+    lessonId: fork.id,
+    doc: edited,
+    previousDoc,
+    client: "Claude Desktop",
+  });
+  assert.equal(recorded.recorded, true);
+
+  const result = await proposeChanges(hub.api, {
+    forkLessonId: fork.id,
+    title: "Explain what makes a volcano erupt",
+  });
+
+  assert.equal(result.pull.ready, true);
+  // The proposal points at the commit the edit made, not at a fresh one built on
+  // top of it — nothing was left to commit.
+  assert.equal(result.commit, recorded.commit);
+  // And the changes are stated against the lesson, not against the fork's own
+  // last commit, which is what a reviewer is being asked to judge.
+  assert.deepEqual(result.changes, ["- edit text block b1 (text)"]);
+
+  const ctx = memRepo("review");
+  await cloneFromPack({ ...ctx, ...hub.pullPacks.get(result.pull.id) });
+  assert.equal(
+    await contains({ ...ctx, oid: result.commit, ancestor: source.head }),
+    true,
+    "still a real clone of the lesson, so the merge has a base",
+  );
+});
+
+test("proposing a fork that has not moved since its proposal is refused", async () => {
+  const hub = fakeHub();
+  const source = await seedLesson(hub, {
+    title: "Volcanoes",
+    text: "A volcano ERUPTS.",
+  });
+  const { lesson: fork } = await forkLesson(hub.api, { lessonId: source.id });
+  hub.lessons.get(fork.id).doc.sections[0].blocks[0].text = "Revised.";
+  await proposeChanges(hub.api, { forkLessonId: fork.id, title: "Revise" });
+
+  // Nothing has happened to the fork since. Bumping the revision here would tell
+  // the reviewer to re-read a diff that hasn't changed.
+  await assert.rejects(
+    proposeChanges(hub.api, { forkLessonId: fork.id, title: "Revise again" }),
+    /already holds exactly these changes/,
+  );
+  assert.equal(hub.pulls[0].revision, undefined, "the proposal did not move");
 });
 
 test("proposing twice updates the proposal already open, rather than stacking one beside it", async () => {

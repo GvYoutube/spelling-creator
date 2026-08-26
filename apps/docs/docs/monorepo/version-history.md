@@ -390,12 +390,15 @@ needs a real browser:
 | `fs`   | LightningFS — the IndexedDB filesystem the repos live on, one directory per lesson. |
 | `sync` | Fork (clone), merge, push, and both sides of a pull request.                        |
 
-Server-side (`apps/mcp/src/git.js`) — the fork-and-propose flow for an AI
-assistant, which is `browser/git/sync`'s two outbound steps built on `memfs`
-instead of LightningFS. It keeps no repository between calls: a fork is a real
-hub lesson with its own stored pack, so each call clones that pack, does one
-thing to it and uploads the result. See
-[Pull requests](/web-app/pull-requests) and [MCP tools](/mcp-server/tools).
+Server-side (`apps/mcp/src/git.js`) — committing, forking and proposing for an AI
+assistant, which is `browser/git/sync`'s outbound steps built on `memfs` instead
+of LightningFS. It keeps no repository between calls: the lesson's stored pack is
+the durable state, so each call clones that pack, does one thing to it and uploads
+the result. Every MCP tool that writes a document commits it the same way the
+editor does, so an assistant's edits appear in the History tab with the rest —
+including a catch-up commit for a row that had run ahead of its history, which is
+what every lesson edited over MCP before that looks like. See
+[MCP tools](/mcp-server/tools) and [Pull requests](/web-app/pull-requests).
 
 App-bound (`apps/web/src/lib/git/`) — what cannot leave the bundle:
 

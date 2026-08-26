@@ -14,6 +14,11 @@ app uses** (`/lessons`), authenticating as you with a Supabase token — so ever
 lesson goes through the existing validation, ban checks, and author attribution.
 Nothing here bypasses the normal API.
 
+Every write is also a **version**. A lesson is a real git repository, and the
+server commits each edit the way the web editor does, so what an assistant did
+turns up in the lesson's History tab — with the diff, attributed to the assistant,
+and revertable. See [Every edit is a version](./tools.md#every-edit-is-a-version).
+
 It can also **fork** a lesson and open a **proposal** against it, rather than
 writing to it — the assistant edits a copy, and you read the diff and decide.
 That's the only route into a lesson somebody else wrote, and the one to use when
