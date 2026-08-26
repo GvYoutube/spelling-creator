@@ -10,6 +10,11 @@
 // asset server behaves the way `env.ASSETS` did, that a client cannot forge the
 // IP that bans are applied to, and that an unconfigured store degrades instead
 // of crashing.
+//
+// Importing `createHandler` pulls in routes/ssr.js, whose import of the built
+// server bundle is deliberately static — so this file cannot run until
+// apps/web has been built. That is why `test` builds it first, the same way
+// `dev`, `start` and `deploy` in this package already do.
 
 import { mkdtemp, mkdir, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';

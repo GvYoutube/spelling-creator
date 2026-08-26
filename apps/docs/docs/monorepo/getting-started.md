@@ -152,9 +152,16 @@ self-hosting bug, and the cheapest moment to find one is when it is introduced.
 
 `pnpm test` is `pnpm -r test`, which runs each workspace's own suite —
 `packages/core` and `apps/api` under vitest (the Worker's through
-`@cloudflare/vitest-pool-workers`, so its sanitizer tests run against the real
-runtime), and `apps/mcp` under `node --test`. `apps/docs` has no test script and
+`@cloudflare/vitest-pool-workers`, so its platform-adapter tests run against real
+R2 and KV), and `apps/mcp` under `node --test`. `apps/docs` has no test script and
 is skipped.
+
+`apps/api`'s `test` script builds `apps/web`'s SSR bundle first, the same way its
+`dev`, `start` and `deploy` scripts do. That is not incidental: `routes/ssr.js`
+imports the built bundle _statically_, deliberately, so that a missing one is a
+build failure rather than a runtime surprise — and the Node entry's tests reach
+it through `createHandler`. Building it here is what lets `pnpm test` work from a
+clean checkout in any order.
 
 The build runs without the `VITE_*` secrets — they are injected only for the real
 deploy, and a pull request from a fork could not read them anyway. It still
