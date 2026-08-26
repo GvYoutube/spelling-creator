@@ -29,23 +29,23 @@ services:
         # Baked into the SPA bundle at build time, so these are the URLs the
         # BROWSER will use — the public address of the gateway, not the internal
         # service names. Change them and you must rebuild, not just restart.
-        VITE_API_URL: ${PUBLIC_URL}
-        VITE_SUPABASE_URL: ${PUBLIC_URL}
-        VITE_SUPABASE_ANON_KEY: ${ANON_KEY}
+        VITE_API_URL: ${PUBLIC_URL:?missing, see .env.example}
+        VITE_SUPABASE_URL: ${PUBLIC_URL:?missing, see .env.example}
+        VITE_SUPABASE_ANON_KEY: ${ANON_KEY:?missing, see .env.example}
     restart: unless-stopped
     environment:
       # Server-side, these point at the gateway over the internal network.
       SUPABASE_URL: http://gateway
-      SUPABASE_SERVICE_ROLE_KEY: ${SERVICE_ROLE_KEY}
-      SUPABASE_ANON_KEY: ${ANON_KEY}
+      SUPABASE_SERVICE_ROLE_KEY: ${SERVICE_ROLE_KEY:?missing, see .env.example}
+      SUPABASE_ANON_KEY: ${ANON_KEY:?missing, see .env.example}
 
       S3_ENDPOINT: http://minio:9000
-      S3_ACCESS_KEY_ID: ${MINIO_ROOT_USER}
-      S3_SECRET_ACCESS_KEY: ${MINIO_ROOT_PASSWORD}
+      S3_ACCESS_KEY_ID: ${MINIO_ROOT_USER:?missing, see .env.example}
+      S3_SECRET_ACCESS_KEY: ${MINIO_ROOT_PASSWORD:?missing, see .env.example}
       S3_BUCKET_IMAGES: lesson-images
       S3_BUCKET_GIT: lesson-git
 
-      ALLOWED_HOSTNAMES: ${PUBLIC_HOSTNAME}
+      ALLOWED_HOSTNAMES: ${PUBLIC_HOSTNAME:?missing, see .env.example}
       # One proxy (the gateway) sits in front of this process, so the client IP
       # is the last entry in x-forwarded-for. Raise this if you add a CDN — the
       # entries to the left of your own proxies are attacker-controlled.
@@ -81,7 +81,7 @@ services:
     image: postgres:17-alpine
     restart: unless-stopped
     environment:
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?missing, see .env.example}
       POSTGRES_DB: spelling
     volumes:
       - postgres-data:/var/lib/postgresql/data
@@ -103,10 +103,10 @@ services:
     image: postgrest/postgrest:v12.2.3
     restart: unless-stopped
     environment:
-      PGRST_DB_URI: postgres://authenticator:${POSTGRES_PASSWORD}@postgres:5432/spelling
+      PGRST_DB_URI: postgres://authenticator:${POSTGRES_PASSWORD:?missing, see .env.example}@postgres:5432/spelling
       PGRST_DB_SCHEMAS: public
       PGRST_DB_ANON_ROLE: anon
-      PGRST_JWT_SECRET: ${JWT_SECRET}
+      PGRST_JWT_SECRET: ${JWT_SECRET:?missing, see .env.example}
       PGRST_DB_USE_LEGACY_GUCS: "false"
     depends_on:
       postgres:
@@ -121,10 +121,10 @@ services:
       GOTRUE_API_HOST: 0.0.0.0
       PORT: 9999
       GOTRUE_DB_DRIVER: postgres
-      GOTRUE_DB_DATABASE_URL: postgres://supabase_auth_admin:${POSTGRES_PASSWORD}@postgres:5432/spelling
-      GOTRUE_SITE_URL: ${PUBLIC_URL}
-      GOTRUE_URI_ALLOW_LIST: ${PUBLIC_URL}/**
-      GOTRUE_JWT_SECRET: ${JWT_SECRET}
+      GOTRUE_DB_DATABASE_URL: postgres://supabase_auth_admin:${POSTGRES_PASSWORD:?missing, see .env.example}@postgres:5432/spelling
+      GOTRUE_SITE_URL: ${PUBLIC_URL:?missing, see .env.example}
+      GOTRUE_URI_ALLOW_LIST: ${PUBLIC_URL:?missing, see .env.example}/**
+      GOTRUE_JWT_SECRET: ${JWT_SECRET:?missing, see .env.example}
       GOTRUE_JWT_EXP: 3600
       GOTRUE_JWT_AUD: authenticated
       GOTRUE_JWT_DEFAULT_GROUP_NAME: authenticated
@@ -133,11 +133,14 @@ services:
       # Sign-in is by magic link, so mail delivery is not optional — without a
       # working SMTP host nobody can create an account. Point it at whatever you
       # already use; a local MailHog is fine for trying this out.
-      GOTRUE_SMTP_HOST: ${SMTP_HOST}
-      GOTRUE_SMTP_PORT: ${SMTP_PORT}
-      GOTRUE_SMTP_USER: ${SMTP_USER}
-      GOTRUE_SMTP_PASS: ${SMTP_PASS}
-      GOTRUE_SMTP_ADMIN_EMAIL: ${SMTP_FROM}
+      # Blank-by-default rather than required, unlike the credentials above: the
+      # stack should come up so you can look at it, and only sign-in is broken
+      # until these are filled in.
+      GOTRUE_SMTP_HOST: ${SMTP_HOST:-}
+      GOTRUE_SMTP_PORT: ${SMTP_PORT:-587}
+      GOTRUE_SMTP_USER: ${SMTP_USER:-}
+      GOTRUE_SMTP_PASS: ${SMTP_PASS:-}
+      GOTRUE_SMTP_ADMIN_EMAIL: ${SMTP_FROM:-}
       GOTRUE_MAILER_AUTOCONFIRM: "false"
     depends_on:
       postgres:
@@ -150,8 +153,8 @@ services:
     restart: unless-stopped
     command: server /data --console-address ":9001"
     environment:
-      MINIO_ROOT_USER: ${MINIO_ROOT_USER}
-      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:?missing, see .env.example}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:?missing, see .env.example}
     volumes:
       - minio-data:/data
     healthcheck:
@@ -168,7 +171,7 @@ services:
         condition: service_healthy
     entrypoint: >
       /bin/sh -c "
-      mc alias set local http://minio:9000 ${MINIO_ROOT_USER} ${MINIO_ROOT_PASSWORD} &&
+      mc alias set local http://minio:9000 ${MINIO_ROOT_USER:?missing, see .env.example} ${MINIO_ROOT_PASSWORD:?missing, see .env.example} &&
       mc mb --ignore-existing local/lesson-images &&
       mc mb --ignore-existing local/lesson-git
       "
@@ -194,7 +197,7 @@ configs:
       create role anon nologin noinherit;
       create role authenticated nologin noinherit;
       create role service_role nologin noinherit bypassrls;
-      create role authenticator noinherit login password '${POSTGRES_PASSWORD}';
+      create role authenticator noinherit login password '${POSTGRES_PASSWORD:?missing, see .env.example}';
       grant anon, authenticated, service_role to authenticator;
 
       grant usage on schema public to anon, authenticated, service_role;
@@ -204,7 +207,7 @@ configs:
         grant all on sequences to service_role;
 
       -- GoTrue owns its own schema and migrates it itself on first start.
-      create user supabase_auth_admin noinherit createrole login password '${POSTGRES_PASSWORD}';
+      create user supabase_auth_admin noinherit createrole login password '${POSTGRES_PASSWORD:?missing, see .env.example}';
       create schema if not exists auth authorization supabase_auth_admin;
       grant create on database spelling to supabase_auth_admin;
       -- The application's tables reference auth.users(id), so every role that

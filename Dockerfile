@@ -63,10 +63,15 @@ ENV VITE_API_URL=$VITE_API_URL \
 RUN pnpm --filter @spelling-creator/web build \
  && pnpm --filter @spelling-creator/docs build
 
-# Drop the build-only dependencies now that the bundles exist. Doing it here
-# rather than reinstalling in the runtime stage keeps the pnpm store mount — and
-# the workspace's symlink layout — intact.
-RUN pnpm install --frozen-lockfile --prod --ignore-scripts
+# Drop the build-only dependencies now that the bundles exist — wrangler, vite,
+# vitepress and the rest are several hundred megabytes the runtime never opens.
+# Done here rather than by reinstalling in the runtime stage so the workspace's
+# symlink layout is built once and copied whole.
+#
+# The store is mounted again for this step: pnpm relinks the packages it is
+# keeping, and without the store it would refetch every one of them over the
+# network to do it.
+RUN --mount=type=cache,id=pnpm,target=/pnpm/store pnpm install --frozen-lockfile --prod --ignore-scripts
 
 # ---------------------------------------------------------------------------
 # Run.

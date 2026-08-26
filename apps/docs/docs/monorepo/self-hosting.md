@@ -30,6 +30,12 @@ docker compose up -d
 docker compose exec -T postgres psql -U postgres -d spelling < apps/api/schema.sql
 ```
 
+The first step is not optional. Every credential is declared as a required
+variable, so `docker compose up` without a filled-in `.env` stops and names what
+is missing rather than standing the stack up with blank passwords. The SMTP
+settings are the exception and default to empty: the stack comes up so you can
+look at it, and only sign-in is broken until you fill them in.
+
 Two things about it are worth understanding before adapting it.
 
 **One origin serves both `/rest/v1/*` and `/auth/v1/*`.** That is how Supabase
