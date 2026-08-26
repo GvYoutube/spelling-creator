@@ -53,6 +53,12 @@ services:
       # entries to the left of your own proxies are attacker-controlled.
       TRUSTED_PROXY_COUNT: 1
 
+      # Gates GET /_diagnostics, which reports what each dependency is doing and
+      # why it is failing. The same report is printed to this container's log at
+      # startup — `docker compose logs app` — so the token is only needed to ask
+      # again without restarting.
+      ADMIN_MIGRATE_TOKEN: ${ADMIN_TOKEN:-}
+
       # Optional: a local model, so the AI helpers work with no hosted key.
       # Uncomment the `ollama` service below to go with it.
       # OPENAI_COMPATIBLE_URL: http://ollama:11434/v1

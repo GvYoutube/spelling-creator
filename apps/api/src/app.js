@@ -41,6 +41,7 @@ import { handleModeration } from './routes/moderation.js';
 import { handleAdminMigrateImages, handleAdminBackfillWebp } from './routes/admin.js';
 import { handleSitemap, handleRobots, handleLessonsFeed } from './routes/seo.js';
 import { handleSpellingWords } from './routes/spelling-words.js';
+import { handleDiagnostics, handleHealth } from './routes/diagnostics.js';
 
 // Per-request handles the route handlers expect, derived from the Hono context.
 // Exported because the entries' own routes take the same arguments.
@@ -143,6 +144,12 @@ export function createApp() {
 	// 401, never actually serving the SPA.
 	app.all('/mod', (c) => handleModeration(req(c), c.env, urlOf(c), cors(c)));
 	app.all('/mod/*', (c) => handleModeration(req(c), c.env, urlOf(c), cors(c)));
+
+	// Is this instance alive, and are the things it depends on working? Named with
+	// a leading underscore so they cannot collide with a client-side route, the
+	// same reason /mod and /profiles are named as they are.
+	app.get('/_health', (c) => handleHealth(cors(c)));
+	app.get('/_diagnostics', (c) => handleDiagnostics(req(c), c.env, cors(c)));
 
 	// One-time admin backfills, secret-gated (X-Admin-Token), POST-only.
 	app.post('/admin/migrate-images', (c) => handleAdminMigrateImages(req(c), c.env, cors(c)));

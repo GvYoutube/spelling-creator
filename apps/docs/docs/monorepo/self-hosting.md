@@ -72,6 +72,52 @@ example values, both deliberately. It is a starting point, not a deployment — 
 compose file that pretended otherwise would be worse than one that is obviously
 an example.
 
+## When something doesn't work
+
+Start here, before reading any of the rest of this page:
+
+```bash
+docker compose logs app
+```
+
+The server asks every dependency whether it is actually working, once it has
+started listening, and prints the answer:
+
+```
+Dependency check:
+  [ok  ] configuration: database and identity credentials are set
+  [ok  ] database: PostgREST answered (HTTP 200)
+  [FAIL] schema: PostgREST cannot see public.lessons (HTTP 404 PGRST205: Could
+         not find the table 'public.lessons' in the schema cache)
+         Either apps/api/schema.sql was never applied, or PostgREST has a stale
+         cache. Check the tables exist, then restart PostgREST if they do.
+  [ok  ] identity: the auth service is healthy
+  [FAIL] identity-admin: the admin API refused the service-role key (HTTP 403)
+         The auth service must allow the "service_role" claim to call /admin —
+         on GoTrue that is GOTRUE_JWT_ADMIN_ROLES.
+  [ok  ] images: the bucket exists and is readable
+```
+
+Each check is written to distinguish causes rather than to confirm health, because
+the causes are what look alike from outside. Reaching PostgREST is not the same
+as PostgREST being able to see the tables. Reaching the auth service is not the
+same as being allowed to call its admin API — that one looks like a working
+instance right up until somebody opens a profile. A bucket that answers is not
+the same as a bucket that exists.
+
+Results carry the upstream's own error code, not a paraphrase, because
+`PGRST205` and `NoSuchBucket` are the strings worth searching for.
+
+To ask again without restarting, once `ADMIN_TOKEN` is set:
+
+```bash
+curl -H "X-Admin-Token: $ADMIN_TOKEN" "http://localhost:8080/_diagnostics?format=text"
+```
+
+`GET /_health` is separate, public and cheap: it answers whether the process is
+up and routing, and deliberately checks nothing else — a health check that fails
+when a dependency hiccups makes an orchestrator restart a process that was fine.
+
 ## What you need
 
 | Piece          | Hosted instance               | Self-hosted                                   |

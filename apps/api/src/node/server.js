@@ -82,30 +82,37 @@ export function createHandler(processEnv = process.env) {
 }
 
 /**
- * Check the configuration a running instance actually needs, and say what is
- * missing rather than failing later at the first request that needed it.
+ * Ask every dependency whether it works, and print the answer.
  *
- * Warnings, not errors: an instance with no object store still serves the hub,
- * and refusing to start would be a worse answer than saying so.
+ * Run once the server is listening rather than before it, and never allowed to
+ * stop it: a dependency that is still starting is normal in a container, and an
+ * instance that refuses to serve because its object store was slow to come up
+ * would be worse than one that says so and carries on.
+ *
+ * The point is that `docker compose logs app` answers "why doesn't the hub
+ * work?" without anyone having to find an endpoint or a token first — which is
+ * exactly what was missing the first time this was deployed.
  */
-function reportConfiguration(env, platform) {
-	if (!env.SUPABASE_URL || !env.SUPABASE_SERVICE_ROLE_KEY) {
-		console.warn('SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY are unset — the lesson hub and sign-in will not work.');
+async function reportDependencies(env) {
+	try {
+		const { runDiagnostics, formatDiagnostics } = await import('../lib/diagnostics.js');
+		const result = await runDiagnostics({ ...env, PLATFORM: nodePlatform(env) });
+		(result.ok ? console.log : console.warn)(formatDiagnostics(result));
+	} catch (e) {
+		console.warn('Could not run the dependency check:', e);
 	}
-	if (!platform.images) console.warn('S3_* / S3_BUCKET_IMAGES are unset — lesson images cannot be uploaded or served.');
-	if (!platform.lessonGit) console.warn('S3_BUCKET_GIT is unset — lesson version history and forking will not work.');
-	if (!env.ALLOWED_HOSTNAMES) console.warn('ALLOWED_HOSTNAMES is unset — cross-origin requests from the SPA may be refused.');
 }
 
 /** Start listening. Returns the server so a caller can close it. */
 export function start(processEnv = process.env) {
 	const port = Number(processEnv.PORT || 8787);
 	const hostname = processEnv.HOST || '0.0.0.0';
-	reportConfiguration(processEnv, nodePlatform(processEnv));
 
 	const fetch = createHandler(processEnv);
 	const server = serve({ fetch, port, hostname }, (info) => {
 		console.log(`Spelling Creator API listening on http://${hostname}:${info.port}`);
+		// Deliberately after the listen callback and deliberately not awaited.
+		void reportDependencies(processEnv);
 	});
 
 	// Containers and process managers stop a process with SIGTERM and expect it to
