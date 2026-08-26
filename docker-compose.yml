@@ -109,9 +109,19 @@ services:
           attempt=$$((attempt + 1))
           if [ "$$attempt" -ge 60 ]; then
             echo 'GAVE UP: auth.users did not appear within two minutes.'
-            echo 'Either the auth service has not run its first migration, or this'
-            echo 'container cannot reach postgres — any psql errors above say which.'
-            echo 'Check: docker compose logs auth'
+            echo ''
+            echo 'What this container can see:'
+            # Narrows it without a round trip. No auth schema at all means GoTrue
+            # never connected (check its logs for a connection refusal — the
+            # usual one is sslmode). An auth schema with no tables means it
+            # connected and its migration failed part way. Errors here instead
+            # mean this container cannot reach postgres either.
+            psql -h postgres -U postgres -d spelling -tAc \
+              "select 'auth schema exists: ' || count(*) from pg_namespace where nspname = 'auth'" || true
+            psql -h postgres -U postgres -d spelling -tAc \
+              "select 'tables in auth: ' || count(*) from pg_tables where schemaname = 'auth'" || true
+            echo ''
+            echo 'Then: docker compose logs auth'
             exit 1
           fi
           if [ $$((attempt % 5)) -eq 0 ]; then
@@ -163,7 +173,10 @@ services:
     image: postgrest/postgrest:v12.2.3
     restart: unless-stopped
     environment:
-      PGRST_DB_URI: postgres://authenticator:${POSTGRES_PASSWORD:?missing, see .env.example}@postgres:5432/spelling
+      # Explicit for the same reason GoTrue's is, though this driver defaults to
+      # `prefer` and would have connected either way. Spelling it out means the
+      # two services fail the same way if the database ever does serve TLS.
+      PGRST_DB_URI: "postgres://authenticator:${POSTGRES_PASSWORD:?missing, see .env.example}@postgres:5432/spelling?sslmode=disable"
       PGRST_DB_SCHEMAS: public
       PGRST_DB_ANON_ROLE: anon
       PGRST_JWT_SECRET: ${JWT_SECRET:?missing, see .env.example}
@@ -195,7 +208,15 @@ services:
       # routes back here.
       API_EXTERNAL_URL: ${PUBLIC_URL:?missing, see .env.example}
       GOTRUE_DB_DRIVER: postgres
-      GOTRUE_DB_DATABASE_URL: postgres://supabase_auth_admin:${POSTGRES_PASSWORD:?missing, see .env.example}@postgres:5432/spelling
+      # sslmode=disable is load-bearing, not tidiness. GoTrue connects through
+      # lib/pq, whose default sslmode is `require`, and the plain postgres image
+      # serves no TLS — so without this the connection is refused, GoTrue never
+      # runs its first migration, auth.users never appears, and the schema
+      # service waits for a table that is never coming. PostgREST is unaffected
+      # and connects fine, which is exactly what makes this confusing: its driver
+      # defaults to `prefer`. Supabase's own compose omits it because their
+      # postgres image does serve TLS; this one does not.
+      GOTRUE_DB_DATABASE_URL: "postgres://supabase_auth_admin:${POSTGRES_PASSWORD:?missing, see .env.example}@postgres:5432/spelling?sslmode=disable&search_path=auth"
       GOTRUE_SITE_URL: ${PUBLIC_URL:?missing, see .env.example}
       GOTRUE_URI_ALLOW_LIST: ${PUBLIC_URL:?missing, see .env.example}/**
       GOTRUE_JWT_SECRET: ${JWT_SECRET:?missing, see .env.example}
