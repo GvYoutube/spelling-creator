@@ -109,6 +109,14 @@ oxlint, so there is nothing to disable.
 merge: install (with `--frozen-lockfile`), `pnpm lint`, `pnpm test`, then the web
 and docs builds.
 
+`apps/api`'s own suite runs **twice, in two runtimes**, because the API is meant
+to run in two. The `workers` project runs everything inside workerd — the hosted
+instance's runtime, and the only place the Durable Objects and the R2/KV adapters
+can be exercised for real. The `node` project runs the portable subset under Node,
+which is what a self-hosted instance runs on. Most files are in both, and that
+overlap is the point: a module that behaves differently across the two is a
+self-hosting bug, and the cheapest moment to find one is when it is introduced.
+
 `pnpm test` is `pnpm -r test`, which runs each workspace's own suite —
 `packages/core` and `apps/api` under vitest (the Worker's through
 `@cloudflare/vitest-pool-workers`, so its sanitizer tests run against the real

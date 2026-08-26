@@ -20,6 +20,28 @@ Worker endpoints (`apps/api/src/index.js`):
   original bytes for formats it can't decode or when the WEBP isn't smaller. The
   key is still the original content hash, so dedup and references are unaffected.
 
+The conversion uses [@jsquash](https://github.com/jamsinclair/jSquash)'s WASM
+codecs rather than a native dependency like `sharp`, which is what lets the same
+code run in the Workers runtime and in Node with no per-platform build step. Each
+codec's `init()` is handed an already-compiled `WebAssembly.Module`, so the
+Emscripten glue never tries to fetch its binary at runtime — the Workers sandbox
+forbids that, and in Node it would resolve against the wrong base.
+
+Where that module comes from is the only per-runtime part, and it sits behind the
+`#image-codec-wasm` subpath import (`apps/api/package.json`, `src/codecs/`):
+wrangler's bundler resolves the `.wasm` imports on Workers, and Node reads and
+compiles them off disk, memoised and deferred so an instance that never receives
+an upload doesn't pay for ~700 KB of codecs at startup. It is the same
+conditional-import pattern `apps/mcp` uses for its `#standards-md`.
+
+The two halves are verified in different places, because no single runner covers
+both. The Node half runs in the API's Node test project; the Workers half is
+resolved by wrangler's bundler, which CI exercises with
+`pnpm --filter @spelling-creator/api bundle` (a `wrangler deploy --dry-run`).
+`vitest-pool-workers` cannot resolve a `.wasm` out of `node_modules` — it uses
+Vite's module graph, not wrangler's — so the image tests are excluded from that
+project rather than made to limp along in it.
+
 The browser also tries to do this conversion itself before an image ever reaches
 the Worker: `readImageFile` (`apps/web/src/lib/image.js`) re-encodes PNG/JPEG
 picks to WEBP on a canvas (same quality target, same keep-whichever-is-smaller

@@ -1,19 +1,21 @@
 // Server-side image conversion: turn uploaded PNG/JPEG bytes into compressed
-// WEBP before they land in R2. Runs in the Workers runtime (no native deps like
-// sharp), using @jsquash's WASM codecs.
+// WEBP before they land in the object store. Uses @jsquash's WASM codecs rather
+// than a native dependency like sharp, which is what lets the same code run in
+// the Workers runtime and in Node without a build step per platform.
 //
-// We import each codec's .wasm as a precompiled WebAssembly.Module (wrangler
-// resolves `.wasm` imports to a Module) and hand it to the codec's init() so the
-// Emscripten/wasm-bindgen glue never tries to fetch the binary at runtime —
-// which the Workers sandbox doesn't allow.
+// Each codec's init() is handed an already-compiled `WebAssembly.Module`, so the
+// Emscripten/wasm-bindgen glue never tries to fetch the binary at runtime — the
+// Workers sandbox doesn't allow that, and in Node it would resolve against the
+// wrong base. Where that Module comes from is the one part that differs per
+// runtime, and it lives behind the `#image-codec-wasm` subpath import (see
+// package.json and src/codecs/): wrangler's bundler on Workers, a read and
+// compile off disk in Node.
 
 import encodeWebp, { init as initWebpEncode } from '@jsquash/webp/encode';
 import decodePng, { init as initPngDecode } from '@jsquash/png/decode';
 import decodeJpeg, { init as initJpegDecode } from '@jsquash/jpeg/decode';
 
-import WEBP_ENC_WASM from '@jsquash/webp/codec/enc/webp_enc_simd.wasm';
-import PNG_DEC_WASM from '@jsquash/png/codec/pkg/squoosh_png_bg.wasm';
-import JPEG_DEC_WASM from '@jsquash/jpeg/codec/dec/mozjpeg_dec.wasm';
+import { jpegDecoderWasm, pngDecoderWasm, webpEncoderWasm } from '#image-codec-wasm';
 
 // Quality for the WEBP encoder (0–100). 80 is the usual "visually lossless
 // enough" sweet spot and what most image pipelines default to.
@@ -37,15 +39,15 @@ function guardInit(promise, reset) {
 	});
 }
 function ensureWebp() {
-	if (!webpReady) webpReady = guardInit(initWebpEncode(WEBP_ENC_WASM), () => (webpReady = null));
+	if (!webpReady) webpReady = guardInit(webpEncoderWasm().then(initWebpEncode), () => (webpReady = null));
 	return webpReady;
 }
 function ensurePng() {
-	if (!pngReady) pngReady = guardInit(initPngDecode(PNG_DEC_WASM), () => (pngReady = null));
+	if (!pngReady) pngReady = guardInit(pngDecoderWasm().then(initPngDecode), () => (pngReady = null));
 	return pngReady;
 }
 function ensureJpeg() {
-	if (!jpegReady) jpegReady = guardInit(initJpegDecode(JPEG_DEC_WASM), () => (jpegReady = null));
+	if (!jpegReady) jpegReady = guardInit(jpegDecoderWasm().then(initJpegDecode), () => (jpegReady = null));
 	return jpegReady;
 }
 

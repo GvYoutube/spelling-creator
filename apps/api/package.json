@@ -2,11 +2,19 @@
 	"name": "@spelling-creator/api",
 	"version": "0.0.0",
 	"private": true,
+	"type": "module",
+	"imports": {
+		"#image-codec-wasm": {
+			"workerd": "./src/codecs/wasm.workerd.js",
+			"default": "./src/codecs/wasm.node.js"
+		}
+	},
 	"scripts": {
 		"deploy": "pnpm --filter @spelling-creator/web build:ssr && wrangler deploy",
 		"dev": "pnpm --filter @spelling-creator/web build:ssr && wrangler dev",
 		"start": "pnpm --filter @spelling-creator/web build:ssr && wrangler dev",
-		"test": "vitest run"
+		"test": "vitest run",
+		"bundle": "wrangler deploy --dry-run --outdir dist"
 	},
 	"dependencies": {
 		"@cloudflare/puppeteer": "^1.3.0",
