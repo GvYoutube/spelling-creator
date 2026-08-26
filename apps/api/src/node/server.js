@@ -15,6 +15,8 @@
 // src/node/platform.js and in the docs. The process is stateless: run as many as
 // you like behind a proxy.
 
+import { pathToFileURL } from 'node:url';
+
 import { serve } from '@hono/node-server';
 
 import { createApp, registerFrontend } from '../app.js';
@@ -119,4 +121,9 @@ export function start(processEnv = process.env) {
 }
 
 // Started directly (`node src/node/server.js`) rather than imported by a test.
-if (process.argv[1] && import.meta.url === `file://${process.argv[1]}`) start();
+//
+// Compared through pathToFileURL rather than by pasting `file://` onto the path:
+// the two stop matching as soon as the path contains a space or a non-ASCII
+// character, and the failure mode is that the process starts, exits 0, and
+// serves nothing — which is a miserable thing to debug in a container.
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) start();
