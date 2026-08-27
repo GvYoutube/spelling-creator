@@ -27,8 +27,9 @@ you'd rather check the assistant's work before it goes live. See
 
 On a client that renders [MCP Apps](./interactive-views.md) — Claude on web, desktop and
 mobile — some results come back as a small interface rather than as text: `search_images`
-shows the Commons candidates as pictures, and the one the user clicks goes into the
-lesson. Everywhere else the same tools answer in text, exactly as before.
+shows the Commons candidates as pictures, the assistant stands back rather than choosing
+for you, and the one you click goes into the lesson. Everywhere else the same tools answer
+in text, exactly as before.
 
 Two ways to connect:
 

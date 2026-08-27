@@ -222,8 +222,18 @@ in the lesson without another turn. Without a `lessonId` — or on a client that
 a tool call on the view's behalf — the card still works: picking one tells the assistant
 which `ref` to use, and it places the image as usual.
 
-The same search answers a client that renders nothing at all with exactly the text result
-it always did; the picker reads the identical payload.
+**The assistant is told to stop when the picker is showing.** This is the one place the
+server says different things to different clients, and it has to: the same result means
+"choose one" to a text client and "stand back" to a rendered one. `search_images` checks
+whether the connected host negotiated the MCP Apps extension, and when it did, the result
+leads with an instruction to end the turn — don't call `add_image`, don't pick from the
+descriptions — and the payload follows behind it. Without that, the assistant reads a list
+of candidates, does the obvious thing with it, and adds a picture of its own choosing while
+the user is still looking at the cards; the choice the picker exists to hand over is taken
+back before they can make it.
+
+A client that renders nothing at all gets exactly the text result it always did, list and
+"choose the best `ref`" alike; the picker reads the identical payload either way.
 
 `add_image` downloads a **downscaled rendering** (Commons is asked for a thumbnail ~1600px
 wide, and again at ~1000px if that one is still heavy) rather than the original file, so

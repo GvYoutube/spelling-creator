@@ -19,14 +19,22 @@ import { appDomain, IMAGE_PICKER_URI } from "../src/views.js";
 
 const CONFIG = { apiUrl: "https://example.test" };
 
-async function connected(api = {}) {
+async function connected(api = {}, capabilities = {}) {
   const server = new McpServer(SERVER_INFO);
   registerTools(server, { api, config: CONFIG });
-  const client = new Client({ name: "test", version: "0" });
+  const client = new Client({ name: "test", version: "0" }, { capabilities });
   const [clientT, serverT] = InMemoryTransport.createLinkedPair();
   await Promise.all([server.connect(serverT), client.connect(clientT)]);
   return client;
 }
+
+// A client that renders MCP Apps, declared the way the extension negotiates:
+// an `extensions` entry naming the mime type the views are served under.
+const RENDERS_VIEWS = {
+  extensions: {
+    "io.modelcontextprotocol/ui": { mimeTypes: ["text/html;profile=mcp-app"] },
+  },
+};
 
 test("the image picker is offered as a ui:// resource a host can render", async () => {
   const client = await connected();
@@ -133,7 +141,64 @@ test("search_images answers in text and in structured content alike", async () =
     sectionIndex: 2,
     index: 0,
   });
+
+  // Nothing renders here, so nobody but the model can choose — and it is asked
+  // to, exactly as it was before the view existed.
+  assert.match(res.structuredContent.note, /Choose the best `ref`/);
+  assert.doesNotMatch(res.structuredContent.note, /STOP/);
 });
+
+test("a host that renders the picker is told to leave the choosing alone", async () => {
+  const res = await withCommons(COMMONS_RESPONSE, async () => {
+    const client = await connected({}, RENDERS_VIEWS);
+    return client.callTool({
+      name: "search_images",
+      arguments: { query: "red fox", lessonId: "L1" },
+    });
+  });
+
+  // The instruction leads, ahead of the candidates it governs: the model must
+  // not answer a list of images by picking one, because the user is looking at
+  // them. This is the whole fix — without it the assistant adds an image itself
+  // and the picker it talked over is already out of date.
+  assert.match(res.content[0].text, /STOP HERE/);
+  assert.match(res.content[0].text, /do not call add_image/);
+  assert.match(res.content[0].text, /USER is choosing/);
+  assert.equal(res.structuredContent.note, res.content[0].text);
+  assert.doesNotMatch(res.structuredContent.note, /Choose the best `ref`/);
+
+  // The candidates still travel, in both shapes: the view renders them, and the
+  // model can still talk about them when the user asks it to.
+  const fromText = JSON.parse(res.content[1].text);
+  assert.deepEqual(res.structuredContent, fromText);
+  assert.equal(res.structuredContent.images[0].ref, "File:Red fox.jpg");
+});
+
+// A half-declared capability takes the text path, because the two ways of
+// guessing wrong don't cost the same. Told to wait by a host that draws no
+// picker, the assistant ends its turn on a click that can never come and the
+// conversation dies silently; told to choose by a host that does draw one, it
+// picks over the user — the old bug, and one sentence to undo.
+for (const [what, ui] of [
+  ["names no mime types", {}],
+  ["names only other mime types", { mimeTypes: ["text/html"] }],
+]) {
+  test(`a host that ${what} is treated as text-only`, async () => {
+    const res = await withCommons(COMMONS_RESPONSE, async () => {
+      const client = await connected(
+        {},
+        { extensions: { "io.modelcontextprotocol/ui": ui } },
+      );
+      return client.callTool({
+        name: "search_images",
+        arguments: { query: "red fox" },
+      });
+    });
+
+    assert.match(res.structuredContent.note, /Choose the best `ref`/);
+    assert.doesNotMatch(res.content[0].text, /STOP HERE/);
+  });
+}
 
 test("a search with no hits still satisfies the tool's output schema", async () => {
   const res = await withCommons({ query: { pages: {} } }, async () => {

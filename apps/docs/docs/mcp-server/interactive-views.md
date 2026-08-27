@@ -37,6 +37,9 @@ say — never reads the `ui://` resource and gets the same text result it always
 unconditionally rather than branching on the capability. The text path stays the
 contract; views are an enhancement on top of it.
 
+What a tool **says** does branch, in exactly one place, and it's worth knowing why. See
+[Say the right thing to each client](#say-the-right-thing-to-each-client).
+
 ## How it fits together
 
 ```text
@@ -76,6 +79,50 @@ the model's context (`ui/update-model-context`) or send a follow-up turn
 build on — rather than a silent side effect it then contradicts. It can also ask the host
 to open a link (`ui/open-link`), which is how a view hands off to the real maker for work
 that belongs there.
+
+## Say the right thing to each client
+
+A view changes who is doing the work, and a tool result that ignores that fights it.
+
+`search_images` returns a list of photographs. In a terminal that list is addressed to the
+assistant, because the assistant is the only one who can act on it — "choose the best
+`ref` and call `add_image`" is the correct and only useful thing to say. Send those same
+words to a host that just drew twelve cards and the assistant does what it was told: it
+picks from prose descriptions of images it cannot see, adds one, and reports it — while
+the user is still reading the picker. The picker didn't fail; it was talked over. The
+choice it existed to hand across was taken back a second before the user could make it.
+
+So the tool asks who is looking, through `rendersViews()` in `src/views.js`:
+
+```js
+const ui = getUiCapability(server.server.getClientCapabilities());
+return Boolean(ui?.mimeTypes?.includes(RESOURCE_MIME_TYPE));
+```
+
+That reads the `io.modelcontextprotocol/ui` entry the host declared at initialisation —
+the same negotiation that decides whether the view is fetched at all — and when the host
+named the mime type the views are served under, `search_images` leads its result with an
+instruction to stop: end the turn, add nothing, wait to be told what the user clicked. The
+candidates still follow, in the text block and in `structuredContent` alike, so the model
+can still answer "the fox one, please" without searching again. Only the instruction
+changes.
+
+Three things about the shape of that, all learned the hard way:
+
+- **The instruction goes first, as its own content block.** A rule appended to a JSON blob
+  is a rule read after the model has already met the list and decided what to do with it.
+- **It has to be blunt.** "The user may pick one" reads as permission to pick first. What
+  works is naming the stop and the reason: they can see the pictures, you cannot.
+- **An uncertain answer is `false`.** Both halves of that check are required — a host that
+  declared the extension but named no mime types takes the text path. The two ways of
+  guessing wrong are not equally bad. Saying "text" to a host that renders leaves the old
+  behaviour: the assistant picks over the user, rude but undone in one sentence. Saying
+  "renders" to a host that doesn't ends the turn waiting for a click on a picker nobody
+  drew, and nothing will ever arrive — the conversation just stops, with no clue why.
+
+The same applies to any future view: what the model is told has to match what the user can
+already see, or the two race. Registration stays unconditional — the branch belongs in the
+words, not in the wiring.
 
 ## Writing a view
 
@@ -129,6 +176,10 @@ client: that the `ui://` resource is listed and readable, under the mime type ho
 for, self-contained, carrying the origin and the CSP entry, with the tool's `_meta`
 pointing at it. That's the wiring a host silently refuses to render without, and all of it
 is checkable without ever rendering anything.
+
+The capability branch is checkable there too, and is: a client that declares
+`io.modelcontextprotocol/ui` gets the hands-off result, a plain one still gets "choose the
+best `ref`". Both are only what a `tools/call` returns, so neither needs a renderer.
 
 The view's own behaviour — that it draws the candidates, that a click calls `add_image`
 with the right arguments, that it degrades when the host won't proxy that call — is
