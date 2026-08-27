@@ -31,9 +31,18 @@ image and endpoint and nothing else. The service is named `storage` for its role
 rather than its implementation to keep that swap a one-line edit.
 
 ```bash
-node scripts/generate-env.mjs   # writes .env with every credential filled in
+./scripts/generate-env.sh   # writes .env with every credential filled in
 # then set PUBLIC_URL / PUBLIC_HOSTNAME and the SMTP block in .env
 docker compose up -d --build
+```
+
+The generator is POSIX `sh` and `openssl`, so it needs nothing installed —
+asking someone whose only requirement is Docker to add a Node toolchain to
+produce a config file would be a silly thing to ask. If `openssl` somehow isn't
+there, any container has it:
+
+```bash
+docker run --rm -v "$PWD:/w" -w /w alpine/openssl:latest sh scripts/generate-env.sh
 ```
 
 Use the generator rather than copying `.env.example` by hand. `ANON_KEY` and

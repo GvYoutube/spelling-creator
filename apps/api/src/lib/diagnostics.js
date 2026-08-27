@@ -105,7 +105,7 @@ function checkCredentials(env) {
 			'credentials',
 			`SUPABASE_SERVICE_ROLE_KEY is not a JWT — it has ${parts} part${parts === 1 ? '' : 's'} where a token has 3`,
 			'It should be a signed token, not a password. If it still reads like the placeholder from .env.example, ' +
-				'generate a real one — `node scripts/generate-env.mjs` writes a matching set.',
+				'generate a real one — `./scripts/generate-env.sh` writes a matching set.',
 		);
 	}
 	if (!payload) {
