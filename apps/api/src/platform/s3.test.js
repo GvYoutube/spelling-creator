@@ -156,6 +156,18 @@ describe('parseListResponse', () => {
 		expect(parsed.keys[0].key).toBe('a&b<c');
 	});
 
+	it('un-escapes entities in the continuation token', () => {
+		// The token goes straight back to the server as a query parameter. One that
+		// differs from the issued token by five characters pages wrongly rather than
+		// failing, which is the sort of bug nobody finds.
+		const parsed = parseListResponse(
+			'<ListBucketResult><IsTruncated>true</IsTruncated>' +
+				'<Contents><Key>a</Key><Size>1</Size></Contents>' +
+				'<NextContinuationToken>tok&amp;en</NextContinuationToken></ListBucketResult>',
+		);
+		expect(parsed.nextCursor).toBe('tok&en');
+	});
+
 	it('ignores elements it does not know about', () => {
 		// A server that adds StorageClass or Owner must not shift anything.
 		const parsed = parseListResponse(
@@ -252,6 +264,45 @@ describe('s3Blobs errors', () => {
 			fetch: async () => new Response('<Error><Code>NoSuchKey</Code></Error>', { status: 404 }),
 		});
 		await store.delete('absent');
+	});
+
+	it('does not report a missing bucket as a missing object', async () => {
+		// S3 answers both with a 404 and separates them only in the error body. Read
+		// the same way, a mistyped bucket name is an empty one: every get() a miss
+		// and every delete() a success, on a deployment that stores nothing.
+		const missingBucket = {
+			fetch: async () => new Response('<Error><Code>NoSuchBucket</Code></Error>', { status: 404 }),
+		};
+		const store = storeOver(missingBucket);
+		await expect(store.get('anything')).rejects.toThrow(/NoSuchBucket/);
+		await expect(store.delete('anything')).rejects.toThrow(/NoSuchBucket/);
+	});
+
+	it('still reports an absent object as absent', async () => {
+		const server = fakeS3('lessons');
+		expect(await storeOver(server).get('never-written')).toBe(null);
+		expect(await storeOver(server).head('never-written')).toBe(null);
+		await storeOver(server).delete('never-written');
+	});
+
+	it('fails the listing when a HEAD fails for any reason but absence', async () => {
+		// The HEAD per listed object is how this adapter supplies the content types
+		// a listing must carry. Swallowing a 403 or a 5xx would hand the WEBP
+		// backfill a page of objects with no content type, which it reads as
+		// "already converted" and skips for good.
+		const server = fakeS3('lessons');
+		const store = storeOver(server);
+		await store.put('listed-1', enc.encode('x'), { contentType: 'image/png' });
+
+		const failing = {
+			...server,
+			fetch: async (input, init = {}) => {
+				const method = (init.method || 'GET').toUpperCase();
+				if (method === 'HEAD') return new Response('<Error><Code>AccessDenied</Code></Error>', { status: 403 });
+				return await server.fetch(input, init);
+			},
+		};
+		await expect(storeOver(failing).list({ limit: 10 })).rejects.toThrow(/403/);
 	});
 
 	it('signs every request it sends', async () => {

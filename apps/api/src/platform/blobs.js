@@ -86,6 +86,36 @@ export function normalizeMetadata(metadata) {
 }
 
 /**
+ * Check a key an adapter is about to act on, returning it, or throw if no
+ * adapter can address it unambiguously.
+ *
+ * Keys are opaque here — any text, slashes included, which is what lets them be
+ * `git/<lessonId>/pack` — with one exception, and it is a correctness rule
+ * rather than a matter of taste. An S3 store addresses an object by URL path,
+ * and a URL resolves `.` and `..` segments before the request is ever signed:
+ * `git/../images/x` would be sent, and stored, as `images/x`, and a key starting
+ * `../` would leave the bucket altogether. R2 takes the same key verbatim and
+ * stores it exactly as given. So a key with a dot segment means two different
+ * objects depending on which host is running, which is precisely the divergence
+ * this seam exists to prevent — and on the path-based host it is a way to write
+ * somewhere the caller did not name.
+ *
+ * Nothing in this API produces such a key: they are content hashes and
+ * UUID-shaped paths. This is here so that the day something does, it fails
+ * loudly at the call rather than quietly at the wrong object.
+ *
+ * @param {string} key
+ * @returns {string}
+ */
+export function assertUsableKey(key) {
+	const text = String(key ?? '');
+	if (text.split('/').some((segment) => segment === '.' || segment === '..')) {
+		throw new Error(`Blob key ${JSON.stringify(text)} contains a "." or ".." path segment, which no store may resolve.`);
+	}
+	return text;
+}
+
+/**
  * The list of keys a delete() call should act on, given either form of its
  * argument, with blanks dropped. Adapters use this so `delete([])` is a no-op
  * everywhere rather than an error at one host and a full-bucket scan at another.
@@ -95,5 +125,5 @@ export function normalizeMetadata(metadata) {
  */
 export function deleteKeys(key) {
 	const keys = Array.isArray(key) ? key : [key];
-	return keys.filter((k) => typeof k === 'string' && k !== '');
+	return keys.filter((k) => typeof k === 'string' && k !== '').map(assertUsableKey);
 }

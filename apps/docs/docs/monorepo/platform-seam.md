@@ -20,7 +20,7 @@ so a handler can ask for "the image store" rather than for `env.IMAGES`.
 
 ## What it covers
 
-```
+```text
 platform(env) -> {
   images,      BlobStore | null   lesson images, keyed by content hash
   lessonGit,   BlobStore | null   lesson history packfiles
@@ -136,6 +136,14 @@ Two places where S3 and R2 genuinely differ, both absorbed by the adapter:
 what a self-hosted MinIO or Garage serves without wildcard DNS. Pass
 `forcePathStyle: false` for AWS-style virtual hosts.
 
+**Keys are opaque**, slashes included — with one exception. A key containing a
+`.` or `..` path segment is refused by every adapter, because a URL resolves
+those before the request is signed: `git/../images/x` would be stored as
+`images/x` on an S3 host and as itself on R2, and a key starting `../` would
+address a different bucket entirely. Nothing here produces such a key; refusing
+one is so that the day something does, it fails at the call rather than at the
+wrong object.
+
 **Bulk deletes** are issued as parallel `DELETE`s, eight at a time, rather than
 through S3's `DeleteObjects` POST. That API is the one smaller S3
 implementations most often lack, and building and signing an XML body would save
@@ -205,9 +213,30 @@ env.PLATFORM = {
   rateLimit: postgresKv(pool),
   oauthState: postgresKv(pool),
   cache: noopCache,
-  clientIp: (request) => request.headers.get("x-forwarded-for") || "",
+  // NOT `headers.get("x-forwarded-for")`. See below.
+  clientIp: trustedClientIp(env),
 };
 ```
+
+Two of those lines deserve more than a glance.
+
+`endpoint` is a plaintext `http://` URL in every example here because the store
+is a container on a private network. SigV4 signs the request but encrypts
+nothing, so the objects and the signature both cross the wire in the clear —
+which is fine over a Docker network and is not fine anywhere the traffic leaves
+the host. Use `https://` for anything shared, and for real S3.
+
+`clientIp` is the one method where the obvious implementation is a security bug.
+`x-forwarded-for` is a list each hop appends to, and the _client_ writes what is
+at the front — so reading the header whole, or reading its first entry, lets any
+caller choose the address that bans and rate limits are keyed on. The trustworthy
+entry is the one your own nearest proxy added, counted from the right, and how
+many to count back is a property of the deployment rather than of the code. See
+`clientIpFrom` in `apps/api/src/node/platform.js`, which reads
+`TRUSTED_PROXY_COUNT` for exactly that, and returns no IP at all when it is `0` —
+a process with nothing in front of it has no trustworthy source for one. The
+Cloudflare adapter has it easy: `cf-connecting-ip` is written by the edge and
+overwrites whatever the client sent.
 
 Then run the conformance suites against each new adapter. `cloudflare.js` is the
 reference implementation and is a thin renaming layer by design: no fallbacks, no

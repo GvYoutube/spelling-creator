@@ -65,7 +65,13 @@ function fakePostgrest() {
 
 		const key = keyFilter(url);
 		if (method === 'DELETE') {
-			if (key !== null) rows.delete(key);
+			// PostgREST deletes what the filters match, so an `expires_at=eq.` on the
+			// request narrows it to the exact row that was read — which is how the
+			// expiry sweep avoids deleting a replacement.
+			const expiry = url.searchParams.get('expires_at') || '';
+			const expected = expiry.startsWith('eq.') ? expiry.slice(3) : null;
+			const row = key !== null ? rows.get(key) : null;
+			if (row && (expected === null || row.expires_at === expected)) rows.delete(key);
 			return new Response(null, { status: 204 });
 		}
 
@@ -121,6 +127,36 @@ describe('postgrestKv expiry', () => {
 		expect(server.rows.has('stale')).toBe(false);
 	});
 
+	it('does not sweep a row that was written while the stale one was being read', async () => {
+		// The sweep is fire-and-forget, so a put() can land between the read and the
+		// delete. Without matching on the expiry that was read, the sweep of the
+		// spent bucket would take the fresh one with it — and the next request would
+		// find no bucket at all and start a new rate-limit window.
+		const server = fakePostgrest();
+		const stale = new Date(Date.now() - 1000).toISOString();
+		server.rows.set('bucket', { key: 'bucket', value: 'spent', expires_at: stale });
+
+		// Hold the sweep's DELETE open until the replacement has been written.
+		let release;
+		const held = new Promise((resolve) => {
+			release = resolve;
+		});
+		const slow = {
+			fetch: async (input, init = {}) => {
+				if ((init.method || 'GET').toUpperCase() === 'DELETE') await held;
+				return await server.fetch(input, init);
+			},
+		};
+		const store = storeOver(slow);
+
+		expect(await store.get('bucket')).toBe(null);
+		await store.put('bucket', 'fresh', { expirationTtl: 60 });
+		release();
+		await new Promise((resolve) => setTimeout(resolve, 0));
+
+		expect(await store.get('bucket')).toBe('fresh');
+	});
+
 	it('keeps a row with no expiry indefinitely', async () => {
 		const server = fakePostgrest();
 		const store = storeOver(server);
@@ -170,6 +206,18 @@ describe('postgrestKv requests', () => {
 			fetch: fakePostgrest().fetch,
 		});
 		expect(await store.get('k')).toBe(null);
+	});
+
+	it('reports a failed delete rather than claiming the key is gone', async () => {
+		// Deleting an absent key is a no-op by contract, but a refused DELETE means
+		// the row may well still be there — and the caller deleting a consumed OAuth
+		// authorization is entitled to know that.
+		const store = postgrestKv({
+			url: 'https://db.test',
+			apiKey: 'wrong-key',
+			fetch: fakePostgrest().fetch,
+		});
+		await expect(store.delete('k')).rejects.toThrow(/401/);
 	});
 
 	it('escapes a key that would otherwise break the filter', async () => {

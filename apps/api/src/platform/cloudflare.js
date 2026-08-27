@@ -7,7 +7,7 @@
 // bindings directly. Anything cleverer belongs in the route, where it can be
 // tested once for every host rather than once per host.
 
-import { normalizeMetadata, deleteKeys } from './blobs.js';
+import { normalizeMetadata, assertUsableKey, deleteKeys } from './blobs.js';
 
 /**
  * Normalise an R2 head/get result into the BlobHead fields. R2 splits an
@@ -35,12 +35,12 @@ function headOf(object) {
 export function r2Blobs(bucket) {
 	return {
 		async head(key) {
-			const object = await bucket.head(key);
+			const object = await bucket.head(assertUsableKey(key));
 			return object ? headOf(object) : null;
 		},
 
 		async get(key) {
-			const object = await bucket.get(key);
+			const object = await bucket.get(assertUsableKey(key));
 			if (!object) return null;
 			return {
 				...headOf(object),
@@ -52,7 +52,10 @@ export function r2Blobs(bucket) {
 		},
 
 		async put(key, bytes, opts) {
-			await bucket.put(key, bytes, {
+			// R2 would take a `..` segment literally where an S3 path would resolve
+			// it. Refused here too, so the two hosts cannot disagree about which
+			// object a key names — see assertUsableKey.
+			await bucket.put(assertUsableKey(key), bytes, {
 				httpMetadata: { contentType: opts?.contentType || 'application/octet-stream' },
 				customMetadata: normalizeMetadata(opts?.metadata),
 			});
@@ -67,14 +70,17 @@ export function r2Blobs(bucket) {
 		},
 
 		async list(opts) {
-			// `include: ['httpMetadata']` is what makes the listing carry each
-			// object's content type — without it R2 returns keys and sizes only, and
-			// the WEBP backfill would need a get() per object just to decide whether
-			// to skip it.
+			// `include` is what makes the listing carry each object's content type and
+			// user metadata — without it R2 returns keys and sizes only, and the WEBP
+			// backfill would need a get() per object just to decide whether to skip
+			// it. Both are asked for because the contract promises both: the S3
+			// adapter HEADs every listed object and so returns metadata whether it
+			// wants to or not, and a listing that carried it on one host and `{}` on
+			// the other is exactly the silent divergence this seam exists to prevent.
 			const listing = await bucket.list({
 				limit: opts?.limit,
 				cursor: opts?.cursor || undefined,
-				include: ['httpMetadata'],
+				include: ['httpMetadata', 'customMetadata'],
 			});
 			return {
 				objects: listing.objects.map(headOf),

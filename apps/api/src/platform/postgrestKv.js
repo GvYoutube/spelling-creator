@@ -42,14 +42,36 @@ export function postgrestKv(config) {
 
 	const rowUrl = (key) => `${base}?key=eq.${encodeURIComponent(key)}`;
 
-	/** Remove a row without caring whether it was there. */
-	async function remove(key) {
-		await doFetch(rowUrl(key), { method: 'DELETE', headers });
+	/**
+	 * Remove a row, whether or not it was there.
+	 *
+	 * A DELETE that PostgREST refuses is an error and is raised as one: deleting
+	 * an absent key is a no-op by contract, but a 401 or a 5xx means the row may
+	 * well still be there, and the callers that delete a consumed OAuth
+	 * authorization or a stale cached answer are entitled to know that it isn't.
+	 * Only the best-effort expiry sweep below ignores the outcome, and it says so.
+	 */
+	async function remove(key, query = '') {
+		const response = await doFetch(`${rowUrl(key)}${query}`, { method: 'DELETE', headers });
+		if (!response.ok) {
+			const detail = await response.text().catch(() => '');
+			throw new Error(`kv delete ${key} failed: ${response.status} ${detail.slice(0, 200)}`);
+		}
 	}
 
 	return {
 		async get(key) {
-			const response = await doFetch(`${rowUrl(key)}&select=value,expires_at&limit=1`, { headers });
+			// A store that cannot be reached reads as a miss, which is what every
+			// caller here is built for — a rate limiter that has lost its buckets
+			// charges the request afresh, and a cache miss costs a recomputation. A
+			// throw would instead turn a database blip into a 500 on a page that
+			// could have been served.
+			let response;
+			try {
+				response = await doFetch(`${rowUrl(key)}&select=value,expires_at&limit=1`, { headers });
+			} catch (e) {
+				return null;
+			}
 			if (!response.ok) return null;
 			const rows = await response.json().catch(() => []);
 			const row = Array.isArray(rows) ? rows[0] : null;
@@ -64,7 +86,13 @@ export function postgrestKv(config) {
 				// Sweep it on the way past. Best-effort and deliberately not awaited
 				// for its result: the read has its answer either way, and a failed
 				// delete only means the periodic sweep gets it instead.
-				remove(key).catch(() => {});
+				//
+				// Matched on the expiry we just read as well as on the key, so that a
+				// put() racing this read cannot have its fresh row deleted by the sweep
+				// of the stale one it replaced. Without that, a rate-limit bucket
+				// written the instant its predecessor expired would vanish, and the
+				// next request would find no bucket and start a new window.
+				remove(key, `&expires_at=eq.${encodeURIComponent(row.expires_at)}`).catch(() => {});
 				return null;
 			}
 			return typeof row.value === 'string' ? row.value : null;

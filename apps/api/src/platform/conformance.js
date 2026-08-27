@@ -121,6 +121,18 @@ export function testBlobStore({ store, prefix, vitest: { describe, it, expect } 
 			expect(await (await s.get(key('odd key/with+chars~'))).text()).toBe('found');
 		});
 
+		it('refuses a key with a dot segment rather than resolving it', async () => {
+			// A path-based store resolves `a/../b` to `b` while an object store takes
+			// it literally, so accepting one would mean the same call naming two
+			// different objects depending on the host — and on the path-based host,
+			// writing somewhere the caller never asked for. Every adapter refuses.
+			const s = store();
+			await expect(s.put(key('bad/../escape'), enc.encode('x'))).rejects.toThrow(/path segment/);
+			await expect(s.get(`${prefix}../escape`)).rejects.toThrow(/path segment/);
+			await expect(s.head(`${prefix}../escape`)).rejects.toThrow(/path segment/);
+			await expect(s.delete([key('fine'), key('bad/./here')])).rejects.toThrow(/path segment/);
+		});
+
 		it('deletes one key, and deleting an absent key is not an error', async () => {
 			const s = store();
 			await s.put(key('single-delete'), enc.encode('x'));
@@ -147,9 +159,9 @@ export function testBlobStore({ store, prefix, vitest: { describe, it, expect } 
 			await store().delete([]);
 		});
 
-		it('lists objects with their content types, and pages', async () => {
+		it('lists objects with their content types and metadata, and pages', async () => {
 			const s = store();
-			await s.put(key('list-1'), enc.encode('1'), { contentType: 'image/png' });
+			await s.put(key('list-1'), enc.encode('1'), { contentType: 'image/png', metadata: { listed: 'yes' } });
 			await s.put(key('list-2'), enc.encode('2'), { contentType: 'image/webp' });
 
 			// The WEBP backfill filters on contentType straight off the listing — a
@@ -158,6 +170,13 @@ export function testBlobStore({ store, prefix, vitest: { describe, it, expect } 
 			const mine = all.objects.filter((o) => o.key.startsWith(prefix));
 			expect(mine.length).toBeGreaterThanOrEqual(2);
 			expect(mine.every((o) => typeof o.contentType === 'string')).toBe(true);
+			// BlobHead promises metadata everywhere it appears, and a listing is
+			// where a host is most tempted to leave it out: R2 omits it unless the
+			// listing asks, and the S3 adapter gets it for free from its per-object
+			// HEAD. A caller filtering a listing on metadata must not have to know
+			// which host it is talking to.
+			expect(mine.every((o) => o.metadata && typeof o.metadata === 'object')).toBe(true);
+			expect(mine.find((o) => o.key === key('list-1')).metadata.listed).toBe('yes');
 
 			const page = await s.list({ limit: 1 });
 			expect(page.objects.length).toBe(1);

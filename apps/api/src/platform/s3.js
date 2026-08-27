@@ -27,7 +27,7 @@
 //     pays for that with a HEAD per listed object — see list() for why that's
 //     the right trade rather than weakening the contract.
 
-import { deleteKeys, normalizeMetadata } from './blobs.js';
+import { assertUsableKey, deleteKeys, normalizeMetadata } from './blobs.js';
 import { signRequest, uriEncode } from './sigv4.js';
 
 // How many object deletes to have in flight at once. The lesson-delete path
@@ -145,7 +145,12 @@ export function parseListResponse(xml) {
 	return {
 		keys,
 		truncated: tagText(xml, 'IsTruncated').value === 'true',
-		nextCursor: tagText(xml, 'NextContinuationToken').value,
+		// Unescaped like the keys are. A continuation token is opaque and usually
+		// base64, so an entity in one is unlikely — but it is handed straight back
+		// to the server as a query parameter, and a token that differs by five
+		// characters from the one the server issued pages wrongly rather than
+		// failing, which is the sort of bug nobody finds.
+		nextCursor: xmlUnescape(tagText(xml, 'NextContinuationToken').value),
 	};
 }
 
@@ -196,7 +201,14 @@ export function s3Blobs(config) {
 		const url = new URL(base);
 		// Encode the key ourselves rather than letting `URL` decide: it would leave
 		// a literal '?' or '#' to be read as a delimiter, and a key is opaque text.
-		const path = key ? `/${uriEncode(key, true)}` : '/';
+		//
+		// What `URL` does decide, and cannot be told not to, is dot segments: it
+		// resolves them when the path is assigned, so `a/../b` would be signed and
+		// sent as `b`. Percent-encoding them wouldn't help — the signer canonicalises
+		// the path by decoding each segment, so the wire path and the signed path
+		// would stop agreeing. So such a key is refused outright, by every adapter
+		// and for every host. See assertUsableKey.
+		const path = key ? `/${uriEncode(assertUsableKey(key), true)}` : '/';
 		if (forcePathStyle) {
 			url.pathname = `/${bucket}${path}`;
 		} else {
@@ -239,11 +251,33 @@ export function s3Blobs(config) {
 		throw error;
 	}
 
+	/**
+	 * A 404 as the contract wants it — null — unless the server is saying the
+	 * *bucket* is missing, which is a misconfiguration and not an absent object.
+	 *
+	 * S3 answers both with a 404 and distinguishes them only in the error body's
+	 * `<Code>`: NoSuchKey against NoSuchBucket. Reading them the same way makes a
+	 * mistyped bucket name look like an empty one — every get() a miss and every
+	 * delete() a success — which is a deployment that appears to work while
+	 * storing nothing. The body is consumed either way, so the connection is
+	 * reusable rather than dropped.
+	 *
+	 * A HEAD has no body to read, so it cannot tell them apart and answers null;
+	 * the diagnostics check lists the bucket, which does.
+	 */
+	async function absent(operation, key, response) {
+		const detail = await response.text().catch(() => '');
+		if (!/NoSuchBucket/i.test(detail)) return null;
+		const error = new Error(`S3 ${operation} ${key || bucket} failed: 404 ${detail.slice(0, 300)}`);
+		error.status = 404;
+		throw error;
+	}
+
 	// Named rather than reached for through `this`, because list() calls it and a
 	// destructured `const { list } = store` must keep working.
 	async function head(key) {
 		const response = await send('HEAD', key);
-		if (response.status === 404) return null;
+		if (response.status === 404) return await absent('HEAD', key, response);
 		if (!response.ok) return await fail('HEAD', key, response);
 		return headFrom(key, response);
 	}
@@ -253,11 +287,7 @@ export function s3Blobs(config) {
 
 		async get(key) {
 			const response = await send('GET', key);
-			if (response.status === 404) {
-				// Drain the body so the connection can be reused rather than dropped.
-				await response.arrayBuffer().catch(() => {});
-				return null;
-			}
+			if (response.status === 404) return await absent('GET', key, response);
 			if (!response.ok) return await fail('GET', key, response);
 			return {
 				...headFrom(key, response),
@@ -286,8 +316,13 @@ export function s3Blobs(config) {
 				const response = await send('DELETE', one);
 				// S3 answers 204 for a key that was never there, which is the no-op
 				// the contract asks for; 404 from a stricter implementation means the
-				// same thing.
-				if (!response.ok && response.status !== 404) return await fail('DELETE', one, response);
+				// same thing — unless it is the bucket that is missing, which absent()
+				// tells apart and raises.
+				if (response.status === 404) {
+					await absent('DELETE', one, response);
+					return;
+				}
+				if (!response.ok) return await fail('DELETE', one, response);
 				await response.arrayBuffer().catch(() => {});
 			});
 		},
@@ -311,9 +346,14 @@ export function s3Blobs(config) {
 			// same cost onto the caller as a full GET per object, on every host.
 			const objects = [];
 			await inBatches(parsed.keys, DELETE_CONCURRENCY, async (entry) => {
-				const meta = await head(entry.key).catch(() => null);
-				// An object listed and then deleted before we could HEAD it still
-				// belongs in the page — the caller will skip it when its get() misses.
+				// Only a 404 is tolerated here, and head() has already turned that into
+				// null: an object listed and then deleted before we could HEAD it still
+				// belongs in the page, and the caller will skip it when its get()
+				// misses. Anything else — 403, 429, a 5xx — is left to throw and fail
+				// the listing. Swallowing those would hand the WEBP backfill a page of
+				// objects with no content type, which it reads as "already converted"
+				// and skips for good.
+				const meta = await head(entry.key);
 				objects.push(meta || { ...entry, contentType: '', metadata: {} });
 			});
 			// inBatches resolves within a batch in completion order, so restore the
