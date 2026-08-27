@@ -4,7 +4,11 @@
 // Worker needs to authorise a publish.
 
 import { createContext, useContext, useEffect, useMemo, useState } from "react";
-import { hasSupabase } from "@spelling-creator/core/config";
+import {
+  hasMagicLinkAuth,
+  hasPasswordAuth,
+  hasSupabase,
+} from "@spelling-creator/core/config";
 import {
   getSupabase,
   readPersistedRefreshToken,
@@ -135,6 +139,41 @@ export function AuthProvider({ children }) {
           options: { emailRedirectTo: redirectTo },
         });
         if (error) throw new Error(error.message);
+      },
+
+      // Whether this instance offers each way in. Both are read here rather than
+      // by the login page so there is one answer to "how does one sign in".
+      passwordAuth: hasPasswordAuth(),
+      magicLinkAuth: hasMagicLinkAuth(),
+
+      // Sign in with a password. Only reachable when the instance enables it —
+      // an instance with no mail server has no other way in, since a magic link
+      // it cannot send is not a way in at all.
+      async signInWithPassword(email, password) {
+        if (!hasSupabase()) throw new Error("Sign-in is not configured.");
+        const { error } = await getSupabase().auth.signInWithPassword({
+          email,
+          password,
+        });
+        if (error) throw new Error(error.message);
+      },
+
+      // Create an account with a password.
+      //
+      // Whether the new account can sign in immediately depends on the server:
+      // with mail configured it will want the address confirmed first, and
+      // without it the instance is expected to auto-confirm (there is nowhere
+      // for a confirmation to go). `needsConfirmation` reports which happened,
+      // rather than leaving the page to guess — Supabase returns a user with no
+      // session in the first case and a session in the second.
+      async signUpWithPassword(email, password) {
+        if (!hasSupabase()) throw new Error("Sign-in is not configured.");
+        const { data, error } = await getSupabase().auth.signUp({
+          email,
+          password,
+        });
+        if (error) throw new Error(error.message);
+        return { needsConfirmation: !data?.session };
       },
 
       async signOut() {

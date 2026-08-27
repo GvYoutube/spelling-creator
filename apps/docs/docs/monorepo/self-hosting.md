@@ -231,6 +231,41 @@ The IP is what bans and rate limits are keyed on, so reading the leftmost entry
 (the usual mistake) would let any caller forge both. With one reverse proxy the
 default is correct; behind a CDN _and_ a proxy, set it to 2.
 
+### Sign-in
+
+The hosted instance signs people in with a magic link, which is the nicer
+experience and needs a mail server. A self-hosted one frequently has no SMTP at
+all, which would otherwise leave it with no way for anyone to sign in — so the
+instance chooses:
+
+| `AUTH_MODE`  | What the login page offers | Needs mail |
+| ------------ | -------------------------- | ---------- |
+| `password`   | Email and password         | no         |
+| `magic-link` | A one-time emailed link    | yes        |
+| `both`       | Either, visitor's choice   | yes        |
+
+The compose file defaults to `password`, because an instance reaching for it is
+more likely to have no mail server than to have one. `AUTH_MODE` is baked into
+the SPA at build time, so changing it means a rebuild.
+
+Two things follow from running without mail, and both are worth deciding
+deliberately rather than discovering:
+
+- **New accounts are auto-confirmed** (`AUTH_AUTOCONFIRM`, on by default),
+  because a confirmation nobody can receive would make registration a dead end.
+  That means anyone can register with an address they don't own. An instance
+  open to the internet with no SMTP should also set `GOTRUE_DISABLE_SIGNUP=true`
+  and create accounts by hand.
+- **There is no password reset.** Resetting one means emailing a link. Without
+  mail, a forgotten password is an admin job — GoTrue's admin API, or a row in
+  `auth.users`.
+
+With SMTP configured, set `AUTH_AUTOCONFIRM=false` so addresses get verified
+properly.
+
+Passwords must be at least 8 characters. The login form checks that before
+submitting and `GOTRUE_PASSWORD_MIN_LENGTH` enforces it, so the two agree.
+
 ### AI
 
 Any of the hosted providers, or a local model through

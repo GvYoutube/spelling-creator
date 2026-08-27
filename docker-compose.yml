@@ -34,6 +34,10 @@ services:
         VITE_API_URL: ${PUBLIC_URL:?missing, see .env.example}
         VITE_SUPABASE_URL: ${PUBLIC_URL:?missing, see .env.example}
         VITE_SUPABASE_ANON_KEY: ${ANON_KEY:?missing, see .env.example}
+        # Defaults to password, because an instance reaching for this compose
+        # file is more likely to have no mail server than to have one, and a
+        # magic link it cannot send is not a way in.
+        VITE_AUTH_MODE: ${AUTH_MODE:-password}
     restart: unless-stopped
     environment:
       # Server-side, these point at the gateway over the internal network.
@@ -262,7 +266,21 @@ services:
       GOTRUE_SMTP_USER: ${SMTP_USER:-}
       GOTRUE_SMTP_PASS: ${SMTP_PASS:-}
       GOTRUE_SMTP_ADMIN_EMAIL: ${SMTP_FROM:-}
-      GOTRUE_MAILER_AUTOCONFIRM: "false"
+      # Whether a new account is usable before its email address is proved.
+      #
+      # Defaults on, because the default AUTH_MODE here is password and there is
+      # no mail server assumed: a confirmation nobody can receive would make
+      # registration a dead end. The cost is real and worth knowing — anyone can
+      # register with an address they do not own, so an instance open to the
+      # internet with no SMTP should also set GOTRUE_DISABLE_SIGNUP and create
+      # its accounts by hand.
+      #
+      # With SMTP configured, set AUTH_AUTOCONFIRM=false and addresses get
+      # verified properly.
+      GOTRUE_MAILER_AUTOCONFIRM: ${AUTH_AUTOCONFIRM:-true}
+      # Matched by the client-side check in the login form. Eight rather than
+      # GoTrue's default of six.
+      GOTRUE_PASSWORD_MIN_LENGTH: 8
     depends_on:
       postgres:
         condition: service_healthy

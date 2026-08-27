@@ -19,13 +19,31 @@
     "description": "We sent a sign-in link to <strong>{{email}}</strong>. Open it on this device to finish signing in.",
     "useDifferentEmail": "Use a different email"
   },
+  "confirm": {
+    "heading": "Confirm your email",
+    "description": "We sent a confirmation link to <strong>{{email}}</strong>. Open it to finish creating your account."
+  },
   "form": {
-    "description": "Enter your email and we'll send you a one-time sign-in link — no password needed. You only need an account to publish lessons to the hub.",
+    "magicLinkDescription": "Enter your email and we'll send you a one-time sign-in link — no password needed. You only need an account to publish lessons to the hub.",
+    "passwordDescription": "Sign in with your email and password. You only need an account to publish lessons to the hub.",
+    "registerDescription": "Create an account with an email and a password. You only need one to publish lessons to the hub.",
     "emailLabel": "Email address",
-    "submit": "Send magic link"
+    "passwordLabel": "Password",
+    "submit": "Send magic link",
+    "submitMagicLink": "Send magic link",
+    "submitPassword": "Sign in",
+    "submitRegister": "Create account",
+    "needAccount": "Don't have an account? Create one",
+    "haveAccount": "Already have an account? Sign in",
+    "usePassword": "Use a password instead",
+    "useMagicLink": "Email me a link instead"
   },
   "errors": {
     "invalidEmail": "Please enter a valid email address.",
-    "sendFailed": "Could not send the sign-in link."
+    "passwordTooShort": "Your password must be at least {{count}} characters.",
+    "sendFailed": "Could not send the sign-in link.",
+    "magic-linkFailed": "Could not send the sign-in link.",
+    "passwordFailed": "Could not sign you in.",
+    "registerFailed": "Could not create your account."
   }
 }

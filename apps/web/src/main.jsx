@@ -15,6 +15,7 @@ configureCore({
   supabaseAnonKey: import.meta.env.VITE_SUPABASE_ANON_KEY,
   googleClientId: import.meta.env.VITE_GOOGLE_CLIENT_ID,
   turnstileSiteKey: import.meta.env.VITE_TURNSTILE_SITE_KEY,
+  authMode: import.meta.env.VITE_AUTH_MODE,
 });
 // Registers all translation namespaces with i18next before anything renders.
 import "./lib/i18n.js";

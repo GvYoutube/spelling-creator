@@ -6,8 +6,11 @@ import {
   googleClientId,
   hasApi,
   hasGoogleDrive,
+  hasMagicLinkAuth,
+  hasPasswordAuth,
   hasSupabase,
   hasTurnstile,
+  authMode,
   supabaseConfig,
   turnstileSiteKey,
 } from "./config.js";
@@ -20,6 +23,7 @@ beforeEach(() => {
     supabaseAnonKey: "",
     googleClientId: "",
     turnstileSiteKey: "",
+    authMode: "",
   });
 });
 
@@ -106,5 +110,41 @@ describe("the optional integrations", () => {
     expect(googleClientId()).toBe("123.apps.googleusercontent.com");
     expect(hasTurnstile()).toBe(true);
     expect(turnstileSiteKey()).toBe("0x4AAA");
+  });
+});
+
+describe("authMode", () => {
+  it("defaults to magic link, the hosted instance's behaviour", () => {
+    expect(authMode()).toBe("magic-link");
+    expect(hasMagicLinkAuth()).toBe(true);
+    expect(hasPasswordAuth()).toBe(false);
+  });
+
+  it("offers passwords when asked", () => {
+    configureCore({ authMode: "password" });
+    expect(hasPasswordAuth()).toBe(true);
+    // Password-only is what an instance with no mail server wants: a magic link
+    // it cannot send is not a way in.
+    expect(hasMagicLinkAuth()).toBe(false);
+  });
+
+  it("offers both when asked", () => {
+    configureCore({ authMode: "both" });
+    expect(hasPasswordAuth()).toBe(true);
+    expect(hasMagicLinkAuth()).toBe(true);
+  });
+
+  it("treats anything it does not recognise as the default", () => {
+    // A typo should leave an instance on magic links, not on an instance nobody
+    // can sign in to.
+    for (const mode of ["passwords", "PASSWORD", "true", "yes", " "]) {
+      configureCore({ authMode: mode });
+      expect(authMode()).toBe("magic-link");
+    }
+  });
+
+  it("trims whitespace, which an env file readily supplies", () => {
+    configureCore({ authMode: " both " });
+    expect(authMode()).toBe("both");
   });
 });

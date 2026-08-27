@@ -59,11 +59,15 @@ ARG VITE_SUPABASE_URL=""
 ARG VITE_SUPABASE_ANON_KEY=""
 ARG VITE_TURNSTILE_SITE_KEY=""
 ARG VITE_GOOGLE_CLIENT_ID=""
+# 'magic-link' (default), 'password', or 'both'. An instance with no mail server
+# needs 'password', since a magic link it cannot send is not a way in.
+ARG VITE_AUTH_MODE=""
 ENV VITE_API_URL=$VITE_API_URL \
     VITE_SUPABASE_URL=$VITE_SUPABASE_URL \
     VITE_SUPABASE_ANON_KEY=$VITE_SUPABASE_ANON_KEY \
     VITE_TURNSTILE_SITE_KEY=$VITE_TURNSTILE_SITE_KEY \
-    VITE_GOOGLE_CLIENT_ID=$VITE_GOOGLE_CLIENT_ID
+    VITE_GOOGLE_CLIENT_ID=$VITE_GOOGLE_CLIENT_ID \
+    VITE_AUTH_MODE=$VITE_AUTH_MODE
 
 # The web build emits both halves: dist (the SPA) and dist-ssr (the server bundle
 # routes/ssr.js imports). Docs must come second — the SPA build empties dist, so
