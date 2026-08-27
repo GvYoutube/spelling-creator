@@ -1,9 +1,34 @@
+import { execFileSync } from "node:child_process";
 import llmstxt from "vitepress-plugin-llms";
 import { defineConfig } from "vitepress";
 
 // The public origin the docs are published under. Used for the sitemap's
 // absolute URLs and for the absolute links in llms.txt.
 const SITE_ORIGIN = "https://spellingcreator.org";
+
+/**
+ * Whether this build can ask git when each page last changed.
+ *
+ * `lastUpdated` runs `git log` per page, which is fine in a checkout and in CI
+ * and fails the entire build anywhere else — inside a container without git
+ * installed, or in a build from a source tarball that has no `.git` at all. Both
+ * are ordinary ways to build this (see the Dockerfile), and a missing timestamp
+ * is not worth failing over.
+ *
+ * Detected rather than configured, so it needs no flag to be passed and cannot
+ * be got wrong. Checks for a repository too, not just the binary: git being
+ * installed says nothing about whether there is any history to read.
+ */
+function gitHistoryAvailable(): boolean {
+  try {
+    execFileSync("git", ["rev-parse", "--git-dir"], { stdio: "ignore" });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+const HAS_GIT_HISTORY = gitHistoryAvailable();
 
 // This runs in Node.js during the build — no browser APIs here.
 export default defineConfig({
@@ -27,8 +52,10 @@ export default defineConfig({
   description: "Documentation and updates for Spelling Creator",
   head: [["link", { rel: "icon", href: "/docs/img/favicon.ico" }]],
 
-  // Every page ships a <lastmod> in the sitemap, taken from git.
-  lastUpdated: true,
+  // Every page ships a <lastmod> in the sitemap, taken from git — where there is
+  // git to take it from. A build without it (a container, a source tarball)
+  // simply omits the timestamps rather than failing; see gitHistoryAvailable.
+  lastUpdated: HAS_GIT_HISTORY,
 
   // Built-in sitemap generation. The hostname includes `base`, as VitePress
   // requires, so the emitted URLs are the real published ones under /docs/.
@@ -81,6 +108,8 @@ export default defineConfig({
             text: "Version history (git, by content block)",
             link: "/monorepo/version-history",
           },
+          { text: "The platform seam", link: "/monorepo/platform-seam" },
+          { text: "Self-hosting", link: "/monorepo/self-hosting" },
           { text: "Frontend migration", link: "/monorepo/frontend-migration" },
         ],
       },

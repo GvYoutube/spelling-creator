@@ -1,33 +1,20 @@
-// Tests run inside the real Workers runtime (workerd) rather than Node, because the
-// code under test uses runtime globals Node doesn't have — notably HTMLRewriter, which
-// the rich-text sanitizer is built on (src/lib/richtext.js). Testing that against a
-// Node-shaped fake would prove nothing about what actually runs in production.
+// The API's tests run twice, in two runtimes, because the API is meant to run in
+// two runtimes.
 //
-// The same goes double for CollabRoom: it's a Durable Object holding the live session's
-// Yjs document in SQLite and handing it to late joiners, so the only test worth having
-// runs it as a real Durable Object. `main` points at a test-only entry exporting just
-// that class (see src/collab-room.test-worker.js) — the production entry would drag in
-// Puppeteer and the whole route table for no benefit.
+//   workers — everything, inside workerd (vitest.workers.config.js). This is the
+//             hosted instance's runtime, and the only place the Durable Objects
+//             and the R2/KV adapters can be exercised for real.
+//   node    — the portable subset, under Node (vitest.node.config.js). What the
+//             self-hosted instance runs on.
+//
+// Most files are in both. That overlap is the point rather than waste: a module
+// that behaves differently across the two is a self-hosting bug, and the cheapest
+// moment to find one is the moment it is introduced.
 
-import { defineWorkersConfig } from '@cloudflare/vitest-pool-workers/config';
+import { defineConfig } from 'vitest/config';
 
-export default defineWorkersConfig({
+export default defineConfig({
 	test: {
-		poolOptions: {
-			workers: {
-				main: './src/collab-room.test-worker.js',
-				// Isolated storage (a per-test storage stack) can't unwind a Durable Object
-				// that still holds open WebSockets — it fails on the room's SQLite journal.
-				// The collab tests each use their own room code, so they don't need it.
-				isolatedStorage: false,
-				miniflare: {
-					compatibilityDate: '2026-05-28',
-					compatibilityFlags: ['nodejs_compat'],
-					durableObjects: {
-						COLLAB_ROOM: { className: 'CollabRoom', useSQLite: true },
-					},
-				},
-			},
-		},
+		projects: ['./vitest.workers.config.js', './vitest.node.config.js'],
 	},
 });

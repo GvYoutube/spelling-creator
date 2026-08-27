@@ -259,7 +259,7 @@ export async function handleComments(request, env, lessonId, cors) {
 			// The sanitized HTML — never the raw submission.
 			body: html,
 			// Recorded so an admin can later ban the address from this comment.
-			author_ip: clientIp(request) || null,
+			author_ip: clientIp(env, request) || null,
 		};
 
 		let res;

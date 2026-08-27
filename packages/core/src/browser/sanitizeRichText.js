@@ -15,7 +15,7 @@
 // The policy it enforces — which tags survive, which link schemes are real
 // links, what a link is rewritten to carry — is shared with the Worker in
 // @spelling-creator/core/richText, as is the flattening to plain text. Only the
-// parser differs: DOMPurify here, HTMLRewriter there.
+// parser differs: DOMPurify here, parse5 there.
 
 import DOMPurify from "dompurify";
 import {

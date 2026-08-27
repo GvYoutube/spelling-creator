@@ -31,6 +31,39 @@ Each app keeps its own environment file:
 
 Both are gitignored.
 
+### AI providers
+
+`generateWithFallback` (`apps/api/src/lib/ai/index.js`) tries each provider in
+order, skipping any that isn't configured, and within a provider tries its models
+in order. `AI_PROVIDER_ORDER` overrides the order; the default is
+`gemini, openai, anthropic, groq, openai-compatible, workers-ai`.
+
+The last two go last because neither needs a hosted API key, which makes them
+fallbacks rather than competitors for priority with the better models.
+
+**`openai-compatible`** is the one an instance with no hosted keys and no
+Cloudflare bindings can use. Ollama, llama.cpp's server, vLLM, LM Studio, LiteLLM
+and most hosted gateways all expose the OpenAI chat-completions shape, so one
+provider covers all of them — including a model running on the same machine as
+the app.
+
+| Variable                    | Required | Meaning                                                  |
+| --------------------------- | -------- | -------------------------------------------------------- |
+| `OPENAI_COMPATIBLE_URL`     | yes      | Base URL, e.g. `http://ollama:11434/v1`. `/v1` optional. |
+| `OPENAI_COMPATIBLE_MODELS`  | yes      | Comma-separated, tried in order.                         |
+| `OPENAI_COMPATIBLE_API_KEY` | no       | Most local runtimes want no auth.                        |
+| `OPENAI_COMPATIBLE_JSON`    | no       | `schema` if the server enforces JSON Schema.             |
+
+Structured output defaults to the weaker `json_object` mode, with the shape
+described in the prompt — the same thing the Groq provider does, and for the same
+reason: whether a server honours `json_schema` depends on which runtime it is and
+which version, and a wrong guess fails every question suggestion with a 400. Set
+`OPENAI_COMPATIBLE_JSON=schema` if you know yours enforces schemas.
+
+A self-hosted instance that would rather use its local model _first_ — for
+privacy, or because it has no hosted keys worth spending — sets
+`AI_PROVIDER_ORDER=openai-compatible` rather than being told what it wants.
+
 ## Documentation site
 
 This site is [VitePress](https://vitepress.dev). Pages are plain Markdown under
@@ -82,8 +115,9 @@ The repo uses the [Oxc](https://oxc.rs) toolchain — `oxfmt` for formatting and
   `correctness` category as errors, mirroring the old flat config's
   `js/recommended` + `eslint-plugin-react` + `eslint-plugin-react-hooks` setup.
   Per-app `overrides` supply the right globals for each runtime: browser for
-  `apps/web`, worker + Node (plus `WebSocketPair`, `WebSocketRequestResponsePair`
-  and `HTMLRewriter`) for `apps/api`, and Node for `apps/mcp`. `packages/core` is
+  `apps/web`, worker + Node (plus `WebSocketPair` and
+  `WebSocketRequestResponsePair`, the Durable Objects' globals) for `apps/api`,
+  and Node for `apps/mcp`. `packages/core` is
   linted against the `worker` env — the narrowest of the three — so that anything
   reaching for a browser-only global there fails the lint rather than breaking at
   runtime inside the Worker. The modules that legitimately need the DOM
@@ -108,11 +142,26 @@ oxlint, so there is nothing to disable.
 merge: install (with `--frozen-lockfile`), `pnpm lint`, `pnpm test`, then the web
 and docs builds.
 
+`apps/api`'s own suite runs **twice, in two runtimes**, because the API is meant
+to run in two. The `workers` project runs everything inside workerd — the hosted
+instance's runtime, and the only place the Durable Objects and the R2/KV adapters
+can be exercised for real. The `node` project runs the portable subset under Node,
+which is what a self-hosted instance runs on. Most files are in both, and that
+overlap is the point: a module that behaves differently across the two is a
+self-hosting bug, and the cheapest moment to find one is when it is introduced.
+
 `pnpm test` is `pnpm -r test`, which runs each workspace's own suite —
 `packages/core` and `apps/api` under vitest (the Worker's through
-`@cloudflare/vitest-pool-workers`, so its sanitizer tests run against the real
-runtime), and `apps/mcp` under `node --test`. `apps/docs` has no test script and
+`@cloudflare/vitest-pool-workers`, so its platform-adapter tests run against real
+R2 and KV), and `apps/mcp` under `node --test`. `apps/docs` has no test script and
 is skipped.
+
+`apps/api`'s `test` script builds `apps/web`'s SSR bundle first, the same way its
+`dev`, `start` and `deploy` scripts do. That is not incidental: `routes/ssr.js`
+imports the built bundle _statically_, deliberately, so that a missing one is a
+build failure rather than a runtime surprise — and the Node entry's tests reach
+it through `createHandler`. Building it here is what lets `pnpm test` work from a
+clean checkout in any order.
 
 The build runs without the `VITE_*` secrets — they are injected only for the real
 deploy, and a pull request from a fork could not read them anyway. It still

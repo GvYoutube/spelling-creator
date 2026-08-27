@@ -4,7 +4,17 @@
 // Worker needs to authorise a publish.
 
 import { createContext, useContext, useEffect, useMemo, useState } from "react";
-import { hasSupabase } from "@spelling-creator/core/config";
+import {
+  hasMagicLinkAuth,
+  hasPasswordAuth,
+  hasSupabase,
+  usernameDomain,
+} from "@spelling-creator/core/config";
+import {
+  identifierToEmail,
+  usernameFromEmail,
+  usernameToEmail,
+} from "@spelling-creator/core/username";
 import {
   getSupabase,
   readPersistedRefreshToken,
@@ -99,6 +109,13 @@ export function AuthProvider({ children }) {
   // The public name the user chose (set via the Worker's /profile endpoint and
   // stored in user_metadata). This — never the email — is what other users see.
   const displayName = (user?.user_metadata?.display_name || "").trim() || null;
+  // The login identifier for a username account, read from metadata and falling
+  // back to unpicking the synthetic address — accounts made before the metadata
+  // was written still have the username sitting in their address.
+  const username =
+    (user?.user_metadata?.username || "").trim() ||
+    usernameFromEmail(user?.email, usernameDomain()) ||
+    null;
 
   const value = useMemo(
     () => ({
@@ -137,6 +154,58 @@ export function AuthProvider({ children }) {
         if (error) throw new Error(error.message);
       },
 
+      // Whether this instance offers each way in. Both are read here rather than
+      // by the login page so there is one answer to "how does one sign in".
+      passwordAuth: hasPasswordAuth(),
+      magicLinkAuth: hasMagicLinkAuth(),
+
+      // The username this account signs in with, or null for one created from a
+      // real email address. Never shown to anybody else — see
+      // @spelling-creator/core/username for why it is not a display name.
+      username,
+
+      // Sign in with a password, by username or by email address.
+      //
+      // Which one was typed is decided by the value rather than by a toggle: an
+      // input containing `@` is an address, anything else is a username, and a
+      // username is turned into the synthetic address it registered under. That
+      // is what makes one field accept either on an instance that has both.
+      async signInWithPassword(identifier, password) {
+        if (!hasSupabase()) throw new Error("Sign-in is not configured.");
+        const resolved = identifierToEmail(identifier, usernameDomain());
+        if (!resolved) throw new Error("Enter your username or email address.");
+        const { error } = await getSupabase().auth.signInWithPassword({
+          email: resolved.email,
+          password,
+        });
+        if (error) throw new Error(error.message);
+      },
+
+      // Create an account from a username and a password, with no email address
+      // involved at all — which is the point, on an instance with no mail.
+      //
+      // The username goes into user_metadata as well as into the address, so it
+      // can be shown back to its owner without unpicking the address. It
+      // deliberately does NOT set a display name: display names are checked for
+      // profanity and banned names by the profile endpoint, and letting the
+      // client set one at registration would route around that.
+      //
+      // Whether the new account can sign in immediately depends on the server.
+      // With mail configured it will want the address confirmed first — which a
+      // synthetic address can never be, so an instance offering usernames is
+      // expected to auto-confirm. `needsConfirmation` reports which happened
+      // rather than leaving the page to guess.
+      async signUpWithUsername(username_, password) {
+        if (!hasSupabase()) throw new Error("Sign-in is not configured.");
+        const { data, error } = await getSupabase().auth.signUp({
+          email: usernameToEmail(username_, usernameDomain()),
+          password,
+          options: { data: { username: username_.trim().toLowerCase() } },
+        });
+        if (error) throw new Error(error.message);
+        return { needsConfirmation: !data?.session };
+      },
+
       async signOut() {
         if (!hasSupabase()) return;
         await getSupabase().auth.signOut();
@@ -152,7 +221,7 @@ export function AuthProvider({ children }) {
         setSession(data?.session ?? null);
       },
     }),
-    [loading, session, user, displayName, role, roleLoading],
+    [loading, session, user, displayName, username, role, roleLoading],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

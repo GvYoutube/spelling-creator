@@ -58,6 +58,7 @@
     "./richText": "./src/richText.js",
     "./spelling": "./src/spelling.js",
     "./spellingWords": "./src/spellingWords.js",
+    "./username": "./src/username.js",
     "./users": "./src/users.js",
     "./wikimedia": "./src/wikimedia.js",
     "./ydoc": "./src/ydoc.js"

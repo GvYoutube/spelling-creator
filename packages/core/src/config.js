@@ -15,12 +15,16 @@
 // test can pass whatever it likes. The reader functions resolve lazily, so import
 // order doesn't matter — only that configureCore runs before the first *call*.
 
+import { DEFAULT_USERNAME_DOMAIN } from "./username.js";
+
 const config = {
   apiUrl: "",
   supabaseUrl: "",
   supabaseAnonKey: "",
   googleClientId: "",
   turnstileSiteKey: "",
+  authMode: "magic-link",
+  usernameDomain: "",
 };
 
 /**
@@ -32,6 +36,7 @@ const config = {
  * @param {string} [next.supabaseAnonKey]  Supabase anon key.
  * @param {string} [next.googleClientId]   OAuth 2.0 Web client id, for "save to Google Docs".
  * @param {string} [next.turnstileSiteKey] Public Cloudflare Turnstile site key.
+ * @param {string} [next.authMode]         'magic-link' (default), 'password', or 'both'.
  */
 export function configureCore(next) {
   Object.assign(config, next);
@@ -106,4 +111,58 @@ export function turnstileSiteKey() {
 /** @returns {boolean} Whether the Turnstile-gated features are available. */
 export function hasTurnstile() {
   return turnstileSiteKey() !== "";
+}
+
+/**
+ * How people sign in to this instance.
+ *
+ * The hosted instance is magic-link only, which is the nicer experience and the
+ * default. It is also the one that cannot work without a mail server — and a
+ * self-hosted instance frequently has no SMTP at all, which would otherwise
+ * leave it with no way for anyone to sign in. So the mode is per-instance:
+ *
+ *   'magic-link'  email a one-time link. Needs SMTP.
+ *   'password'    email and password. Needs no mail at all.
+ *   'both'        offer either, the visitor chooses.
+ *
+ * Anything unrecognised reads as 'magic-link', so a typo degrades to the
+ * default rather than to an instance nobody can get into.
+ *
+ * @returns {'magic-link' | 'password' | 'both'}
+ */
+export function authMode() {
+  const mode = (config.authMode || "").trim();
+  return mode === "password" || mode === "both" ? mode : "magic-link";
+}
+
+/** @returns {boolean} Whether this instance offers email + password sign-in. */
+export function hasPasswordAuth() {
+  return authMode() !== "magic-link";
+}
+
+/** @returns {boolean} Whether this instance offers magic-link sign-in. */
+export function hasMagicLinkAuth() {
+  return authMode() !== "password";
+}
+
+/**
+ * The shortest password this instance accepts.
+ *
+ * Matched to GOTRUE_PASSWORD_MIN_LENGTH on the server: the check here exists so
+ * somebody is told before they submit, not instead of the server's.
+ */
+export const PASSWORD_MIN_LENGTH = 8;
+
+/**
+ * The domain usernames are turned into addresses under.
+ *
+ * See @spelling-creator/core/username for why there is one at all. An instance
+ * only needs to set this if the default collides with something it actually
+ * sends mail to, which — the default being a reserved `.invalid` domain — it
+ * cannot.
+ *
+ * @returns {string}
+ */
+export function usernameDomain() {
+  return (config.usernameDomain || "").trim() || DEFAULT_USERNAME_DOMAIN;
 }

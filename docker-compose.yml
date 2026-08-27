@@ -1,0 +1,459 @@
+# A worked example of a self-hosted Spelling Creator, for adapting rather than
+# running as-is. See /docs/monorepo/self-hosting for what each piece is for.
+#
+#   cp .env.example .env     # then edit it — the defaults are not secrets
+#   docker compose up -d
+#
+# There is no schema step to run by hand: the `schema` service below waits for
+# GoTrue to create auth.users, applies apps/api/schema.sql, and exits, and the
+# app waits for it to finish.
+#
+# The shape to understand before adapting: the app expects ONE origin that serves
+# both `/rest/v1/*` (PostgREST) and `/auth/v1/*` (GoTrue), because that is how
+# Supabase presents them and this API was written against it. Nothing here is
+# Supabase — `gateway` below is what joins the two upstream projects under one
+# origin, and it is also the reverse proxy the docs recommend putting in front of
+# the app. On Supabase's own hosting that job is done by Kong.
+#
+# Not production-ready as written: it terminates no TLS, and the credentials come
+# from .env with example values. Both are deliberate — a compose file that
+# pretended to be a deployment would be worse than one that is obviously a
+# starting point.
+
+name: spelling-creator
+
+services:
+  # The API + SPA + docs, all from the one image.
+  app:
+    build:
+      context: .
+      args:
+        # Baked into the SPA bundle at build time, so these are the URLs the
+        # BROWSER will use — the public address of the gateway, not the internal
+        # service names. Change them and you must rebuild, not just restart.
+        VITE_API_URL: ${PUBLIC_URL:?missing, see .env.example}
+        VITE_SUPABASE_URL: ${PUBLIC_URL:?missing, see .env.example}
+        VITE_SUPABASE_ANON_KEY: ${ANON_KEY:?missing, see .env.example}
+        # Defaults to password, because an instance reaching for this compose
+        # file is more likely to have no mail server than to have one, and a
+        # magic link it cannot send is not a way in.
+        VITE_AUTH_MODE: ${AUTH_MODE:-password}
+        VITE_USERNAME_DOMAIN: ${USERNAME_DOMAIN:-}
+    restart: unless-stopped
+    environment:
+      # Server-side, these point at the gateway over the internal network.
+      SUPABASE_URL: http://gateway
+      SUPABASE_SERVICE_ROLE_KEY: ${SERVICE_ROLE_KEY:?missing, see .env.example}
+      SUPABASE_ANON_KEY: ${ANON_KEY:?missing, see .env.example}
+
+      S3_ENDPOINT: http://storage:9000
+      S3_ACCESS_KEY_ID: ${S3_ACCESS_KEY:?missing, see .env.example}
+      S3_SECRET_ACCESS_KEY: ${S3_SECRET_KEY:?missing, see .env.example}
+      S3_BUCKET_IMAGES: lesson-images
+      S3_BUCKET_GIT: lesson-git
+      # Must match whatever the store signs against — SigV4 includes the region,
+      # so a mismatch is a 403 that looks like bad credentials. The default suits
+      # RustFS, MinIO and Garage, which don't care; point this at a real S3
+      # region if you swap the storage service for one that does, and note that
+      # storage-init below reads the same variable.
+      S3_REGION: ${S3_REGION:-us-east-1}
+
+      # The sign-in settings, which the SPA bakes in at build time above and the
+      # server needs at runtime too — the same values, from the same variables,
+      # so the two halves cannot disagree. USERNAME_DOMAIN is the load-bearing
+      # one: POST /mod/password resolves the username an admin types into the
+      # address the identity service knows, and a server still on the default
+      # domain answers "no account with that username" for every reset.
+      AUTH_MODE: ${AUTH_MODE:-password}
+      USERNAME_DOMAIN: ${USERNAME_DOMAIN:-}
+
+      ALLOWED_HOSTNAMES: ${PUBLIC_HOSTNAME:?missing, see .env.example}
+      # One proxy (the gateway) sits in front of this process, so the client IP
+      # is the last entry in x-forwarded-for. Raise this if you add a CDN — the
+      # entries to the left of your own proxies are attacker-controlled.
+      TRUSTED_PROXY_COUNT: 1
+
+      # Gates GET /_diagnostics, which reports what each dependency is doing and
+      # why it is failing. The same report is printed to this container's log at
+      # startup — `docker compose logs app` — so the token is only needed to ask
+      # again without restarting.
+      ADMIN_MIGRATE_TOKEN: ${ADMIN_TOKEN:-}
+
+      # Optional: a local model, so the AI helpers work with no hosted key.
+      # Uncomment the `ollama` service below to go with it.
+      # OPENAI_COMPATIBLE_URL: http://ollama:11434/v1
+      # OPENAI_COMPATIBLE_MODELS: llama3.2
+      # AI_PROVIDER_ORDER: openai-compatible
+    depends_on:
+      # Both of these run once and exit, so the app starts against a database
+      # that has its tables and an object store that has its buckets, rather
+      # than racing them and failing the first few requests.
+      schema:
+        condition: service_completed_successfully
+      storage-init:
+        condition: service_completed_successfully
+
+  # Applies apps/api/schema.sql once, then exits.
+  #
+  # This is a service rather than a step in the README because of an ordering
+  # trap that is very easy to lose an evening to. Every table in the schema
+  # references auth.users, which GoTrue creates on its first migration — so the
+  # schema cannot be applied until auth has started, and applying it early fails
+  # *every* statement. `psql` walks straight past errors and exits 0, so that
+  # failure is silent: you get an empty database, PostgREST reporting "0
+  # Relations", and the app answering 502 with no clue why.
+  #
+  # Hence both halves below: wait for auth.users to exist, and run with
+  # ON_ERROR_STOP so a real failure stops here and says so.
+  schema:
+    image: postgres:17-alpine
+    restart: "no"
+    environment:
+      PGPASSWORD: ${POSTGRES_PASSWORD:?missing, see .env.example}
+    volumes:
+      - ./apps/api/schema.sql:/schema.sql:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+      auth:
+        condition: service_started
+    # List form with a literal block, so the script is one argument and needs no
+    # quote-escaping — the folded `sh -c "..."` spelling has to escape the inner
+    # quotes and is easy to get subtly wrong.
+    entrypoint:
+      - sh
+      - -c
+      - |
+        echo 'waiting for auth.users (GoTrue creates it on its first migration)...'
+        attempt=0
+        # Bounded, and loud about why it gave up. An unbounded wait cannot tell
+        # "not migrated yet" from "cannot reach the database at all", and both
+        # look identical from outside: a container that never finishes and an
+        # app that never starts. psql's own errors are left on stderr so they
+        # land in `docker compose logs schema`.
+        until [ "$(psql -h postgres -U postgres -d spelling -tAc "select to_regclass('auth.users')" | tr -d '[:space:]')" = "auth.users" ]; do
+          attempt=$$((attempt + 1))
+          if [ "$$attempt" -ge 60 ]; then
+            echo 'GAVE UP: auth.users did not appear within two minutes.'
+            echo ''
+            echo 'What this container can see:'
+            # Narrows it without a round trip. No auth schema at all means GoTrue
+            # never connected (check its logs for a connection refusal — the
+            # usual one is sslmode). An auth schema with no tables means it
+            # connected and its migration failed part way. Errors here instead
+            # mean this container cannot reach postgres either.
+            psql -h postgres -U postgres -d spelling -tAc \
+              "select 'auth schema exists: ' || count(*) from pg_namespace where nspname = 'auth'" || true
+            psql -h postgres -U postgres -d spelling -tAc \
+              "select 'tables in auth: ' || count(*) from pg_tables where schemaname = 'auth'" || true
+            echo ''
+            echo 'Then: docker compose logs auth'
+            exit 1
+          fi
+          if [ $$((attempt % 5)) -eq 0 ]; then
+            echo "  still waiting ($$((attempt * 2))s)"
+          fi
+          sleep 2
+        done
+        echo 'applying schema.sql'
+        psql -v ON_ERROR_STOP=1 -h postgres -U postgres -d spelling -f /schema.sql
+        echo 'granting the new tables to service_role'
+        # Belt and braces over the ALTER DEFAULT PRIVILEGES in the roles script.
+        # Default privileges only reach objects created afterwards by the role
+        # that set them, which makes them quietly conditional on how and by whom
+        # the schema was applied — and the failure is a table that exists, that
+        # PostgREST can see, and that the API is refused with 42501. That reads
+        # as an authentication problem and is not one. Granting explicitly here
+        # does not depend on any of it.
+        psql -v ON_ERROR_STOP=1 -h postgres -U postgres -d spelling -c \
+          "grant all on all tables in schema public to service_role;
+           grant all on all sequences in schema public to service_role;"
+
+  # Joins PostgREST and GoTrue under one origin, and fronts the app. This is the
+  # piece with no Supabase equivalent to install — it is just a reverse proxy.
+  gateway:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    ports:
+      - "${PUBLIC_PORT:-8080}:80"
+    configs:
+      - source: caddyfile
+        target: /etc/caddy/Caddyfile
+    depends_on:
+      - app
+      - postgrest
+      - auth
+
+  postgres:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?missing, see .env.example}
+      POSTGRES_DB: spelling
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    configs:
+      # Runs once, on an empty data directory, before anything else connects.
+      - source: roles-sql
+        target: /docker-entrypoint-initdb.d/00-roles.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d spelling"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  # The REST layer the API reads and writes the hub through. It connects as the
+  # `authenticator` role and the API presents the service-role key, which is what
+  # bypasses RLS — so this port must never be exposed publicly except through the
+  # gateway.
+  postgrest:
+    image: postgrest/postgrest:v12.2.3
+    restart: unless-stopped
+    environment:
+      # Explicit for the same reason GoTrue's is, though this driver defaults to
+      # `prefer` and would have connected either way. Spelling it out means the
+      # two services fail the same way if the database ever does serve TLS.
+      PGRST_DB_URI: "postgres://authenticator:${POSTGRES_PASSWORD:?missing, see .env.example}@postgres:5432/spelling?sslmode=disable"
+      PGRST_DB_SCHEMAS: public
+      PGRST_DB_ANON_ROLE: anon
+      PGRST_JWT_SECRET: ${JWT_SECRET:?missing, see .env.example}
+      PGRST_DB_USE_LEGACY_GUCS: "false"
+      # Listen for the reload that the pgrst_watch event trigger sends on any
+      # DDL (see the roles-sql config). Both are already the defaults; they are
+      # written out because the schema cache going stale is invisible from here
+      # and shows up as a 502 in the app, which is a long way from the cause.
+      PGRST_DB_CHANNEL_ENABLED: "true"
+      PGRST_DB_CHANNEL: pgrst
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  # Identity. The API verifies every session token against this and reads display
+  # names and bios from its user metadata.
+  auth:
+    image: supabase/gotrue:v2.177.0
+    restart: unless-stopped
+    environment:
+      GOTRUE_API_HOST: 0.0.0.0
+      PORT: 9999
+      # Not a typo, and not GOTRUE_-prefixed: a handful of GoTrue's settings are
+      # read under their bare name, and this one is required — without it the
+      # container exits at startup with "required key API_EXTERNAL_URL missing
+      # value" and restarts forever. It is the public origin GoTrue builds email
+      # links against, so it is the gateway's address rather than its own: a
+      # magic link points at ${PUBLIC_URL}/auth/v1/verify, which the gateway
+      # routes back here.
+      API_EXTERNAL_URL: ${PUBLIC_URL:?missing, see .env.example}
+      GOTRUE_DB_DRIVER: postgres
+      # sslmode=disable is load-bearing, not tidiness. GoTrue connects through
+      # lib/pq, whose default sslmode is `require`, and the plain postgres image
+      # serves no TLS — so without this the connection is refused, GoTrue never
+      # runs its first migration, auth.users never appears, and the schema
+      # service waits for a table that is never coming. PostgREST is unaffected
+      # and connects fine, which is exactly what makes this confusing: its driver
+      # defaults to `prefer`. Supabase's own compose omits it because their
+      # postgres image does serve TLS; this one does not.
+      GOTRUE_DB_DATABASE_URL: "postgres://supabase_auth_admin:${POSTGRES_PASSWORD:?missing, see .env.example}@postgres:5432/spelling?sslmode=disable&search_path=auth"
+      GOTRUE_SITE_URL: ${PUBLIC_URL:?missing, see .env.example}
+      GOTRUE_URI_ALLOW_LIST: ${PUBLIC_URL:?missing, see .env.example}/**
+      GOTRUE_JWT_SECRET: ${JWT_SECRET:?missing, see .env.example}
+      GOTRUE_JWT_EXP: 3600
+      GOTRUE_JWT_AUD: authenticated
+      GOTRUE_JWT_DEFAULT_GROUP_NAME: authenticated
+      # Which role claim may call the /auth/v1/admin/* endpoints. The API reads
+      # display names and bios through them with the service-role key (see
+      # lib/supabase.js), so without this every profile and moderation lookup
+      # comes back 403 — the app would look like it works until someone opened a
+      # profile.
+      GOTRUE_JWT_ADMIN_ROLES: service_role
+      GOTRUE_DISABLE_SIGNUP: "false"
+      GOTRUE_EXTERNAL_EMAIL_ENABLED: "true"
+      # Optional, and blank by default, because AUTH_MODE above defaults to
+      # password: this stack signs people in without sending anything. Fill these
+      # in for AUTH_MODE=magic-link or both, or to let people reset their own
+      # passwords by email — with no mail server that recovery is an admin's job
+      # instead, through POST /mod/password. Any provider will do; a local
+      # MailHog is fine for trying this out.
+      GOTRUE_SMTP_HOST: ${SMTP_HOST:-}
+      GOTRUE_SMTP_PORT: ${SMTP_PORT:-587}
+      GOTRUE_SMTP_USER: ${SMTP_USER:-}
+      GOTRUE_SMTP_PASS: ${SMTP_PASS:-}
+      GOTRUE_SMTP_ADMIN_EMAIL: ${SMTP_FROM:-}
+      # Whether a new account is usable before its email address is proved.
+      #
+      # Defaults on, because the default AUTH_MODE here is password and there is
+      # no mail server assumed: a confirmation nobody can receive would make
+      # registration a dead end. The cost is real and worth knowing — anyone can
+      # register with an address they do not own, so an instance open to the
+      # internet with no SMTP should also set GOTRUE_DISABLE_SIGNUP and create
+      # its accounts by hand.
+      #
+      # With SMTP configured, set AUTH_AUTOCONFIRM=false and addresses get
+      # verified properly.
+      GOTRUE_MAILER_AUTOCONFIRM: ${AUTH_AUTOCONFIRM:-true}
+      # Matched by the client-side check in the login form. Eight rather than
+      # GoTrue's default of six.
+      GOTRUE_PASSWORD_MIN_LENGTH: 8
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  # Object storage for lesson images and packed lesson histories.
+  #
+  # RustFS rather than MinIO: MinIO's community edition is no longer somewhere to
+  # point self-hosters. Nothing in the app knows which this is — it speaks plain
+  # S3 with SigV4 (apps/api/src/platform/s3.js) — so Garage, SeaweedFS, Ceph RGW
+  # or real S3 are a change of image and endpoint and nothing else. The service is
+  # named for its role rather than its implementation so that swap stays a
+  # one-line edit.
+  storage:
+    image: rustfs/rustfs:latest
+    restart: unless-stopped
+    environment:
+      RUSTFS_ACCESS_KEY: ${S3_ACCESS_KEY:?missing, see .env.example}
+      RUSTFS_SECRET_KEY: ${S3_SECRET_KEY:?missing, see .env.example}
+      RUSTFS_VOLUMES: /data
+      RUSTFS_ADDRESS: ":9000"
+    volumes:
+      - storage-data:/data
+
+  # Creates the two buckets and exits. Idempotent — it checks before creating, so
+  # it is safe on every `up`.
+  storage-init:
+    image: amazon/aws-cli:latest
+    restart: "no"
+    depends_on:
+      - storage
+    # The AWS CLI rather than a vendor's own client, because it speaks to any of
+    # them: swapping the implementation above should not mean rewriting this too.
+    #
+    # Credentials arrive as environment variables and are read by the script
+    # rather than pasted into a command line by compose, so a secret containing a
+    # space, a quote or a dollar sign cannot be split or mangled before the shell
+    # runs. The doubled dollars are compose's escape for a literal one.
+    environment:
+      AWS_ACCESS_KEY_ID: ${S3_ACCESS_KEY:?missing, see .env.example}
+      AWS_SECRET_ACCESS_KEY: ${S3_SECRET_KEY:?missing, see .env.example}
+      # The same region the app signs with. Creating the buckets in one region
+      # and addressing them in another is a 403 at the first upload, long after
+      # this container has exited saying everything was fine.
+      AWS_DEFAULT_REGION: ${S3_REGION:-us-east-1}
+      S3_ENDPOINT: http://storage:9000
+    entrypoint:
+      - /bin/sh
+      - -c
+      - |
+        set -e
+        echo 'waiting for the object store to accept a signed request...'
+        attempt=0
+        # Waits on list-buckets rather than on a port being open, because that
+        # proves the credentials work too — a store that is up but rejecting our
+        # signature would otherwise fail later, at the first upload, as a 403 with
+        # no obvious cause.
+        until aws --endpoint-url "$$S3_ENDPOINT" s3api list-buckets >/dev/null 2>&1; do
+          attempt=$$((attempt + 1))
+          if [ "$$attempt" -ge 60 ]; then
+            echo 'GAVE UP: the object store never accepted a signed request.'
+            echo 'Its own error follows; check S3_ACCESS_KEY / S3_SECRET_KEY match'
+            echo 'what the storage service was started with.'
+            aws --endpoint-url "$$S3_ENDPOINT" s3api list-buckets || true
+            echo 'Then: docker compose logs storage'
+            exit 1
+          fi
+          sleep 2
+        done
+        for bucket in lesson-images lesson-git; do
+          if aws --endpoint-url "$$S3_ENDPOINT" s3api head-bucket --bucket "$$bucket" 2>/dev/null; then
+            echo "bucket $$bucket already exists"
+          else
+            echo "creating bucket $$bucket"
+            aws --endpoint-url "$$S3_ENDPOINT" s3api create-bucket --bucket "$$bucket"
+          fi
+        done
+
+  # Optional: a local model for the AI helpers, so no request leaves the machine.
+  # Pull one after starting it: `docker compose exec ollama ollama pull llama3.2`
+  # ollama:
+  #   image: ollama/ollama:latest
+  #   restart: unless-stopped
+  #   volumes:
+  #     - ollama-data:/root/.ollama
+
+configs:
+  # The roles PostgREST and GoTrue expect, which apps/api/schema.sql does not
+  # create — it describes the application's tables, and on Supabase these roles
+  # already exist. PostgREST logs in as `authenticator` and switches to the role
+  # named in the JWT, so `anon`, `authenticated` and `service_role` must exist for
+  # it to switch *to*; `service_role` is the one that bypasses RLS, which is why
+  # it is BYPASSRLS and why its key never reaches a browser.
+  roles-sql:
+    content: |
+      create role anon nologin noinherit;
+      create role authenticated nologin noinherit;
+      create role service_role nologin noinherit bypassrls;
+      create role authenticator noinherit login password '${POSTGRES_PASSWORD:?missing, see .env.example}';
+      grant anon, authenticated, service_role to authenticator;
+
+      grant usage on schema public to anon, authenticated, service_role, authenticator;
+      alter default privileges in schema public
+        grant all on tables to service_role;
+      alter default privileges in schema public
+        grant all on sequences to service_role;
+
+      -- Extensions GoTrue's migrations expect to exist. They are created here,
+      -- as the superuser this script runs as, because CREATE EXTENSION needs
+      -- privileges supabase_auth_admin does not have — and a migration that
+      -- fails on one leaves auth.users uncreated, which strands everything
+      -- downstream waiting for a table that is never coming.
+      create extension if not exists "uuid-ossp";
+      create extension if not exists pgcrypto;
+
+      -- GoTrue owns its own schema and migrates it itself on first start.
+      create user supabase_auth_admin noinherit createrole login password '${POSTGRES_PASSWORD:?missing, see .env.example}';
+      create schema if not exists auth authorization supabase_auth_admin;
+      grant create on database spelling to supabase_auth_admin;
+      -- The application's tables reference auth.users(id), so every role that
+      -- reads them needs to be able to see that table exists.
+      grant usage on schema auth to anon, authenticated, service_role;
+
+      -- Tell PostgREST to re-read the schema whenever the schema changes.
+      --
+      -- PostgREST builds its view of the database once, at startup. Everything
+      -- here is created before it has any tables to find, and schema.sql is
+      -- applied later still — so without this, every request answers
+      -- "Could not find the table 'public.lessons' in the schema cache" until
+      -- somebody restarts it, and the app reports a 502. This is the same
+      -- event trigger Supabase ships, and it turns an ordering trap into
+      -- something that simply works whenever the schema is applied.
+      -- The body is a quoted literal rather than the usual dollar-quoted form,
+      -- and there is deliberately not a dollar sign anywhere in this config:
+      -- compose interpolates the content before Postgres ever sees it, and it
+      -- reads a doubled dollar as the escape for a single literal one. A
+      -- dollar-quoted body would arrive with its delimiters halved and fail to
+      -- parse.
+      create or replace function public.pgrst_watch() returns event_trigger
+        language plpgsql as 'begin notify pgrst, ''reload schema''; end;';
+      drop event trigger if exists pgrst_watch;
+      create event trigger pgrst_watch on ddl_command_end execute procedure public.pgrst_watch();
+
+  caddyfile:
+    content: |
+      :80 {
+        # PostgREST and GoTrue under the paths the API and the SPA expect. The
+        # prefixes are stripped because both upstreams serve from their own root.
+        handle_path /rest/v1/* {
+          reverse_proxy postgrest:3000
+        }
+        handle_path /auth/v1/* {
+          reverse_proxy auth:9999
+        }
+        # Everything else is the app: the API, the SPA and the docs.
+        handle {
+          reverse_proxy app:8787
+        }
+      }
+
+volumes:
+  postgres-data:
+  storage-data:
+  # ollama-data:

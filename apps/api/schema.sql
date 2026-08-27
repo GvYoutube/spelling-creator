@@ -398,6 +398,56 @@ alter table public.banned_ips            enable row level security;
 alter table public.lesson_delete_requests enable row level security;
 
 
+-- ============================================================================
+-- Expiring key-value store.
+--
+-- Only needed when self-hosting. The Cloudflare deployment keeps rate-limit
+-- buckets, cached AI answers and MCP OAuth state in a KV namespace; an instance
+-- without one puts them here instead, reached over PostgREST with the same
+-- service-role key as everything else (see apps/api/src/platform/postgrestKv.js
+-- and /monorepo/platform-seam). Creating the table on the hosted instance too is
+-- harmless — nothing writes to it there.
+--
+-- Nothing in here is authoritative. Every row is small, short-lived, and has an
+-- expiry past which its absence is the correct answer: a spent rate-limit
+-- bucket, a stale suggestion, an abandoned consent flow. That is why this can be
+-- an ordinary table with no locking and no transactions — the rate limiters are
+-- read-modify-write token buckets that tolerate a lost update, and the worst a
+-- lost one costs is one extra request served.
+-- ============================================================================
+create table if not exists public.kv_store (
+  key        text primary key,
+  value      text not null,
+  -- Null means "never expires". The store treats a row past this as absent and
+  -- deletes it on the way past, so correctness does not depend on the sweep
+  -- below ever running — that only reclaims rows nobody asks for again.
+  expires_at timestamptz,
+  updated_at timestamptz not null default now()
+);
+
+-- The sweep's only access path.
+create index if not exists kv_store_expires_idx on public.kv_store (expires_at)
+  where expires_at is not null;
+
+-- Same posture as notifications and the moderation tables: only the
+-- service-role Worker touches this, so RLS is on with no anon/authenticated
+-- policies. It holds OAuth authorization state, so a readable row here would
+-- matter.
+alter table public.kv_store enable row level security;
+
+-- ----------------------------------------------------------------------------
+-- Reclaim expired rows. Expiry is enforced on read, so this is housekeeping
+-- rather than correctness — it collects the entries nobody comes back for. Run
+-- it from pg_cron if the instance has it:
+--
+--   select cron.schedule('kv-store-sweep', '17 * * * *',
+--     $$delete from public.kv_store where expires_at is not null and expires_at < now()$$);
+--
+-- ...or from anything else that can reach the database on a timer. An instance
+-- that never runs it works correctly and grows slowly.
+-- ----------------------------------------------------------------------------
+
+
 -- ----------------------------------------------------------------------------
 -- Seed an admin. There is no in-app way to create an admin (admins can only add
 -- moderators), so run this once per admin in the Supabase SQL editor. The person

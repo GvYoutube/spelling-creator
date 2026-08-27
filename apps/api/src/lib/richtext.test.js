@@ -105,6 +105,132 @@ describe('richTextToPlain', () => {
 	});
 });
 
+// The cases below were added when the sanitizer moved from HTMLRewriter to
+// parse5. Two different reasons, both worth keeping whatever parses next:
+//
+//   * Mutation XSS — markup that is inert as written, but which a browser
+//     re-parses into something that executes. These are the vectors a
+//     tree-based sanitizer has to be checked against specifically, because the
+//     tree it sanitizes and the tree the browser eventually builds are two
+//     different parses of two different strings.
+//   * Resource limits. The streaming parser had no tree and so no depth; a
+//     tree-building one does, and the input's shape is the caller's choice.
+describe('sanitizeRichText - resists mutation XSS', () => {
+	it('does not let a comment inside a dropped tag re-open as markup', async () => {
+		// The classic: `<style>` content is raw text, so the `</style>` inside the
+		// title attribute closes it early on re-parse.
+		const out = await sanitizeRichText('<style><!--</style><img src=x onerror=alert(1)>--></style>');
+		expect(out).not.toContain('onerror');
+		expect(out).not.toContain('<img');
+	});
+
+	it('does not let noscript content re-open as markup', async () => {
+		const out = await sanitizeRichText('<noscript><p title="</noscript><img src=x onerror=alert(1)>">');
+		expect(out).not.toContain('onerror');
+		expect(out).not.toContain('<img');
+	});
+
+	it('drops foreign content wholesale rather than unwrapping into it', async () => {
+		// Inside <svg>, HTML parsing rules change — an unwrapped child would be
+		// re-parsed under different rules than it was sanitized under. svg is in
+		// DROP_TAGS precisely so that question never arises.
+		const out = await sanitizeRichText('<svg><style><a href="</style><img src=1 onerror=alert(1)>">x</a></style></svg>');
+		expect(out).not.toContain('onerror');
+		expect(out).not.toContain('<img');
+	});
+
+	it('drops a math/mglyph nest without promoting anything out of it', async () => {
+		const out = await sanitizeRichText('<math><mtext><table><mglyph><style><!--</style><img src onerror=alert(1)>');
+		expect(out).not.toContain('onerror');
+		expect(out).not.toContain('<img');
+	});
+
+	it('escapes text that would otherwise re-parse as a tag', async () => {
+		// Serialization has to escape, or a comment reading `<script>` as *text*
+		// would come back out as a tag.
+		const out = await sanitizeRichText('<p>a &lt;script&gt;alert(1)&lt;/script&gt; b</p>');
+		expect(out).toBe('<p>a &lt;script&gt;alert(1)&lt;/script&gt; b</p>');
+	});
+
+	it('escapes a quote inside a link href', async () => {
+		const out = await sanitizeRichText('<p><a href=\'https://e.test/"onmouseover="alert(1)\'>x</a></p>');
+		expect(out).not.toContain('onmouseover="alert');
+		expect(out).toContain('&quot;');
+	});
+
+	it('rejects an href whose scheme is entity-encoded', async () => {
+		const out = await sanitizeRichText('<p><a href="&#106;avascript:alert(1)">x</a></p>');
+		expect(out).toBe('<p>x</p>');
+	});
+
+	it('rejects an href with a newline inside the scheme', async () => {
+		const out = await sanitizeRichText('<p><a href="jav&#x0A;ascript:alert(1)">x</a></p>');
+		expect(out).toBe('<p>x</p>');
+	});
+
+	it('keeps an unclosed allowed tag closed', async () => {
+		// Tag soup is the normal case for hand-written input; the output still has
+		// to be well-formed or it changes the shape of the page it lands in.
+		expect(await sanitizeRichText('<p><strong>bold')).toBe('<p><strong>bold</strong></p>');
+	});
+
+	it("does not emit a raw-text element's body as markup", async () => {
+		// The content of xmp/noembed/noframes/plaintext is parsed as literal text
+		// and serialized back *unescaped*, so unwrapping one turns its body into
+		// real markup on the way out — the stored string would contain a live
+		// <script>. They are dropped with their content for that reason.
+		for (const tag of ['xmp', 'noembed', 'noframes', 'plaintext']) {
+			const out = await sanitizeRichText(`<${tag}><script>alert(1)</script></${tag}>`);
+			expect(out).not.toContain('<script');
+			expect(out).not.toContain('alert(1)');
+		}
+	});
+
+	it('does not promote a raw-text body out of a block', async () => {
+		// <xmp> closes an open <p>, so its text lands at the fragment root — the one
+		// level with no surviving element to re-parent it under.
+		const out = await sanitizeRichText('<p><xmp><img src=x onerror=alert(1)></xmp></p>');
+		expect(out).not.toContain('<img');
+		expect(out).not.toContain('onerror');
+	});
+
+	it('drops a script smuggled inside a template', async () => {
+		// parse5 puts template children on `content`, not `childNodes` — a walker
+		// that only looked at childNodes would see an empty element and keep it.
+		const out = await sanitizeRichText('<template><script>alert(1)</script></template><p>hi</p>');
+		expect(out).toBe('<p>hi</p>');
+	});
+});
+
+describe('sanitizeRichText - bounded by input, not by trust', () => {
+	it('survives nesting far deeper than the routes allow through', async () => {
+		// The routes cap raw input at 20,000 characters and `<b>` is three of them,
+		// so this is a shape a caller can actually send. A recursive walk exhausts
+		// the stack here.
+		const out = await sanitizeRichText('<b>'.repeat(6600) + 'deep');
+		expect(out).toContain('deep');
+	});
+
+	it('keeps the words when it flattens past the depth limit', async () => {
+		const out = await sanitizeRichText(`${'<b>'.repeat(150)}buried${'</b>'.repeat(150)}`);
+		expect(out).toContain('buried');
+	});
+
+	it('does not promote a dropped subtree into the text it keeps', async () => {
+		// Flattening past the limit must not turn a <script> body into prose.
+		const out = await sanitizeRichText(`${'<b>'.repeat(150)}<script>alert(1)</script>ok`);
+		expect(out).toContain('ok');
+		expect(out).not.toContain('alert(1)');
+	});
+
+	it('stays within the depth limit in its output', async () => {
+		const out = await sanitizeRichText('<b>'.repeat(500) + 'x');
+		// Whatever survives has to be shallow enough for the serializer that just
+		// wrote it — and for every reader after it.
+		expect(out.split('<b>').length - 1).toBeLessThanOrEqual(100);
+	});
+});
+
 describe('isRichTextEmpty', () => {
 	it("treats an empty editor's markup as empty", () => {
 		expect(isRichTextEmpty('<p></p>')).toBe(true);

@@ -13,6 +13,10 @@ import { useEffect, useState } from "react";
 import { Link as RouterLink } from "react-router-dom";
 import { toast } from "sonner";
 import { useTranslation } from "react-i18next";
+import {
+  hasPasswordAuth,
+  PASSWORD_MIN_LENGTH,
+} from "@spelling-creator/core/config";
 import { Trash2Icon, XIcon, TriangleAlertIcon } from "lucide-react";
 import PageBar from "../components/layout/PageBar.jsx";
 import PageBody from "../components/layout/PageBody.jsx";
@@ -34,6 +38,7 @@ import {
   listModerators,
   addModerator,
   removeModerator,
+  setUserPassword,
   listDeleteRequests,
   resolveDeleteRequest,
   listShadowbannedLessons,
@@ -522,6 +527,75 @@ function ModeratorsSection({ accessToken, onToast }) {
   );
 }
 
+// Setting somebody's password, for an instance where nobody can email them a
+// reset link. Admin-only, and rendered only when this instance signs people in
+// with a password at all — on a magic-link instance there is no password to set.
+function PasswordSection({ accessToken, onToast }) {
+  const { t } = useTranslation("moderation");
+  const [identifier, setIdentifier] = useState("");
+  const [password, setPassword] = useState("");
+  const [saving, setSaving] = useState(false);
+
+  const canSubmit =
+    identifier.trim().length > 0 && password.length >= PASSWORD_MIN_LENGTH;
+
+  const submit = async () => {
+    if (!canSubmit) return;
+    setSaving(true);
+    try {
+      await setUserPassword(identifier.trim(), password, accessToken);
+      onToast(t("password.toasts.set", { identifier: identifier.trim() }));
+      setIdentifier("");
+      setPassword("");
+    } catch (err) {
+      onToast(err.message || t("password.toasts.failed"));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <Section title={t("password.title")}>
+      <p className="mb-3 text-sm text-muted-foreground">
+        {t("password.description", { count: PASSWORD_MIN_LENGTH })}
+      </p>
+      <div className="flex flex-wrap items-end gap-2">
+        <Field className="min-w-[220px]">
+          <FieldLabel htmlFor="reset-identifier" className="sr-only">
+            {t("password.identifierLabel")}
+          </FieldLabel>
+          <Input
+            id="reset-identifier"
+            placeholder={t("password.identifierLabel")}
+            autoCapitalize="none"
+            spellCheck={false}
+            value={identifier}
+            onChange={(e) => setIdentifier(e.target.value)}
+          />
+        </Field>
+        <Field className="min-w-[220px]">
+          <FieldLabel htmlFor="reset-password" className="sr-only">
+            {t("password.passwordLabel")}
+          </FieldLabel>
+          <Input
+            id="reset-password"
+            type="password"
+            autoComplete="new-password"
+            placeholder={t("password.passwordLabel")}
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            onKeyDown={(e) => e.key === "Enter" && !saving && submit()}
+          />
+        </Field>
+        <Button onClick={submit} disabled={saving || !canSubmit}>
+          {saving && <Spinner data-icon="inline-start" />}
+          {t("password.submit")}
+        </Button>
+      </div>
+    </Section>
+  );
+}
+
 export default function ModerationPage() {
   const { t } = useTranslation("moderation");
   const { loading, user, accessToken, roleLoading, isModerator, isAdmin } =
@@ -592,6 +666,9 @@ export default function ModerationPage() {
               />
               {isAdmin && (
                 <ModeratorsSection accessToken={accessToken} onToast={toast} />
+              )}
+              {isAdmin && hasPasswordAuth() && (
+                <PasswordSection accessToken={accessToken} onToast={toast} />
               )}
             </div>
           )

@@ -59,17 +59,23 @@
       "files": ["apps/api/**/*.js"],
       "env": { "worker": true, "node": true },
       "globals": {
-        // Cloudflare-specific runtime globals: Durable Object WebSockets, and the
-        // streaming HTML parser the rich-text sanitizer is built on (lib/richtext.js).
+        // Cloudflare-specific runtime globals, used by the Durable Objects.
+        // HTMLRewriter used to be here too, for the rich-text sanitizer; that now
+        // parses with parse5 so it runs on any host (see lib/richtext.js).
         "WebSocketPair": "readonly",
-        "WebSocketRequestResponsePair": "readonly",
-        "HTMLRewriter": "readonly"
+        "WebSocketRequestResponsePair": "readonly"
       }
     },
 
     // MCP server — Node runtime (also uses Web-standard fetch/crypto globals)
     {
       "files": ["apps/mcp/**/*.js", "apps/mcp/**/*.mjs"],
+      "env": { "node": true }
+    },
+
+    // Repo tooling — plain Node scripts run by hand, never bundled or shipped.
+    {
+      "files": ["scripts/**/*.js", "scripts/**/*.mjs"],
       "env": { "node": true }
     },
 

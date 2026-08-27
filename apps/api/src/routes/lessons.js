@@ -236,7 +236,7 @@ export async function handleLessons(request, env, url, cors) {
 			published,
 			forked_from: forkedFrom,
 			// Recorded so an admin can later ban the address from a lesson of theirs.
-			author_ip: clientIp(request) || null,
+			author_ip: clientIp(env, request) || null,
 		};
 
 		let res;

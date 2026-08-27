@@ -64,3 +64,12 @@ jobs:
 
       - name: Build docs
         run: pnpm --filter @spelling-creator/docs build
+
+      # Bundle the Worker without deploying (no credentials needed). This is the
+      # only step that runs wrangler's own module resolution, so it is what
+      # catches a `.wasm` or Text import that the test runner cannot resolve for
+      # itself (see apps/api/vitest.workers.config.js) — and, more generally, a
+      # dependency that bundles fine under Vite but not for workerd. Depends on
+      # the web build above for apps/web/dist and dist-ssr.
+      - name: Bundle Worker
+        run: pnpm --filter @spelling-creator/api bundle

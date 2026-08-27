@@ -12,6 +12,7 @@
 import { verifySupabaseUser } from '../lib/supabase.js';
 import { bearerToken, displayNameOf } from '../lib/auth.js';
 import { textResponse, jsonResponse } from '../lib/http.js';
+import { oauthStateStore } from '../platform/index.js';
 
 // Long enough to sign in (including an email round trip), short enough to
 // bound how long an unfinished authorization request can be replayed.
@@ -20,7 +21,7 @@ const STATE_KEY_PREFIX = 'mcp-oauth-req:';
 
 async function storeAuthRequest(env, oauthReqInfo) {
 	const stateToken = crypto.randomUUID();
-	await env.OAUTH_KV.put(STATE_KEY_PREFIX + stateToken, JSON.stringify(oauthReqInfo), {
+	await oauthStateStore(env).put(STATE_KEY_PREFIX + stateToken, JSON.stringify(oauthReqInfo), {
 		expirationTtl: STATE_TTL_SECONDS,
 	});
 	return stateToken;
@@ -28,13 +29,13 @@ async function storeAuthRequest(env, oauthReqInfo) {
 
 async function peekAuthRequest(env, stateToken) {
 	if (!stateToken) return null;
-	const raw = await env.OAUTH_KV.get(STATE_KEY_PREFIX + stateToken);
+	const raw = await oauthStateStore(env).get(STATE_KEY_PREFIX + stateToken);
 	return raw ? JSON.parse(raw) : null;
 }
 
 async function consumeAuthRequest(env, stateToken) {
 	const info = await peekAuthRequest(env, stateToken);
-	if (info) await env.OAUTH_KV.delete(STATE_KEY_PREFIX + stateToken);
+	if (info) await oauthStateStore(env).delete(STATE_KEY_PREFIX + stateToken);
 	return info;
 }
 

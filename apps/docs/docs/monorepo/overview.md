@@ -12,7 +12,7 @@ Worker API.
 | Path            | Package                  | Description                                                                                                                                                                                                                                          |
 | --------------- | ------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `apps/web`      | `@spelling-creator/web`  | Vite + React frontend (shadcn/ui + Tailwind, Supabase, react-router), installable as a PWA. Built into `apps/web/dist` and served by the Worker as static assets.                                                                                    |
-| `apps/api`      | `@spelling-creator/api`  | Cloudflare Worker backend (multi-provider AI suggestions — Gemini, OpenAI, Anthropic, Groq, Workers AI — profanity filter, KV rate limiting, R2 for lesson images and packed lesson histories).                                                      |
+| `apps/api`      | `@spelling-creator/api`  | Cloudflare Worker backend (multi-provider AI suggestions — Gemini, OpenAI, Anthropic, Groq, any OpenAI-compatible server, Workers AI — profanity filter, KV rate limiting, R2 for lesson images and packed lesson histories).                        |
 | `apps/mcp`      | `@spelling-creator/mcp`  | MCP server — lets an AI assistant author and publish lessons to the hub.                                                                                                                                                                             |
 | `apps/docs`     | `@spelling-creator/docs` | This VitePress site. Built into `apps/web/dist/docs` and served by the Worker at `/docs/` (see [Getting started](./getting-started.md#documentation-site)).                                                                                          |
 | `packages/core` | `@spelling-creator/core` | Framework-agnostic lesson domain logic — question types, the spelling block, lesson-file import/export, hub search, Wikimedia Commons, the Yjs document, the portable half of version history, plus a browser tier for the IndexedDB/docx/pdf paths. |
@@ -42,6 +42,14 @@ keeps each app's public contract and error wording its own.
 The same split is what a change of frontend framework would rest on — see the
 [frontend migration](./frontend-migration.md) record, which weighs the options
 and is a proposal rather than a commitment.
+
+## Storage, and the platform seam
+
+The Worker's storage — lesson images and packed histories in R2, rate-limit
+buckets in KV, cached renders in `caches.default` — sits behind three small
+interfaces in `apps/api/src/platform/` rather than being called as bindings from
+each route. See [the platform seam](./platform-seam.md) for the interfaces, the
+executable conformance suite that defines them, and what it takes to add a host.
 
 See the [Web App](../web-app/overview.md) docs for full app documentation, and the
 [MCP Server](../mcp-server/overview.md) docs for connecting an AI assistant to the hub.
