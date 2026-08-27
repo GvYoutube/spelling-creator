@@ -38,7 +38,13 @@ export function endpointFor(baseUrl) {
 export function isConfigured(env) {
 	// No API-key check: a local runtime normally has no auth at all, so the URL
 	// is what says whether this provider is available.
-	return Boolean(env.OPENAI_COMPATIBLE_URL && env.OPENAI_COMPATIBLE_MODELS);
+	//
+	// The model list is read the same way generate() reads it, rather than merely
+	// tested for being non-empty: a value of ` , ` is a setting somebody meant to
+	// fill in and didn't, and reporting the provider as configured on the strength
+	// of it turns "no AI configured" into every suggestion failing with "No models
+	// configured".
+	return Boolean(env.OPENAI_COMPATIBLE_URL && modelList(env.OPENAI_COMPATIBLE_MODELS, []).length > 0);
 }
 
 export async function generate({ prompt, schema, env }) {

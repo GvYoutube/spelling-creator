@@ -6,7 +6,7 @@
 // on its own: what matters is that OpenAI still asks for strict schemas and Groq
 // still doesn't, which is a fact about the providers, not about the helper.
 
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { chatCompletion, firstModelThatAnswers, modelList } from './chatCompletions.js';
 import * as openai from './openai.js';
@@ -177,14 +177,18 @@ describe('chatCompletion', () => {
 });
 
 describe('provider wiring', () => {
+	// The providers reach for the global `fetch` when they aren't handed one, so
+	// these tests replace it — and put it back. Deleting it instead would leave
+	// every test that runs after them in this runtime with no fetch at all, which
+	// surfaces as a ReferenceError a long way from the cause.
+	afterEach(() => {
+		vi.unstubAllGlobals();
+	});
+
 	it('openai asks for strict schema enforcement', async () => {
 		const server = recordingFetch();
-		globalThis.fetch = server.fetch;
-		try {
-			await openai.generate({ prompt: 'p', schema: SCHEMA, env: { OPENAI_API_KEY: 'k', OPENAI_MODELS: 'gpt-test' } });
-		} finally {
-			delete globalThis.fetch;
-		}
+		vi.stubGlobal('fetch', server.fetch);
+		await openai.generate({ prompt: 'p', schema: SCHEMA, env: { OPENAI_API_KEY: 'k', OPENAI_MODELS: 'gpt-test' } });
 		expect(server.calls[0].url).toBe('https://api.openai.com/v1/chat/completions');
 		expect(server.calls[0].body.response_format.type).toBe('json_schema');
 		expect(server.calls[0].headers.Authorization).toBe('Bearer k');
@@ -192,12 +196,8 @@ describe('provider wiring', () => {
 
 	it('groq asks for json_object, not a schema', async () => {
 		const server = recordingFetch();
-		globalThis.fetch = server.fetch;
-		try {
-			await groq.generate({ prompt: 'p', schema: SCHEMA, env: { GROQ_API_KEY: 'k', GROQ_MODELS: 'gpt-oss-test' } });
-		} finally {
-			delete globalThis.fetch;
-		}
+		vi.stubGlobal('fetch', server.fetch);
+		await groq.generate({ prompt: 'p', schema: SCHEMA, env: { GROQ_API_KEY: 'k', GROQ_MODELS: 'gpt-oss-test' } });
 		// Groq's json_schema support varies by model; this is the behaviour that
 		// was there before the shared helper and has to stay.
 		expect(server.calls[0].body.response_format).toEqual({ type: 'json_object' });
@@ -207,18 +207,14 @@ describe('provider wiring', () => {
 		const base = { OPENAI_COMPATIBLE_URL: 'http://ollama.test:11434/v1', OPENAI_COMPATIBLE_MODELS: 'llama' };
 
 		let server = recordingFetch();
-		globalThis.fetch = server.fetch;
-		try {
-			await openaiCompatible.generate({ prompt: 'p', schema: SCHEMA, env: base });
-			expect(server.calls[0].body.response_format).toEqual({ type: 'json_object' });
+		vi.stubGlobal('fetch', server.fetch);
+		await openaiCompatible.generate({ prompt: 'p', schema: SCHEMA, env: base });
+		expect(server.calls[0].body.response_format).toEqual({ type: 'json_object' });
 
-			server = recordingFetch();
-			globalThis.fetch = server.fetch;
-			await openaiCompatible.generate({ prompt: 'p', schema: SCHEMA, env: { ...base, OPENAI_COMPATIBLE_JSON: 'schema' } });
-			expect(server.calls[0].body.response_format.type).toBe('json_schema');
-		} finally {
-			delete globalThis.fetch;
-		}
+		server = recordingFetch();
+		vi.stubGlobal('fetch', server.fetch);
+		await openaiCompatible.generate({ prompt: 'p', schema: SCHEMA, env: { ...base, OPENAI_COMPATIBLE_JSON: 'schema' } });
+		expect(server.calls[0].body.response_format.type).toBe('json_schema');
 	});
 });
 
@@ -229,6 +225,13 @@ describe('openai-compatible configuration', () => {
 		expect(openaiCompatible.isConfigured({ OPENAI_COMPATIBLE_URL: 'http://x/v1', OPENAI_COMPATIBLE_MODELS: 'm' })).toBe(true);
 		expect(openaiCompatible.isConfigured({ OPENAI_COMPATIBLE_URL: 'http://x/v1' })).toBe(false);
 		expect(openaiCompatible.isConfigured({})).toBe(false);
+	});
+
+	it('is not configured by a model list that is only separators', () => {
+		// generate() would read this as an empty list and fail every suggestion
+		// with "No models configured", where the honest answer is that this
+		// provider was never set up.
+		expect(openaiCompatible.isConfigured({ OPENAI_COMPATIBLE_URL: 'http://x/v1', OPENAI_COMPATIBLE_MODELS: ' , ' })).toBe(false);
 	});
 
 	it('accepts a base URL with or without /v1', () => {
