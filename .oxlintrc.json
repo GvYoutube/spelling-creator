@@ -73,6 +73,12 @@
       "env": { "node": true }
     },
 
+    // Repo tooling — plain Node scripts run by hand, never bundled or shipped.
+    {
+      "files": ["scripts/**/*.js", "scripts/**/*.mjs"],
+      "env": { "node": true }
+    },
+
     // ...except `views/`, which is the source of the MCP Apps views: browser code
     // that is bundled into an HTML resource and runs in the host's sandboxed
     // iframe, never in Node. Anything in the server proper that reached for the

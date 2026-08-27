@@ -31,9 +31,21 @@ image and endpoint and nothing else. The service is named `storage` for its role
 rather than its implementation to keep that swap a one-line edit.
 
 ```bash
-cp .env.example .env      # then edit it; the defaults are not secrets
-docker compose up -d
+node scripts/generate-env.mjs   # writes .env with every credential filled in
+# then set PUBLIC_URL / PUBLIC_HOSTNAME and the SMTP block in .env
+docker compose up -d --build
 ```
+
+Use the generator rather than copying `.env.example` by hand. `ANON_KEY` and
+`SERVICE_ROLE_KEY` are JWTs that must be signed with the same `JWT_SECRET`
+PostgREST and GoTrue verify against, and a value that is not a valid token fails
+in a way that points everywhere except at itself: PostgREST reports a signing
+error, GoTrue reports a permissions error, and the app answers 502. The
+dependency check below now catches it directly, but not generating a broken one
+is better still.
+
+`PUBLIC_URL` is baked into the SPA at build time, so set it before the build, not
+after.
 
 That is the whole of it — there is no schema step to remember, because the
 ordering it depends on is not something to leave to a reader. A one-shot
