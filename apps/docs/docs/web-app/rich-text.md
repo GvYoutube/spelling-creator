@@ -87,6 +87,17 @@ in any tree-shaped walk. The walk is iterative, and nesting past 100 levels is
 flattened to its text, the same thing that happens to unrecognised markup
 everywhere else. The editor's deepest possible output is five.
 
+It brought one other, sharper concern. An unknown tag is normally _unwrapped_ —
+the tag goes and its words stay — but that is only safe for tags whose content
+was parsed as markup. HTML's raw-text elements (`script`, `style`, `xmp`,
+`iframe`, `noembed`, `noframes`, `plaintext`, `noscript`) hold literal text, and
+a serializer writes their content back **unescaped** because that is what a
+browser expects to find inside them. Unwrapping one would therefore turn its
+`<script>alert(1)</script>` body from words into markup on the way out. All of
+them are dropped with their content instead, and anything that survives the walk
+is re-parented onto the node it is actually written under, so escaping is never
+decided by an element that was removed.
+
 ### Links
 
 Links are the one thing a user may embed. Only `http:`, `https:` and `mailto:`

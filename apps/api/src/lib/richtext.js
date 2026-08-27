@@ -48,9 +48,10 @@ export { isRichTextEmpty, richTextToPlain } from '@spelling-creator/core/richTex
 const KEEP_TAGS = new Set(RICH_TEXT_TAGS);
 
 // Tags dropped *with their content*, because their content is not prose: script and
-// style bodies are code, and the media/embed tags are the ones the product rule
-// forbids outright. Everything else unknown (div, span, h1, table...) is unwrapped
-// instead — its text is innocent, only the tag is unwanted.
+// style bodies are code, the raw-text elements below hold text that was never parsed
+// as markup, and the media/embed tags are the ones the product rule forbids
+// outright. Everything else unknown (div, span, h1, table...) is unwrapped instead —
+// its text is innocent, only the tag is unwanted.
 const DROP_TAGS = new Set([
 	'script',
 	'style',
@@ -62,6 +63,17 @@ const DROP_TAGS = new Set([
 	'object',
 	'embed',
 	'applet',
+	// The rest of HTML's raw-text elements. Their content is not parsed as markup,
+	// so a browser — and parse5's serializer with it — treats the text inside them
+	// as literal and writes it back *unescaped*. Unwrapping one would therefore
+	// hand its `<script>alert(1)</script>` body out as markup rather than as the
+	// words it was parsed as. script, style, iframe and noscript are already above;
+	// these four complete the set (parse5's UNESCAPED_TEXT), and none of them is
+	// prose anybody meant to write.
+	'xmp',
+	'noembed',
+	'noframes',
+	'plaintext',
 	// Media. The product forbids uploading or embedding any of these.
 	...MEDIA_TAGS,
 	// Interactive/form content has no place in a comment.
@@ -113,7 +125,12 @@ const MAX_DEPTH = 100;
  * not be the reason that holds.
  */
 function attributeValue(node, name) {
-	const found = (node.attrs || []).find((attr) => attr.name.toLowerCase() === name);
+	// parse5 keeps the prefix in `name` (`xlink:href`, not `href`) and reports the
+	// namespace separately, so the comparison is against the part after the last
+	// colon. Comparing the whole name would quietly miss exactly the case this
+	// helper says it covers.
+	const localName = (attr) => attr.name.slice(attr.name.lastIndexOf(':') + 1).toLowerCase();
+	const found = (node.attrs || []).find((attr) => localName(attr) === name);
 	return found ? found.value : null;
 }
 
@@ -264,6 +281,13 @@ function transformFragment(root) {
 		}
 		children.push(...(resolved.get(child) || []));
 	}
+	// Re-parent everything that ends up here. A node unwrapped out of a removed
+	// element still points at it, and parse5's serializer asks a text node's
+	// *parent* whether to escape — so a stale parent is not a tidiness matter but the
+	// difference between storing `&lt;script&gt;` and storing `<script>`. Elements
+	// kept by replacementFor already re-parent their own children; this is the one
+	// level that has no element to do it.
+	for (const child of children) child.parentNode = root;
 	return children;
 }
 

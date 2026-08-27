@@ -174,6 +174,26 @@ describe('sanitizeRichText - resists mutation XSS', () => {
 		expect(await sanitizeRichText('<p><strong>bold')).toBe('<p><strong>bold</strong></p>');
 	});
 
+	it("does not emit a raw-text element's body as markup", async () => {
+		// The content of xmp/noembed/noframes/plaintext is parsed as literal text
+		// and serialized back *unescaped*, so unwrapping one turns its body into
+		// real markup on the way out — the stored string would contain a live
+		// <script>. They are dropped with their content for that reason.
+		for (const tag of ['xmp', 'noembed', 'noframes', 'plaintext']) {
+			const out = await sanitizeRichText(`<${tag}><script>alert(1)</script></${tag}>`);
+			expect(out).not.toContain('<script');
+			expect(out).not.toContain('alert(1)');
+		}
+	});
+
+	it('does not promote a raw-text body out of a block', async () => {
+		// <xmp> closes an open <p>, so its text lands at the fragment root — the one
+		// level with no surviving element to re-parent it under.
+		const out = await sanitizeRichText('<p><xmp><img src=x onerror=alert(1)></xmp></p>');
+		expect(out).not.toContain('<img');
+		expect(out).not.toContain('onerror');
+	});
+
 	it('drops a script smuggled inside a template', async () => {
 		// parse5 puts template children on `content`, not `childNodes` — a walker
 		// that only looked at childNodes would see an empty element and keep it.
