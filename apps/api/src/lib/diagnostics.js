@@ -68,6 +68,61 @@ async function upstreamError(response) {
 	return { code: String(code || ''), message: String(message || '').trim() };
 }
 
+/**
+ * Read a JWT's payload without verifying it, reporting how it failed.
+ *
+ * Structure only — we cannot check the signature, since the secret belongs to
+ * PostgREST and GoTrue rather than to us. That is fine: the failure this exists
+ * to catch is a value that is not a token at all, which no amount of upstream
+ * round-tripping diagnoses as clearly as counting the dots.
+ */
+function readJwt(token) {
+	const parts = String(token || '').split('.');
+	if (parts.length !== 3) return { parts: parts.length, payload: null };
+	try {
+		const base64 = parts[1].replace(/-/g, '+').replace(/_/g, '/');
+		const padded = base64 + '='.repeat((4 - (base64.length % 4)) % 4);
+		return { parts: 3, payload: JSON.parse(atob(padded)) };
+	} catch (e) {
+		return { parts: 3, payload: null };
+	}
+}
+
+/**
+ * Is the service-role key even shaped like the thing it is supposed to be?
+ *
+ * Checked locally and before anything is sent anywhere, because a malformed key
+ * produces upstream errors that read as something else entirely: PostgREST
+ * answers PGRST301 with a 401, which looks like a wrong secret, and GoTrue
+ * answers 403, which looks like a permissions problem. Both are really "that
+ * value is not a token", and the quickest way to know is to count its parts.
+ */
+function checkCredentials(env) {
+	const { parts, payload } = readJwt(env.SUPABASE_SERVICE_ROLE_KEY);
+
+	if (parts !== 3) {
+		return failed(
+			'credentials',
+			`SUPABASE_SERVICE_ROLE_KEY is not a JWT — it has ${parts} part${parts === 1 ? '' : 's'} where a token has 3`,
+			'It should be a signed token, not a password. If it still reads like the placeholder from .env.example, ' +
+				'generate a real one — `node scripts/generate-env.mjs` writes a matching set.',
+		);
+	}
+	if (!payload) {
+		return failed('credentials', 'SUPABASE_SERVICE_ROLE_KEY has three parts but its payload is not readable JSON');
+	}
+	if (payload.role !== 'service_role') {
+		return failed(
+			'credentials',
+			`SUPABASE_SERVICE_ROLE_KEY carries role ${JSON.stringify(payload.role ?? null)}, not "service_role"`,
+			'The anon key and the service-role key are both JWTs and are not interchangeable — this looks like the wrong one of the pair.',
+		);
+	}
+	// Structure only. A key that is well-formed but signed with the wrong secret
+	// still fails upstream, and the schema check below is what catches that.
+	return ok('credentials', 'the service-role key is a JWT whose role claim is service_role');
+}
+
 /** Whether the configuration this host needs is even present. */
 function checkConfiguration(env) {
 	const missing = [];
@@ -137,6 +192,16 @@ async function checkSchema(env, base) {
 				'Grant it: GRANT ALL ON ALL TABLES IN SCHEMA public TO service_role.',
 		);
 	}
+	// A key that isn't a token at all lands here as PGRST301, which reads as a
+	// signing mismatch. The credentials check above has already said what is
+	// really wrong, so defer to it rather than offering a second, wronger answer.
+	if (/number of parts|CompactDecodeError|malformed/i.test(message)) {
+		return failed(
+			'schema',
+			`PostgREST could not parse the service-role key as a token (HTTP ${response.status} ${code}: ${message})`,
+			'See the credentials check above — the value is not a JWT, so its signature never came into it.',
+		);
+	}
 	if (response.status === 401 || response.status === 403) {
 		return failed(
 			'schema',
@@ -181,6 +246,15 @@ async function checkIdentityAdmin(env, base) {
 		return ok('identity-admin', 'the admin API accepts the service-role key');
 	}
 	const { code, message } = await upstreamError(response);
+	// Same trap as the schema check: an unparseable token comes back as a 403,
+	// which reads as "this role may not call /admin". It is not a role problem.
+	if (/invalid number of segments|malformed|unable to parse/i.test(message)) {
+		return failed(
+			'identity-admin',
+			`the auth service could not parse the service-role key as a token (HTTP ${response.status}: ${message})`,
+			'See the credentials check above — the value is not a JWT, so no role was ever read from it.',
+		);
+	}
 	if (response.status === 401 || response.status === 403) {
 		return failed(
 			'identity-admin',
@@ -262,16 +336,19 @@ async function checkKeyValue(env) {
  * @returns {Promise<{ ok: boolean, checks: Check[] }>}
  */
 export async function runDiagnostics(env) {
-	const checks = [checkConfiguration(env)];
+	const configuration = checkConfiguration(env);
+	const checks = [configuration];
+	// Only worth asking about the key's shape once we know there is one.
+	if (configuration.state === 'ok') checks.push(checkCredentials(env));
 
-	if (checks[0].state === 'ok') {
+	if (configuration.state === 'ok') {
 		const base = supabaseBase(env);
 		checks.push(await checkDatabase(env, base));
 		checks.push(await checkSchema(env, base));
 		checks.push(await checkIdentity(env, base));
 		checks.push(await checkIdentityAdmin(env, base));
 	} else {
-		for (const name of ['database', 'schema', 'identity', 'identity-admin']) {
+		for (const name of ['credentials', 'database', 'schema', 'identity', 'identity-admin']) {
 			checks.push(skipped(name, 'no database or identity credentials to check with'));
 		}
 	}

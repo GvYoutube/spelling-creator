@@ -18,6 +18,18 @@ const BASE = 'https://db.test';
 
 const json = (body, status = 200) => new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } });
 
+/** base64url, for building the fixture tokens below. */
+const b64u = (o) => btoa(JSON.stringify(o)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+
+/**
+ * A structurally valid JWT with the given claims. The signature is not real —
+ * nothing here verifies one, and the checks under test deliberately only read
+ * the token's shape, because the secret belongs to PostgREST and GoTrue.
+ */
+const jwt = (claims) => `${b64u({ alg: 'HS256', typ: 'JWT' })}.${b64u(claims)}.not-a-real-signature`;
+
+const SERVICE_ROLE_KEY = jwt({ role: 'service_role', iss: 'supabase' });
+
 /** A blob store that answers list() however the test says. */
 function blobStore(onList) {
 	return {
@@ -46,7 +58,7 @@ function kvStore() {
 function envWith(routes, platformOverrides = {}) {
 	const env = {
 		SUPABASE_URL: BASE,
-		SUPABASE_SERVICE_ROLE_KEY: 'service-role-key',
+		SUPABASE_SERVICE_ROLE_KEY: SERVICE_ROLE_KEY,
 		PLATFORM: {
 			images: blobStore(async () => ({ objects: [], cursor: '', truncated: false })),
 			lessonGit: blobStore(async () => ({ objects: [], cursor: '', truncated: false })),
@@ -94,6 +106,7 @@ describe('runDiagnostics — everything working', () => {
 			expect(result.ok).toBe(true);
 			expect(result.checks.map((c) => c.name)).toEqual([
 				'configuration',
+				'credentials',
 				'database',
 				'schema',
 				'identity',
@@ -125,6 +138,64 @@ describe('runDiagnostics — the failures that actually happened', () => {
 			// The upstream's own code, because that is the searchable string.
 			expect(schema.detail).toContain('PGRST205');
 			expect(schema.fix).toMatch(/schema\.sql was never applied|stale cache/);
+		});
+	});
+
+	it('catches a service-role key that is not a token at all', async () => {
+		// The real one: .env still held the placeholder from .env.example, so both
+		// upstreams answered with errors about signatures and roles, and neither
+		// said the plain truth — that the value has no dots in it.
+		await withFetch(async () => {
+			const env = envWith({
+				...HEALTHY_ROUTES,
+				'/rest/v1/lessons': json(
+					{ code: 'PGRST301', message: 'JWSError (CompactDecodeError Invalid number of parts: Expected 3 parts; got 1)' },
+					401,
+				),
+				'/auth/v1/admin/users': json({ msg: 'invalid JWT: unable to parse or verify signature, token is malformed' }, 403),
+			});
+			env.SUPABASE_SERVICE_ROLE_KEY = 'replace-with-a-jwt-whose-role-claim-is-service_role';
+			const result = await runDiagnostics(env);
+
+			const credentials = find(result, 'credentials');
+			expect(credentials.state).toBe('failed');
+			expect(credentials.detail).toContain('has 1 part where a token has 3');
+
+			// And the two downstream checks defer rather than each offering their own
+			// wrong remedy — a signing mismatch and a missing admin role.
+			expect(find(result, 'schema').fix).toContain('credentials check above');
+			expect(find(result, 'identity-admin').fix).toContain('credentials check above');
+			expect(find(result, 'identity-admin').fix).not.toContain('GOTRUE_JWT_ADMIN_ROLES');
+		});
+	});
+
+	it('catches the anon key used where the service-role key belongs', async () => {
+		await withFetch(async () => {
+			const b = (o) => btoa(JSON.stringify(o)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+			const env = envWith(HEALTHY_ROUTES);
+			env.SUPABASE_SERVICE_ROLE_KEY = `${b({ alg: 'HS256' })}.${b({ role: 'anon' })}.sig`;
+			const credentials = find(await runDiagnostics(env), 'credentials');
+			expect(credentials.state).toBe('failed');
+			expect(credentials.detail).toContain('"anon"');
+			expect(credentials.fix).toContain('not interchangeable');
+		});
+	});
+
+	it('accepts a well-formed service-role key', async () => {
+		await withFetch(async () => {
+			const b = (o) => btoa(JSON.stringify(o)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+			const env = envWith(HEALTHY_ROUTES);
+			env.SUPABASE_SERVICE_ROLE_KEY = `${b({ alg: 'HS256' })}.${b({ role: 'service_role' })}.sig`;
+			expect(find(await runDiagnostics(env), 'credentials').state).toBe('ok');
+		});
+	});
+
+	it('never puts the key itself in a credentials result', async () => {
+		await withFetch(async () => {
+			const env = envWith(HEALTHY_ROUTES);
+			env.SUPABASE_SERVICE_ROLE_KEY = 'not-a-token-but-secret-looking';
+			const result = await runDiagnostics(env);
+			expect(JSON.stringify(result)).not.toContain('not-a-token-but-secret-looking');
 		});
 	});
 
@@ -248,7 +319,7 @@ describe('runDiagnostics — the failures that actually happened', () => {
 	it('never puts a credential in a result', async () => {
 		await withFetch(async () => {
 			const result = await runDiagnostics(envWith({ ...HEALTHY_ROUTES, '/rest/v1/lessons': json({ message: 'nope' }, 401) }));
-			expect(JSON.stringify(result)).not.toContain('service-role-key');
+			expect(JSON.stringify(result)).not.toContain(SERVICE_ROLE_KEY);
 		});
 	});
 });
