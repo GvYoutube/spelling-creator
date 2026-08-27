@@ -6,6 +6,12 @@ import { supabaseHeaders, getAuthUserById, findAuthUserByEmail } from '../lib/su
 import { getUserRole, isModeratorRole, verifyUserAndRole } from '../lib/auth.js';
 import { rowToLesson, fullyDeleteLesson } from '../lib/lesson.js';
 import { textResponse, jsonResponse } from '../lib/http.js';
+import { DEFAULT_USERNAME_DOMAIN, identifierToEmail } from '@spelling-creator/core/username';
+
+// Matched to PASSWORD_MIN_LENGTH in @spelling-creator/core/config and to
+// GOTRUE_PASSWORD_MIN_LENGTH, so a password an admin sets here is one the owner
+// could have set themselves.
+const PASSWORD_MIN_LENGTH = 8;
 
 /**
  * Moderation endpoints — the privileged layer on top of the lesson hub. Every
@@ -30,6 +36,7 @@ import { textResponse, jsonResponse } from '../lib/http.js';
  *   GET    /mod/moderators                        admin  list moderators
  *   POST   /mod/moderators                        admin  { email } add a moderator
  *   DELETE /mod/moderators/:userId                admin  remove a moderator
+ *   POST   /mod/password                          admin  { identifier, password } set a password
  *
  * Named "/mod", not "/moderation", so it can't collide with the SPA's own
  * "/moderation" page route — see the registration comment in index.js.
@@ -380,6 +387,64 @@ export async function handleModeration(request, env, url, cors) {
 			return textResponse('Could not reach the store.', 502, cors);
 		}
 		return jsonResponse({ moderator: { userId: target.id, email: target.email } }, 201, cors);
+	}
+
+	// POST /mod/password — admin sets a user's password.
+	//
+	// The recovery path for an instance with no mail server. Sign-in there is by
+	// username and password (see /monorepo/self-hosting), and resetting a password
+	// the ordinary way means emailing a link — so without this, a forgotten
+	// password on such an instance is unrecoverable short of the database.
+	//
+	// Admin-only, never moderator: setting somebody's password is taking their
+	// account, which is a different kind of power from hiding a lesson.
+	if (method === 'POST' && seg.length === 1 && seg[0] === 'password') {
+		const denied = denyAdmin();
+		if (denied) return denied;
+
+		const body = await readJson();
+		const identifier = body && typeof body.identifier === 'string' ? body.identifier.trim() : '';
+		const password = body && typeof body.password === 'string' ? body.password : '';
+		if (!identifier) return textResponse('Provide a username or email.', 400, cors);
+		if (password.length < PASSWORD_MIN_LENGTH) {
+			return textResponse(`Passwords must be at least ${PASSWORD_MIN_LENGTH} characters.`, 400, cors);
+		}
+
+		// A username is an address under the instance's username domain, so both
+		// spellings resolve to the same lookup — an admin can type whichever they
+		// know the person by.
+		const resolved = identifierToEmail(identifier, env.USERNAME_DOMAIN || DEFAULT_USERNAME_DOMAIN);
+		if (!resolved) return textResponse('That is not a valid username or email.', 400, cors);
+
+		const target = await findAuthUserByEmail(env, resolved.email);
+		if (!target) return textResponse('No account with that username or email was found.', 404, cors);
+
+		// An admin may reset their own password, and anyone below them. They may
+		// not reset another admin's: admins are peers, and taking a peer's account
+		// is an escalation the tier was never meant to allow. The last admin
+		// locking themselves out is a database problem, and is documented as one.
+		if (target.id !== user.id) {
+			const targetRole = await getUserRole(env, base, target.id);
+			if (targetRole === 'admin') return textResponse('That user is an admin. Admins cannot reset each other’s passwords.', 409, cors);
+		}
+
+		let res;
+		try {
+			res = await fetch(`${base}/auth/v1/admin/users/${encodeURIComponent(target.id)}`, {
+				method: 'PUT',
+				headers: { ...supabaseHeaders(env), 'Content-Type': 'application/json' },
+				body: JSON.stringify({ password }),
+			});
+		} catch (e) {
+			return textResponse('Could not reach the identity service.', 502, cors);
+		}
+		if (!res.ok) return textResponse('Could not set the password.', 502, cors);
+
+		// There is no audit table, and this is the one moderation action that hands
+		// somebody another person's account — so it at least leaves a trace in the
+		// server log. Identities only; no password, and no token.
+		console.log(`admin ${user.id} reset the password of ${target.id}`);
+		return jsonResponse({ ok: true, userId: target.id }, 200, cors);
 	}
 
 	// DELETE /mod/moderators/:userId — admin revokes moderator. Filtered to

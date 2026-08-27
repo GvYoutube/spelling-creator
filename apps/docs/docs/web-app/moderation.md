@@ -71,16 +71,40 @@ That column is **only ever surfaced to mods/admins**, never in public responses.
 All require a `Bearer <Supabase JWT>` and the appropriate role; the frontend
 wrapper is `@spelling-creator/core/moderation`.
 
-| Method & path                              | Role  | What it does                                 |
-| ------------------------------------------ | ----- | -------------------------------------------- |
-| `GET /mod/whoami`                          | any   | The caller's capabilities (mod/admin flags). |
-| `DELETE /mod/comments/:id`                 | mod   | Delete any comment.                          |
-| `POST /mod/lessons/:id/shadowban`          | mod   | Hide/unhide a lesson from the public hub.    |
-| `GET /mod/lessons/shadowbanned`            | mod   | List shadowbanned lessons.                   |
-| `POST /mod/lessons/:id/delete-request`     | mod   | File a request to fully delete a lesson.     |
-| `GET /mod/delete-requests`                 | admin | List pending deletion requests.              |
-| `POST /mod/delete-requests/:id/approve`    | admin | Approve (and delete) a request.              |
-| `DELETE /mod/lessons/:id`                  | admin | Fully delete a lesson.                       |
-| `GET` / `POST` / `DELETE /mod/bans/name…`  | mod   | List / add / remove name bans.               |
-| `GET` / `POST` / `DELETE /mod/bans/ip…`    | admin | List / add / remove IP bans.                 |
-| `GET` / `POST` / `DELETE /mod/moderators…` | admin | List / add / remove moderators.              |
+| Method & path                              | Role  | What it does                                  |
+| ------------------------------------------ | ----- | --------------------------------------------- |
+| `GET /mod/whoami`                          | any   | The caller's capabilities (mod/admin flags).  |
+| `DELETE /mod/comments/:id`                 | mod   | Delete any comment.                           |
+| `POST /mod/lessons/:id/shadowban`          | mod   | Hide/unhide a lesson from the public hub.     |
+| `GET /mod/lessons/shadowbanned`            | mod   | List shadowbanned lessons.                    |
+| `POST /mod/lessons/:id/delete-request`     | mod   | File a request to fully delete a lesson.      |
+| `GET /mod/delete-requests`                 | admin | List pending deletion requests.               |
+| `POST /mod/delete-requests/:id/approve`    | admin | Approve (and delete) a request.               |
+| `DELETE /mod/lessons/:id`                  | admin | Fully delete a lesson.                        |
+| `GET` / `POST` / `DELETE /mod/bans/name…`  | mod   | List / add / remove name bans.                |
+| `GET` / `POST` / `DELETE /mod/bans/ip…`    | admin | List / add / remove IP bans.                  |
+| `GET` / `POST` / `DELETE /mod/moderators…` | admin | List / add / remove moderators.               |
+| `POST /mod/password`                       | admin | Set a user's password (self-hosted recovery). |
+
+## Setting a password
+
+An instance that signs people in with a username and has no mail server has
+nowhere to send a reset link, so a forgotten password would otherwise be
+unrecoverable short of the database. An admin can set one from this page —
+identifying the person by username or by email, whichever they are known by.
+
+It is **admin-only, never moderator**. Setting somebody's password is taking
+their account, which is a different kind of power from hiding a lesson. An admin
+may reset their own and anybody below them, but not another admin's: admins are
+peers, and taking a peer's account is an escalation the tier was never meant to
+allow. The section only appears at all on an instance that uses passwords —
+there is nothing to set on a magic-link one.
+
+There is no audit table, so the action leaves a line in the server log naming
+who reset whom. It records identities only, never the password.
+
+Two limits worth knowing. The last admin locking themselves out is a database
+problem, not an in-app one. And the reset changes the password without
+necessarily ending sessions already open elsewhere, so treat it as recovery from
+forgetfulness rather than as containment of a compromised account. See
+[Self-hosting](../monorepo/self-hosting.md).

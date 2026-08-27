@@ -274,9 +274,19 @@ deliberately rather than discovering:
   That means anyone can register with an address they don't own. An instance
   open to the internet with no SMTP should also set `GOTRUE_DISABLE_SIGNUP=true`
   and create accounts by hand.
-- **There is no password reset.** Resetting one means emailing a link. Without
-  mail, a forgotten password is an admin job — GoTrue's admin API, or a row in
-  `auth.users`.
+- **There is no self-service password reset.** Resetting one the ordinary way
+  means emailing a link. Instead, an admin sets the password from the
+  **moderation page** (`POST /mod/password`, taking a username or an email).
+  Admin-only, never moderator: setting somebody's password is taking their
+  account, which is a different kind of power from hiding a lesson. An admin may
+  reset their own and anybody below them, but not another admin's — admins are
+  peers, and taking a peer's account is an escalation the tier was never meant to
+  allow.
+
+  Two things follow. The last admin locking themselves out is a database problem,
+  not an in-app one. And the reset changes the password without necessarily
+  ending sessions already open elsewhere, so treat it as recovery from
+  forgetfulness rather than as containment of a compromised account.
 
 With SMTP configured, set `AUTH_AUTOCONFIRM=false` so addresses get verified
 properly.

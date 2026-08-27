@@ -82,5 +82,16 @@
       "removed": "Moderator removed.",
       "removeFailed": "Could not remove the moderator."
     }
+  },
+  "password": {
+    "title": "Set a password",
+    "description": "For an instance with no mail server, this is how a forgotten password is recovered — there is nowhere to send a reset link. The person should change it afterwards. Minimum {{count}} characters.",
+    "identifierLabel": "Username or email",
+    "passwordLabel": "New password",
+    "submit": "Set password",
+    "toasts": {
+      "set": "Password set for {{identifier}}.",
+      "failed": "Could not set the password."
+    }
   }
 }

@@ -190,6 +190,21 @@ export function addModerator(email, accessToken) {
   });
 }
 
+/**
+ * Set another user's password, as an admin.
+ *
+ * The recovery path for an instance that signs people in with a username and has
+ * no mail server to send a reset link through. `identifier` is a username or an
+ * email — whichever the admin knows the person by.
+ */
+export function setUserPassword(identifier, password, accessToken) {
+  return request("/password", {
+    method: "POST",
+    accessToken,
+    body: { identifier, password },
+  });
+}
+
 export function removeModerator(userId, accessToken) {
   return request(`/moderators/${encodeURIComponent(userId)}`, {
     method: "DELETE",
