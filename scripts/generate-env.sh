@@ -56,8 +56,11 @@ if ! command -v openssl >/dev/null 2>&1; then
 		openssl is required and was not found.
 
 		If you would rather not install it, any container with it will do:
-		  docker run --rm -v "$PWD:/w" -w /w alpine/openssl:latest \
-		    sh scripts/generate-env.sh
+		  docker run --rm -v "$PWD:/w" -w /w --entrypoint sh \
+		    alpine/openssl:latest scripts/generate-env.sh
+
+		(--entrypoint sh matters: that image's entrypoint is openssl, so
+		without it Docker runs "openssl sh scripts/generate-env.sh".)
 	MISSING
 	exit 1
 fi
@@ -179,6 +182,9 @@ if [ "$REWRITING" -eq 1 ]; then
 else
 	printf 'Still to fill in by hand:\n'
 	printf '  PUBLIC_URL / PUBLIC_HOSTNAME  where this instance is reachable from a browser\n'
-	printf '  SMTP_*                        sign-in is by magic link, so nobody can log in without it\n'
+	printf '\nSign-in is by username and password (AUTH_MODE=password), so no mail server is\n'
+	printf 'needed. Fill in SMTP_* only for AUTH_MODE=magic-link or both, or to let people\n'
+	printf 'reset their own passwords by email — otherwise an admin does that from the\n'
+	printf 'moderation page.\n'
 fi
 printf '\nPUBLIC_URL is baked into the SPA at build time, so set it before `docker compose up -d --build`.\n'

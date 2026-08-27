@@ -102,6 +102,16 @@ function coreConfig(env, url) {
 		supabaseAnonKey: env.SUPABASE_ANON_KEY,
 		googleClientId: '',
 		turnstileSiteKey: '',
+		// The two settings a self-hosted instance changes about sign-in. Nothing
+		// rendered here reads them today — the login page is not one of the public
+		// read routes, and a server render is always signed out — but the SPA is
+		// configured with them and this is the same core module, so leaving them
+		// out would mean the server quietly holding a different configuration from
+		// the client it hydrates into. `configureCore` merges, so an unset value
+		// here would also persist between requests. Both default the same way core
+		// does when the host doesn't set them.
+		authMode: env.AUTH_MODE || 'magic-link',
+		usernameDomain: env.USERNAME_DOMAIN || '',
 	};
 }
 

@@ -52,8 +52,20 @@ services:
       S3_BUCKET_IMAGES: lesson-images
       S3_BUCKET_GIT: lesson-git
       # Must match whatever the store signs against — SigV4 includes the region,
-      # so a mismatch is a 403 that looks like bad credentials.
-      S3_REGION: us-east-1
+      # so a mismatch is a 403 that looks like bad credentials. The default suits
+      # RustFS, MinIO and Garage, which don't care; point this at a real S3
+      # region if you swap the storage service for one that does, and note that
+      # storage-init below reads the same variable.
+      S3_REGION: ${S3_REGION:-us-east-1}
+
+      # The sign-in settings, which the SPA bakes in at build time above and the
+      # server needs at runtime too — the same values, from the same variables,
+      # so the two halves cannot disagree. USERNAME_DOMAIN is the load-bearing
+      # one: POST /mod/password resolves the username an admin types into the
+      # address the identity service knows, and a server still on the default
+      # domain answers "no account with that username" for every reset.
+      AUTH_MODE: ${AUTH_MODE:-password}
+      USERNAME_DOMAIN: ${USERNAME_DOMAIN:-}
 
       ALLOWED_HOSTNAMES: ${PUBLIC_HOSTNAME:?missing, see .env.example}
       # One proxy (the gateway) sits in front of this process, so the client IP
@@ -256,12 +268,12 @@ services:
       GOTRUE_JWT_ADMIN_ROLES: service_role
       GOTRUE_DISABLE_SIGNUP: "false"
       GOTRUE_EXTERNAL_EMAIL_ENABLED: "true"
-      # Sign-in is by magic link, so mail delivery is not optional — without a
-      # working SMTP host nobody can create an account. Point it at whatever you
-      # already use; a local MailHog is fine for trying this out.
-      # Blank-by-default rather than required, unlike the credentials above: the
-      # stack should come up so you can look at it, and only sign-in is broken
-      # until these are filled in.
+      # Optional, and blank by default, because AUTH_MODE above defaults to
+      # password: this stack signs people in without sending anything. Fill these
+      # in for AUTH_MODE=magic-link or both, or to let people reset their own
+      # passwords by email — with no mail server that recovery is an admin's job
+      # instead, through POST /mod/password. Any provider will do; a local
+      # MailHog is fine for trying this out.
       GOTRUE_SMTP_HOST: ${SMTP_HOST:-}
       GOTRUE_SMTP_PORT: ${SMTP_PORT:-587}
       GOTRUE_SMTP_USER: ${SMTP_USER:-}
@@ -322,7 +334,10 @@ services:
     environment:
       AWS_ACCESS_KEY_ID: ${S3_ACCESS_KEY:?missing, see .env.example}
       AWS_SECRET_ACCESS_KEY: ${S3_SECRET_KEY:?missing, see .env.example}
-      AWS_DEFAULT_REGION: us-east-1
+      # The same region the app signs with. Creating the buckets in one region
+      # and addressing them in another is a 403 at the first upload, long after
+      # this container has exited saying everything was fine.
+      AWS_DEFAULT_REGION: ${S3_REGION:-us-east-1}
       S3_ENDPOINT: http://storage:9000
     entrypoint:
       - /bin/sh

@@ -32,7 +32,7 @@ rather than its implementation to keep that swap a one-line edit.
 
 ```bash
 ./scripts/generate-env.sh   # writes .env with every credential filled in
-# then set PUBLIC_URL / PUBLIC_HOSTNAME and the SMTP block in .env
+# then set PUBLIC_URL / PUBLIC_HOSTNAME in .env
 docker compose up -d --build
 ```
 
@@ -42,8 +42,12 @@ produce a config file would be a silly thing to ask. If `openssl` somehow isn't
 there, any container has it:
 
 ```bash
-docker run --rm -v "$PWD:/w" -w /w alpine/openssl:latest sh scripts/generate-env.sh
+docker run --rm -v "$PWD:/w" -w /w --entrypoint sh alpine/openssl:latest scripts/generate-env.sh
 ```
+
+`--entrypoint sh` is not optional: that image's entrypoint is `openssl` itself,
+so without it Docker runs `openssl sh scripts/generate-env.sh` and the script
+never executes.
 
 Use the generator rather than copying `.env.example` by hand. `ANON_KEY` and
 `SERVICE_ROLE_KEY` are JWTs that must be signed with the same `JWT_SECRET`
@@ -76,8 +80,9 @@ re-read. If you ever suspect it has gone stale anyway,
 Filling in `.env` is not optional. Every credential is declared as a required
 variable, so `docker compose up` without a filled-in `.env` stops and names what
 is missing rather than standing the stack up with blank passwords. The SMTP
-settings are the exception and default to empty: the stack comes up so you can
-look at it, and only sign-in is broken until you fill them in.
+settings are the exception and default to empty, because the default
+`AUTH_MODE=password` needs no mail at all — see [Sign-in](#sign-in) for what is
+missing without them.
 
 Two things about it are worth understanding before adapting it.
 
@@ -113,6 +118,7 @@ started listening, and prints the answer:
 ```
 Dependency check:
   [ok  ] configuration: database and identity credentials are set
+  [ok  ] cross-origin: requests are accepted from spelling.example.com
   [ok  ] database: PostgREST answered (HTTP 200)
   [FAIL] schema: PostgREST cannot see public.lessons (HTTP 404 PGRST205: Could
          not find the table 'public.lessons' in the schema cache)
@@ -223,6 +229,7 @@ is arranged, so moving between hosts is a copy rather than a rename.
 | `ALLOWED_HOSTNAMES`   | —                 | Comma-separated origins allowed to call the API. |
 | `CLIENT_IP_HEADER`    | `x-forwarded-for` |                                                  |
 | `TRUSTED_PROXY_COUNT` | `1`               | How many proxies sit in front of this process.   |
+| `USERNAME_DOMAIN`     | RFC 2606 default  | Must match the SPA's `VITE_USERNAME_DOMAIN`.     |
 
 `TRUSTED_PROXY_COUNT` is worth getting right. `x-forwarded-for` is a list that
 each hop appends to, and the _client_ controls what is at the front — so the
@@ -230,6 +237,13 @@ trustworthy entry is the one your nearest proxy added, counted from the right.
 The IP is what bans and rate limits are keyed on, so reading the leftmost entry
 (the usual mistake) would let any caller forge both. With one reverse proxy the
 default is correct; behind a CDN _and_ a proxy, set it to 2.
+
+Set it to `0` if this process is exposed directly, with nothing in front of it.
+Then no hop wrote the header, so nothing in it is believed and requests are
+treated as having no IP: IP bans stop matching, and the AI rate limiter keys
+everyone to one shared bucket. That is worse than having a proxy, and much
+better than the alternative — a directly-exposed process that trusts the header
+lets a banned visitor choose the address their ban is keyed on.
 
 ### Sign-in
 
@@ -252,7 +266,10 @@ whether the value contains an `@` rather than by a toggle to find.
 Under the hood a username is given to the identity service as an address under
 `USERNAME_DOMAIN` — it authenticates by address and has no notion of a username.
 The default domain is reserved by RFC 2606 so it can never resolve, and nothing
-is ever sent there. Two things follow for free: usernames are unique, because the
+is ever sent there. If you change it, set it in **both** places: the SPA bakes it
+in at build time as `VITE_USERNAME_DOMAIN`, and the server reads it at runtime to
+resolve the username an admin types into `POST /mod/password`. The two disagreeing
+is a password reset that answers "no account with that username". Two things follow for free: usernames are unique, because the
 service will not register the same address twice; and signing in needs no lookup,
 so no public endpoint has to answer "which email belongs to this username?".
 
