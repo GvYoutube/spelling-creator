@@ -174,6 +174,32 @@ test("a host that renders the picker is told to leave the choosing alone", async
   assert.equal(res.structuredContent.images[0].ref, "File:Red fox.jpg");
 });
 
+// A half-declared capability takes the text path, because the two ways of
+// guessing wrong don't cost the same. Told to wait by a host that draws no
+// picker, the assistant ends its turn on a click that can never come and the
+// conversation dies silently; told to choose by a host that does draw one, it
+// picks over the user — the old bug, and one sentence to undo.
+for (const [what, ui] of [
+  ["names no mime types", {}],
+  ["names only other mime types", { mimeTypes: ["text/html"] }],
+]) {
+  test(`a host that ${what} is treated as text-only`, async () => {
+    const res = await withCommons(COMMONS_RESPONSE, async () => {
+      const client = await connected(
+        {},
+        { extensions: { "io.modelcontextprotocol/ui": ui } },
+      );
+      return client.callTool({
+        name: "search_images",
+        arguments: { query: "red fox" },
+      });
+    });
+
+    assert.match(res.structuredContent.note, /Choose the best `ref`/);
+    assert.doesNotMatch(res.content[0].text, /STOP HERE/);
+  });
+}
+
 test("a search with no hits still satisfies the tool's output schema", async () => {
   const res = await withCommons({ query: { pages: {} } }, async () => {
     const client = await connected();

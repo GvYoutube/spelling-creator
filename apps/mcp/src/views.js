@@ -67,8 +67,15 @@ export async function appDomain(mcpUrl) {
  * user is too late to want. The rendered path has to be told to stop instead.
  *
  * Only known once the client has initialised, and only as truthfully as the
- * client declares it, so this is best-effort: unknown means the text path, which
- * is the one that works everywhere.
+ * client declares it — so when the answer is less than certain, it is `false`.
+ * The two ways of being wrong cost very different things. Saying "text" to a
+ * host that does render leaves the old bug: the assistant picks an image over
+ * the user's picker, which is rude but recoverable in one sentence — "no, use
+ * the other one". Saying "renders" to a host that doesn't ends the assistant's
+ * turn to wait for a click on a picker that was never drawn, and nothing will
+ * ever arrive: the conversation simply stops, with no clue why. A stall beats
+ * nothing else here, so anything short of the host plainly saying it renders
+ * this mime type takes the text path.
  *
  * @param {import('@modelcontextprotocol/sdk/server/mcp.js').McpServer} server
  * @returns {boolean}
@@ -76,13 +83,10 @@ export async function appDomain(mcpUrl) {
 export function rendersViews(server) {
   try {
     const ui = getUiCapability(server.server.getClientCapabilities());
-    if (!ui) return false;
-    // The spec has hosts list the mime types they render. Treat a host that
-    // negotiated the extension without saying as one that renders ours: it
-    // declared support, and the fallback is to talk over its picker.
-    return (
-      !Array.isArray(ui.mimeTypes) || ui.mimeTypes.includes(RESOURCE_MIME_TYPE)
-    );
+    // Both halves are required, and `mimeTypes` is not a formality: the spec has
+    // a host name the types it renders, and a host that named none has not said
+    // it can render ours. Guessing wrong is not symmetric — see above.
+    return Boolean(ui?.mimeTypes?.includes(RESOURCE_MIME_TYPE));
   } catch {
     return false;
   }

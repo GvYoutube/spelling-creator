@@ -96,21 +96,29 @@ So the tool asks who is looking, through `rendersViews()` in `src/views.js`:
 
 ```js
 const ui = getUiCapability(server.server.getClientCapabilities());
+return Boolean(ui?.mimeTypes?.includes(RESOURCE_MIME_TYPE));
 ```
 
 That reads the `io.modelcontextprotocol/ui` entry the host declared at initialisation —
-the same negotiation that decides whether the view is fetched at all — and when it's
-there, `search_images` leads its result with an instruction to stop: end the turn, add
-nothing, wait to be told what the user clicked. The candidates still follow, in the text
-block and in `structuredContent` alike, so the model can still answer "the fox one, please"
-without searching again. Only the instruction changes.
+the same negotiation that decides whether the view is fetched at all — and when the host
+named the mime type the views are served under, `search_images` leads its result with an
+instruction to stop: end the turn, add nothing, wait to be told what the user clicked. The
+candidates still follow, in the text block and in `structuredContent` alike, so the model
+can still answer "the fox one, please" without searching again. Only the instruction
+changes.
 
-Two things about the shape of that, both learned the hard way:
+Three things about the shape of that, all learned the hard way:
 
 - **The instruction goes first, as its own content block.** A rule appended to a JSON blob
   is a rule read after the model has already met the list and decided what to do with it.
 - **It has to be blunt.** "The user may pick one" reads as permission to pick first. What
   works is naming the stop and the reason: they can see the pictures, you cannot.
+- **An uncertain answer is `false`.** Both halves of that check are required — a host that
+  declared the extension but named no mime types takes the text path. The two ways of
+  guessing wrong are not equally bad. Saying "text" to a host that renders leaves the old
+  behaviour: the assistant picks over the user, rude but undone in one sentence. Saying
+  "renders" to a host that doesn't ends the turn waiting for a click on a picker nobody
+  drew, and nothing will ever arrive — the conversation just stops, with no clue why.
 
 The same applies to any future view: what the model is told has to match what the user can
 already see, or the two race. Registration stays unconditional — the branch belongs in the
