@@ -15,6 +15,8 @@
 // test can pass whatever it likes. The reader functions resolve lazily, so import
 // order doesn't matter — only that configureCore runs before the first *call*.
 
+import { DEFAULT_USERNAME_DOMAIN } from "./username.js";
+
 const config = {
   apiUrl: "",
   supabaseUrl: "",
@@ -22,6 +24,7 @@ const config = {
   googleClientId: "",
   turnstileSiteKey: "",
   authMode: "magic-link",
+  usernameDomain: "",
 };
 
 /**
@@ -149,3 +152,17 @@ export function hasMagicLinkAuth() {
  * somebody is told before they submit, not instead of the server's.
  */
 export const PASSWORD_MIN_LENGTH = 8;
+
+/**
+ * The domain usernames are turned into addresses under.
+ *
+ * See @spelling-creator/core/username for why there is one at all. An instance
+ * only needs to set this if the default collides with something it actually
+ * sends mail to, which — the default being a reserved `.invalid` domain — it
+ * cannot.
+ *
+ * @returns {string}
+ */
+export function usernameDomain() {
+  return (config.usernameDomain || "").trim() || DEFAULT_USERNAME_DOMAIN;
+}

@@ -6,12 +6,18 @@
 // exchanges the callback `?code=` for a session. That is the nicer experience
 // and stays the default.
 //
-// It is also the one that cannot work without a mail server, which a
-// self-hosted instance frequently has not got — so an instance can offer email
-// and password instead, or as well. When both are available this page leads with
-// the password form and keeps the link as a second option, because an instance
-// that went to the trouble of enabling passwords generally means people to use
-// them.
+// It is also the one that cannot work without a mail server, which a self-hosted
+// instance frequently has not got — so an instance can offer a username and
+// password instead, or as well. Passwords are username-based rather than
+// email-based for the same reason: requiring an address from somebody who will
+// never be sent anything is asking for a detail nobody needs. See
+// @spelling-creator/core/username for how a username reaches an identity service
+// that only understands addresses.
+//
+// One field takes the identifier, and what it accepts follows the mode: an
+// address for a magic link, a new username when registering, and — when the
+// instance has mail too — either when signing in, decided by whether the value
+// contains an `@` rather than by a toggle somebody has to find.
 //
 // Already-signed-in users see their account and a way back to the editor; this
 // page never blocks the rest of the app, which works fine while signed out
@@ -21,7 +27,16 @@ import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Trans, useTranslation } from "react-i18next";
 import { MailCheckIcon } from "lucide-react";
-import { PASSWORD_MIN_LENGTH } from "@spelling-creator/core/config";
+import {
+  PASSWORD_MIN_LENGTH,
+  usernameDomain,
+} from "@spelling-creator/core/config";
+import {
+  identifierToEmail,
+  isUsername,
+  USERNAME_MAX_LENGTH,
+  USERNAME_MIN_LENGTH,
+} from "@spelling-creator/core/username";
 import PageBar from "../components/layout/PageBar.jsx";
 import PageBody from "../components/layout/PageBody.jsx";
 import { Button } from "../components/ui/button.jsx";
@@ -41,11 +56,12 @@ export default function LoginPage() {
     user,
     displayName,
     loading,
+    username,
     passwordAuth,
     magicLinkAuth,
     signInWithMagicLink,
     signInWithPassword,
-    signUpWithPassword,
+    signUpWithUsername,
     signOut,
   } = useAuth();
   const navigate = useNavigate();
@@ -53,24 +69,52 @@ export default function LoginPage() {
   // 'password' | 'register' | 'magic-link'. Starts on whichever this instance
   // leads with, and the toggles below only exist when there is a choice.
   const [mode, setMode] = useState(passwordAuth ? "password" : "magic-link");
-  const [email, setEmail] = useState("");
+  // One field for whatever identifies the account: an email address for a magic
+  // link, and for a password either a username or an address — decided by the
+  // value, not by a toggle the person has to find.
+  const [identifier, setIdentifier] = useState("");
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
   const [sent, setSent] = useState(false);
   const [confirm, setConfirm] = useState(false);
   const [error, setError] = useState("");
 
+  const registering = mode === "register";
+
   const switchTo = (next) => {
     setMode(next);
     setError("");
     setPassword("");
+    // A username carried into a field now labelled "Email address" reads as a
+    // mistake the person made. An address survives the trip in either
+    // direction, because both modes accept one.
+    if (next === "magic-link" && !EMAIL_RE.test(identifier.trim())) {
+      setIdentifier("");
+    }
   };
 
   const submit = async (e) => {
     e.preventDefault();
     setError("");
-    if (!EMAIL_RE.test(email.trim())) {
+    const value = identifier.trim();
+
+    // A magic link can only go to a real address; registration always creates a
+    // username; signing in takes either.
+    if (mode === "magic-link" && !EMAIL_RE.test(value)) {
       setError(t("errors.invalidEmail"));
+      return;
+    }
+    if (registering && !isUsername(value)) {
+      setError(
+        t("errors.invalidUsername", {
+          min: USERNAME_MIN_LENGTH,
+          max: USERNAME_MAX_LENGTH,
+        }),
+      );
+      return;
+    }
+    if (mode === "password" && !identifierToEmail(value, usernameDomain())) {
+      setError(t("errors.invalidIdentifier"));
       return;
     }
     // Checked here so somebody is told before they submit, not instead of the
@@ -82,27 +126,31 @@ export default function LoginPage() {
     setBusy(true);
     try {
       if (mode === "magic-link") {
-        await signInWithMagicLink(email.trim());
+        await signInWithMagicLink(value);
         setSent(true);
       } else if (mode === "password") {
-        await signInWithPassword(email.trim(), password);
+        await signInWithPassword(value, password);
       } else {
-        const { needsConfirmation } = await signUpWithPassword(
-          email.trim(),
-          password,
-        );
+        const { needsConfirmation } = await signUpWithUsername(value, password);
         // An instance with mail wants the address confirmed first; one without
         // signs the new account straight in, and the auth listener takes over.
         if (needsConfirmation) setConfirm(true);
       }
     } catch (err) {
-      setError(err.message || t(`errors.${mode}Failed`));
+      // The identity service knows only about addresses, so a taken username
+      // comes back as a taken user. Say what the person actually did.
+      const taken = /already registered|already exists|User already/i.test(
+        err?.message || "",
+      );
+      setError(
+        registering && taken
+          ? t("errors.usernameTaken")
+          : err.message || t(`errors.${mode}Failed`),
+      );
     } finally {
       setBusy(false);
     }
   };
-
-  const registering = mode === "register";
 
   return (
     <>
@@ -126,7 +174,7 @@ export default function LoginPage() {
               <MailCheckIcon className="size-12 text-primary" />
               <h1 className="text-lg font-semibold">{t("signedIn.heading")}</h1>
               <p className="text-sm break-all text-muted-foreground">
-                {displayName || user.email}
+                {displayName || username || user.email}
               </p>
               <div className="flex gap-2 pt-1">
                 <Button onClick={() => navigate("/editor")}>
@@ -145,7 +193,7 @@ export default function LoginPage() {
                 <Trans
                   i18nKey="sent.description"
                   ns="login"
-                  values={{ email: email.trim() }}
+                  values={{ email: identifier.trim() }}
                   components={{ strong: <strong /> }}
                 />
               </p>
@@ -168,7 +216,7 @@ export default function LoginPage() {
                 <Trans
                   i18nKey="confirm.description"
                   ns="login"
-                  values={{ email: email.trim() }}
+                  values={{ email: identifier.trim() }}
                   components={{ strong: <strong /> }}
                 />
               </p>
@@ -190,16 +238,34 @@ export default function LoginPage() {
                 </Alert>
               )}
               <Field>
-                <FieldLabel htmlFor="login-email">
-                  {t("form.emailLabel")}
+                <FieldLabel htmlFor="login-identifier">
+                  {t(
+                    mode === "magic-link"
+                      ? "form.emailLabel"
+                      : registering
+                        ? "form.usernameLabel"
+                        : magicLinkAuth
+                          ? "form.identifierLabel"
+                          : "form.usernameLabel",
+                  )}
                 </FieldLabel>
                 <Input
-                  id="login-email"
+                  id="login-identifier"
                   autoFocus
-                  type="email"
-                  autoComplete="email"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
+                  // `type=email` would make a browser reject a username as
+                  // malformed before this form ever saw it.
+                  type={mode === "magic-link" ? "email" : "text"}
+                  autoComplete={
+                    mode === "magic-link"
+                      ? "email"
+                      : registering
+                        ? "username"
+                        : "username"
+                  }
+                  autoCapitalize="none"
+                  spellCheck={false}
+                  value={identifier}
+                  onChange={(e) => setIdentifier(e.target.value)}
                   disabled={busy}
                 />
               </Field>

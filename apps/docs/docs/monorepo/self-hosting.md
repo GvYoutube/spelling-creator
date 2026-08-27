@@ -240,9 +240,27 @@ instance chooses:
 
 | `AUTH_MODE`  | What the login page offers | Needs mail |
 | ------------ | -------------------------- | ---------- |
-| `password`   | Email and password         | no         |
+| `password`   | Username and password      | no         |
 | `magic-link` | A one-time emailed link    | yes        |
-| `both`       | Either, visitor's choice   | yes        |
+| `both`       | Both; sign in with either  | yes        |
+
+Passwords are **username**-based, not email-based: asking somebody for an
+address you will never send anything to is asking for a detail nobody needs.
+With `both`, the sign-in field takes a username _or_ an email address, decided by
+whether the value contains an `@` rather than by a toggle to find.
+
+Under the hood a username is given to the identity service as an address under
+`USERNAME_DOMAIN` — it authenticates by address and has no notion of a username.
+The default domain is reserved by RFC 2606 so it can never resolve, and nothing
+is ever sent there. Two things follow for free: usernames are unique, because the
+service will not register the same address twice; and signing in needs no lookup,
+so no public endpoint has to answer "which email belongs to this username?".
+
+A username is **not** a display name. Display names are moderated for profanity
+and banned names, may contain spaces, and are deliberately not unique — two
+people may both be "Miss Kelly". A username is unique, never shown to anybody
+else, and exists only to sign in with. Registration deliberately does not set a
+display name from it, which would route around those checks.
 
 The compose file defaults to `password`, because an instance reaching for it is
 more likely to have no mail server than to have one. `AUTH_MODE` is baked into
