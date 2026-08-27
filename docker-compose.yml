@@ -131,6 +131,17 @@ services:
         done
         echo 'applying schema.sql'
         psql -v ON_ERROR_STOP=1 -h postgres -U postgres -d spelling -f /schema.sql
+        echo 'granting the new tables to service_role'
+        # Belt and braces over the ALTER DEFAULT PRIVILEGES in the roles script.
+        # Default privileges only reach objects created afterwards by the role
+        # that set them, which makes them quietly conditional on how and by whom
+        # the schema was applied — and the failure is a table that exists, that
+        # PostgREST can see, and that the API is refused with 42501. That reads
+        # as an authentication problem and is not one. Granting explicitly here
+        # does not depend on any of it.
+        psql -v ON_ERROR_STOP=1 -h postgres -U postgres -d spelling -c \
+          "grant all on all tables in schema public to service_role;
+           grant all on all sequences in schema public to service_role;"
 
   # Joins PostgREST and GoTrue under one origin, and fronts the app. This is the
   # piece with no Supabase equivalent to install — it is just a reverse proxy.
