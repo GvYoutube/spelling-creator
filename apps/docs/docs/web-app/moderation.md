@@ -100,6 +100,13 @@ peers, and taking a peer's account is an escalation the tier was never meant to
 allow. The section only appears at all on an instance that uses passwords —
 there is nothing to set on a magic-link one.
 
+That last rule fails closed. If the target's role cannot be read at all — the
+database is unreachable, or answers with something that isn't a row list — the
+reset is refused with a 502 rather than allowed through. Everywhere else an
+unknown role means "no privileges" and blocks by itself; here an absent role is
+what _permits_ the reset, so the same reading would hand over another admin's
+account whenever the database hiccuped.
+
 There is no audit table, so the action leaves a line in the server log naming
 who reset whom. It records identities only, never the password.
 

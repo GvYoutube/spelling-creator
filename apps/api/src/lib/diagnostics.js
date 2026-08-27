@@ -135,6 +135,30 @@ function checkConfiguration(env) {
 	return ok('configuration', 'database and identity credentials are set');
 }
 
+/**
+ * Whether this instance will answer a browser on another origin.
+ *
+ * Not a failure when unset — an instance that serves the SPA from the same
+ * origin (which the compose stack does) needs no allow-list at all, and marking
+ * that broken would cry wolf on a working deployment. It is reported because
+ * the alternative is the failure it produces: the app loads, every API call is
+ * refused by the browser, and the console blames CORS rather than a variable.
+ */
+function checkCrossOrigin(env) {
+	const hostnames = (env.ALLOWED_HOSTNAMES || '')
+		.split(',')
+		.map((h) => h.trim())
+		.filter(Boolean);
+	if (hostnames.length === 0) {
+		return skipped(
+			'cross-origin',
+			'ALLOWED_HOSTNAMES is unset — only same-origin requests will work; a browser on any other origin will be refused. ' +
+				'Set it to the hostname the app is served from if the SPA and the API are not the same origin.',
+		);
+	}
+	return ok('cross-origin', `requests are accepted from ${hostnames.join(', ')}`);
+}
+
 /** Can we reach PostgREST at all? Separated from the schema check below. */
 async function checkDatabase(env, base) {
 	const { response, error } = await probe(`${base}/rest/v1/`, { headers: supabaseHeaders(env) });
@@ -306,16 +330,23 @@ async function checkKeyValue(env) {
 	const key = `${PROBE_PREFIX}:kv`;
 	try {
 		await store.put(key, 'ok', { expirationTtl: 60 });
-		const read = await store.get(key);
-		await store.delete(key).catch(() => {});
-		if (read !== 'ok') {
-			return failed(
-				'key-value',
-				`wrote a value and read back ${JSON.stringify(read)}`,
-				'The store is reachable but not durable; check the kv_store table exists.',
-			);
+		// The probe key is swept in a finally, so a read that throws doesn't leave
+		// it sitting in the store until its TTL runs out — a diagnostic that
+		// littered the thing it was diagnosing would be a poor one, and on a host
+		// whose put() ignores TTLs it would never be cleaned up at all.
+		try {
+			const read = await store.get(key);
+			if (read !== 'ok') {
+				return failed(
+					'key-value',
+					`wrote a value and read back ${JSON.stringify(read)}`,
+					'The store is reachable but not durable; check the kv_store table exists.',
+				);
+			}
+			return ok('key-value', 'a value round-tripped');
+		} finally {
+			await store.delete(key).catch(() => {});
 		}
-		return ok('key-value', 'a value round-tripped');
 	} catch (e) {
 		return failed(
 			'key-value',
@@ -337,7 +368,7 @@ async function checkKeyValue(env) {
  */
 export async function runDiagnostics(env) {
 	const configuration = checkConfiguration(env);
-	const checks = [configuration];
+	const checks = [configuration, checkCrossOrigin(env)];
 	// Only worth asking about the key's shape once we know there is one.
 	if (configuration.state === 'ok') checks.push(checkCredentials(env));
 

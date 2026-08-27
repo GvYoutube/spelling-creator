@@ -3,7 +3,7 @@
 // client's claim of being a mod/admin is never trusted), then gates on it.
 
 import { supabaseHeaders, getAuthUserById, findAuthUserByEmail } from '../lib/supabase.js';
-import { getUserRole, isModeratorRole, verifyUserAndRole } from '../lib/auth.js';
+import { getUserRole, isModeratorRole, lookupUserRole, verifyUserAndRole } from '../lib/auth.js';
 import { rowToLesson, fullyDeleteLesson } from '../lib/lesson.js';
 import { textResponse, jsonResponse } from '../lib/http.js';
 import { DEFAULT_USERNAME_DOMAIN, identifierToEmail } from '@spelling-creator/core/username';
@@ -424,7 +424,12 @@ export async function handleModeration(request, env, url, cors) {
 		// is an escalation the tier was never meant to allow. The last admin
 		// locking themselves out is a database problem, and is documented as one.
 		if (target.id !== user.id) {
-			const targetRole = await getUserRole(env, base, target.id);
+			// A role we could not read is not a role we may act on. Everywhere else a
+			// failed lookup means "no privileges" and fails closed; here the absence
+			// of a role is what *permits* the reset, so an unreachable store would
+			// hand over another admin's account. Refuse instead, and say why.
+			const { known, role: targetRole } = await lookupUserRole(env, base, target.id);
+			if (!known) return textResponse('Could not check that user’s role, so the password was not changed.', 502, cors);
 			if (targetRole === 'admin') return textResponse('That user is an admin. Admins cannot reset each other’s passwords.', 409, cors);
 		}
 

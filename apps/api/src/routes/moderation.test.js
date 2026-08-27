@@ -27,10 +27,11 @@ const json = (body, status = 200) => new Response(JSON.stringify(body), { status
  * Stand in for GoTrue and PostgREST.
  *
  * `caller` decides who the bearer token belongs to; `roles` maps a user id to
- * what public.user_roles says about them. Records the password writes so a test
- * can assert one did or did not happen.
+ * what public.user_roles says about them, and `unreadableRoles` lists the ids
+ * whose role lookup fails outright. Records the password writes so a test can
+ * assert one did or did not happen.
  */
-function stub({ caller, roles = {}, accounts = {} }) {
+function stub({ caller, roles = {}, accounts = {}, unreadableRoles = [] }) {
 	const passwordWrites = [];
 	globalThis.fetch = async (url, init = {}) => {
 		const target = String(url);
@@ -42,7 +43,9 @@ function stub({ caller, roles = {}, accounts = {} }) {
 		// Their role, and the target's.
 		const roleMatch = target.match(/user_roles\?user_id=eq\.([^&]+)/);
 		if (roleMatch) {
-			const role = roles[decodeURIComponent(roleMatch[1])];
+			const id = decodeURIComponent(roleMatch[1]);
+			if (unreadableRoles.includes(id)) return json({ message: 'database unavailable' }, 503);
+			const role = roles[id];
 			return json(role ? [{ role }] : []);
 		}
 
@@ -136,6 +139,24 @@ describe('POST /mod/password — who may use it', () => {
 			});
 			const res = await reset({ identifier: 'other@test.com', password: 'longenough1' });
 			expect(res.status).toBe(409);
+			expect(passwordWrites).toEqual([]);
+		});
+	});
+
+	it('refuses when the target’s role cannot be read', async () => {
+		await withStub(async () => {
+			// Every other gate reads an unknown role as "no privileges" and fails
+			// closed. Here an absent role is what *permits* the reset, so a database
+			// that will not answer must stop it rather than wave it through — the
+			// target might be the other admin.
+			const { passwordWrites } = stub({
+				caller: ADMIN_ID,
+				roles: { [ADMIN_ID]: 'admin' },
+				accounts: { 'other@test.com': OTHER_ADMIN_ID },
+				unreadableRoles: [OTHER_ADMIN_ID],
+			});
+			const res = await reset({ identifier: 'other@test.com', password: 'longenough1' });
+			expect(res.status).toBe(502);
 			expect(passwordWrites).toEqual([]);
 		});
 	});

@@ -59,6 +59,7 @@ function envWith(routes, platformOverrides = {}) {
 	const env = {
 		SUPABASE_URL: BASE,
 		SUPABASE_SERVICE_ROLE_KEY: SERVICE_ROLE_KEY,
+		ALLOWED_HOSTNAMES: 'app.test',
 		PLATFORM: {
 			images: blobStore(async () => ({ objects: [], cursor: '', truncated: false })),
 			lessonGit: blobStore(async () => ({ objects: [], cursor: '', truncated: false })),
@@ -106,6 +107,7 @@ describe('runDiagnostics — everything working', () => {
 			expect(result.ok).toBe(true);
 			expect(result.checks.map((c) => c.name)).toEqual([
 				'configuration',
+				'cross-origin',
 				'credentials',
 				'database',
 				'schema',
@@ -116,6 +118,21 @@ describe('runDiagnostics — everything working', () => {
 				'key-value',
 			]);
 			expect(result.checks.every((c) => c.state === 'ok')).toBe(true);
+		});
+	});
+
+	it('reports an unset ALLOWED_HOSTNAMES without calling the instance broken', async () => {
+		// It was a startup warning before the report existed, and it earns its
+		// place: the app loads, every API call is refused by the browser, and the
+		// console blames CORS rather than the variable that caused it. Same-origin
+		// deployments are fine without it, so it is not a failure.
+		await withFetch(async () => {
+			const env = envWith(HEALTHY_ROUTES);
+			delete env.ALLOWED_HOSTNAMES;
+			const result = await runDiagnostics(env);
+			expect(result.ok).toBe(true);
+			expect(find(result, 'cross-origin').state).toBe('skipped');
+			expect(find(result, 'cross-origin').detail).toContain('ALLOWED_HOSTNAMES');
 		});
 	});
 });

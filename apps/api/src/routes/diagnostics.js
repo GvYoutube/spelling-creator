@@ -18,16 +18,9 @@
 // being locked out of this endpoint never leaves an operator with no way to see
 // what is wrong.
 
+import { adminTokenMatches } from '../lib/adminToken.js';
 import { runDiagnostics, formatDiagnostics } from '../lib/diagnostics.js';
 import { jsonResponse, textResponse } from '../lib/http.js';
-
-/** Constant-time compare, so the token check leaks neither length nor content. */
-function timingSafeEqual(a, b) {
-	if (a.length !== b.length) return false;
-	let diff = 0;
-	for (let i = 0; i < a.length; i += 1) diff |= a.charCodeAt(i) ^ b.charCodeAt(i);
-	return diff === 0;
-}
 
 /**
  * GET /_health — the process is running and routing.
@@ -56,7 +49,7 @@ export async function handleDiagnostics(request, env, cors) {
 		);
 	}
 	const provided = request.headers.get('X-Admin-Token') || '';
-	if (!timingSafeEqual(provided, env.ADMIN_MIGRATE_TOKEN)) {
+	if (!(await adminTokenMatches(provided, env.ADMIN_MIGRATE_TOKEN))) {
 		return textResponse('Forbidden.', 403, cors);
 	}
 

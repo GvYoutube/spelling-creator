@@ -50,23 +50,47 @@ export function bearerToken(request) {
 }
 
 /**
- * The privilege tier of a verified user: 'admin', 'moderator', or null for a
- * plain author. Read from public.user_roles with the service-role key, so the
- * role can never be asserted by the client — it is always re-derived server-side.
+ * The privilege tier of a verified user, and whether we actually know it.
+ *
+ * `known` is false when the lookup itself failed — the store was unreachable,
+ * or answered with something other than a row list. That is a different thing
+ * from a user who has no row, and the difference matters wherever an absent
+ * role *grants* something rather than withholding it: gating a moderator route
+ * on `role` fails closed when the answer is null, but refusing to reset another
+ * admin's password does not, and a caller that cannot tell the two apart would
+ * take a peer's account whenever the database hiccuped.
+ *
+ * Read from public.user_roles with the service-role key, so the role can never
+ * be asserted by the client — it is always re-derived server-side.
+ *
+ * @returns {Promise<{ known: boolean, role: 'admin' | 'moderator' | null }>}
  */
-export async function getUserRole(env, base, userId) {
-	if (!userId) return null;
+export async function lookupUserRole(env, base, userId) {
+	if (!userId) return { known: true, role: null };
 	let res;
 	try {
 		res = await fetch(`${base}/rest/v1/user_roles?user_id=eq.${encodeURIComponent(userId)}&select=role&limit=1`, {
 			headers: supabaseHeaders(env),
 		});
 	} catch (e) {
-		return null;
+		return { known: false, role: null };
 	}
-	if (!res.ok) return null;
-	const rows = await res.json().catch(() => []);
-	return Array.isArray(rows) && rows.length ? rows[0].role : null;
+	if (!res.ok) return { known: false, role: null };
+	const rows = await res.json().catch(() => null);
+	if (!Array.isArray(rows)) return { known: false, role: null };
+	return { known: true, role: rows.length ? rows[0].role : null };
+}
+
+/**
+ * The privilege tier of a verified user: 'admin', 'moderator', or null for a
+ * plain author — with a failed lookup reported as null.
+ *
+ * That is the right answer for every gate that asks "may this caller do the
+ * privileged thing?", since an unknown role must not be allowed through. Use
+ * `lookupUserRole` where a null would instead permit something.
+ */
+export async function getUserRole(env, base, userId) {
+	return (await lookupUserRole(env, base, userId)).role;
 }
 
 /**

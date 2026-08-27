@@ -6,16 +6,8 @@ import { supabaseHeaders } from '../lib/supabase.js';
 import { sha256Hex, extFromMime, decodeDataUrl, putImageObject } from '../lib/images.js';
 import { convertImageToWebp } from '../imageConvert.js';
 import { textResponse, jsonResponse } from '../lib/http.js';
+import { adminTokenMatches } from '../lib/adminToken.js';
 import { imageStore, responseCache } from '../platform/index.js';
-
-// Constant-time string compare so the admin token check doesn't leak length/
-// content via timing.
-function timingSafeEqual(a, b) {
-	if (a.length !== b.length) return false;
-	let diff = 0;
-	for (let i = 0; i < a.length; i += 1) diff |= a.charCodeAt(i) ^ b.charCodeAt(i);
-	return diff === 0;
-}
 
 // Walk a lesson doc in place: upload each inline base64 image to R2 and rewrite
 // the block to a hash ref. Returns the number of images converted (0 = nothing).
@@ -57,7 +49,7 @@ export async function handleAdminMigrateImages(request, env, cors) {
 	if (!imageStore(env)) return textResponse('Image store is not configured.', 500, cors);
 
 	const provided = request.headers.get('X-Admin-Token') || '';
-	if (!timingSafeEqual(provided, env.ADMIN_MIGRATE_TOKEN)) {
+	if (!(await adminTokenMatches(provided, env.ADMIN_MIGRATE_TOKEN))) {
 		return textResponse('Forbidden.', 403, cors);
 	}
 
@@ -127,7 +119,7 @@ export async function handleAdminBackfillWebp(request, env, ctx, cors) {
 	if (!images) return textResponse('Image store is not configured.', 500, cors);
 
 	const provided = request.headers.get('X-Admin-Token') || '';
-	if (!timingSafeEqual(provided, env.ADMIN_MIGRATE_TOKEN)) {
+	if (!(await adminTokenMatches(provided, env.ADMIN_MIGRATE_TOKEN))) {
 		return textResponse('Forbidden.', 403, cors);
 	}
 
