@@ -85,23 +85,29 @@ function generate() {
  * every explanation the example carries, and so a new setting added there is not
  * silently dropped from generated files.
  */
-function fill(template, values) {
-  let out = template;
+function fill(source, values, { appendMissing = false } = {}) {
+  let out = source;
   const unmatched = [];
   for (const [key, value] of Object.entries(values)) {
     const pattern = new RegExp(`^${key}=.*$`, "m");
     if (!pattern.test(out)) {
-      unmatched.push(key);
+      unmatched.push([key, value]);
       continue;
     }
     out = out.replace(pattern, `${key}=${value}`);
   }
-  if (unmatched.length > 0) {
+  if (unmatched.length === 0) return out;
+  if (!appendMissing) {
     // A rename in .env.example that nobody reflected here would otherwise mean
     // a generated file quietly missing a credential.
-    throw new Error(`.env.example has no line for: ${unmatched.join(", ")}`);
+    throw new Error(
+      `.env.example has no line for: ${unmatched.map(([key]) => key).join(", ")}`,
+    );
   }
-  return out;
+  // Rewriting an existing .env that predates a new setting: add it rather than
+  // refusing, since the alternative is asking someone to hand-merge.
+  const added = unmatched.map(([key, value]) => `${key}=${value}`).join("\n");
+  return `${out.replace(/\n*$/, "\n")}\n${added}\n`;
 }
 
 const args = new Set(process.argv.slice(2));
@@ -111,26 +117,38 @@ if (!existsSync(TEMPLATE)) {
   process.exit(1);
 }
 
-const filled = fill(readFileSync(TEMPLATE, "utf8"), generate());
+// Regenerating rewrites the credentials in the .env that is already there,
+// rather than starting from the example again. That is the difference between
+// "mint me new keys" and "throw away the PUBLIC_URL and SMTP settings I spent
+// time getting right", and only the first is ever what somebody means.
+const rewriting = existsSync(TARGET) && args.has("--force");
+const source = readFileSync(rewriting ? TARGET : TEMPLATE, "utf8");
+const filled = fill(source, generate(), { appendMissing: rewriting });
 
 if (args.has("--print")) {
-  process.stdout.write(filled);
+  process.stdout.write(fill(readFileSync(TEMPLATE, "utf8"), generate()));
 } else if (existsSync(TARGET) && !args.has("--force")) {
   console.error(
-    `${TARGET} already exists. Pass --force to overwrite it, or --print to see the values.`,
+    `${TARGET} already exists. Pass --force to mint new credentials into it, or --print to see a fresh set.`,
   );
   process.exit(1);
 } else {
   writeFileSync(TARGET, filled, { mode: 0o600 });
   console.log(`Wrote ${TARGET}`);
   console.log("");
-  console.log("Still to fill in by hand:");
-  console.log(
-    "  PUBLIC_URL / PUBLIC_HOSTNAME  where this instance is reachable from a browser",
-  );
-  console.log(
-    "  SMTP_*                        sign-in is by magic link, so nobody can log in without it",
-  );
+  if (rewriting) {
+    console.log(
+      "Credentials replaced; everything else in the file was left as it was.",
+    );
+  } else {
+    console.log("Still to fill in by hand:");
+    console.log(
+      "  PUBLIC_URL / PUBLIC_HOSTNAME  where this instance is reachable from a browser",
+    );
+    console.log(
+      "  SMTP_*                        sign-in is by magic link, so nobody can log in without it",
+    );
+  }
   console.log("");
   console.log(
     "PUBLIC_URL is baked into the SPA at build time, so set it before `docker compose up -d --build`.",
