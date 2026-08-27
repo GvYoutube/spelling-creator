@@ -6,10 +6,15 @@
 // Views are a progressive enhancement, and deliberately the only optional part
 // of this server: a host that doesn't negotiate the MCP Apps capability
 // (io.modelcontextprotocol/ui) never reads these resources and gets exactly the
-// text results it always did. That's why nothing branches on the capability —
+// text results it always did. Registration doesn't branch on the capability —
 // the `_meta.ui` a tool carries is inert to a host that doesn't look for it, so
 // registering unconditionally costs a client that can't render anything nothing
 // at all, and keeps one code path instead of two.
+//
+// What a tool *says* does branch, through `rendersViews()` below: when the user
+// is about to be shown a choice, telling the model to make that choice anyway
+// is worse than saying nothing. See its comment for why that one branch is
+// worth having.
 //
 // The HTML reaches both runtimes the same way standards.md does — a package
 // subpath import resolved per-runtime (see package.json's "imports"), because
@@ -17,6 +22,7 @@
 // has no text-module loader at all.
 
 import {
+  getUiCapability,
   registerAppResource,
   RESOURCE_MIME_TYPE,
 } from "@modelcontextprotocol/ext-apps/server";
@@ -45,6 +51,41 @@ const IMAGE_HOSTS = ["https://upload.wikimedia.org"];
 export async function appDomain(mcpUrl) {
   const digest = await sha256Hex(new TextEncoder().encode(mcpUrl));
   return `${digest.slice(0, 32)}.claudemcpcontent.com`;
+}
+
+/**
+ * Whether the connected host will actually put this server's views on screen —
+ * it negotiated the MCP Apps extension, and renders the mime type the views are
+ * served under.
+ *
+ * A tool with a view asks this before it writes to the model, because the same
+ * result means two different things on the two paths. In a text client the model
+ * IS the one choosing, and a list of candidates with "pick one" is exactly right.
+ * In a host that renders the picker, the user is choosing, from pictures the
+ * model cannot see — so the same words make the assistant race ahead and add an
+ * image itself, and the picker it just talked over becomes a list of things the
+ * user is too late to want. The rendered path has to be told to stop instead.
+ *
+ * Only known once the client has initialised, and only as truthfully as the
+ * client declares it, so this is best-effort: unknown means the text path, which
+ * is the one that works everywhere.
+ *
+ * @param {import('@modelcontextprotocol/sdk/server/mcp.js').McpServer} server
+ * @returns {boolean}
+ */
+export function rendersViews(server) {
+  try {
+    const ui = getUiCapability(server.server.getClientCapabilities());
+    if (!ui) return false;
+    // The spec has hosts list the mime types they render. Treat a host that
+    // negotiated the extension without saying as one that renders ours: it
+    // declared support, and the fallback is to talk over its picker.
+    return (
+      !Array.isArray(ui.mimeTypes) || ui.mimeTypes.includes(RESOURCE_MIME_TYPE)
+    );
+  } catch {
+    return false;
+  }
 }
 
 /**

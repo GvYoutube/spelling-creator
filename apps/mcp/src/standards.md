@@ -191,7 +191,9 @@ on the default when the image goes with a section's opening. Prefer images that 
 (reinforce a green answer AND illustrate) or diagrams that carry an argument, over decorative
 photos. Check the image doesn't contradict the text (e.g. a shift direction, an orientation).
 Choose on content rather than on file size — add_image downloads a downscaled rendering of
-whatever you pick, so a large original is not a problem.
+whatever you pick, so a large original is not a problem. Some clients show the search_images
+candidates to the user as pictures; when the result says so, the choice is theirs — stop and
+wait for it rather than adding one yourself.
 
 ## Branding
 

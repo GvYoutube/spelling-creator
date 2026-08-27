@@ -1,6 +1,6 @@
 {
   "name": "@spelling-creator/mcp",
-  "version": "0.9.0",
+  "version": "0.9.1",
   "private": true,
   "description": "MCP server for the Spelling Creator hub — lets any MCP-capable AI assistant author and publish spelling lessons.",
   "license": "AGPL-3.0-only",

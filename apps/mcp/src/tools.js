@@ -17,7 +17,7 @@ import { forkLesson, proposeChanges, recordLessonHistory } from "./git.js";
 import { applyPatch, findBlock } from "./patch.js";
 import { searchWikimediaImages, resolveWikimediaImage } from "./wikimedia.js";
 import { LESSON_STANDARDS } from "./standards.js";
-import { IMAGE_PICKER_URI, registerViews } from "./views.js";
+import { IMAGE_PICKER_URI, registerViews, rendersViews } from "./views.js";
 import {
   inputBlocksFromOperations,
   inputBlocksFromSections,
@@ -265,6 +265,28 @@ const imageSearchOutputSchema = {
     .optional(),
   note: z.string().optional(),
 };
+
+// The two halves of what search_images tells the model, kept apart because they
+// ask for opposite behaviour and only one of them can be true per client.
+//
+// Without a picker on screen the assistant is the only one who can choose, so it
+// should — a list of Commons files is no use to a user who'd have to type a
+// filename back.
+const PICK_ONE_YOURSELF =
+  "Choose the best `ref` and call add_image to insert it. The `caption` carries the licence attribution " +
+  "Commons requires — keep it on the image.";
+
+// With one, choosing is the user's, and an assistant that keeps going takes it
+// away from them: it picks from descriptions, adds an image nobody asked for,
+// and leaves a picker on screen that the lesson has already moved past. Said as
+// bluntly as it is, because "the user may pick" reads as permission to do it
+// first, and this is the exact failure the picker was built to prevent.
+const PICKER_IS_THE_USERS =
+  "These candidates are on screen in the image picker and the USER is choosing one. STOP HERE: do not call " +
+  "add_image, and do not pick for them. They can see the pictures; you cannot, which is the whole point of the " +
+  "picker. End your turn now — a short line inviting them to pick is all that's wanted, and choosing on their " +
+  "behalf wastes the search. When they click you will be told which file it was: either that it is already in " +
+  "the lesson (don't add it again) or which `ref` to use with add_image.";
 
 // Render a value as a text content result (the MCP content shape).
 function text(value) {
@@ -949,6 +971,10 @@ export function registerTools(server, ctx) {
   // so the image lands in the lesson without a further turn. Everywhere else
   // this is the text result it has always been — the structured payload the
   // view reads is the same object the text block spells out.
+  //
+  // Which of those two is happening is the one thing the result must be clear
+  // about, because the assistant's next move is opposite in each: pick, or stand
+  // aside. See the `note` the handler chooses, and rendersViews().
   registerAppTool(
     server,
     "search_images",
@@ -958,13 +984,16 @@ export function registerTools(server, ctx) {
         "Search Wikimedia Commons for freely-licensed images to illustrate a lesson. Returns a list of candidates, " +
         "each with a `ref` (its File: title), a `caption` carrying the required attribution, the licence/author, " +
         "dimensions, a `previewURL`, and a `source` page link.\n\n" +
-        "Pick the most relevant result and call add_image with its `ref` to download it, store it, and place it in a " +
-        "lesson. Pixabay is not available over MCP (it needs a human verification step); only Wikimedia Commons is. " +
-        "If the user doesn't like a chosen image, swap it later with add_image (after remove_block) or replace it in " +
-        "the web editor, which keeps it in the same place.\n\n" +
+        "WHO PICKS DEPENDS ON THE CLIENT, AND THE RESULT SAYS WHICH — read its `note` first and follow it. On a " +
+        "client that can show the candidates as pictures, they are on screen and the USER picks: stop there, add " +
+        "nothing, and wait to be told what they chose. On a text-only client, you pick — take the most relevant " +
+        "`ref` and call add_image with it to download, store, and place the image.\n\n" +
+        "Pixabay is not available over MCP (it needs a human verification step); only Wikimedia Commons is. If the " +
+        "user doesn't like a chosen image, swap it later with add_image (after remove_block) or replace it in the " +
+        "web editor, which keeps it in the same place.\n\n" +
         "Pass `lessonId` (and `sectionIndex`, if the picture is for a particular section) whenever you already know " +
-        "where the image is going. A client that can show the candidates as pictures then lets the user pick one " +
-        "outright, which is both quicker and a better choice than one made from descriptions.",
+        "where the image is going. It lets a user picking from the pictures place the image with the same click, " +
+        "and costs a text-only client nothing — the list comes back either way.",
       inputSchema: {
         query: z
           .string()
@@ -1010,6 +1039,7 @@ export function registerTools(server, ctx) {
           structuredContent: empty,
         };
       }
+      const picking = rendersViews(server);
       const result = {
         query,
         count: hits.length,
@@ -1018,11 +1048,18 @@ export function registerTools(server, ctx) {
         ...(lessonId && Number.isInteger(sectionIndex)
           ? { placement: { sectionIndex, index: 0 } }
           : {}),
-        note:
-          "Choose the best `ref` and call add_image to insert it. The `caption` carries the licence attribution " +
-          "Commons requires — keep it on the image.",
+        note: picking ? PICKER_IS_THE_USERS : PICK_ONE_YOURSELF,
       };
-      return { ...text(result), structuredContent: result };
+      if (!picking) return { ...text(result), structuredContent: result };
+      // Ahead of the payload, not buried in it: the candidates read as an
+      // invitation to choose, and the model meets that invitation first.
+      return {
+        content: [
+          { type: "text", text: PICKER_IS_THE_USERS },
+          { type: "text", text: JSON.stringify(result, null, 2) },
+        ],
+        structuredContent: result,
+      };
     }),
   );
 
@@ -1038,9 +1075,10 @@ export function registerTools(server, ctx) {
         "the most reliable way to choose placement. Otherwise choose the target section with `sectionId` (from " +
         "get_lesson) or `sectionIndex` (0-based), and optionally `index` for the exact position within it. If you " +
         "give none of these, the image is inserted at the end of the LAST section's prose, before any trailing " +
-        "question block(s) — never buried after the quiz. Run search_images first to get a `ref`. To change an " +
-        "image later, remove_block it and add_image again, or have the user replace it in the editor (which keeps " +
-        "its place).\n\n" +
+        "question block(s) — never buried after the quiz. Run search_images first to get a `ref` — and if its " +
+        "result said the candidates are on screen for the user to pick from, don't call this until they have " +
+        "picked one and you've been told which. To change an image later, remove_block it and add_image again, or " +
+        "have the user replace it in the editor (which keeps its place).\n\n" +
         "The standard puts a section's image FIRST, above both paragraphs, so pass `sectionId`/`sectionIndex` with " +
         "`index: 0` rather than relying on the default. Prefer images that do double duty — reinforcing an answer " +
         "as well as illustrating — and diagrams that carry an argument over decorative photos; a letter-frequency " +
