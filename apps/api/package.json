@@ -34,7 +34,7 @@
 	},
 	"devDependencies": {
 		"@cloudflare/vitest-pool-workers": "^0.12.4",
-		"vitest": "~3.2.4",
+		"vitest": "~4.1.11",
 		"wrangler": "^4.95.0"
 	},
 	"packageManager": "pnpm@11.1.3"
