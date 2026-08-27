@@ -13,7 +13,7 @@
 // process, one port, and it works.
 
 import { createReadStream } from 'node:fs';
-import { stat } from 'node:fs/promises';
+import { realpath, stat } from 'node:fs/promises';
 import { extname, join, normalize, resolve, sep } from 'node:path';
 import { Readable } from 'node:stream';
 
@@ -56,11 +56,25 @@ function cacheControl(pathname) {
 }
 
 /**
+ * Whether `candidate` is `root` itself or something underneath it.
+ *
+ * The separator is appended rather than assumed so that `/a/bcd` is not read as
+ * living inside `/a/b`. `root` is checked for one first because the filesystem
+ * root already ends in one, and `//` is inside nothing.
+ */
+function contains(root, candidate) {
+	const prefix = root.endsWith(sep) ? root : root + sep;
+	return candidate === root || candidate.startsWith(prefix);
+}
+
+/**
  * Resolve a URL path to a file inside `root`, or null if it escapes.
  *
  * The traversal check is the point: a request for /../../etc/passwd must not be
  * served, and `decodeURIComponent` means the check has to happen after decoding
  * rather than on the raw path.
+ *
+ * Lexical, and therefore only half the check — see fileAt for the other half.
  */
 function resolveWithin(root, pathname) {
 	let decoded;
@@ -70,15 +84,28 @@ function resolveWithin(root, pathname) {
 		return null;
 	}
 	const candidate = resolve(join(root, normalize(decoded)));
-	return candidate === root || candidate.startsWith(root + sep) ? candidate : null;
+	return contains(root, candidate) ? candidate : null;
 }
 
-/** The file at `path`, or the index.html inside it if it is a directory. */
-async function fileAt(path) {
+/**
+ * The file at `path`, or the index.html inside it if it is a directory — but
+ * only when it really lives inside `root`.
+ *
+ * `stat` follows symlinks, so the lexical check above is not enough on its own:
+ * a link inside the asset directory pointing at /etc or at a sibling checkout
+ * has a path that passes containment and contents that are nowhere near it. So
+ * the resolved real path is checked against the real root, which is the one both
+ * of them can be compared in — the configured directory may itself be reached
+ * through a link (/tmp is /private/tmp on macOS), and comparing a resolved file
+ * against an unresolved root would refuse every file in it.
+ */
+async function fileAt(root, path) {
 	try {
 		const info = await stat(path);
-		if (info.isDirectory()) return await fileAt(join(path, 'index.html'));
-		return info.isFile() ? { path, size: info.size } : null;
+		if (info.isDirectory()) return await fileAt(root, join(path, 'index.html'));
+		if (!info.isFile()) return null;
+		const real = await realpath(path);
+		return contains(root, real) ? { path: real, size: info.size } : null;
 	} catch (e) {
 		return null;
 	}
@@ -93,8 +120,18 @@ async function fileAt(path) {
 export function assetServer(directory) {
 	const root = resolve(directory);
 
+	// Resolved once, lazily, and remembered as the promise rather than its value
+	// so that concurrent first requests share the one lookup. A directory that
+	// cannot be resolved (it does not exist yet) falls back to the lexical path,
+	// which serves nothing anyway.
+	let realRootOnce = null;
+	const realRoot = () => {
+		realRootOnce ||= realpath(root).catch(() => root);
+		return realRootOnce;
+	};
+
 	async function respond(request, path, status) {
-		const found = await fileAt(path);
+		const found = await fileAt(await realRoot(), path);
 		if (!found) return null;
 		// The type comes from the file that was actually resolved, not from what was
 		// asked for: a request for "/" resolves to index.html, and typing it by the

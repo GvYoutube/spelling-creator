@@ -48,11 +48,26 @@ function s3Config(env) {
  *
  * This matters because the IP is used for bans and rate limits. Reading the
  * leftmost entry — the usual mistake — lets any caller forge both.
+ *
+ * `TRUSTED_PROXY_COUNT=0` means what it says: nothing in front of this process,
+ * so *every* entry in the header was written by the caller and none of it may be
+ * believed. The answer is then no IP at all, which the callers already handle —
+ * IP bans stop matching and the rate limiter shares one bucket. That is the
+ * honest reading of a directly-exposed process, and much better than the
+ * alternative it replaces, where flooring the count at 1 quietly trusted a
+ * header a client had just made up.
  */
 function clientIpFrom(env) {
 	const header = (env.CLIENT_IP_HEADER || 'x-forwarded-for').toLowerCase();
-	const hops = Math.max(1, Number(env.TRUSTED_PROXY_COUNT || 1) || 1);
+	// Read without `||`, which would fold an explicit 0 into the default. An unset
+	// or blank value is the default of 1; anything that isn't a whole number of
+	// hops falls back to it too, since a typo should not quietly turn the header
+	// off — only the literal 0 does that, and only on purpose.
+	const setting = String(env.TRUSTED_PROXY_COUNT ?? '').trim();
+	const configured = setting === '' ? 1 : Number(setting);
+	const hops = Number.isFinite(configured) && configured >= 0 ? Math.floor(configured) : 1;
 	return (request) => {
+		if (hops === 0) return '';
 		const raw = request.headers.get(header) || '';
 		if (!raw) return '';
 		// A single-value header (Cloudflare's cf-connecting-ip, nginx's

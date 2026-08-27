@@ -16,7 +16,7 @@
 // apps/web has been built. That is why `test` builds it first, the same way
 // `dev`, `start` and `deploy` in this package already do.
 
-import { mkdtemp, mkdir, writeFile } from 'node:fs/promises';
+import { mkdtemp, mkdir, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { beforeAll, describe, expect, it } from 'vitest';
@@ -96,6 +96,29 @@ describe('assetServer', () => {
 		expect((await get('/%2e%2e%2f%2e%2e%2fpackage.json')).status).toBe(404);
 	});
 
+	it('refuses to follow a symlink out of the asset directory', async () => {
+		// The lexical containment check passes for a link inside the directory —
+		// its path is inside — while its contents are anywhere the link points. A
+		// build step or an unpacked archive can leave one behind, and without the
+		// real-path check the process serves whatever it can read.
+		const root = await mkdtemp(join(tmpdir(), 'spelling-symlink-'));
+		const outside = await mkdtemp(join(tmpdir(), 'spelling-outside-'));
+		await writeFile(join(root, 'index.html'), '<!doctype html><title>shell</title>');
+		await writeFile(join(outside, 'secret.txt'), 'not yours');
+		await symlink(join(outside, 'secret.txt'), join(root, 'secret.txt'));
+		await symlink(outside, join(root, 'elsewhere'));
+
+		const server = assetServer(root);
+		const fetchPath = (path) => server.fetch(new Request(`https://host.test${path}`));
+		expect((await fetchPath('/secret.txt')).status).toBe(404);
+		expect((await fetchPath('/elsewhere/secret.txt')).status).toBe(404);
+		// A file that really is inside still works, including through a link that
+		// stays within the directory — the check is where the bytes are, not
+		// whether a link was involved.
+		await symlink(join(root, 'index.html'), join(root, 'shell.html'));
+		expect((await fetchPath('/shell.html')).status).toBe(200);
+	});
+
 	it('answers HEAD with headers and no body', async () => {
 		const res = await get('/assets/app-abc123.js', { method: 'HEAD' });
 		expect(res.status).toBe(200);
@@ -144,6 +167,23 @@ describe('nodePlatform', () => {
 			// More trusted hops than entries means something is misconfigured; the
 			// answer should be the oldest entry, not undefined.
 			expect(ipFor({ TRUSTED_PROXY_COUNT: '9' }, { 'x-forwarded-for': '1.1.1.1' })).toBe('1.1.1.1');
+		});
+
+		it('trusts nothing when no proxy is declared', () => {
+			// A directly-exposed process has no hop that wrote the header, so every
+			// entry in it is the caller's. Believing any of them would let a banned
+			// user pick the address the ban is keyed on.
+			expect(ipFor({ TRUSTED_PROXY_COUNT: '0' }, { 'x-forwarded-for': '1.1.1.1, 2.2.2.2' })).toBe('');
+			expect(ipFor({ TRUSTED_PROXY_COUNT: '0', CLIENT_IP_HEADER: 'x-real-ip' }, { 'x-real-ip': '4.4.4.4' })).toBe('');
+		});
+
+		it('keeps the default when the setting is blank or nonsense', () => {
+			// Only a literal 0 turns the header off; a typo falls back to one proxy
+			// rather than to trusting nothing (or, worse, to trusting the client).
+			const xff = { 'x-forwarded-for': '1.1.1.1, 2.2.2.2' };
+			expect(ipFor({ TRUSTED_PROXY_COUNT: '' }, xff)).toBe('2.2.2.2');
+			expect(ipFor({ TRUSTED_PROXY_COUNT: 'two' }, xff)).toBe('2.2.2.2');
+			expect(ipFor({ TRUSTED_PROXY_COUNT: '-1' }, xff)).toBe('2.2.2.2');
 		});
 
 		it('takes a single-value header whole', () => {
