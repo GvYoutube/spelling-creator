@@ -73,9 +73,9 @@ export async function appDomain(mcpUrl) {
  * the user's picker, which is rude but recoverable in one sentence — "no, use
  * the other one". Saying "renders" to a host that doesn't ends the assistant's
  * turn to wait for a click on a picker that was never drawn, and nothing will
- * ever arrive: the conversation simply stops, with no clue why. A stall beats
- * nothing else here, so anything short of the host plainly saying it renders
- * this mime type takes the text path.
+ * ever arrive: the conversation simply stops, with no clue why. The stall is the
+ * worse of the two by a long way, so anything short of the host plainly saying
+ * it renders this mime type takes the text path.
  *
  * @param {import('@modelcontextprotocol/sdk/server/mcp.js').McpServer} server
  * @returns {boolean}
