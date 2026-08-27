@@ -128,6 +128,27 @@ describe('runDiagnostics — the failures that actually happened', () => {
 		});
 	});
 
+	it('does not blame the key for a privilege error', async () => {
+		// A real instance answered exactly this. PostgREST reports Postgres's
+		// 42501 as a 401, so it reads as a rejected key — but the key was
+		// accepted and the role it named simply has no grant. Sending someone to
+		// check their JWT over this is a wasted evening.
+		await withFetch(async () => {
+			const result = await runDiagnostics(
+				envWith({
+					...HEALTHY_ROUTES,
+					'/rest/v1/lessons': json({ code: '42501', message: 'permission denied for table lessons' }, 401),
+				}),
+			);
+			const schema = find(result, 'schema');
+			expect(schema.state).toBe('failed');
+			expect(schema.detail).toContain('privileges, not credentials');
+			expect(schema.fix).toContain('GRANT ALL ON ALL TABLES');
+			// Specifically must NOT send them to the JWT.
+			expect(schema.fix).not.toMatch(/signed with the same secret/);
+		});
+	});
+
 	it('distinguishes a refused key from a missing table', async () => {
 		await withFetch(async () => {
 			const result = await runDiagnostics(envWith({ ...HEALTHY_ROUTES, '/rest/v1/lessons': json({ message: 'JWSError' }, 401) }));

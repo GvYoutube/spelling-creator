@@ -124,6 +124,19 @@ async function checkSchema(env, base) {
 				'Check the tables exist, then restart PostgREST if they do.',
 		);
 	}
+	// 42501 is Postgres's own insufficient_privilege. PostgREST reports it as a
+	// 401, which makes it look like the key was rejected — it was not. The key
+	// was accepted, the role it named was assumed, and that role cannot read the
+	// table. Sending someone to check their JWT over this is a wasted evening,
+	// so it is separated out and checked before the status codes below.
+	if (code === '42501' || /permission denied/i.test(message)) {
+		return failed(
+			'schema',
+			`the database refused the query on privileges, not credentials (HTTP ${response.status} ${code}: ${message})`,
+			'The service-role key was accepted; the role it names has no grant on the table. ' +
+				'Grant it: GRANT ALL ON ALL TABLES IN SCHEMA public TO service_role.',
+		);
+	}
 	if (response.status === 401 || response.status === 403) {
 		return failed(
 			'schema',
