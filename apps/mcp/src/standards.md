@@ -220,8 +220,11 @@ the offending value, and the fix, so read it and resubmit — you do not have to
 A rejection throws away the whole call, and the rules below are strict enough that six sections
 written blind rarely pass on the first attempt. Do not compose the entire lesson and hope.
 `validate_lesson` runs these same checks and saves nothing, so check each section as you finish
-it, fix what the messages name, and call a writing tool once the lesson comes back clean. It
-costs nothing to call and it is not rate limited.
+it, fix what the messages name, and call a writing tool once the lesson comes back clean.
+Checking `sections` you are composing is a local check — nothing is written and nothing is
+fetched — so do it as often as you like. Checking by `id` reads the lesson from the hub first,
+which is an ordinary API read: still writes nothing, but it is a request like any other, so
+don't poll with it.
 
 Rejected (errors):
 

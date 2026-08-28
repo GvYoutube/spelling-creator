@@ -543,7 +543,9 @@ export function registerTools(server, ctx) {
         "spelling-word length, answer uniqueness — and create_lesson rejects a lesson outright when any of it " +
         "fails, so a six-section lesson written in one shot rarely lands first time. Build a section, check it, " +
         "fix what the messages name, then go on to the next: no lesson is created, no document overwritten, and " +
-        "no version added to anyone's History tab, so you can call this as often as you like.\n\n" +
+        "no version added to anyone's History tab. Checking `sections` is entirely local — nothing is fetched " +
+        "either — so do that as often as you like; checking by `id` reads the lesson from the hub first, which " +
+        "writes nothing but is still a request, so don't poll with it.\n\n" +
         "Two ways to call it:\n" +
         "• `sections` (with an optional `title`) — content you are composing, in create_lesson's shape. It need " +
         "not be a whole lesson; a single section is a perfectly good thing to check.\n" +

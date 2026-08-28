@@ -93,9 +93,13 @@ whole lesson — so an assistant composing the lot in a single call, with no way
 its work until it submits, rarely lands it first time.
 
 **`validate_lesson`** is the same checks with the write taken off the end. Nothing is
-created, nothing is overwritten, and no version is added to anyone's History tab, so it
-can be called as often as the assistant likes: write a section, check it, fix what the
-messages name, move on.
+created, nothing is overwritten, and no version is added to anyone's History tab: write a
+section, check it, fix what the messages name, move on.
+
+Checking `sections` you are composing is a **local** check — nothing is fetched either — so
+it can be called as often as the assistant likes. Checking by `id` reads the lesson from the
+hub first, which still writes nothing but is an ordinary API read like any other, so it is
+not free and should not be polled.
 
 It takes either content being composed or a lesson that already exists:
 
