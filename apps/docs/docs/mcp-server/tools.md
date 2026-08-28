@@ -23,6 +23,10 @@ title: Tools
 | `search_images`         | Search Wikimedia Commons for freely-licensed images — as a picker, where a client can show one. |
 | `add_image`             | Download a searched image and insert it as an image block in a lesson.                          |
 
+Plus five more on the stdio transport, for joining a lesson the user is editing live:
+`join_collab_session`, `read_collab_doc`, `edit_collab_doc`, `send_collab_chat` and
+`leave_collab_session`. See [Live sessions](/mcp-server/live-sessions).
+
 ## Every edit is a version
 
 A lesson is a [real git repository](/monorepo/version-history), and the web editor

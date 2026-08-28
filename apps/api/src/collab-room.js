@@ -18,49 +18,18 @@
 // whole-document last-write-wins model silently dropped one of them. See
 // apps/web/src/lib/ydoc.js for the document model and the plain-JSON bridge.
 //
-// Wire protocol — binary frames for speed. Every frame is an ArrayBuffer whose
-// first byte is the message type; the rest is the payload. Cursor and chat
-// payloads are UTF-8 JSON; document payloads are opaque Yjs update bytes, which
-// the room can relay without parsing. A sender is identified by a server-assigned
-// u16 "slot" (not by name/email) — smaller packets and unspoofable. Frame shapes:
-//
-//   server -> client
-//     HELLO    [0][slot u16][role u8]            your slot + role (1=host)
-//     UPDATE   [1][yjs update]                    someone edited the document
-//     CURSOR   [2][senderSlot u16][utf8 cursor]   where someone is editing
-//     CHAT     [3][senderSlot u16][utf8 chat]     a chat message for everyone
-//     PRESENCE [4][utf8 roster]                   who's here / who's waiting
-//     ADMITTED [5][yjs state]                     you were added; here's the lesson
-//     REMOVED  [6][utf8 reason]                   declined / removed / host left
-//     ERROR    [7][utf8 message]                  fatal error before/while joining
-//   client -> server
-//     UPDATE   [1][yjs update]                     I edited the document
-//     CURSOR   [2][utf8 cursor]                     my caret moved
-//     CHAT     [3][utf8 chat]                       send a chat message
-//     ADMIT    [8][targetSlot u16]                  host: add this pending guest
-//     REMOVE   [9][targetSlot u16]                  host: decline / remove
-//
-// There is deliberately no separate "full document" frame: a Yjs update encoding
-// an entire document is just a large update, and Y.applyUpdate treats it exactly
-// like an incremental one. So the host's initial seed, a late joiner's ADMITTED
-// payload and a single keystroke all travel the same path.
+// Wire protocol — binary frames for speed, defined once in
+// packages/core/src/collabFrames.js and spoken by all three ends (this room, the
+// browser in apps/web/src/lib/collab.js, and the MCP server in
+// apps/mcp/src/collab.js). Read that file for the frame shapes; a sender is
+// identified there by a server-assigned u16 "slot" rather than by name or email,
+// which makes packets smaller and identities unspoofable.
 import { DurableObject } from 'cloudflare:workers';
 import * as Y from 'yjs';
 
-import { rateLimitStore } from './platform/index.js';
+import { T, frameBytes, frameJson, frameWithSlot } from '@spelling-creator/core/collabFrames';
 
-const T = {
-	HELLO: 0,
-	UPDATE: 1,
-	CURSOR: 2,
-	CHAT: 3,
-	PRESENCE: 4,
-	ADMITTED: 5,
-	REMOVED: 6,
-	ERROR: 7,
-	ADMIT: 8,
-	REMOVE: 9,
-};
+import { rateLimitStore } from './platform/index.js';
 
 // Hard limits (the "strict" rate-limit profile). The Worker additionally caps
 // how often a user may open a connection and how many rooms they may host; these
@@ -81,35 +50,14 @@ const MAX_VIOLATIONS = 100;
 
 const enc = new TextEncoder();
 
-// ----- binary frame builders ------------------------------------------------
+// The one frame shape that is the room's alone to build: HELLO tells a socket
+// its own slot and role, so nothing else ever sends it.
 function frameHello(slot, host) {
 	const b = new Uint8Array(4);
 	b[0] = T.HELLO;
 	b[1] = (slot >> 8) & 0xff;
 	b[2] = slot & 0xff;
 	b[3] = host ? 1 : 0;
-	return b;
-}
-
-// A type byte followed by raw payload bytes (used for DOC/ADMITTED/REMOVED/ERROR).
-function frameBytes(type, payload) {
-	const b = new Uint8Array(1 + payload.length);
-	b[0] = type;
-	b.set(payload, 1);
-	return b;
-}
-
-function frameJson(type, obj) {
-	return frameBytes(type, enc.encode(JSON.stringify(obj)));
-}
-
-// A type byte, a sender slot (u16), then the payload bytes (CURSOR/CHAT relay).
-function frameWithSlot(type, slot, payload) {
-	const b = new Uint8Array(3 + payload.length);
-	b[0] = type;
-	b[1] = (slot >> 8) & 0xff;
-	b[2] = slot & 0xff;
-	b.set(payload, 3);
 	return b;
 }
 

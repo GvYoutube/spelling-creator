@@ -18,6 +18,7 @@ import { applyPatch, findBlock } from "./patch.js";
 import { searchWikimediaImages, resolveWikimediaImage } from "./wikimedia.js";
 import { LESSON_STANDARDS } from "./standards.js";
 import { IMAGE_PICKER_URI, registerViews, rendersViews } from "./views.js";
+import { registerCollabTools } from "./collabTools.js";
 import {
   formatFindings,
   inputBlocksFromOperations,
@@ -417,11 +418,18 @@ function verdict({ checked, failures, flags, preexisting }) {
 
 /**
  * Attach all tools to an MCP server.
+ *
+ * `ctx.live` says whether this transport can hold state between tool calls.
+ * Stdio can — it is one process per client — so it gets the collaboration
+ * session tools. The Worker builds a fresh server per request and has nowhere to
+ * keep a WebSocket, so it doesn't, and they are left unregistered rather than
+ * advertised and then failing at the one moment somebody needs them.
+ *
  * @param {import('@modelcontextprotocol/sdk/server/mcp.js').McpServer} server
- * @param {{ api: ReturnType<import('./api.js').createApi>, config: ReturnType<import('./config.js').loadConfig> }} ctx
+ * @param {{ api: ReturnType<import('./api.js').createApi>, config: ReturnType<import('./config.js').loadConfig>, auth?: any, live?: boolean }} ctx
  */
 export function registerTools(server, ctx) {
-  const { api, config } = ctx;
+  const { api, config, auth, live = false } = ctx;
 
   // The `ui://` resources behind the tools that have a view. Registered
   // unconditionally: a host that doesn't do MCP Apps simply never reads them.
@@ -1685,6 +1693,21 @@ export function registerTools(server, ctx) {
       },
     ),
   );
+
+  // Live collaboration, where the transport can hold a session open. These need
+  // the auth token directly (the room authenticates the WebSocket itself, rather
+  // than through the API client) and they share this file's tool wrapper and
+  // standard check, so what the assistant is told about a live edit matches what
+  // it is told about a saved one.
+  if (live && auth) {
+    registerCollabTools(server, {
+      config,
+      auth,
+      text,
+      tool,
+      standardFindings,
+    });
+  }
 }
 
 // The server's identifying metadata, shared by both transports.
@@ -1694,5 +1717,5 @@ export function registerTools(server, ctx) {
 // every client UI and bug report.
 export const SERVER_INFO = {
   name: "spelling-creator-hub",
-  version: "0.13.0",
+  version: "0.14.0",
 };

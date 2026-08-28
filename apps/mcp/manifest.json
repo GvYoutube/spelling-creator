@@ -2,7 +2,7 @@
   "manifest_version": "0.3",
   "name": "spelling-creator-hub",
   "display_name": "Spelling Creator Hub",
-  "version": "0.13.0",
+  "version": "0.14.0",
   "description": "Author and publish spelling lessons to the Spelling Creator hub from your AI assistant.",
   "long_description": "Connects your AI assistant to the Spelling Creator hub so it can compose and publish spelling lessons for you. You describe the lesson; the assistant builds it (reading passages with ALL-CAPS spelling words, explicit word lists, and quiz questions) and saves it to the hub through the same API the web app uses — with all the usual validation and author attribution. Lessons default to private drafts; publish them when you're ready. Requires a Supabase refresh token (run the bundled `login` helper, or copy one from the web app) and a display name set on your account.",
   "author": {
@@ -115,6 +115,26 @@
     {
       "name": "delete_lesson",
       "description": "Permanently delete a lesson you authored, confirming with you first where the client can ask."
+    },
+    {
+      "name": "join_collab_session",
+      "description": "Join a lesson the user is editing live, as a participant they admit to the session."
+    },
+    {
+      "name": "read_collab_doc",
+      "description": "Read the lesson as the live session holds it, including unsaved edits."
+    },
+    {
+      "name": "edit_collab_doc",
+      "description": "Edit the live session's lesson, appearing on everyone's screen as you go."
+    },
+    {
+      "name": "send_collab_chat",
+      "description": "Say something to everyone in the live session."
+    },
+    {
+      "name": "leave_collab_session",
+      "description": "Disconnect from the live session, leaving the lesson as it is."
     }
   ],
   "tools_generated": false,
