@@ -217,6 +217,12 @@ explicitly supplies one.
 writing it, and REJECT the write when a rule below is broken. Each rejection names the section,
 the offending value, and the fix, so read it and resubmit — you do not have to guess.
 
+A rejection throws away the whole call, and the rules below are strict enough that six sections
+written blind rarely pass on the first attempt. Do not compose the entire lesson and hope.
+`validate_lesson` runs these same checks and saves nothing, so check each section as you finish
+it, fix what the messages name, and call a writing tool once the lesson comes back clean. It
+costs nothing to call and it is not rate limited.
+
 Rejected (errors):
 
 - a green (single) answer that does not appear, word for word, in its own section's passage

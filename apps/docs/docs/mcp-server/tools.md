@@ -7,6 +7,7 @@ title: Tools
 | Tool                    | What it does                                                                                    |
 | ----------------------- | ----------------------------------------------------------------------------------------------- |
 | `whoami`                | Confirm the session is valid and show the publishing display name.                              |
+| `validate_lesson`       | Check lesson content against the authoring standard, saving nothing.                            |
 | `create_lesson`         | Build and save a new lesson (draft by default; `published: true` to share).                     |
 | `create_lesson_file`    | Build an importable lesson file offline, with no account or network.                            |
 | `patch_lesson`          | Edit a lesson with a small diff (id-addressed ops) instead of a full replace.                   |
@@ -173,6 +174,12 @@ spelling-word or uniqueness failure, with a message naming the section, the valu
 Softer shape problems come back as a `warnings` array on the saved result. `skipValidation: true`
 turns the errors off for a user who deliberately wants something the standard forbids. See
 [Lesson validation](/mcp-server/lesson-validation) for every code.
+
+Because a rejected write is all-or-nothing, an assistant composing six sections in one call
+has to get every one of them right first time. **`validate_lesson`** runs the same checks
+without saving, so it can build a section, check it, fix what the messages name, and only
+call `create_lesson` once the whole thing comes back clean. See
+[Checking before you write](/mcp-server/lesson-validation#checking-before-you-write).
 
 A lesson is **sections** of **blocks**. Block types:
 

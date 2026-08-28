@@ -332,18 +332,44 @@ function toWireWarnings(warnings) {
 }
 
 /**
+ * The standard's verdict on a document, as data: what would be rejected
+ * (`failures`) and what would merely be reported (`flags`).
+ *
+ * Split out of checkStandard so validate_lesson can report the same findings
+ * that a write would act on. Keeping one function behind both is the point —
+ * "check it here, then write it" is only worth anything if the two agree, and
+ * two copies of this would drift apart the first time a rule changed.
+ *
+ * `baselineDoc` (patch_lesson, and validate_lesson previewing a patch) holds the
+ * lesson as it was before the edit, and limits both lists to the ones the edit
+ * actually introduced. Without it, a one-line tweak to a lesson written in the
+ * web editor — or written before these rules existed — would be blocked by
+ * defects the caller never touched and may not be able to fix.
+ *
+ * @param {{ doc: any, rawBlocks?: any[], baselineDoc?: any }} args
+ * @returns {{ failures: import('./validate.js').Finding[], flags: import('./validate.js').Finding[] }}
+ */
+function standardFindings({ doc, rawBlocks = [], baselineDoc = null }) {
+  const { errors, warnings } = validateLesson(doc);
+  let failures = [...validateInput(rawBlocks), ...errors];
+  let flags = warnings;
+
+  if (baselineDoc) {
+    const before = validateLesson(baselineDoc);
+    failures = newFindings(before.errors, failures);
+    flags = newFindings(before.warnings, flags);
+  }
+
+  return { failures, flags };
+}
+
+/**
  * Run the authoring standard over a lesson about to be written.
  *
  * Throws when it fails, which the `tool()` wrapper turns into a readable isError
  * result — so a rejected lesson is never saved, and the assistant gets a message
  * naming every defect and its fix. Returns the warnings to ride along with a
  * successful write.
- *
- * `baselineDoc` (patch_lesson only) holds the lesson as it was before the edit,
- * and limits both errors and warnings to the ones the edit actually introduced.
- * Without it, a one-line tweak to a lesson written in the web editor — or written
- * before these rules existed — would be blocked by defects the caller never
- * touched and may not be able to fix.
  *
  * @param {{ doc: any, rawBlocks?: any[], skipValidation?: boolean, baselineDoc?: any }} args
  * @returns {Array<{ code: string, section?: number, message: string }>}
@@ -356,18 +382,37 @@ function checkStandard({
 }) {
   if (skipValidation) return [];
 
-  const { errors, warnings } = validateLesson(doc);
-  let failures = [...validateInput(rawBlocks), ...errors];
-  let flags = warnings;
-
-  if (baselineDoc) {
-    const before = validateLesson(baselineDoc);
-    failures = newFindings(before.errors, failures);
-    flags = newFindings(before.warnings, flags);
-  }
-
+  const { failures, flags } = standardFindings({ doc, rawBlocks, baselineDoc });
   if (failures.length) throw new Error(validationErrorMessage(failures));
   return toWireWarnings(flags);
+}
+
+/**
+ * How validate_lesson reports one check.
+ *
+ * `ok` answers the question actually being asked — would a write of this be
+ * accepted? — before either list, so a model that reads no further still gets it
+ * right. The lists themselves carry the same self-correcting messages a rejected
+ * write would have returned.
+ *
+ * @param {{ checked: string, failures: any[], flags: any[], preexisting?: object }} args
+ */
+function verdict({ checked, failures, flags, preexisting }) {
+  const ok = failures.length === 0;
+  return {
+    ok,
+    checked,
+    errors: toWireWarnings(failures),
+    warnings: toWireWarnings(flags),
+    ...(preexisting ? { preexisting } : {}),
+    note: ok
+      ? flags.length
+        ? "No errors — a write of this would be accepted. The warnings would ride along with it: worth fixing, " +
+          "but they don't block."
+        : "Clean — a write of this would be accepted with nothing to report."
+      : `A write of this would be REJECTED. Fix the ${failures.length} error${failures.length === 1 ? "" : "s"} ` +
+        "above and check again. Nothing has been saved either way.",
+  };
 }
 
 /**
@@ -488,6 +533,129 @@ export function registerTools(server, ctx) {
   );
 
   server.registerTool(
+    "validate_lesson",
+    {
+      title: "Check a lesson against the standard",
+      description:
+        "Check lesson content against the authoring standard WITHOUT saving anything. The same checks and the " +
+        "same messages the writing tools use, so what passes here passes there.\n\n" +
+        "Use it AS YOU COMPOSE rather than writing a whole lesson blind. The standard is strict — grounding, " +
+        "spelling-word length, answer uniqueness — and create_lesson rejects a lesson outright when any of it " +
+        "fails, so a six-section lesson written in one shot rarely lands first time. Build a section, check it, " +
+        "fix what the messages name, then go on to the next: no lesson is created, no document overwritten, and " +
+        "no version added to anyone's History tab, so you can call this as often as you like.\n\n" +
+        "Two ways to call it:\n" +
+        "• `sections` (with an optional `title`) — content you are composing, in create_lesson's shape. It need " +
+        "not be a whole lesson; a single section is a perfectly good thing to check.\n" +
+        "• `id` — a lesson that already exists on the hub. Add `operations` (patch_lesson's shape) to see what " +
+        "that patch WOULD produce, without applying it.\n\n" +
+        "`errors` are what would be rejected; `warnings` are what would be reported alongside a successful write. " +
+        "When you pass `id`, defects already in the stored lesson are counted under `preexisting` instead of being " +
+        "held against you — exactly as patch_lesson treats them.\n\n" +
+        LESSON_STANDARDS,
+      inputSchema: {
+        title: z
+          .string()
+          .optional()
+          .describe(
+            "The draft's title. Optional — the standard says nothing about titles; it only makes the result " +
+              "easier to read.",
+          ),
+        sections: sectionsSchema
+          .optional()
+          .describe(
+            "Content you are composing, in create_lesson's shape — a whole lesson, or the one section you just " +
+              "wrote. Omit when checking an existing lesson by `id`.",
+          ),
+        id: z
+          .string()
+          .optional()
+          .describe(
+            "The id of a lesson on the hub to check as it stands. Omit when checking `sections` you are composing.",
+          ),
+        operations: z
+          .array(operationSchema)
+          .min(1)
+          .optional()
+          .describe(
+            "With `id`: the patch_lesson operations to try. They are applied to a copy in memory and the result " +
+              "is checked; the stored lesson is not touched.",
+          ),
+      },
+    },
+    tool(async ({ title, sections, id, operations }) => {
+      if (sections && id) {
+        throw new Error(
+          "Pass either `sections` (content you are composing) or `id` (a lesson on the hub), not both.",
+        );
+      }
+      if (operations && !id) {
+        throw new Error(
+          "`operations` previews a patch to a lesson that already exists, so it needs that lesson's `id`. " +
+            "To check content you are composing, pass `sections` on its own.",
+        );
+      }
+      if (!sections && !id) {
+        throw new Error(
+          "Nothing to check. Pass `sections` to check content you are composing, or `id` to check a lesson on the hub.",
+        );
+      }
+
+      // Composing: build exactly what create_lesson/update_lesson would build,
+      // and check exactly what they would check.
+      if (sections) {
+        const doc = buildDoc({ title, sections });
+        const { failures, flags } = standardFindings({
+          doc,
+          rawBlocks: inputBlocksFromSections(sections),
+        });
+        const count = doc.sections.length;
+        return text(
+          verdict({
+            checked: `draft content — ${count} section${count === 1 ? "" : "s"}, nothing saved`,
+            failures,
+            flags,
+          }),
+        );
+      }
+
+      // An existing lesson, optionally with a patch applied to the fetched copy.
+      // Read-only either way: applyPatch works in memory and no write follows it.
+      const current = await api.getLesson(id);
+      if (!operations) {
+        const { failures, flags } = standardFindings({ doc: current.doc });
+        return text(
+          verdict({ checked: `lesson ${id} as stored`, failures, flags }),
+        );
+      }
+
+      const doc = applyPatch(current.doc, operations);
+      const { failures, flags } = standardFindings({
+        doc,
+        rawBlocks: inputBlocksFromOperations(operations),
+        baselineDoc: current.doc,
+      });
+      const before = validateLesson(current.doc);
+      return text(
+        verdict({
+          checked:
+            `lesson ${id} with ${operations.length} operation${operations.length === 1 ? "" : "s"} applied in ` +
+            "memory — the stored lesson is unchanged",
+          failures,
+          flags,
+          preexisting: {
+            errors: before.errors.length,
+            warnings: before.warnings.length,
+            note:
+              "Defects already in the stored lesson. They are not counted against this patch, and patch_lesson " +
+              "would not block on them either.",
+          },
+        }),
+      );
+    }),
+  );
+
+  server.registerTool(
     "create_lesson",
     {
       title: "Create a lesson",
@@ -505,6 +673,8 @@ export function registerTools(server, ctx) {
         "short and unambiguous, and every answer except the background one must be findable in that section's own " +
         "passage. Writes are validated against the standard below: grounding, spelling-word and uniqueness failures " +
         "are REJECTED with a message naming the section, the offending value and the fix — read it and resubmit.\n\n" +
+        "Don't compose all six sections blind and hope. Check your work with validate_lesson as you go — it runs " +
+        "these same checks without saving anything — and call this once it comes back clean.\n\n" +
         LESSON_STANDARDS,
       inputSchema: {
         title: z.string().describe("The lesson title / topic."),
@@ -1260,5 +1430,5 @@ export function registerTools(server, ctx) {
 // every client UI and bug report.
 export const SERVER_INFO = {
   name: "spelling-creator-hub",
-  version: "0.9.1",
+  version: "0.11.0",
 };

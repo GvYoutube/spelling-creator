@@ -84,6 +84,50 @@ Returned as a `warnings` array on the successful result:
 These are warnings and not errors because a legitimate lesson can trip each one: a user who
 asks for four sections gets `W_SECTION_COUNT` and should not be blocked by it.
 
+## Checking before you write
+
+A rejected write is all-or-nothing: `create_lesson` saves nothing at all when any error
+fires. A default lesson is six sections of 4 spelling words and 15 questions in a fixed
+order, every answer of which has to be findable in its own passage and unique across the
+whole lesson — so an assistant composing the lot in a single call, with no way to check
+its work until it submits, rarely lands it first time.
+
+**`validate_lesson`** is the same checks with the write taken off the end. Nothing is
+created, nothing is overwritten, and no version is added to anyone's History tab, so it
+can be called as often as the assistant likes: write a section, check it, fix what the
+messages name, move on.
+
+It takes either content being composed or a lesson that already exists:
+
+```json
+{ "title": "Volcanoes", "sections": [ … ] }   // create_lesson's shape — one section is fine
+{ "id": "…" }                                  // a stored lesson, as it stands
+{ "id": "…", "operations": [ … ] }             // what that patch WOULD produce
+```
+
+The result answers the question actually being asked before either list, so a model that
+reads no further still gets it right:
+
+```json
+{
+  "ok": false,
+  "checked": "draft content — 1 section, nothing saved",
+  "errors": [{ "code": "E_GROUNDING_SINGLE", "section": 1, "message": "…" }],
+  "warnings": [{ "code": "W_SECTION_COUNT", "message": "…" }],
+  "note": "A write of this would be REJECTED. …"
+}
+```
+
+`errors` are what would be rejected; `warnings` are what would ride along with a successful
+write. With `operations`, the baseline rule below applies exactly as it does to
+`patch_lesson` — defects already in the stored lesson are counted under `preexisting`
+rather than held against the caller — and the operations are applied to a copy in memory,
+so the stored lesson is untouched whatever the verdict.
+
+The tool and the writing tools share one implementation of the check (`standardFindings`
+in `apps/mcp/src/tools.js`), which is the only thing that makes "check here, then write"
+worth anything: two copies would disagree the first time a rule changed.
+
 ## `skipValidation`
 
 Every writing tool takes `skipValidation: true`, which turns the **errors** off (and with
