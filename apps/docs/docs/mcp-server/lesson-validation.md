@@ -84,11 +84,87 @@ Returned as a `warnings` array on the successful result:
 These are warnings and not errors because a legitimate lesson can trip each one: a user who
 asks for four sections gets `W_SECTION_COUNT` and should not be blocked by it.
 
+## Checking before you write
+
+A rejected write is all-or-nothing: `create_lesson` saves nothing at all when any error
+fires. A default lesson is six sections of 4 spelling words and 15 questions in a fixed
+order, every answer of which has to be findable in its own passage and unique across the
+whole lesson — so an assistant composing the lot in a single call, with no way to check
+its work until it submits, rarely lands it first time.
+
+**`validate_lesson`** is the same checks with the write taken off the end. Nothing is
+created, nothing is overwritten, and no version is added to anyone's History tab: write a
+section, check it, fix what the messages name, move on.
+
+Checking `sections` you are composing is a **local** check — nothing is fetched either — so
+it can be called as often as the assistant likes. Checking by `id` reads the lesson from the
+hub first, which still writes nothing but is an ordinary API read like any other, so it is
+not free and should not be polled.
+
+It takes either content being composed or a lesson that already exists:
+
+```json
+{ "title": "Volcanoes", "sections": [ … ] }   // create_lesson's shape — one section is fine
+{ "id": "…" }                                  // a stored lesson, as it stands
+{ "id": "…", "operations": [ … ] }             // what that patch WOULD produce
+```
+
+The result answers the question actually being asked before either list, so a model that
+reads no further still gets it right:
+
+```json
+{
+  "ok": false,
+  "checked": "draft content — 1 section, nothing saved",
+  "errors": [{ "code": "E_GROUNDING_SINGLE", "section": 1, "message": "…" }],
+  "warnings": [{ "code": "W_SECTION_COUNT", "message": "…" }],
+  "note": "A write of this would be REJECTED. …"
+}
+```
+
+`errors` are what would be rejected; `warnings` are what would ride along with a successful
+write. With `operations`, the baseline rule below applies exactly as it does to
+`patch_lesson` — defects already in the stored lesson are counted under `preexisting`
+rather than held against the caller — and the operations are applied to a copy in memory,
+so the stored lesson is untouched whatever the verdict.
+
+The tool and the writing tools share one implementation of the check (`standardFindings`
+in `apps/mcp/src/tools.js`), which is the only thing that makes "check here, then write"
+worth anything: two copies would disagree the first time a rule changed.
+
 ## `skipValidation`
 
 Every writing tool takes `skipValidation: true`, which turns the **errors** off (and with
 them the warnings — nothing is checked). It exists for the user who deliberately wants a
 lesson the standard forbids, not as a way around a defect that should be fixed.
+
+That distinction used to live entirely in the flag's description — advice to the model,
+which nobody could audit and which the user never saw. The assistant set the flag, the
+standard was waived, and the only trace was a lesson that quietly broke the rules.
+
+So the findings are now computed even when the flag is set, and on a client that supports
+[elicitation](/mcp-server/tools#decisions-that-are-the-users), the override becomes a
+question put to the user, listing what would be waived:
+
+```text
+The assistant is about to save a lesson that breaks the authoring standard in
+2 ways, by overriding the check:
+
+1. [E_GROUNDING_SINGLE] Section 1 "Reading": the answer "obsidian" does not …
+2. [E_SPELLING_LENGTH] Section 1 "Reading": the spelling word "ash" is 3 …
+
+Save it as it is?
+```
+
+Say no and nothing is saved: the write fails with the findings and an instruction not to
+try the override again unasked. Say yes and it saves exactly as before. Nothing is asked
+when the lesson breaks no rule anyway — the flag is often set defensively, and there is
+nothing to waive.
+
+On a client that can't ask, the flag behaves exactly as it always has. That is a real gap,
+not a temporary one: elicitation is optional in the MCP spec and most clients don't
+implement it. Validation is still the thing that holds without the model's cooperation;
+this only closes the loop on the one escape hatch the model controls.
 
 ## Patching an existing lesson
 

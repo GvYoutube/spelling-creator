@@ -27,6 +27,7 @@
     "./browser/summarizer": "./src/browser/summarizer.js",
     "./browser/supabase": "./src/browser/supabase.js",
     "./browser/turnstile": "./src/browser/turnstile.js",
+    "./collabFrames": "./src/collabFrames.js",
     "./comments": "./src/comments.js",
     "./config": "./src/config.js",
     "./git/doc": "./src/git/doc.js",

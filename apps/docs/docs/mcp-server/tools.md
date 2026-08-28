@@ -7,6 +7,7 @@ title: Tools
 | Tool                    | What it does                                                                                    |
 | ----------------------- | ----------------------------------------------------------------------------------------------- |
 | `whoami`                | Confirm the session is valid and show the publishing display name.                              |
+| `validate_lesson`       | Check lesson content against the authoring standard, saving nothing.                            |
 | `create_lesson`         | Build and save a new lesson (draft by default; `published: true` to share).                     |
 | `create_lesson_file`    | Build an importable lesson file offline, with no account or network.                            |
 | `patch_lesson`          | Edit a lesson with a small diff (id-addressed ops) instead of a full replace.                   |
@@ -21,6 +22,10 @@ title: Tools
 | `delete_lesson`         | Permanently delete one of your lessons.                                                         |
 | `search_images`         | Search Wikimedia Commons for freely-licensed images — as a picker, where a client can show one. |
 | `add_image`             | Download a searched image and insert it as an image block in a lesson.                          |
+
+Plus five more on the stdio transport, for joining a lesson the user is editing live:
+`join_collab_session`, `read_collab_doc`, `edit_collab_doc`, `send_collab_chat` and
+`leave_collab_session`. See [Live sessions](/mcp-server/live-sessions).
 
 ## Every edit is a version
 
@@ -57,6 +62,59 @@ Some things worth knowing:
   to pass on.
 - **Nothing is committed when nothing changed.** An edit that leaves the stored content
   identical records no version, rather than an empty one.
+- **The assistant can name the version.** `patch_lesson` and `update_lesson` take a
+  `summary`, which becomes the version's title instead of the mechanical description of
+  what changed. See [Building a lesson in passes](#building-a-lesson-in-passes).
+
+## Decisions that are the user's
+
+Three things this server does are the user's call rather than the assistant's: **deleting a
+lesson**, which cannot be undone; **publishing one**, which puts it in front of strangers
+under their name; and **overriding the authoring standard** with `skipValidation`, which is
+meant for a user who deliberately wants what the standard forbids.
+
+All three were governed only by prose in the tool descriptions — "ask the user first" —
+which is advice the model may or may not follow, and which neither the server nor the user
+can check after the fact. On a client that supports **elicitation**, the server now asks
+them directly, mid-tool-call, and their answer decides it:
+
+- **`delete_lesson`** names the lesson and says what goes with it, and points at
+  unpublishing as the reversible alternative. Say no and nothing is deleted.
+- **Publishing** — `set_lesson_published(true)`, or `published: true` on `create_lesson`,
+  `update_lesson` or `patch_lesson`. See below.
+- **`skipValidation`** lists the defects that would be waived before waiving them. See
+  [Lesson validation](/mcp-server/lesson-validation#skipvalidation).
+
+### Publishing
+
+Publishing is asked about only **on the way out**, and only when public is a change:
+unpublishing is never confirmed (it only ever makes a lesson less visible), and neither is
+`published: true` on a lesson that is already public.
+
+A refusal never costs the work. On the editing tools `published` rides along with a content
+change, so the content is written either way and only the visibility is held back; on
+`create_lesson` the lesson is created as a private draft rather than not at all. The result
+carries a `note` saying so, because the assistant asked for something it didn't get and
+would otherwise assume the field was ignored:
+
+```json
+{
+  "id": "…",
+  "note": "The content changes were saved, but the user was asked about publishing and said no, so the lesson is still a PRIVATE DRAFT. …"
+}
+```
+
+This is the same principle as the [image picker](./interactive-views.md): where a choice is
+genuinely the user's, an assistant that makes it takes it away from them.
+
+A refusal is not an error. `delete_lesson` returns a normal result saying the user declined
+and telling the assistant not to ask again unprompted; a refused `skipValidation` fails the
+write, because a write that was never permitted didn't happen.
+
+**On a client that can't ask, both tools behave exactly as they did before** — elicitation
+is optional in the MCP spec and most clients don't implement it, so failing closed would
+make `delete_lesson` unusable for most people. Both tool descriptions say so, and tell the
+assistant to ask in the conversation regardless.
 
 ## Proposing changes instead of making them
 
@@ -149,6 +207,42 @@ server fetches the lesson, applies the ops in order, and saves the result (the h
 itself only does full replaces, so the diff is applied server-side). Use `update_lesson`
 when you're rewriting the whole lesson anyway.
 
+## Building a lesson in passes
+
+`patch_lesson` isn't only for tweaks. A six-section lesson is a lot to get right in one
+`create_lesson` call, and that call is all-or-nothing — one grounding failure anywhere and
+nothing is saved. The alternative is to create the first section or two and add the rest a
+pass at a time:
+
+```text
+validate_lesson({ sections: [ … ] })        -> check the section you just wrote
+create_lesson({ title, sections: [ … ] })   -> the lesson exists after one section
+validate_lesson({ id, operations: [ … ] })  -> check the next pass before sending it
+patch_lesson({ id, operations, summary })   -> add it
+```
+
+Each pass is checked on its own, reversible on its own, and named on its own. Composing the
+whole document locally and writing it in one `create_lesson` is equally fine — the thing to
+avoid is writing six sections blind and hoping, which is what the tools used to require.
+
+**Name each pass with `summary`.** `patch_lesson` and `update_lesson` both take one, and it
+becomes the version's title in the **History** tab:
+
+```json
+{ "id": "…", "operations": [ … ], "summary": "Add section 3: volcanic ash" }
+```
+
+Without it the version is named after what mechanically changed ("Add 15 question blocks"),
+which is accurate and says nothing about why — fine for a one-off tweak, and poor for six
+passes the user has to open one by one to tell apart. The summary replaces the subject line
+only: the itemised operations and the "made by an AI assistant" note still follow in the
+commit body. It's clamped to 72 characters.
+
+One reason to prefer `patch_lesson` over `update_lesson` for this: `update_lesson` rebuilds
+every section and block id, so its diff reads as a wholesale add-and-remove even for a
+one-word change. `patch_lesson` addresses blocks by id, so the history records what actually
+moved.
+
 There is a second reason to prefer patching. Both tools check the result against the
 authoring standard, but `patch_lesson` holds the caller only to the defects its edit
 introduced, whereas `update_lesson` replaces the whole document and so owns everything in
@@ -173,6 +267,12 @@ spelling-word or uniqueness failure, with a message naming the section, the valu
 Softer shape problems come back as a `warnings` array on the saved result. `skipValidation: true`
 turns the errors off for a user who deliberately wants something the standard forbids. See
 [Lesson validation](/mcp-server/lesson-validation) for every code.
+
+Because a rejected write is all-or-nothing, an assistant composing six sections in one call
+has to get every one of them right first time. **`validate_lesson`** runs the same checks
+without saving, so it can build a section, check it, fix what the messages name, and only
+call `create_lesson` once the whole thing comes back clean. See
+[Checking before you write](/mcp-server/lesson-validation#checking-before-you-write).
 
 A lesson is **sections** of **blocks**. Block types:
 

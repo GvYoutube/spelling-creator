@@ -217,6 +217,20 @@ explicitly supplies one.
 writing it, and REJECT the write when a rule below is broken. Each rejection names the section,
 the offending value, and the fix, so read it and resubmit — you do not have to guess.
 
+A rejection throws away the whole call, and the rules below are strict enough that six sections
+written blind rarely pass on the first attempt. Do not compose the entire lesson and hope.
+`validate_lesson` runs these same checks and saves nothing, so check each section as you finish
+it, fix what the messages name, and call a writing tool once the lesson comes back clean.
+Checking `sections` you are composing is a local check — nothing is written and nothing is
+fetched — so do it as often as you like. Checking by `id` reads the lesson from the hub first,
+which is an ordinary API read: still writes nothing, but it is a request like any other, so
+don't poll with it.
+
+For a long lesson you can also write it in passes rather than in one call: `create_lesson` with
+the first section or two, then `patch_lesson` with an `add_section` op for each one after that,
+passing a `summary` that says what the pass added. Each pass is validated, recorded and
+reversible on its own.
+
 Rejected (errors):
 
 - a green (single) answer that does not appear, word for word, in its own section's passage

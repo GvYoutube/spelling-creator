@@ -378,6 +378,7 @@ test("the MCP server exposes the full tool set", async () => {
     "search_images",
     "set_lesson_published",
     "update_lesson",
+    "validate_lesson",
     "whoami",
   ]);
 
@@ -562,6 +563,170 @@ test("patch_lesson only blocks on defects the patch introduced", async () => {
   assert.equal(breaking.isError, true);
   assert.match(breaking.content[0].text, /"pumice"/);
   assert.doesNotMatch(breaking.content[0].text, /obsidian/);
+
+  await client.close();
+  await server.close();
+});
+
+// validate_lesson's promise is that what passes it passes the write tools, so
+// these check it against the very content the create_lesson tests above use: the
+// same lesson, the same codes, the same messages — minus the write.
+
+test("validate_lesson reports what create_lesson would reject, and touches nothing", async () => {
+  const server = new McpServer(SERVER_INFO);
+  // Any API call at all is a failure: checking a draft is a local operation.
+  const api = new Proxy(
+    {},
+    {
+      get() {
+        throw new Error("validate_lesson must not call the API for a draft");
+      },
+    },
+  );
+  registerTools(server, { api, config: { apiUrl: "https://example.test" } });
+
+  const client = new Client({ name: "test", version: "0" });
+  const [clientT, serverT] = InMemoryTransport.createLinkedPair();
+  await Promise.all([server.connect(serverT), client.connect(clientT)]);
+
+  const res = await client.callTool({
+    name: "validate_lesson",
+    arguments: UNGROUNDED_LESSON,
+  });
+
+  // A failed check is a successful call — the findings are the answer, not an
+  // error, which is the whole difference from create_lesson.
+  assert.equal(res.isError, undefined);
+  const payload = JSON.parse(res.content[0].text);
+  assert.equal(payload.ok, false);
+  const codes = payload.errors.map((e) => e.code);
+  assert.ok(codes.includes("E_GROUNDING_SINGLE"));
+  assert.match(payload.errors[0].message, /"obsidian"/);
+  assert.match(payload.note, /REJECTED/);
+  assert.match(payload.checked, /nothing saved/);
+
+  await client.close();
+  await server.close();
+});
+
+test("validate_lesson passes a grounded draft, with warnings that don't block", async () => {
+  const server = new McpServer(SERVER_INFO);
+  registerTools(server, {
+    api: {},
+    config: { apiUrl: "https://example.test" },
+  });
+
+  const client = new Client({ name: "test", version: "0" });
+  const [clientT, serverT] = InMemoryTransport.createLinkedPair();
+  await Promise.all([server.connect(serverT), client.connect(clientT)]);
+
+  const res = await client.callTool({
+    name: "validate_lesson",
+    arguments: {
+      title: "Volcanoes",
+      sections: [
+        {
+          name: "Reading",
+          blocks: [
+            { type: "text", text: "A volcano ERUPTS." },
+            {
+              type: "question",
+              questionType: "single",
+              prompt: "What erupts?",
+              answer: "volcano",
+            },
+          ],
+        },
+      ],
+    },
+  });
+
+  const payload = JSON.parse(res.content[0].text);
+  assert.equal(payload.ok, true);
+  assert.deepEqual(payload.errors, []);
+  // One section instead of six is a warning, not a defect — it rides along.
+  assert.ok(payload.warnings.map((w) => w.code).includes("W_SECTION_COUNT"));
+  assert.match(payload.note, /would be accepted/);
+
+  await client.close();
+  await server.close();
+});
+
+test("validate_lesson previews a patch without applying it, and discounts inherited defects", async () => {
+  const server = new McpServer(SERVER_INFO);
+  const stored = buildDoc(UNGROUNDED_LESSON);
+  const api = {
+    async getLesson() {
+      return { id: "L2", title: "T", doc: stored };
+    },
+    async updateLesson() {
+      throw new Error("validate_lesson must never write");
+    },
+  };
+  registerTools(server, { api, config: { apiUrl: "https://example.test" } });
+
+  const client = new Client({ name: "test", version: "0" });
+  const [clientT, serverT] = InMemoryTransport.createLinkedPair();
+  await Promise.all([server.connect(serverT), client.connect(clientT)]);
+
+  const res = await client.callTool({
+    name: "validate_lesson",
+    arguments: {
+      id: "L2",
+      operations: [
+        {
+          op: "add_block",
+          sectionId: stored.sections[0].id,
+          block: {
+            type: "question",
+            questionType: "single",
+            prompt: "What else?",
+            answer: "pumice",
+          },
+        },
+      ],
+    },
+  });
+
+  const payload = JSON.parse(res.content[0].text);
+  assert.equal(payload.ok, false);
+  // Exactly what patch_lesson would block on: the answer this patch introduced,
+  // and not the one it inherited.
+  const reported = JSON.stringify(payload.errors);
+  assert.match(reported, /pumice/);
+  assert.doesNotMatch(reported, /obsidian/);
+  // The inherited defect is still counted, so the model knows it's there.
+  assert.equal(payload.preexisting.errors, 1);
+  assert.equal(stored.title, "T", "the stored doc was not mutated");
+
+  await client.close();
+  await server.close();
+});
+
+test("validate_lesson says what to pass when the arguments don't pick a target", async () => {
+  const server = new McpServer(SERVER_INFO);
+  registerTools(server, {
+    api: {},
+    config: { apiUrl: "https://example.test" },
+  });
+
+  const client = new Client({ name: "test", version: "0" });
+  const [clientT, serverT] = InMemoryTransport.createLinkedPair();
+  await Promise.all([server.connect(serverT), client.connect(clientT)]);
+
+  const empty = await client.callTool({
+    name: "validate_lesson",
+    arguments: {},
+  });
+  assert.equal(empty.isError, true);
+  assert.match(empty.content[0].text, /Nothing to check/);
+
+  const both = await client.callTool({
+    name: "validate_lesson",
+    arguments: { id: "L1", sections: [{ blocks: [] }] },
+  });
+  assert.equal(both.isError, true);
+  assert.match(both.content[0].text, /not both/);
 
   await client.close();
   await server.close();

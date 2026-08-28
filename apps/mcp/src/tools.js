@@ -18,7 +18,9 @@ import { applyPatch, findBlock } from "./patch.js";
 import { searchWikimediaImages, resolveWikimediaImage } from "./wikimedia.js";
 import { LESSON_STANDARDS } from "./standards.js";
 import { IMAGE_PICKER_URI, registerViews, rendersViews } from "./views.js";
+import { registerCollabTools } from "./collabTools.js";
 import {
+  formatFindings,
   inputBlocksFromOperations,
   inputBlocksFromSections,
   newFindings,
@@ -320,7 +322,30 @@ const skipValidationSchema = z
   .describe(
     "Save even if the lesson breaks the authoring standard (see this tool's standards text). Only for when " +
       "the user deliberately wants something the standard forbids — a 3-section lesson, a different question " +
-      "order. Never use it to get past a defect you could fix; the rejection message says exactly what to change.",
+      "order. Never use it to get past a defect you could fix; the rejection message says exactly what to change. " +
+      "On a client that can put a question to the user, setting this asks them to approve the override and lists " +
+      "what would be waived, so setting it on a hunch wastes their time and mine.",
+  );
+
+// The `summary` input, shared by the tools that edit an existing lesson.
+//
+// Without one, recordLessonHistory names the version after what changed
+// mechanically ("Edit 2 text blocks, add 15 question blocks"), which is accurate
+// and tells the user nothing about why. That is fine for a one-off tweak and
+// poor for a lesson built up in passes, where the History tab ends up a column
+// of near-identical op counts the user has to open one by one to tell apart.
+//
+// The assistant is the only party that knows what the pass was for, so it says.
+// The full op list still rides along in the commit body either way — this
+// replaces the subject line, not the record.
+const summarySchema = z
+  .string()
+  .optional()
+  .describe(
+    "One short line naming what this edit was for, shown as the version's title in the lesson's History tab " +
+      '("Add section 3: volcanic ash", "Rewrite the orange questions"). Write it for the user reading the tab ' +
+      "later, not as a restatement of the operations — those are recorded underneath it anyway. Clamped to 72 " +
+      "characters. Omit it and the version is named after what mechanically changed.",
   );
 
 // Findings carry an internal level and dedupe key; the assistant only needs to
@@ -332,30 +357,24 @@ function toWireWarnings(warnings) {
 }
 
 /**
- * Run the authoring standard over a lesson about to be written.
+ * The standard's verdict on a document, as data: what would be rejected
+ * (`failures`) and what would merely be reported (`flags`).
  *
- * Throws when it fails, which the `tool()` wrapper turns into a readable isError
- * result — so a rejected lesson is never saved, and the assistant gets a message
- * naming every defect and its fix. Returns the warnings to ride along with a
- * successful write.
+ * Split out of checkStandard so validate_lesson can report the same findings
+ * that a write would act on. Keeping one function behind both is the point —
+ * "check it here, then write it" is only worth anything if the two agree, and
+ * two copies of this would drift apart the first time a rule changed.
  *
- * `baselineDoc` (patch_lesson only) holds the lesson as it was before the edit,
- * and limits both errors and warnings to the ones the edit actually introduced.
- * Without it, a one-line tweak to a lesson written in the web editor — or written
- * before these rules existed — would be blocked by defects the caller never
- * touched and may not be able to fix.
+ * `baselineDoc` (patch_lesson, and validate_lesson previewing a patch) holds the
+ * lesson as it was before the edit, and limits both lists to the ones the edit
+ * actually introduced. Without it, a one-line tweak to a lesson written in the
+ * web editor — or written before these rules existed — would be blocked by
+ * defects the caller never touched and may not be able to fix.
  *
- * @param {{ doc: any, rawBlocks?: any[], skipValidation?: boolean, baselineDoc?: any }} args
- * @returns {Array<{ code: string, section?: number, message: string }>}
+ * @param {{ doc: any, rawBlocks?: any[], baselineDoc?: any }} args
+ * @returns {{ failures: import('./validate.js').Finding[], flags: import('./validate.js').Finding[] }}
  */
-function checkStandard({
-  doc,
-  rawBlocks = [],
-  skipValidation = false,
-  baselineDoc = null,
-}) {
-  if (skipValidation) return [];
-
+function standardFindings({ doc, rawBlocks = [], baselineDoc = null }) {
   const { errors, warnings } = validateLesson(doc);
   let failures = [...validateInput(rawBlocks), ...errors];
   let flags = warnings;
@@ -366,17 +385,51 @@ function checkStandard({
     flags = newFindings(before.warnings, flags);
   }
 
-  if (failures.length) throw new Error(validationErrorMessage(failures));
-  return toWireWarnings(flags);
+  return { failures, flags };
+}
+
+/**
+ * How validate_lesson reports one check.
+ *
+ * `ok` answers the question actually being asked — would a write of this be
+ * accepted? — before either list, so a model that reads no further still gets it
+ * right. The lists themselves carry the same self-correcting messages a rejected
+ * write would have returned.
+ *
+ * @param {{ checked: string, failures: any[], flags: any[], preexisting?: object }} args
+ */
+function verdict({ checked, failures, flags, preexisting }) {
+  const ok = failures.length === 0;
+  return {
+    ok,
+    checked,
+    errors: toWireWarnings(failures),
+    warnings: toWireWarnings(flags),
+    ...(preexisting ? { preexisting } : {}),
+    note: ok
+      ? flags.length
+        ? "No errors — a write of this would be accepted. The warnings would ride along with it: worth fixing, " +
+          "but they don't block."
+        : "Clean — a write of this would be accepted with nothing to report."
+      : `A write of this would be REJECTED. Fix the ${failures.length} error${failures.length === 1 ? "" : "s"} ` +
+        "above and check again. Nothing has been saved either way.",
+  };
 }
 
 /**
  * Attach all tools to an MCP server.
+ *
+ * `ctx.live` says whether this transport can hold state between tool calls.
+ * Stdio can — it is one process per client — so it gets the collaboration
+ * session tools. The Worker builds a fresh server per request and has nowhere to
+ * keep a WebSocket, so it doesn't, and they are left unregistered rather than
+ * advertised and then failing at the one moment somebody needs them.
+ *
  * @param {import('@modelcontextprotocol/sdk/server/mcp.js').McpServer} server
- * @param {{ api: ReturnType<import('./api.js').createApi>, config: ReturnType<import('./config.js').loadConfig> }} ctx
+ * @param {{ api: ReturnType<import('./api.js').createApi>, config: ReturnType<import('./config.js').loadConfig>, auth?: any, live?: boolean }} ctx
  */
 export function registerTools(server, ctx) {
-  const { api, config } = ctx;
+  const { api, config, auth, live = false } = ctx;
 
   // The `ui://` resources behind the tools that have a view. Registered
   // unconditionally: a host that doesn't do MCP Apps simply never reads them.
@@ -407,6 +460,126 @@ export function registerTools(server, ctx) {
     } catch (err) {
       return errorResult(err);
     }
+  };
+
+  /**
+   * Put a yes/no question to the USER, mid-tool-call, over the same connection.
+   *
+   * This exists for the handful of decisions that are the user's and have until
+   * now been made by the model on their behalf: deleting a lesson for good, and
+   * overriding the authoring standard. Both are cases where the tool
+   * descriptions ask the model to check with the user first — which is prose it
+   * may or may not act on, and neither the server nor the user can tell whether
+   * it did. Asking directly is the difference between a rule and a request.
+   *
+   * The same reasoning as the image picker (see views.js): where a choice is
+   * genuinely the user's, an assistant that makes it takes it away from them.
+   *
+   * Returns true if they said yes, false if they said no or dismissed the
+   * prompt, and **null if they were never asked** — the client doesn't do
+   * elicitation, or the ask itself failed. Null is not consent and it is not
+   * refusal; it means this connection has no way to reach the user, and the
+   * caller decides what to do about it. Elicitation is optional in the MCP spec
+   * and most clients still don't implement it, so null is the common case and
+   * every caller must leave those clients working exactly as they did.
+   *
+   * @param {string} message  The question, as the user will read it.
+   * @param {string} title    The affirmative answer's label.
+   * @returns {Promise<boolean|null>}
+   */
+  const askUser = async (message, title) => {
+    let capable = false;
+    try {
+      capable = Boolean(server.server.getClientCapabilities()?.elicitation);
+    } catch {
+      return null;
+    }
+    if (!capable) return null;
+
+    try {
+      const res = await server.server.elicitInput({
+        message,
+        requestedSchema: {
+          type: "object",
+          properties: {
+            confirm: {
+              type: "boolean",
+              title,
+              description: "Leave this unchecked to stop.",
+            },
+          },
+          required: ["confirm"],
+        },
+      });
+      // "decline" and "cancel" are both a no. Only an explicit accept carrying
+      // an explicit true is a yes — an accept with the box unticked is the user
+      // saying no through the form rather than through the buttons.
+      if (res.action !== "accept") return false;
+      return res.content?.confirm === true;
+    } catch {
+      // The client said it could ask and then couldn't. Treated as "not asked"
+      // rather than as a refusal, so a flaky client doesn't make a tool
+      // impossible to use — the caller falls back to how it behaved before.
+      return null;
+    }
+  };
+
+  /**
+   * Run the authoring standard over a lesson about to be written.
+   *
+   * Throws when it fails, which the `tool()` wrapper turns into a readable
+   * isError result — so a rejected lesson is never saved, and the assistant gets
+   * a message naming every defect and its fix. Returns the warnings to ride
+   * along with a successful write.
+   *
+   * `skipValidation` is the interesting path. It suppresses the check entirely,
+   * and it is meant for a user who deliberately wants something the standard
+   * forbids — but the model is the one that sets it, and nothing ever confirmed
+   * the user had asked for any such thing. So the findings are computed even
+   * when it is set, and where a client can reach the user, the override becomes
+   * a question put to them, naming what would be waived. Where a client cannot,
+   * the flag behaves exactly as it always has.
+   *
+   * @param {{ doc: any, rawBlocks?: any[], skipValidation?: boolean, baselineDoc?: any }} args
+   * @returns {Promise<Array<{ code: string, section?: number, message: string }>>}
+   */
+  const checkStandard = async ({
+    doc,
+    rawBlocks = [],
+    skipValidation = false,
+    baselineDoc = null,
+  }) => {
+    const { failures, flags } = standardFindings({
+      doc,
+      rawBlocks,
+      baselineDoc,
+    });
+
+    if (!skipValidation) {
+      if (failures.length) throw new Error(validationErrorMessage(failures));
+      return toWireWarnings(flags);
+    }
+
+    if (failures.length) {
+      const allowed = await askUser(
+        `The assistant is about to save a lesson that breaks the authoring standard in ` +
+          `${failures.length} way${failures.length === 1 ? "" : "s"}, by overriding the check:\n\n` +
+          `${formatFindings(failures, 5)}\n\n` +
+          "Save it as it is?",
+        "Save it anyway",
+      );
+      if (allowed === false) {
+        throw new Error(
+          "The user was asked whether to save this lesson despite breaking the authoring standard, and said no. " +
+            `Nothing was saved. Fix the ${failures.length} problem${failures.length === 1 ? "" : "s"} instead:\n\n` +
+            `${formatFindings(failures)}\n\n` +
+            "Do not call the tool again with skipValidation until the user asks you to.",
+        );
+      }
+    }
+
+    // Skipping the check skips the warnings with it: nothing was reported.
+    return [];
   };
 
   /**
@@ -457,13 +630,69 @@ export function registerTools(server, ctx) {
    * recordHistory but can do their job without one. Tolerant on purpose: a read
    * that fails must not stop a write the user asked for — it only costs the
    * catch-up commit, which is a tidiness in the history rather than the edit.
+   *
+   * Also says whether the lesson is already public, which decides whether
+   * `published: true` is a change worth asking the user about.
    */
-  const currentDoc = async (id) => {
+  const currentLesson = async (id) => {
     try {
-      return (await api.getLesson(id))?.doc || null;
+      return (await api.getLesson(id)) || null;
     } catch {
       return null;
     }
+  };
+
+  /**
+   * Ask before a lesson becomes publicly readable under the user's name.
+   *
+   * Publishing is outward-facing in a way nothing else here is: the lesson is
+   * listed on the hub, attributed to them, and anyone can read and fork it. That
+   * makes it their call, the same as deleting — see askUser.
+   *
+   * Unlike deleting, it is reversible, and unlike skipValidation it is often
+   * exactly what was asked for. So this only asks on the way OUT (nothing
+   * confirms unpublishing) and only when public is a change from where the
+   * lesson already was. A "no" never costs the work: every caller falls back to
+   * saving the lesson as a private draft rather than failing the write.
+   *
+   * @param {string} named  The lesson, as the user should see it named.
+   * @returns {Promise<boolean>} Whether to go ahead and publish.
+   */
+  const mayPublish = async (named) => {
+    const answer = await askUser(
+      `Publish the lesson ${named} to the public Spelling Creator hub? It will be listed publicly under your ` +
+        "name, and anyone will be able to read, copy and fork it. You can unpublish it again at any time.",
+      "Publish it",
+    );
+    // Only an actual refusal stops it: a client that can't ask must publish
+    // exactly as it did before.
+    return answer !== false;
+  };
+
+  /**
+   * What `published` an edit should actually write, having asked the user first
+   * if the edit would take a private lesson public.
+   *
+   * The editing tools carry `published` as a rider on a content change, so a
+   * refusal must not lose the edit: the content is written either way and only
+   * the visibility is held back. When that happens the result says so — the
+   * assistant asked for something it didn't get, and has to know it was the user
+   * who overruled it rather than assume the field was ignored.
+   *
+   * @param {{ published: boolean|undefined, wasPublished: boolean, named: string }} args
+   * @returns {Promise<{ published: boolean|undefined, note?: string }>}
+   */
+  const resolveVisibility = async ({ published, wasPublished, named }) => {
+    // Omitted, unpublishing, or already public — nothing is becoming visible
+    // that wasn't, so there is nothing to ask about.
+    if (published !== true || wasPublished) return { published };
+    if (await mayPublish(named)) return { published: true };
+    return {
+      published: false,
+      note:
+        "The content changes were saved, but the user was asked about publishing and said no, so the lesson is " +
+        "still a PRIVATE DRAFT. Don't try to publish it again unless they ask you to.",
+    };
   };
 
   server.registerTool(
@@ -488,6 +717,131 @@ export function registerTools(server, ctx) {
   );
 
   server.registerTool(
+    "validate_lesson",
+    {
+      title: "Check a lesson against the standard",
+      description:
+        "Check lesson content against the authoring standard WITHOUT saving anything. The same checks and the " +
+        "same messages the writing tools use, so what passes here passes there.\n\n" +
+        "Use it AS YOU COMPOSE rather than writing a whole lesson blind. The standard is strict — grounding, " +
+        "spelling-word length, answer uniqueness — and create_lesson rejects a lesson outright when any of it " +
+        "fails, so a six-section lesson written in one shot rarely lands first time. Build a section, check it, " +
+        "fix what the messages name, then go on to the next: no lesson is created, no document overwritten, and " +
+        "no version added to anyone's History tab. Checking `sections` is entirely local — nothing is fetched " +
+        "either — so do that as often as you like; checking by `id` reads the lesson from the hub first, which " +
+        "writes nothing but is still a request, so don't poll with it.\n\n" +
+        "Two ways to call it:\n" +
+        "• `sections` (with an optional `title`) — content you are composing, in create_lesson's shape. It need " +
+        "not be a whole lesson; a single section is a perfectly good thing to check.\n" +
+        "• `id` — a lesson that already exists on the hub. Add `operations` (patch_lesson's shape) to see what " +
+        "that patch WOULD produce, without applying it.\n\n" +
+        "`errors` are what would be rejected; `warnings` are what would be reported alongside a successful write. " +
+        "When you pass `id`, defects already in the stored lesson are counted under `preexisting` instead of being " +
+        "held against you — exactly as patch_lesson treats them.\n\n" +
+        LESSON_STANDARDS,
+      inputSchema: {
+        title: z
+          .string()
+          .optional()
+          .describe(
+            "The draft's title. Optional — the standard says nothing about titles; it only makes the result " +
+              "easier to read.",
+          ),
+        sections: sectionsSchema
+          .optional()
+          .describe(
+            "Content you are composing, in create_lesson's shape — a whole lesson, or the one section you just " +
+              "wrote. Omit when checking an existing lesson by `id`.",
+          ),
+        id: z
+          .string()
+          .optional()
+          .describe(
+            "The id of a lesson on the hub to check as it stands. Omit when checking `sections` you are composing.",
+          ),
+        operations: z
+          .array(operationSchema)
+          .min(1)
+          .optional()
+          .describe(
+            "With `id`: the patch_lesson operations to try. They are applied to a copy in memory and the result " +
+              "is checked; the stored lesson is not touched.",
+          ),
+      },
+    },
+    tool(async ({ title, sections, id, operations }) => {
+      if (sections && id) {
+        throw new Error(
+          "Pass either `sections` (content you are composing) or `id` (a lesson on the hub), not both.",
+        );
+      }
+      if (operations && !id) {
+        throw new Error(
+          "`operations` previews a patch to a lesson that already exists, so it needs that lesson's `id`. " +
+            "To check content you are composing, pass `sections` on its own.",
+        );
+      }
+      if (!sections && !id) {
+        throw new Error(
+          "Nothing to check. Pass `sections` to check content you are composing, or `id` to check a lesson on the hub.",
+        );
+      }
+
+      // Composing: build exactly what create_lesson/update_lesson would build,
+      // and check exactly what they would check.
+      if (sections) {
+        const doc = buildDoc({ title, sections });
+        const { failures, flags } = standardFindings({
+          doc,
+          rawBlocks: inputBlocksFromSections(sections),
+        });
+        const count = doc.sections.length;
+        return text(
+          verdict({
+            checked: `draft content — ${count} section${count === 1 ? "" : "s"}, nothing saved`,
+            failures,
+            flags,
+          }),
+        );
+      }
+
+      // An existing lesson, optionally with a patch applied to the fetched copy.
+      // Read-only either way: applyPatch works in memory and no write follows it.
+      const current = await api.getLesson(id);
+      if (!operations) {
+        const { failures, flags } = standardFindings({ doc: current.doc });
+        return text(
+          verdict({ checked: `lesson ${id} as stored`, failures, flags }),
+        );
+      }
+
+      const doc = applyPatch(current.doc, operations);
+      const { failures, flags } = standardFindings({
+        doc,
+        rawBlocks: inputBlocksFromOperations(operations),
+        baselineDoc: current.doc,
+      });
+      const before = validateLesson(current.doc);
+      return text(
+        verdict({
+          checked:
+            `lesson ${id} with ${operations.length} operation${operations.length === 1 ? "" : "s"} applied in ` +
+            "memory — the stored lesson is unchanged",
+          failures,
+          flags,
+          preexisting: {
+            errors: before.errors.length,
+            warnings: before.warnings.length,
+            note:
+              "Defects already in the stored lesson. They are not counted against this patch, and patch_lesson " +
+              "would not block on them either.",
+          },
+        }),
+      );
+    }),
+  );
+
+  server.registerTool(
     "create_lesson",
     {
       title: "Create a lesson",
@@ -505,6 +859,10 @@ export function registerTools(server, ctx) {
         "short and unambiguous, and every answer except the background one must be findable in that section's own " +
         "passage. Writes are validated against the standard below: grounding, spelling-word and uniqueness failures " +
         "are REJECTED with a message naming the section, the offending value and the fix — read it and resubmit.\n\n" +
+        "Don't compose all six sections blind and hope. Check your work with validate_lesson as you go — it runs " +
+        "these same checks without saving anything — and call this once it comes back clean. For a long lesson you " +
+        "can also create the first section or two here and add the rest with patch_lesson, a pass at a time; see " +
+        "that tool.\n\n" +
         LESSON_STANDARDS,
       inputSchema: {
         title: z.string().describe("The lesson title / topic."),
@@ -521,15 +879,18 @@ export function registerTools(server, ctx) {
     tool(async ({ title, sections, published = false, skipValidation }) => {
       const doc = buildDoc({ title, sections });
       // Throws (and saves nothing) when the lesson breaks the standard.
-      const warnings = checkStandard({
+      const warnings = await checkStandard({
         doc,
         rawBlocks: inputBlocksFromSections(sections),
         skipValidation,
       });
+      // Asked before the write, so a "no" saves a draft rather than publishing
+      // and retracting.
+      const publish = published ? await mayPublish(`"${doc.title}"`) : false;
       const lesson = await api.createLesson({
         title: doc.title,
         doc,
-        published,
+        published: publish,
       });
       const result = {
         ...lesson,
@@ -541,9 +902,12 @@ export function registerTools(server, ctx) {
           doc,
           summary: `Create "${doc.title}"`,
         }),
-        note: published
+        note: publish
           ? "Published to the public hub."
-          : "Saved as a private draft. Call set_lesson_published to share it.",
+          : published
+            ? "The user was asked about publishing and said no, so the lesson was saved as a PRIVATE DRAFT instead " +
+              "— nothing else about it changed, and no work was lost. Don't publish it unless they ask you to."
+            : "Saved as a private draft. Call set_lesson_published to share it.",
       };
       // Soft warnings: the lesson saved fine, but flag shape issues (e.g. a
       // section with no question) so the assistant can offer to fix them.
@@ -578,7 +942,7 @@ export function registerTools(server, ctx) {
     },
     tool(async ({ title, sections, skipValidation }) => {
       const doc = buildDoc({ title, sections });
-      const warnings = checkStandard({
+      const warnings = await checkStandard({
         doc,
         rawBlocks: inputBlocksFromSections(sections),
         skipValidation,
@@ -619,34 +983,48 @@ export function registerTools(server, ctx) {
           .describe(
             "Omit to leave visibility unchanged; true/false to publish or unpublish.",
           ),
+        summary: summarySchema,
         skipValidation: skipValidationSchema,
       },
     },
-    tool(async ({ id, title, sections, published, skipValidation }) => {
-      const doc = buildDoc({ title, sections });
-      // A full replace, so the caller owns every defect in the result.
-      const warnings = checkStandard({
-        doc,
-        rawBlocks: inputBlocksFromSections(sections),
-        skipValidation,
-      });
-      // Read before writing, purely so the version history has a before-picture
-      // to diff against — this tool doesn't otherwise need one. Only the write
-      // below decides whether the call succeeds.
-      const previousDoc = await currentDoc(id);
-      const lesson = await api.updateLesson(id, {
-        title: doc.title,
-        doc,
-        published,
-      });
-      const result = {
-        ...lesson,
-        url: hubUrl(lesson.id),
-        history: await recordHistory({ lessonId: id, doc, previousDoc }),
-      };
-      if (warnings.length) result.warnings = warnings;
-      return text(result);
-    }),
+    tool(
+      async ({ id, title, sections, published, summary, skipValidation }) => {
+        const doc = buildDoc({ title, sections });
+        // A full replace, so the caller owns every defect in the result.
+        const warnings = await checkStandard({
+          doc,
+          rawBlocks: inputBlocksFromSections(sections),
+          skipValidation,
+        });
+        // Read before writing, so the version history has a before-picture to
+        // diff against and so we know whether `published: true` is a change.
+        // Only the write below decides whether the call succeeds.
+        const current = await currentLesson(id);
+        const visibility = await resolveVisibility({
+          published,
+          wasPublished: current?.published === true,
+          named: `"${doc.title}"`,
+        });
+        const lesson = await api.updateLesson(id, {
+          title: doc.title,
+          doc,
+          published: visibility.published,
+        });
+        const result = {
+          ...lesson,
+          url: hubUrl(lesson.id),
+          history: await recordHistory({
+            lessonId: id,
+            doc,
+            previousDoc: current?.doc || null,
+            summary,
+          }),
+        };
+        if (visibility.note) result.note = visibility.note;
+        if (warnings.length) result.warnings = warnings;
+        return text(result);
+      },
+    ),
   );
 
   server.registerTool(
@@ -655,9 +1033,16 @@ export function registerTools(server, ctx) {
       title: "Patch a lesson",
       description:
         "Edit a lesson you authored with a small list of operations, instead of resending the whole document. " +
-        "Prefer this over update_lesson for tweaks. Call get_lesson first to read the current sections/blocks and " +
-        "their ids; operations address them by id. The server fetches the lesson, applies the operations in order, " +
-        "then saves the result.\n\n" +
+        "Prefer this over update_lesson for anything short of a full rewrite. Call get_lesson first to read the " +
+        "current sections/blocks and their ids; operations address them by id. The server fetches the lesson, " +
+        "applies the operations in order, then saves the result.\n\n" +
+        "TWO USES. The obvious one is a tweak — a typo, a wrong answer, a reworded prompt. The other is BUILDING A " +
+        "LESSON UP IN PASSES: create_lesson with the first section or two, then add_section the rest one pass at a " +
+        "time. A six-section lesson is a lot to get right in a single call, and every pass here is checked, " +
+        "reversible and named, where one big create_lesson is all-or-nothing. Check each pass with validate_lesson " +
+        "before you send it and you will rarely be rejected. (If you would rather compose the whole document first, " +
+        "that is fine too — validate_lesson as you go, then one create_lesson at the end. What to avoid is writing " +
+        "six sections blind and hoping.)\n\n" +
         "Operations (each is { op, ... }):\n" +
         "• set_title { title }\n" +
         "• set_section_name { sectionId, name }\n" +
@@ -673,7 +1058,9 @@ export function registerTools(server, ctx) {
         "your edit introduces are held against you — pre-existing problems in a lesson written elsewhere won't " +
         "block a small tweak.\n\n" +
         "Each patch is committed to the lesson's version history as its own version, so the user can read the diff " +
-        "and revert it from the lesson's History tab. `history` in the result says what was recorded.",
+        "and revert it from the lesson's History tab. `history` in the result says what was recorded. Pass a " +
+        "`summary` so each version says what the pass was for — building a lesson in passes otherwise leaves the " +
+        "user a column of near-identical op counts to tell apart.",
       inputSchema: {
         id: z.string().describe("The id of the lesson to patch."),
         operations: z
@@ -686,26 +1073,32 @@ export function registerTools(server, ctx) {
           .describe(
             "Omit to leave visibility unchanged; true/false to publish or unpublish.",
           ),
+        summary: summarySchema,
         skipValidation: skipValidationSchema,
       },
     },
-    tool(async ({ id, operations, published, skipValidation }) => {
+    tool(async ({ id, operations, published, summary, skipValidation }) => {
       // Fetch current content, apply the diff in memory, then save (the Worker
       // only offers a full-replace PUT — see api.updateLesson).
       const current = await api.getLesson(id);
       const doc = applyPatch(current.doc, operations);
       // Only the defects this patch introduced: a small edit to a lesson written
       // elsewhere shouldn't be blocked by what was already there.
-      const warnings = checkStandard({
+      const warnings = await checkStandard({
         doc,
         rawBlocks: inputBlocksFromOperations(operations),
         skipValidation,
         baselineDoc: current.doc,
       });
+      const visibility = await resolveVisibility({
+        published,
+        wasPublished: current.published === true,
+        named: `"${doc.title || current.title}"`,
+      });
       const lesson = await api.updateLesson(id, {
         title: doc.title || current.title,
         doc,
-        published,
+        published: visibility.published,
       });
       const result = {
         ...lesson,
@@ -714,8 +1107,10 @@ export function registerTools(server, ctx) {
           lessonId: id,
           doc,
           previousDoc: current.doc,
+          summary,
         }),
       };
+      if (visibility.note) result.note = visibility.note;
       if (warnings.length) result.warnings = warnings;
       return text(result);
     }),
@@ -929,7 +1324,10 @@ export function registerTools(server, ctx) {
       title: "Publish or unpublish a lesson",
       description:
         "Toggle a lesson you authored between a public-hub listing (published: true) and a private draft " +
-        "(published: false), without changing its content.",
+        "(published: false), without changing its content.\n\n" +
+        "Publishing puts the lesson on the public hub under the user's name, where anyone can read, copy and fork " +
+        "it, so on a client that can put a question to the user this asks them to confirm it first and their answer " +
+        "decides. Unpublishing is never confirmed — it only ever makes a lesson less visible.",
       inputSchema: {
         id: z.string().describe("The lesson id."),
         published: z
@@ -942,6 +1340,19 @@ export function registerTools(server, ctx) {
     tool(async ({ id, published }) => {
       // PUT replaces the whole row, so carry the existing title/doc through.
       const current = await api.getLesson(id);
+      const named = current.title ? `"${current.title}"` : `\`${id}\``;
+
+      if (
+        published &&
+        current.published !== true &&
+        !(await mayPublish(named))
+      ) {
+        return text(
+          `Not published — the user was asked and said no, so ${named} is still a private draft. Its content is ` +
+            "unchanged. Don't call set_lesson_published(true) for it again unless they ask you to.",
+        );
+      }
+
       const lesson = await api.updateLesson(id, {
         title: current.title,
         doc: current.doc,
@@ -956,13 +1367,44 @@ export function registerTools(server, ctx) {
     {
       title: "Delete a lesson",
       description:
-        "Permanently delete a lesson you authored. This cannot be undone. Prefer set_lesson_published(false) if you " +
-        "only want to hide it from the public hub.",
+        "Permanently delete a lesson you authored. This cannot be undone — the content and the whole version " +
+        "history go with it. Prefer set_lesson_published(false) if you only want to hide it from the public hub.\n\n" +
+        "On a client that can put a question to the user, this asks them to confirm before deleting, and their " +
+        "answer decides it. Ask them yourself first regardless: not every client can show that prompt, and on the " +
+        "ones that can't, calling this deletes the lesson outright.",
       inputSchema: { id: z.string().describe("The lesson id to delete.") },
     },
     tool(async ({ id }) => {
+      // The lesson's title, so the user is asked about a lesson rather than
+      // about an opaque id. Tolerant: failing to read it must not stop a
+      // deletion the user asked for, so an unnamed lesson is still deletable.
+      let named = `\`${id}\``;
+      try {
+        const lesson = await api.getLesson(id);
+        if (lesson?.title) named = `"${lesson.title}"`;
+      } catch {
+        // Fall back to the id.
+      }
+
+      const confirmed = await askUser(
+        `Permanently delete the lesson ${named}? This cannot be undone — its content and its whole version ` +
+          "history go with it. To take it off the public hub without deleting it, say no and unpublish it instead.",
+        "Delete it permanently",
+      );
+      if (confirmed === false) {
+        return text(
+          `Not deleted — the user was asked and said no, so ${named} is untouched. Do not call delete_lesson for ` +
+            "it again unless they ask you to. If they only wanted it off the public hub, use " +
+            "set_lesson_published(false).",
+        );
+      }
+
       await api.deleteLesson(id);
-      return text(`Deleted lesson ${id}.`);
+      return text(
+        confirmed === true
+          ? `Deleted lesson ${id}, with the user's confirmation.`
+          : `Deleted lesson ${id}.`,
+      );
     }),
   );
 
@@ -1251,6 +1693,22 @@ export function registerTools(server, ctx) {
       },
     ),
   );
+
+  // Live collaboration, where the transport can hold a session open. These need
+  // the auth token directly (the room authenticates the WebSocket itself, rather
+  // than through the API client) and they share this file's tool wrapper and
+  // standard check, so what the assistant is told about a live edit matches what
+  // it is told about a saved one.
+  if (live && auth) {
+    registerCollabTools(server, {
+      config,
+      auth,
+      text,
+      tool,
+      standardFindings,
+      clientName,
+    });
+  }
 }
 
 // The server's identifying metadata, shared by both transports.
@@ -1260,5 +1718,5 @@ export function registerTools(server, ctx) {
 // every client UI and bug report.
 export const SERVER_INFO = {
   name: "spelling-creator-hub",
-  version: "0.9.1",
+  version: "0.15.0",
 };

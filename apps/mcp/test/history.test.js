@@ -366,6 +366,82 @@ test("patch_lesson commits the edit it saves", async () => {
   await mcp.close();
 });
 
+test("patch_lesson names the version when the assistant says what the pass was for", async () => {
+  // Building a lesson in passes otherwise leaves the History tab a column of
+  // near-identical op counts ("Add 15 question blocks" six times over), which
+  // the user has to open one by one to tell apart.
+  const hub = fakeHub();
+  const source = await seedLesson(hub, {
+    title: "Volcanoes",
+    text: "A volcano ERUPTS.",
+  });
+  const mcp = await connect(hub);
+
+  const result = await mcp.call("patch_lesson", {
+    id: source.id,
+    operations: [
+      {
+        op: "add_section",
+        name: "Ash",
+        blocks: [{ type: "text", text: "The cloud of ASH spread wide." }],
+      },
+    ],
+    summary: "Add section 2: volcanic ash",
+    skipValidation: true,
+  });
+
+  assert.equal(result.history.summary, "Add section 2: volcanic ash");
+  const [latest] = await storedHistory(hub, source.id);
+  assert.equal(latest.summary, "Add section 2: volcanic ash");
+  // The summary replaces the subject line, not the record: the itemised
+  // operations and the provenance note are still in the commit body.
+  assert.match(latest.message, /add section/i);
+  assert.match(latest.message, /Claude Desktop/);
+
+  await mcp.close();
+});
+
+test("update_lesson takes a summary too, and both tools still name the version themselves without one", async () => {
+  const hub = fakeHub();
+  const source = await seedLesson(hub, {
+    title: "Volcanoes",
+    text: "A volcano ERUPTS.",
+  });
+  const mcp = await connect(hub);
+
+  const named = await mcp.call("update_lesson", {
+    id: source.id,
+    title: "Volcanoes",
+    sections: [
+      { name: "Reading", blocks: [{ type: "text", text: "LAVA flows fast." }] },
+    ],
+    summary: "Rewrite the opening passage",
+    skipValidation: true,
+  });
+  assert.equal(named.history.summary, "Rewrite the opening passage");
+
+  // Omitting it falls back to the mechanical description, unchanged. Note what
+  // that description is: update_lesson rebuilds every id through buildDoc, so
+  // even a one-word change reads as a wholesale add-and-remove. Another reason
+  // to compose in passes with patch_lesson, which addresses blocks by id and so
+  // records what actually moved.
+  const unnamed = await mcp.call("update_lesson", {
+    id: source.id,
+    title: "Volcanoes",
+    sections: [
+      {
+        name: "Reading",
+        blocks: [{ type: "text", text: "LAVA cools slowly." }],
+      },
+    ],
+    skipValidation: true,
+  });
+  assert.notEqual(unnamed.history.summary, "Rewrite the opening passage");
+  assert.match(unnamed.history.summary, /add 1 text block/i);
+
+  await mcp.close();
+});
+
 test("update_lesson commits the replacement over what was there", async () => {
   const hub = fakeHub();
   const source = await seedLesson(hub, {

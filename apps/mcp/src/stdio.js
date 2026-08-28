@@ -29,7 +29,10 @@ async function main() {
   const server = new McpServer(SERVER_INFO, {
     instructions: LESSON_STANDARDS,
   });
-  registerTools(server, { api, config });
+  // `live`: this transport is one process per client, so it can hold a
+  // collaboration session's WebSocket open between tool calls. The Worker can't
+  // — see registerTools.
+  registerTools(server, { api, config, auth, live: true });
 
   const transport = new StdioServerTransport();
   await server.connect(transport);

@@ -29,12 +29,12 @@
 // remote edit doesn't bounce it straight back. It replaces the old approach of
 // stringifying the document and comparing it against the last one we sent.
 //
-// Wire protocol — binary frames for speed (see collab-room.js for the full spec).
-// Every frame is an ArrayBuffer whose first byte is the message type; the rest is
-// the payload. Cursor/chat payloads are UTF-8 JSON; document payloads are opaque
-// Yjs update bytes. A peer is identified by a server-assigned numeric "slot"; we
-// map slot -> identity from the presence roster so cursors and chat can be
-// labelled without shipping a name in every packet.
+// Wire protocol — binary frames for speed, defined once in
+// packages/core/src/collabFrames.js (see it for the frame shapes). This file owns
+// the socket and the React state around it. A peer is identified by a
+// server-assigned numeric "slot"; we map slot -> identity from the presence
+// roster so cursors and chat can be labelled without shipping a name in every
+// packet.
 
 import { apiUrl, hasApi } from "@spelling-creator/core/config";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -52,19 +52,12 @@ import {
   stripLocalFields,
 } from "@spelling-creator/core/git/doc";
 
-// Message type bytes — must match T in apps/api/src/collab-room.js.
-const T = {
-  HELLO: 0,
-  UPDATE: 1,
-  CURSOR: 2,
-  CHAT: 3,
-  PRESENCE: 4,
-  ADMITTED: 5,
-  REMOVED: 6,
-  ERROR: 7,
-  ADMIT: 8,
-  REMOVE: 9,
-};
+import {
+  T,
+  frameBytes as frame,
+  frameJson as jsonFrame,
+  slotFrame,
+} from "@spelling-creator/core/collabFrames";
 
 // How long to sit on a burst of local edits before pushing them into the Y.Doc.
 // Short, because a CRDT update is bytes rather than a re-serialised lesson — the
@@ -75,7 +68,6 @@ const SYNC_DEBOUNCE_MS = 50;
 // string. Chat is ephemeral (kept only in memory for the session).
 const MAX_CHAT_LEN = 2000;
 
-const encoder = new TextEncoder();
 const decoder = new TextDecoder();
 
 // The wss:// base for the collaboration endpoint, derived from the API URL.
@@ -85,27 +77,6 @@ function wsBase() {
   if (base.startsWith("https://")) return `wss://${base.slice(8)}`;
   if (base.startsWith("http://")) return `ws://${base.slice(7)}`;
   return base;
-}
-
-// ----- binary frame builders ------------------------------------------------
-function frame(type, payload) {
-  const b = new Uint8Array(1 + (payload ? payload.length : 0));
-  b[0] = type;
-  if (payload) b.set(payload, 1);
-  return b;
-}
-
-function jsonFrame(type, obj) {
-  return frame(type, encoder.encode(JSON.stringify(obj)));
-}
-
-// A type byte followed by a u16 slot (used for the host's admit/remove actions).
-function slotFrame(type, slot) {
-  const b = new Uint8Array(3);
-  b[0] = type;
-  b[1] = (slot >> 8) & 0xff;
-  b[2] = slot & 0xff;
-  return b;
 }
 
 // A short label for someone we don't have a name for yet.
@@ -387,6 +358,7 @@ export function useCollaboration({ doc, onRemoteDoc, identity, accessToken }) {
           const map = new Map();
           for (const p of [...list, ...reqs]) {
             map.set(p.slot, {
+              bot: Boolean(p.bot),
               name: p.name,
               email: p.email,
               avatarUrl: p.avatarUrl,
@@ -402,6 +374,10 @@ export function useCollaboration({ doc, onRemoteDoc, identity, accessToken }) {
               email: p.email,
               avatarUrl: p.avatarUrl,
               host: p.host,
+              // An AI assistant joined on someone's account, so the roster and
+              // the floating cursors can say so rather than showing a second
+              // person by that name.
+              bot: Boolean(p.bot),
             })),
           );
           setRequests(
@@ -410,6 +386,7 @@ export function useCollaboration({ doc, onRemoteDoc, identity, accessToken }) {
               name: p.name,
               email: p.email,
               avatarUrl: p.avatarUrl,
+              bot: Boolean(p.bot),
             })),
           );
 
