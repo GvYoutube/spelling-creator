@@ -75,12 +75,8 @@
   },
   "lessonView": {
     "untitledLesson": "Untitled Lesson",
-    "untitledSection": "Untitled section",
     "noQuestionText": "(no question text)",
-    "answerLabel": "Answer:",
-    "stepsLabel": "Steps:",
-    "answersLabel": "Answers:",
-    "spellingWordsLabel": "Spelling words",
+    "spellingWordsLabel": "Spell:",
     "noSpellingWords": "(no spelling words yet)",
     "imageAlt": "lesson image"
   },

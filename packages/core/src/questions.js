@@ -1,4 +1,4 @@
-// Shared definitions for the five question types. Imported by the editor
+// Shared definitions for the six question types. Imported by the editor
 // (SectionCard / ContentBlock) and the exporters so colours, labels, and the
 // default block shape stay in sync everywhere.
 
@@ -22,7 +22,17 @@ export const QUESTION_TYPES = {
     label: "Multiple answers",
     short: "Multiple",
     description: "Several accepted answers",
-    color: "#e8590c", // orange
+    // Amber. Deliberately yellower than the burnt orange this used to be
+    // (#e8590c), which sat too close to `paraphrase`'s brown to tell apart in a
+    // printed lesson where the colour is the only thing marking the type.
+    color: "#d68f00",
+  },
+  paraphrase: {
+    key: "paraphrase",
+    label: "Paraphrase",
+    short: "Paraphrase",
+    description: "Restate the passage in their own words",
+    color: "#a0522d", // brown
   },
   open: {
     key: "open",
@@ -42,6 +52,90 @@ export const QUESTION_TYPES = {
 
 export const QUESTION_TYPE_LIST = Object.values(QUESTION_TYPES);
 
+// The order the printed footer legend lists the types in: recall first, opening
+// out to free response last. This is a reading order for the legend only — the
+// editor's type picker keeps QUESTION_TYPES' own order.
+export const QUESTION_LEGEND = [
+  QUESTION_TYPES.single,
+  QUESTION_TYPES.background,
+  QUESTION_TYPES.number,
+  QUESTION_TYPES.multiple,
+  QUESTION_TYPES.paraphrase,
+  QUESTION_TYPES.open,
+];
+
+// ---------------------------------------------------------------------------
+// Word character styles, one per question type.
+//
+// The printed lesson has no "[Number answer]" tag in front of a prompt any more
+// — the prompt's own colour is what marks its type. That leaves nothing in the
+// text for the DOCX importer to read the type back off, and mammoth drops run
+// colours, so the PDF path loses the colour coding too.
+//
+// A named character style fixes both: Word carries the colour, mammoth can be
+// told to map the style onto a `<span class>` (see docxImport / pdfExport), and
+// the class names below are the contract the three sides share.
+// ---------------------------------------------------------------------------
+
+/** The Word style id for a question type's prompt run. */
+export function questionStyleId(key) {
+  return `s2cQuestion${key.charAt(0).toUpperCase()}${key.slice(1)}`;
+}
+
+/** The Word style *name* — what mammoth matches on in a style map. */
+export function questionStyleName(key) {
+  return `S2C Question ${questionMeta(key).label}`;
+}
+
+/** The HTML class mammoth is told to emit for that style. */
+export function questionStyleClass(key) {
+  return `s2c-q-${key}`;
+}
+
+/**
+ * The mammoth style map that turns each question style back into a tagged span.
+ * Shared by the PDF exporter (which colours the spans) and the DOCX importer
+ * (which reads the type off them).
+ * @returns {string[]}
+ */
+export function questionStyleMap() {
+  return QUESTION_TYPE_LIST.map(
+    (q) =>
+      `r[style-name='${questionStyleName(q.key)}'] => span.${questionStyleClass(q.key)}`,
+  );
+}
+
+// Types whose answer is a single value held on `block.answer`.
+const SINGLE_ANSWER_TYPES = new Set(["number", "single", "background"]);
+
+// The gap between an answer and the next thing along. Built around a
+// non-breaking space on purpose: the PDF path renders the docx as HTML, which
+// collapses a run of ordinary spaces down to one, and the wide gap is what
+// separates several accepted answers from each other. The plain spaces on either
+// side still give the line somewhere to wrap.
+export const ANSWER_GAP = " \u00A0 ";
+
+// The answer text a printed lesson shows inline, immediately after the prompt
+// and in the body colour — the shape the exported lesson uses, where a question
+// is one line of coloured prompt followed by its answer in black.
+//
+// Returns "" when there is nothing to show: an unanswered question, or an
+// `open`/`paraphrase` one, which is answered on the speller's own paper and so
+// prints as the prompt alone.
+export function questionAnswerText(block) {
+  if (!block) return "";
+  if (SINGLE_ANSWER_TYPES.has(block.questionType)) {
+    return block.answer == null ? "" : String(block.answer).trim();
+  }
+  if (block.questionType === "multiple") {
+    return (block.answers || [])
+      .map((a) => (a.text || "").trim())
+      .filter(Boolean)
+      .join(ANSWER_GAP);
+  }
+  return "";
+}
+
 export function questionMeta(questionType) {
   return QUESTION_TYPES[questionType] || QUESTION_TYPES.open;
 }
@@ -57,6 +151,8 @@ export function createQuestionBlock(newId, questionType) {
       return { ...base, answer: "" };
     case "multiple":
       return { ...base, answers: [{ id: newId(), text: "" }] };
+    // Both are free written responses with no stored answer.
+    case "paraphrase":
     case "open":
       return { ...base };
     case "background":
@@ -88,6 +184,7 @@ export function buildQuestionBlock(newId, questionType, data = {}) {
       };
     case "multiple":
       return { ...base, answers: toAnswers(newId, data.answers) };
+    case "paraphrase":
     case "open":
       return { ...base };
     case "background":

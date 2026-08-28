@@ -22,10 +22,15 @@ import { Skeleton } from "./ui/skeleton.jsx";
 import { fitWithin, imageSizeScale } from "@spelling-creator/core/image";
 import { DOCX_MAX_IMAGE_WIDTH } from "@spelling-creator/core/lessonLayout";
 import { useImageSrc } from "../lib/useImageSrc.js";
-import { questionMeta } from "@spelling-creator/core/questions";
-import { SPELLING_COLOR } from "@spelling-creator/core/spelling";
-
-const BLANK = "____________";
+import {
+  ANSWER_GAP,
+  questionAnswerText,
+  questionMeta,
+} from "@spelling-creator/core/questions";
+import {
+  SPELLING_COLOR,
+  SPELLING_WORD_SEPARATOR,
+} from "@spelling-creator/core/spelling";
 
 // The document's own typography, in theme colours: same sizes and spacing the
 // docx uses, so the page keeps its shape, with the paper colours and the Word
@@ -60,14 +65,8 @@ const LESSON_STYLES = `
     margin: 0 0 24px;
     color: var(--foreground);
   }
-  .s2c-lesson-root h2 {
-    font-size: 19px;
-    color: var(--primary);
-    border-bottom: 2px solid var(--primary);
-    padding-bottom: 4px;
-    margin: 22px 0 12px;
-  }
-  .s2c-lesson-root p { margin: 0 0 10px; }
+  .s2c-lesson-root p { margin: 0 0 6px; }
+  .s2c-lesson-root .s2c-spelling { margin-top: 14px; }
   .s2c-lesson-root figure { margin: 0; }
   .s2c-lesson-root img {
     display: block;
@@ -155,66 +154,34 @@ function ImageBlock({ block }) {
   );
 }
 
+// A question reads the way it prints: the prompt in the colour of its type, then
+// its answer in the body colour on the same line. Nothing is labelled — the
+// colour is what marks the type — so this matches the exported lesson exactly.
 function QuestionBlock({ block }) {
   const { t } = useTranslation("lesson");
   const meta = questionMeta(block.questionType);
-  const answers = (block.answers || [])
-    .map((a) => (a.text || "").trim())
-    .filter(Boolean);
+  const answer = questionAnswerText(block);
   const steps = (block.steps || []).filter((s) => (s.text || "").trim());
 
   return (
     <>
       <p>
-        <strong>
-          <span className="s2c-label" style={{ "--s2c-label": meta.color }}>
-            [{meta.label}]
-          </span>{" "}
+        <span className="s2c-label" style={{ "--s2c-label": meta.color }}>
           {block.prompt || t("lessonView.noQuestionText")}
-        </strong>
+        </span>
+        {answer ? `${ANSWER_GAP}${answer}` : null}
       </p>
 
-      {(block.questionType === "number" ||
-        block.questionType === "single" ||
-        block.questionType === "background") && (
-        <p>
-          <em>{t("lessonView.answerLabel")} </em>
-          {block.answer ? String(block.answer) : BLANK}
+      {steps.map((step, i) => (
+        <p key={step.id} style={{ marginLeft: "24px" }}>
+          {i + 1}. {step.text}
         </p>
-      )}
-
-      {block.questionType === "number" && steps.length > 0 && (
-        <>
-          <p>
-            <em>{t("lessonView.stepsLabel")}</em>
-          </p>
-          {steps.map((step, i) => (
-            <p key={step.id} style={{ marginLeft: "24px" }}>
-              {i + 1}. {step.text}
-            </p>
-          ))}
-        </>
-      )}
-
-      {block.questionType === "open" && <p>{BLANK}</p>}
-
-      {block.questionType === "multiple" && (
-        <>
-          <p>
-            <em>{t("lessonView.answersLabel")}</em>
-            {answers.length ? "" : ` ${BLANK}`}
-          </p>
-          {answers.map((text, i) => (
-            <p key={i} style={{ marginLeft: "24px" }}>
-              • {text}
-            </p>
-          ))}
-        </>
-      )}
+      ))}
     </>
   );
 }
 
+// The words print as one running line after the label, not a numbered list.
 function SpellingBlock({ block }) {
   const { t } = useTranslation("lesson");
   const words = (block.words || [])
@@ -222,24 +189,16 @@ function SpellingBlock({ block }) {
     .filter(Boolean);
 
   return (
-    <>
-      <p>
-        <strong className="s2c-label" style={{ "--s2c-label": SPELLING_COLOR }}>
-          {t("lessonView.spellingWordsLabel")}
-        </strong>
-      </p>
+    <p className="s2c-spelling">
+      <strong className="s2c-label" style={{ "--s2c-label": SPELLING_COLOR }}>
+        {t("lessonView.spellingWordsLabel")}
+      </strong>{" "}
       {words.length ? (
-        words.map((word, i) => (
-          <p key={i} style={{ marginLeft: "24px" }}>
-            {i + 1}. {word}
-          </p>
-        ))
+        words.join(SPELLING_WORD_SEPARATOR)
       ) : (
-        <p>
-          <em>{t("lessonView.noSpellingWords")}</em>
-        </p>
+        <em>{t("lessonView.noSpellingWords")}</em>
       )}
-    </>
+    </p>
   );
 }
 
@@ -269,12 +228,13 @@ export default function LessonView({ doc }) {
         // editing panes rather than sitting beside them, so one id matches one
         // element. On the public lesson page nothing queries these, and an
         // unused data attribute costs nothing.
+        // A section prints no heading of its own: its name is an organising
+        // device for the editor, and a finished lesson runs straight through.
         <section
           key={section.id || si}
           data-section-id={section.id}
           className="scroll-mt-(--header-h)"
         >
-          <h2>{section.name || t("lessonView.untitledSection")}</h2>
           {(section.blocks || []).map((block, bi) => (
             <Block key={block.id || bi} block={block} />
           ))}

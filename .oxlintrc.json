@@ -96,6 +96,15 @@
       "env": { "worker": true }
     },
 
+    // ...except the tests, which only ever run under vitest on Node. Keeping this
+    // to `*.test.js` means the modules themselves stay held to the runtime-neutral
+    // rule above: a test may reach for `process` (to pin TZ, say), the code it
+    // tests may not.
+    {
+      "files": ["packages/core/**/*.test.js"],
+      "env": { "worker": true, "node": true }
+    },
+
     // ...except the `browser/` tier, which is framework-agnostic but genuinely
     // needs a DOM (IndexedDB, <canvas>, FileReader, an <a> to download). It sits
     // behind the `@spelling-creator/core/browser/*` subpaths so the Worker and the

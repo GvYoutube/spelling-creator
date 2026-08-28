@@ -184,6 +184,8 @@ A lesson is **sections** of **blocks**. Block types:
   - `single` → `answer` (one text answer)
   - `multiple` → `answers` (array of accepted answers — the items of a list the passage
     states explicitly, with the prompt quoting that sentence with the list blanked out)
+  - `paraphrase` → free response restating the passage in the speller's own words
+    (no answer field; just the `prompt`)
   - `open` → free response (no answer field; just the `prompt`)
   - `background` → `background` + `answer` (needs prior knowledge)
 

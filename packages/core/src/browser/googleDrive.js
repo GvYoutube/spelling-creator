@@ -179,9 +179,11 @@ async function uploadWithBackoff(body, token) {
 /**
  * Builds the lesson docx and uploads it to the user's Drive as a Google Doc.
  * @param {object} doc  The lesson document state.
+ * @param {{author?: string, published?: string|number|Date}} [meta]
+ *   By-line and copyright metadata — see buildDocument in docxExport.js.
  * @returns {Promise<{id: string, name: string, webViewLink: string}>}
  */
-export async function saveToGoogleDrive(doc) {
+export async function saveToGoogleDrive(doc, meta = {}) {
   // Never allow two uploads at once — a second click while one is running would
   // double our request rate for no benefit.
   if (inFlight) {
@@ -202,7 +204,7 @@ export async function saveToGoogleDrive(doc) {
   try {
     const token = await getAccessToken();
 
-    const document = await buildDocument(doc);
+    const document = await buildDocument(doc, meta);
     const docxBlob = await Packer.toBlob(document);
 
     const metadata = {

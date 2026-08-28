@@ -1333,16 +1333,19 @@ export default function EditorPage() {
     }
     setBusy(kind);
     try {
+      // A draft has no publication date yet, so the footer's copyright falls
+      // back to the current year; the by-line is whoever is signed in.
+      const meta = { author: identity.name };
       if (kind === "docx") {
         const { exportDocx } = await loadExportEngine();
-        await exportDocx(doc);
+        await exportDocx(doc, meta);
         notify({ severity: "success", message: t("messages.wordDownloaded") });
       } else if (kind === "json") {
         exportJson(doc);
         notify({ severity: "success", message: t("messages.jsonDownloaded") });
       } else {
         const { exportPdf } = await loadExportEngine();
-        await exportPdf(doc);
+        await exportPdf(doc, meta);
         notify({
           severity: "success",
           message: t("messages.pdfGenerated"),
@@ -1370,7 +1373,7 @@ export default function EditorPage() {
     setBusy("gdocs");
     try {
       const { saveToGoogleDrive } = await loadExportEngine();
-      const file = await saveToGoogleDrive(doc);
+      const file = await saveToGoogleDrive(doc, { author: identity.name });
       notify({
         severity: "success",
         message: t("messages.savedToGoogleDrive"),

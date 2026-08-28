@@ -264,13 +264,16 @@ export default function LessonLayout() {
     if (!lesson) return;
     setBusy(kind);
     try {
+      // The by-line and the footer's copyright line come from the lesson record
+      // rather than the document, so they have to be handed to the exporter.
+      const meta = { author: lesson.author, published: lesson.createdAt };
       if (kind === "docx") {
         const { exportDocx } = await loadExportEngine();
-        await exportDocx(lesson.doc);
+        await exportDocx(lesson.doc, meta);
         toast(t("lessonPage.wordDownloaded"));
       } else {
         const { exportPdf } = await loadExportEngine();
-        await exportPdf(lesson.doc);
+        await exportPdf(lesson.doc, meta);
         toast(t("lessonPage.pdfGenerated"));
       }
     } catch (err) {

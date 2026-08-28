@@ -56,7 +56,8 @@ const blockSchema = z
       .optional()
       .describe(
         'For type "question": number (numeric answer), single (one text answer), multiple (several accepted ' +
-          "answers), open (free response), background (needs prior knowledge). Every answer except a background " +
+          "answers), paraphrase (restate the passage in their own words — no stored answer), open (free " +
+          "response), background (needs prior knowledge). Every answer except a background " +
           "one must appear, word for word, in that section's own passage; a background answer must NOT. A single " +
           "(green) answer must also be a HARD FACT with one right answer — being in the passage is not enough. " +
           '"What was the goddess called? → BASTET" is a fact; "What is a cat called when it purrs on a lap? → ' +

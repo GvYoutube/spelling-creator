@@ -4,15 +4,26 @@
 // then walk that HTML and rebuild the blocks our editor understands.
 //
 // It is tuned for documents this app produced — the exporter emits a recognised
-// shape (a bold title paragraph, `<h2>` section headings, `[Label] …` question
-// prompts, a "Spelling words" heading followed by a numbered list). Files
-// authored elsewhere import only as well as they happen to match that shape;
-// anything we can't recognise degrades to plain text, and a document with no
-// section headings at all is rejected (see validateImportedDoc) so we never
-// open an unusable lesson in the editor.
+// shape (a bold title paragraph, question prompts carrying a per-type Word
+// character style, a "Spell:" line listing the words). Files authored elsewhere
+// import only as well as they happen to match that shape; anything we can't
+// recognise degrades to plain text, and a document with no readable content is
+// rejected (see validateImportedDoc) so we never open an unusable lesson.
+//
+// A printed lesson has no section headings and no "[Label]" in front of a
+// prompt, so neither is available to read the structure back off. Question types
+// come from the character styles instead — questionStyleMap() tells mammoth to
+// surface them as `<span class="s2c-q-…">`. Section *divisions* have nothing
+// left to carry them, so a document that uses no headings arrives as a single
+// section; Export/Import JSON is the lossless round trip.
 import mammoth from "mammoth";
 import { newId } from "../id.js";
-import { QUESTION_TYPES } from "../questions.js";
+import {
+  QUESTION_TYPE_LIST,
+  questionStyleClass,
+  questionStyleMap,
+} from "../questions.js";
+import { SPELLING_LABEL } from "../spelling.js";
 import { DEFAULT_IMAGE_SIZE, DEFAULT_IMAGE_ALIGN } from "../image.js";
 import { convertDocImages, resolveImageSrc } from "./imageRef.js";
 
@@ -27,11 +38,16 @@ export class DocxImportError extends Error {
   }
 }
 
-// Exported question labels (e.g. "Number answer") mapped back to their type key
-// (e.g. "number"), keyed lower-case so matching is case-insensitive.
-const LABEL_TO_TYPE = Object.fromEntries(
-  Object.values(QUESTION_TYPES).map((q) => [q.label.toLowerCase(), q.key]),
+// The class mammoth emits for each question style (e.g. "s2c-q-number") mapped
+// back to its type key.
+const CLASS_TO_TYPE = Object.fromEntries(
+  QUESTION_TYPE_LIST.map((q) => [questionStyleClass(q.key), q.key]),
 );
+
+// A CSS selector matching a prompt span of any question type.
+const QUESTION_SPAN_SELECTOR = QUESTION_TYPE_LIST.map(
+  (q) => `span.${questionStyleClass(q.key)}`,
+).join(", ");
 
 // Read a .docx File and rebuild a lesson document. Resolves to a doc shaped like
 // { title, sections } ready for the editor; rejects (DocxImportError) when the
@@ -47,7 +63,12 @@ export async function importDocxFile(file) {
   let html;
   try {
     const arrayBuffer = await file.arrayBuffer();
-    const result = await mammoth.convertToHtml({ arrayBuffer });
+    // The style map is what carries each question's type through the conversion,
+    // now that nothing in the visible text names it.
+    const result = await mammoth.convertToHtml(
+      { arrayBuffer },
+      { styleMap: questionStyleMap() },
+    );
     html = result.value || "";
   } catch {
     throw new DocxImportError(
@@ -163,7 +184,7 @@ function parseHtmlToDoc(html, fileName) {
       current === null &&
       sections.length === 0 &&
       isBoldOnly(el) &&
-      !matchQuestion(text) &&
+      !matchQuestion(el) &&
       !isSpellingHeading(text)
     ) {
       title = text;
@@ -178,7 +199,7 @@ function parseHtmlToDoc(html, fileName) {
       continue;
     }
 
-    const question = matchQuestion(text);
+    const question = matchQuestion(el);
     if (question) {
       ensureSection();
       const { block, next } = readQuestion(nodes, i, question);
@@ -212,84 +233,75 @@ function italicOnlyText(el) {
   return "";
 }
 
+// The exporter's spelling line is "Spell: FIRST SECOND THIRD". Older exports
+// used a "Spelling words" heading above a numbered list, which readSpelling
+// still understands, so both shapes import.
 function isSpellingHeading(text) {
-  return /^spelling words$/i.test(text);
+  return (
+    /^spelling words$/i.test(text) ||
+    text.toLowerCase().startsWith(SPELLING_LABEL.toLowerCase())
+  );
 }
 
-// Parse a "[Label] prompt" paragraph into { type, prompt }, or null if the label
-// isn't a known question type.
-function matchQuestion(text) {
-  const m = /^\[([^\]]+)\]\s*([\s\S]*)$/.exec(text);
-  if (!m) return null;
-  const type = LABEL_TO_TYPE[m[1].trim().toLowerCase()];
+// Read a question off a paragraph whose prompt carries one of our question
+// character styles: `<p><span class="s2c-q-single">prompt</span>  answer</p>`.
+// Returns { type, prompt, answer } or null when the paragraph isn't one.
+function matchQuestion(el) {
+  const span = el.querySelector?.(QUESTION_SPAN_SELECTOR);
+  if (!span) return null;
+  const type = matchQuestionClass(span);
   if (!type) return null;
-  return { type, prompt: m[2].trim() };
+
+  // Whatever follows the prompt span in the same paragraph is the answer the
+  // exporter wrote in the body colour.
+  let answer = "";
+  for (let node = span.nextSibling; node; node = node.nextSibling) {
+    answer += node.textContent || "";
+  }
+  return { type, prompt: span.textContent.trim(), answer: answer.trim() };
 }
 
-// Build a question block, consuming the metadata paragraphs that follow its
-// prompt. Returns { block, next } where `next` is the index of the last node
-// consumed (so the caller resumes after it).
-function readQuestion(nodes, i, { type, prompt }) {
+function matchQuestionClass(span) {
+  for (const name of span.classList) {
+    if (CLASS_TO_TYPE[name]) return CLASS_TO_TYPE[name];
+  }
+  return null;
+}
+
+// Build a question block from its prompt paragraph. The answer travelled inline
+// with the prompt; only a number question's working-out spills onto the indented
+// paragraphs that follow. Returns { block, next } where `next` is the index of
+// the last node consumed (so the caller resumes after it).
+function readQuestion(nodes, i, { type, prompt, answer }) {
   const block = { id: newId(), type: "question", questionType: type, prompt };
-  const peek = (k) => {
-    const el = nodes[k];
-    if (!el) return null;
-    return { tag: el.tagName.toLowerCase(), text: el.textContent.trim() };
-  };
   let last = i;
 
   if (type === "number") {
-    block.answer = "";
+    block.answer = answer;
     block.steps = [];
-    const n = peek(i + 1);
-    if (n && n.tag === "p" && /^answer\s*:/i.test(n.text)) {
-      block.answer = stripLabel(n.text);
-      last = i + 1;
-    }
-    let k = last + 1;
-    const head = peek(k);
-    if (head && head.tag === "p" && /^steps\s*:/i.test(head.text)) {
-      last = k;
-      k += 1;
-      let item = peek(k);
-      while (item && item.tag === "p" && /^\d+\.\s*/.test(item.text)) {
-        const t = item.text.replace(/^\d+\.\s*/, "").trim();
-        if (t) block.steps.push({ id: newId(), text: t });
-        last = k;
-        k += 1;
-        item = peek(k);
-      }
-    }
-  } else if (type === "single") {
-    block.answer = "";
-    const n = peek(i + 1);
-    if (n && n.tag === "p" && /^answer\s*:/i.test(n.text)) {
-      block.answer = stripLabel(n.text);
-      last = i + 1;
-    }
-  } else if (type === "background") {
-    block.answer = "";
-    const ans = peek(i + 1);
-    if (ans && ans.tag === "p" && /^answer\s*:/i.test(ans.text)) {
-      block.answer = stripLabel(ans.text);
-      last = i + 1;
-    }
-  } else if (type === "multiple") {
-    block.answers = [];
+    // Numbered working-out lines written under the question.
     let k = i + 1;
-    const head = peek(k);
-    if (head && head.tag === "p" && /^answers\s*:/i.test(head.text)) {
+    for (;;) {
+      const el = nodes[k];
+      if (!el || el.tagName.toLowerCase() !== "p") break;
+      const text = el.textContent.trim();
+      if (!/^\d+\.\s*/.test(text)) break;
+      const step = text.replace(/^\d+\.\s*/, "").trim();
+      if (step) block.steps.push({ id: newId(), text: step });
       last = k;
       k += 1;
-      let item = peek(k);
-      while (item && item.tag === "p" && /^[•·*-]/.test(item.text)) {
-        const t = item.text.replace(/^[•·*-]\s*/, "").trim();
-        if (t) block.answers.push({ id: newId(), text: t });
-        last = k;
-        k += 1;
-        item = peek(k);
-      }
     }
+  } else if (type === "single" || type === "background") {
+    block.answer = answer;
+  } else if (type === "multiple") {
+    // The exporter joins the accepted answers with a run of spaces, which is the
+    // only thing left to split them on. An answer containing a double space
+    // would be split in two — a known limit of the lossy DOCX round trip.
+    block.answers = answer
+      .split(/\s{2,}/)
+      .map((text) => text.trim())
+      .filter(Boolean)
+      .map((text) => ({ id: newId(), text }));
     if (block.answers.length === 0) {
       block.answers.push({ id: newId(), text: "" });
     }
@@ -298,12 +310,29 @@ function readQuestion(nodes, i, { type, prompt }) {
   return { block, next: last };
 }
 
-// Build a spelling block from a "Spelling words" heading followed by numbered
-// (or bulleted/list) word paragraphs.
+// Build a spelling block from either shape: the current "Spell: FIRST SECOND"
+// line, or the older "Spelling words" heading followed by numbered (or
+// bulleted/list) word paragraphs.
 function readSpelling(nodes, i) {
   const block = { id: newId(), type: "spelling", words: [] };
   let last = i;
   let k = i + 1;
+
+  // "Spell: …" carries the words on its own line, separated by runs of spaces.
+  // The older "Spelling words" heading has none of its own and falls through to
+  // the list-reading loop below.
+  const heading = nodes[i].textContent.trim();
+  if (heading.toLowerCase().startsWith(SPELLING_LABEL.toLowerCase())) {
+    const inline = heading.slice(SPELLING_LABEL.length).trim();
+    if (inline && !/^\(no spelling words/i.test(inline)) {
+      for (const word of inline.split(/\s{2,}/)) {
+        const text = word.trim();
+        if (text) block.words.push({ id: newId(), text });
+      }
+    }
+    if (block.words.length === 0) block.words.push({ id: newId(), text: "" });
+    return { block, next: last };
+  }
 
   while (k < nodes.length) {
     const el = nodes[k];
@@ -335,13 +364,6 @@ function readSpelling(nodes, i) {
   return { block, next: last };
 }
 
-// Strip a leading "Label: " prefix and treat a blank-line placeholder
-// ("____________") as an empty value.
-function stripLabel(text) {
-  const value = text.replace(/^[^:]*:\s*/, "").trim();
-  return /^_+$/.test(value) ? "" : value;
-}
-
 function imageBlock(img, caption) {
   return {
     id: newId(),
@@ -361,16 +383,15 @@ function stripExtension(name) {
 
 // Reject documents that are readable but not structured as a lesson, so the
 // editor never opens an unusable import.
+//
+// Section headings are no longer required: an exported lesson has none, so
+// demanding them would reject our own documents. What has to be there is
+// readable content.
 function validateImportedDoc(doc) {
-  if (!doc.sections.length) {
-    throw new DocxImportError(
-      "This Word document isn't structured as a lesson. A lesson needs section headings (Word's “Heading 2” style) — the same format you get when you export a lesson from here. Add section headings to the document and try again.",
-    );
-  }
   const hasContent = doc.sections.some((s) => s.blocks.some(blockHasContent));
   if (!hasContent) {
     throw new DocxImportError(
-      "This document has section headings but no readable content beneath them.",
+      "This Word document has no readable lesson content — no passages, questions or spelling words could be found in it.",
     );
   }
 }
