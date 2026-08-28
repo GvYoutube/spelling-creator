@@ -4,7 +4,7 @@ title: Live sessions
 
 # Live sessions
 
-An assistant can join a [live collaboration session](/web-app/collaboration) as a
+An assistant can join a [live collaboration session](/web-app/live-collaboration) as a
 participant, the same way a second teacher would: it gets a slot in the room, its edits
 appear on everyone's screen as it makes them, and the host can remove it at any moment.
 
@@ -102,7 +102,7 @@ and the host's next save discards it.
 
 ## The wire protocol
 
-All three ends — the room ([`apps/api/src/collab-room.js`](/monorepo/api)), the browser
+All three ends — the room (`apps/api/src/collab-room.js`), the browser
 (`apps/web/src/lib/collab.js`) and this server (`apps/mcp/src/collab.js`) — speak the frame
 format defined once in `packages/core/src/collabFrames.js`. It used to live as two copies
 joined by a comment reading "must match T in collab-room.js", which is a convention rather
