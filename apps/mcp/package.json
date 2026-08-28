@@ -36,7 +36,7 @@
     "@modelcontextprotocol/sdk": "^1.30.0",
     "@spelling-creator/core": "workspace:*",
     "yjs": "^13.6.32",
-    "zod": "^3.25.0"
+    "zod": "^4.4.3"
   },
   "devDependencies": {
     "@anthropic-ai/mcpb": "^1.1.0",
