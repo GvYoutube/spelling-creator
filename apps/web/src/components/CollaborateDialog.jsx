@@ -498,6 +498,16 @@ export default function CollaborateDialog({
               }
               secondary={p.email}
             >
+              {/* An assistant can't host, so these never compete for the slot. */}
+              {p.bot ? (
+                <Badge
+                  variant="outline"
+                  className="shrink-0 border-muted-foreground/40 text-muted-foreground"
+                  title={t("collaborateDialog.roster.assistantTooltip")}
+                >
+                  {t("collaborateDialog.roster.assistant")}
+                </Badge>
+              ) : null}
               {p.host ? (
                 <Badge
                   variant="outline"

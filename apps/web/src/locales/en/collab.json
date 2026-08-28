@@ -40,6 +40,8 @@
       "inThisLesson": "In this lesson ({{count}})",
       "collaboratorFallback": "Collaborator",
       "host": "Host",
+      "assistant": "AI",
+      "assistantTooltip": "An AI assistant connected through this person's account",
       "removeFromLesson": "Remove from lesson"
     },
     "guest": {

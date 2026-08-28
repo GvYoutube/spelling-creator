@@ -40,6 +40,34 @@ edit_collab_doc({ operations: [ … ] })
 leave_collab_session()
 ```
 
+## Who the host sees
+
+An assistant joins on the user's own account — it holds their token, because that is the
+only identity it has. Left alone that puts two cursors in the room with the same name, and
+the host has no way to tell which one is a person.
+
+So the connection declares itself. `join_collab_session` adds `?assistant=<client name>`,
+taking the name from the connecting MCP client's own account of itself, and the Worker
+renders the participant as:
+
+```text
+Ms Kelly · Claude Desktop        [AI]
+```
+
+The decorated name flows into the floating cursors and chat labels automatically, since
+both already read from the presence roster; the roster entry also carries `bot: true`, which
+is what the **AI** badge in the Collaborate dialog reads.
+
+**This is self-declared, and deliberately not a security control.** The account is
+authenticated; the label is not. A connection that lies can only make itself _look_ like an
+assistant, or decline to admit that it is one — neither of which grants it anything, and
+the room still gates what matters on the host admitting a participant they can see. What
+it buys is that the honest case, which is every case shipped here, is legible.
+
+The label is bounded to 40 characters and stripped of control characters, line breaks and
+the `·` separator, so it cannot crowd out or impersonate the display name that _was_
+verified.
+
 ## What the design leans on
 
 Three properties of the room, none of them new — the session tools are built on the

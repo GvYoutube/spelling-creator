@@ -172,6 +172,9 @@ export class CollabRoom extends DurableObject {
 				email: s.email,
 				avatarUrl: s.avatarUrl,
 				host: s.host,
+				// Self-declared by the connection and passed through by the Worker.
+				// The UI labels it; nothing is gated on it. See handleCollab.
+				bot: Boolean(s.bot),
 			};
 			if (s.admitted) participants.push(entry);
 			else requests.push(entry);
@@ -240,6 +243,10 @@ export class CollabRoom extends DurableObject {
 			name: dec('X-Collab-Name'),
 			email: dec('X-Collab-Email'),
 			avatarUrl: dec('X-Collab-Avatar'),
+			// Set by the Worker when the connection declared itself an AI assistant
+			// acting for this account (see handleCollab). Carried through to the
+			// roster so the host can tell a person from an assistant at a glance.
+			bot: request.headers.get('X-Collab-Bot') === '1',
 		};
 
 		const existingHost = this.hostSocket();
@@ -267,6 +274,7 @@ export class CollabRoom extends DurableObject {
 			name: identity.name,
 			email: identity.email,
 			avatarUrl: identity.avatarUrl,
+			bot: identity.bot,
 			host,
 			admitted: host, // the host is implicitly part of their own lesson
 		});

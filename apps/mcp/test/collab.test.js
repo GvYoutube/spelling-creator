@@ -256,12 +256,22 @@ test("an edit received from the room is not echoed back to it", async () => {
   // path, or two peers ping-pong the same edit forever.
   const ws = fakeSocket();
   try {
-    const session = await joinedSession(ws);
+    // Built from the same admitted state, so this is a genuine replica of the
+    // room rather than an unrelated document whose writes race ours on client
+    // id — see the merge test above.
+    const seed = seedUpdate(LESSON);
+    const joining = joinSession({
+      url: "wss://example.test/collab/ABC",
+      code: "ABC",
+    });
+    ws.push(new Uint8Array([T.HELLO, 0, 1, 0]));
+    ws.push(frameBytes(T.ADMITTED, seed));
+    const session = await joining;
     const before = ws.frames().length;
 
     const theirs = new Y.Doc();
-    Y.applyUpdate(theirs, seedUpdate(session.doc()));
-    reconcile(theirs, { ...session.doc(), title: "Theirs" });
+    Y.applyUpdate(theirs, seed);
+    reconcile(theirs, { ...LESSON, title: "Theirs" });
     ws.push(frameBytes(T.UPDATE, Y.encodeStateAsUpdate(theirs)));
 
     assert.equal(session.doc().title, "Theirs");
@@ -375,6 +385,29 @@ test("the session tools exist only where a transport can hold a session open", a
   assert.equal(remoteNames.includes("join_collab_session"), false);
   assert.ok(remoteNames.includes("create_lesson"), "everything else is there");
   await remote.close();
+});
+
+test("joining declares which assistant is connecting", async () => {
+  // Without this the assistant arrives wearing the account holder's display
+  // name, and the host sees two cursors called the same thing with no way to
+  // tell which one is a person.
+  const ws = fakeSocket();
+  const mcp = await connect({ live: true });
+  try {
+    const joining = mcp.call("join_collab_session", { code: "ABC" });
+    await new Promise((r) => setTimeout(r, 0));
+
+    const url = new URL(ws.url);
+    assert.equal(url.searchParams.get("assistant"), "test");
+    assert.equal(url.searchParams.get("token"), "jwt");
+
+    // Let the join fail so the test doesn't sit on the admission timer.
+    ws.emit("close", {});
+    await joining;
+  } finally {
+    await mcp.close();
+    ws.restore();
+  }
 });
 
 test("the session tools say what to do when there is no session", async () => {

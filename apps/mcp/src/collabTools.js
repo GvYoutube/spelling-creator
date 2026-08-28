@@ -34,7 +34,7 @@ function touchedBlocks(operations) {
  * @param {{ config: any, auth: any, text: Function, tool: Function, standardFindings: Function }} ctx
  */
 export function registerCollabTools(server, ctx) {
-  const { config, auth, text, tool } = ctx;
+  const { config, auth, text, tool, clientName } = ctx;
 
   // The one live session, or null. Deliberately module-free state: it belongs to
   // this server process and dies with it.
@@ -49,7 +49,16 @@ export function registerCollabTools(server, ctx) {
           "SUPABASE_REFRESH_TOKEN, then check with whoami.",
       );
     }
-    return `${base}/collab/${encodeURIComponent(code)}?token=${encodeURIComponent(token)}`;
+    // Declare what this is. The room shows an assistant as a participant of its
+    // own rather than as a second cursor wearing the account holder's name — see
+    // handleCollab in apps/api/src/routes/collab.js. The label is the connecting
+    // MCP client's own account of itself ("Claude Desktop"), which is the most
+    // useful thing the teacher could be told about who is typing.
+    const assistant = clientName() || "AI assistant";
+    return (
+      `${base}/collab/${encodeURIComponent(code)}` +
+      `?token=${encodeURIComponent(token)}&assistant=${encodeURIComponent(assistant)}`
+    );
   };
 
   /** The live session, or a clear error naming what to do instead. */

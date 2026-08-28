@@ -7,6 +7,23 @@ import { verifySupabaseUser } from '../lib/supabase.js';
 import { displayNameOf } from '../lib/auth.js';
 import { rateLimitStore } from '../platform/index.js';
 
+// The assistant label is arbitrary text from the connecting client (an MCP
+// client's self-reported name — "Claude Desktop", "Cursor"), so it is bounded
+// and stripped of anything that would let it impersonate the rest of the roster
+// entry. Same reasoning as assistantNote in apps/mcp/src/git.js: a name nobody
+// vetted must not crowd out the name that was verified.
+const ASSISTANT_LABEL_MAX = 40;
+
+export function clampLabel(raw) {
+	const text = (raw || '')
+		.replace(/[\p{C}\p{Zl}\p{Zp}]/gu, ' ') // control chars and line breaks
+		.replace(/·/g, '-') // the separator itself, so a label can't fake a second one
+		.replace(/\s+/g, ' ')
+		.trim();
+	if (!text) return '';
+	return text.length <= ASSISTANT_LABEL_MAX ? text : `${text.slice(0, ASSISTANT_LABEL_MAX - 1).trimEnd()}…`;
+}
+
 /**
  * Live-collaboration WebSocket entry. A browser opens
  *   wss://<api>/collab/<code>?token=<jwt>[&create=1]
@@ -80,9 +97,25 @@ export async function handleCollab(request, env, url, cors) {
 	// Values are URL-encoded so non-ASCII display names survive HTTP headers.
 	const name = displayNameOf(user) || (user.email ? user.email.split('@')[0] : '');
 	const meta = user.user_metadata || {};
+
+	// An AI assistant joining on someone's behalf (the MCP server — see
+	// apps/mcp/src/collab.js) says so with ?assistant=<client name>, and the room
+	// shows it as a participant of its own rather than as a second cursor wearing
+	// the account holder's name.
+	//
+	// This is SELF-DECLARED and deliberately not a security control: the account
+	// is authenticated, the label is not. A connection that lies about it can only
+	// make itself look like an assistant, or decline to admit that it is one —
+	// neither of which grants it anything. The room already gates what matters on
+	// the host admitting a participant they can see. What this buys is that the
+	// honest case, which is every case we ship, is legible: the host knows which
+	// cursor is a person.
+	const assistant = clampLabel(url.searchParams.get('assistant'));
+
 	const headers = new Headers(request.headers);
 	headers.set('X-Collab-Uid', encodeURIComponent(user.id));
-	headers.set('X-Collab-Name', encodeURIComponent(name));
+	headers.set('X-Collab-Name', encodeURIComponent(assistant ? `${name} · ${assistant}` : name));
+	if (assistant) headers.set('X-Collab-Bot', '1');
 	headers.set('X-Collab-Email', encodeURIComponent(user.email || ''));
 	headers.set('X-Collab-Avatar', encodeURIComponent(meta.avatar_url || meta.picture || ''));
 

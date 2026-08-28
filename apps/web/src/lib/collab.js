@@ -358,6 +358,7 @@ export function useCollaboration({ doc, onRemoteDoc, identity, accessToken }) {
           const map = new Map();
           for (const p of [...list, ...reqs]) {
             map.set(p.slot, {
+              bot: Boolean(p.bot),
               name: p.name,
               email: p.email,
               avatarUrl: p.avatarUrl,
@@ -373,6 +374,10 @@ export function useCollaboration({ doc, onRemoteDoc, identity, accessToken }) {
               email: p.email,
               avatarUrl: p.avatarUrl,
               host: p.host,
+              // An AI assistant joined on someone's account, so the roster and
+              // the floating cursors can say so rather than showing a second
+              // person by that name.
+              bot: Boolean(p.bot),
             })),
           );
           setRequests(
@@ -381,6 +386,7 @@ export function useCollaboration({ doc, onRemoteDoc, identity, accessToken }) {
               name: p.name,
               email: p.email,
               avatarUrl: p.avatarUrl,
+              bot: Boolean(p.bot),
             })),
           );
 

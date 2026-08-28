@@ -1706,6 +1706,7 @@ export function registerTools(server, ctx) {
       text,
       tool,
       standardFindings,
+      clientName,
     });
   }
 }
@@ -1717,5 +1718,5 @@ export function registerTools(server, ctx) {
 // every client UI and bug report.
 export const SERVER_INFO = {
   name: "spelling-creator-hub",
-  version: "0.14.0",
+  version: "0.15.0",
 };
