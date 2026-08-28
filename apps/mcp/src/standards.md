@@ -226,6 +226,11 @@ fetched — so do it as often as you like. Checking by `id` reads the lesson fro
 which is an ordinary API read: still writes nothing, but it is a request like any other, so
 don't poll with it.
 
+For a long lesson you can also write it in passes rather than in one call: `create_lesson` with
+the first section or two, then `patch_lesson` with an `add_section` op for each one after that,
+passing a `summary` that says what the pass added. Each pass is validated, recorded and
+reversible on its own.
+
 Rejected (errors):
 
 - a green (single) answer that does not appear, word for word, in its own section's passage

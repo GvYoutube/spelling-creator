@@ -323,6 +323,27 @@ const skipValidationSchema = z
       "order. Never use it to get past a defect you could fix; the rejection message says exactly what to change.",
   );
 
+// The `summary` input, shared by the tools that edit an existing lesson.
+//
+// Without one, recordLessonHistory names the version after what changed
+// mechanically ("Edit 2 text blocks, add 15 question blocks"), which is accurate
+// and tells the user nothing about why. That is fine for a one-off tweak and
+// poor for a lesson built up in passes, where the History tab ends up a column
+// of near-identical op counts the user has to open one by one to tell apart.
+//
+// The assistant is the only party that knows what the pass was for, so it says.
+// The full op list still rides along in the commit body either way — this
+// replaces the subject line, not the record.
+const summarySchema = z
+  .string()
+  .optional()
+  .describe(
+    "One short line naming what this edit was for, shown as the version's title in the lesson's History tab " +
+      '("Add section 3: volcanic ash", "Rewrite the orange questions"). Write it for the user reading the tab ' +
+      "later, not as a restatement of the operations — those are recorded underneath it anyway. Clamped to 72 " +
+      "characters. Omit it and the version is named after what mechanically changed.",
+  );
+
 // Findings carry an internal level and dedupe key; the assistant only needs to
 // know what is wrong and where.
 function toWireWarnings(warnings) {
@@ -676,7 +697,9 @@ export function registerTools(server, ctx) {
         "passage. Writes are validated against the standard below: grounding, spelling-word and uniqueness failures " +
         "are REJECTED with a message naming the section, the offending value and the fix — read it and resubmit.\n\n" +
         "Don't compose all six sections blind and hope. Check your work with validate_lesson as you go — it runs " +
-        "these same checks without saving anything — and call this once it comes back clean.\n\n" +
+        "these same checks without saving anything — and call this once it comes back clean. For a long lesson you " +
+        "can also create the first section or two here and add the rest with patch_lesson, a pass at a time; see " +
+        "that tool.\n\n" +
         LESSON_STANDARDS,
       inputSchema: {
         title: z.string().describe("The lesson title / topic."),
@@ -791,34 +814,42 @@ export function registerTools(server, ctx) {
           .describe(
             "Omit to leave visibility unchanged; true/false to publish or unpublish.",
           ),
+        summary: summarySchema,
         skipValidation: skipValidationSchema,
       },
     },
-    tool(async ({ id, title, sections, published, skipValidation }) => {
-      const doc = buildDoc({ title, sections });
-      // A full replace, so the caller owns every defect in the result.
-      const warnings = checkStandard({
-        doc,
-        rawBlocks: inputBlocksFromSections(sections),
-        skipValidation,
-      });
-      // Read before writing, purely so the version history has a before-picture
-      // to diff against — this tool doesn't otherwise need one. Only the write
-      // below decides whether the call succeeds.
-      const previousDoc = await currentDoc(id);
-      const lesson = await api.updateLesson(id, {
-        title: doc.title,
-        doc,
-        published,
-      });
-      const result = {
-        ...lesson,
-        url: hubUrl(lesson.id),
-        history: await recordHistory({ lessonId: id, doc, previousDoc }),
-      };
-      if (warnings.length) result.warnings = warnings;
-      return text(result);
-    }),
+    tool(
+      async ({ id, title, sections, published, summary, skipValidation }) => {
+        const doc = buildDoc({ title, sections });
+        // A full replace, so the caller owns every defect in the result.
+        const warnings = checkStandard({
+          doc,
+          rawBlocks: inputBlocksFromSections(sections),
+          skipValidation,
+        });
+        // Read before writing, purely so the version history has a before-picture
+        // to diff against — this tool doesn't otherwise need one. Only the write
+        // below decides whether the call succeeds.
+        const previousDoc = await currentDoc(id);
+        const lesson = await api.updateLesson(id, {
+          title: doc.title,
+          doc,
+          published,
+        });
+        const result = {
+          ...lesson,
+          url: hubUrl(lesson.id),
+          history: await recordHistory({
+            lessonId: id,
+            doc,
+            previousDoc,
+            summary,
+          }),
+        };
+        if (warnings.length) result.warnings = warnings;
+        return text(result);
+      },
+    ),
   );
 
   server.registerTool(
@@ -827,9 +858,16 @@ export function registerTools(server, ctx) {
       title: "Patch a lesson",
       description:
         "Edit a lesson you authored with a small list of operations, instead of resending the whole document. " +
-        "Prefer this over update_lesson for tweaks. Call get_lesson first to read the current sections/blocks and " +
-        "their ids; operations address them by id. The server fetches the lesson, applies the operations in order, " +
-        "then saves the result.\n\n" +
+        "Prefer this over update_lesson for anything short of a full rewrite. Call get_lesson first to read the " +
+        "current sections/blocks and their ids; operations address them by id. The server fetches the lesson, " +
+        "applies the operations in order, then saves the result.\n\n" +
+        "TWO USES. The obvious one is a tweak — a typo, a wrong answer, a reworded prompt. The other is BUILDING A " +
+        "LESSON UP IN PASSES: create_lesson with the first section or two, then add_section the rest one pass at a " +
+        "time. A six-section lesson is a lot to get right in a single call, and every pass here is checked, " +
+        "reversible and named, where one big create_lesson is all-or-nothing. Check each pass with validate_lesson " +
+        "before you send it and you will rarely be rejected. (If you would rather compose the whole document first, " +
+        "that is fine too — validate_lesson as you go, then one create_lesson at the end. What to avoid is writing " +
+        "six sections blind and hoping.)\n\n" +
         "Operations (each is { op, ... }):\n" +
         "• set_title { title }\n" +
         "• set_section_name { sectionId, name }\n" +
@@ -845,7 +883,9 @@ export function registerTools(server, ctx) {
         "your edit introduces are held against you — pre-existing problems in a lesson written elsewhere won't " +
         "block a small tweak.\n\n" +
         "Each patch is committed to the lesson's version history as its own version, so the user can read the diff " +
-        "and revert it from the lesson's History tab. `history` in the result says what was recorded.",
+        "and revert it from the lesson's History tab. `history` in the result says what was recorded. Pass a " +
+        "`summary` so each version says what the pass was for — building a lesson in passes otherwise leaves the " +
+        "user a column of near-identical op counts to tell apart.",
       inputSchema: {
         id: z.string().describe("The id of the lesson to patch."),
         operations: z
@@ -858,10 +898,11 @@ export function registerTools(server, ctx) {
           .describe(
             "Omit to leave visibility unchanged; true/false to publish or unpublish.",
           ),
+        summary: summarySchema,
         skipValidation: skipValidationSchema,
       },
     },
-    tool(async ({ id, operations, published, skipValidation }) => {
+    tool(async ({ id, operations, published, summary, skipValidation }) => {
       // Fetch current content, apply the diff in memory, then save (the Worker
       // only offers a full-replace PUT — see api.updateLesson).
       const current = await api.getLesson(id);
@@ -886,6 +927,7 @@ export function registerTools(server, ctx) {
           lessonId: id,
           doc,
           previousDoc: current.doc,
+          summary,
         }),
       };
       if (warnings.length) result.warnings = warnings;
@@ -1432,5 +1474,5 @@ export function registerTools(server, ctx) {
 // every client UI and bug report.
 export const SERVER_INFO = {
   name: "spelling-creator-hub",
-  version: "0.11.0",
+  version: "0.12.0",
 };

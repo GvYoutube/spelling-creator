@@ -58,6 +58,9 @@ Some things worth knowing:
   to pass on.
 - **Nothing is committed when nothing changed.** An edit that leaves the stored content
   identical records no version, rather than an empty one.
+- **The assistant can name the version.** `patch_lesson` and `update_lesson` take a
+  `summary`, which becomes the version's title instead of the mechanical description of
+  what changed. See [Building a lesson in passes](#building-a-lesson-in-passes).
 
 ## Proposing changes instead of making them
 
@@ -149,6 +152,42 @@ Ops: `set_title`, `set_section_name`, `add_section`, `remove_section`, `move_sec
 server fetches the lesson, applies the ops in order, and saves the result (the hub API
 itself only does full replaces, so the diff is applied server-side). Use `update_lesson`
 when you're rewriting the whole lesson anyway.
+
+## Building a lesson in passes
+
+`patch_lesson` isn't only for tweaks. A six-section lesson is a lot to get right in one
+`create_lesson` call, and that call is all-or-nothing — one grounding failure anywhere and
+nothing is saved. The alternative is to create the first section or two and add the rest a
+pass at a time:
+
+```text
+validate_lesson({ sections: [ … ] })        -> check the section you just wrote
+create_lesson({ title, sections: [ … ] })   -> the lesson exists after one section
+validate_lesson({ id, operations: [ … ] })  -> check the next pass before sending it
+patch_lesson({ id, operations, summary })   -> add it
+```
+
+Each pass is checked on its own, reversible on its own, and named on its own. Composing the
+whole document locally and writing it in one `create_lesson` is equally fine — the thing to
+avoid is writing six sections blind and hoping, which is what the tools used to require.
+
+**Name each pass with `summary`.** `patch_lesson` and `update_lesson` both take one, and it
+becomes the version's title in the **History** tab:
+
+```json
+{ "id": "…", "operations": [ … ], "summary": "Add section 3: volcanic ash" }
+```
+
+Without it the version is named after what mechanically changed ("Add 15 question blocks"),
+which is accurate and says nothing about why — fine for a one-off tweak, and poor for six
+passes the user has to open one by one to tell apart. The summary replaces the subject line
+only: the itemised operations and the "made by an AI assistant" note still follow in the
+commit body. It's clamped to 72 characters.
+
+One reason to prefer `patch_lesson` over `update_lesson` for this: `update_lesson` rebuilds
+every section and block id, so its diff reads as a wholesale add-and-remove even for a
+one-word change. `patch_lesson` addresses blocks by id, so the history records what actually
+moved.
 
 There is a second reason to prefer patching. Both tools check the result against the
 authoring standard, but `patch_lesson` holds the caller only to the defects its edit
