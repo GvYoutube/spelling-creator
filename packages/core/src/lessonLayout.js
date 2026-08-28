@@ -47,11 +47,35 @@ const MONTHS = [
   "December",
 ];
 
+// A publication date written as a plain calendar day, with no time and no zone.
+const DATE_ONLY = /^(\d{4})-(\d{2})-(\d{2})$/;
+
 // Parse whatever the lesson record carries as a publication date (an ISO string,
 // a timestamp, or a Date) into a Date, or null when it isn't usable.
+//
+// A date-only string is deliberately not handed to `new Date()`: the spec reads
+// "2026-01-01" as UTC midnight, so everything below — which asks the Date for its
+// *local* month and year — would print "December 2025" for a lesson released on
+// New Year's Day anywhere west of Greenwich. A calendar day carries no zone, so
+// it's built as that day in local time and comes back out as the day it says.
+// Anything with a time in it is a real instant and keeps the standard parse.
 function toDate(value) {
   if (!value) return null;
-  const date = value instanceof Date ? value : new Date(value);
+  if (value instanceof Date) {
+    return Number.isNaN(value.getTime()) ? null : value;
+  }
+  if (typeof value === "string") {
+    const civil = DATE_ONLY.exec(value.trim());
+    if (civil) {
+      const date = new Date(
+        Number(civil[1]),
+        Number(civil[2]) - 1,
+        Number(civil[3]),
+      );
+      return Number.isNaN(date.getTime()) ? null : date;
+    }
+  }
+  const date = new Date(value);
   return Number.isNaN(date.getTime()) ? null : date;
 }
 
