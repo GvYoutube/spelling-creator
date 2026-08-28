@@ -110,7 +110,7 @@
     },
     {
       "name": "set_lesson_published",
-      "description": "Publish or unpublish a lesson without changing its content."
+      "description": "Publish or unpublish a lesson without changing its content, confirming a publish with you where the client can ask."
     },
     {
       "name": "delete_lesson",

@@ -622,13 +622,69 @@ export function registerTools(server, ctx) {
    * recordHistory but can do their job without one. Tolerant on purpose: a read
    * that fails must not stop a write the user asked for — it only costs the
    * catch-up commit, which is a tidiness in the history rather than the edit.
+   *
+   * Also says whether the lesson is already public, which decides whether
+   * `published: true` is a change worth asking the user about.
    */
-  const currentDoc = async (id) => {
+  const currentLesson = async (id) => {
     try {
-      return (await api.getLesson(id))?.doc || null;
+      return (await api.getLesson(id)) || null;
     } catch {
       return null;
     }
+  };
+
+  /**
+   * Ask before a lesson becomes publicly readable under the user's name.
+   *
+   * Publishing is outward-facing in a way nothing else here is: the lesson is
+   * listed on the hub, attributed to them, and anyone can read and fork it. That
+   * makes it their call, the same as deleting — see askUser.
+   *
+   * Unlike deleting, it is reversible, and unlike skipValidation it is often
+   * exactly what was asked for. So this only asks on the way OUT (nothing
+   * confirms unpublishing) and only when public is a change from where the
+   * lesson already was. A "no" never costs the work: every caller falls back to
+   * saving the lesson as a private draft rather than failing the write.
+   *
+   * @param {string} named  The lesson, as the user should see it named.
+   * @returns {Promise<boolean>} Whether to go ahead and publish.
+   */
+  const mayPublish = async (named) => {
+    const answer = await askUser(
+      `Publish the lesson ${named} to the public Spelling Creator hub? It will be listed publicly under your ` +
+        "name, and anyone will be able to read, copy and fork it. You can unpublish it again at any time.",
+      "Publish it",
+    );
+    // Only an actual refusal stops it: a client that can't ask must publish
+    // exactly as it did before.
+    return answer !== false;
+  };
+
+  /**
+   * What `published` an edit should actually write, having asked the user first
+   * if the edit would take a private lesson public.
+   *
+   * The editing tools carry `published` as a rider on a content change, so a
+   * refusal must not lose the edit: the content is written either way and only
+   * the visibility is held back. When that happens the result says so — the
+   * assistant asked for something it didn't get, and has to know it was the user
+   * who overruled it rather than assume the field was ignored.
+   *
+   * @param {{ published: boolean|undefined, wasPublished: boolean, named: string }} args
+   * @returns {Promise<{ published: boolean|undefined, note?: string }>}
+   */
+  const resolveVisibility = async ({ published, wasPublished, named }) => {
+    // Omitted, unpublishing, or already public — nothing is becoming visible
+    // that wasn't, so there is nothing to ask about.
+    if (published !== true || wasPublished) return { published };
+    if (await mayPublish(named)) return { published: true };
+    return {
+      published: false,
+      note:
+        "The content changes were saved, but the user was asked about publishing and said no, so the lesson is " +
+        "still a PRIVATE DRAFT. Don't try to publish it again unless they ask you to.",
+    };
   };
 
   server.registerTool(
@@ -820,10 +876,13 @@ export function registerTools(server, ctx) {
         rawBlocks: inputBlocksFromSections(sections),
         skipValidation,
       });
+      // Asked before the write, so a "no" saves a draft rather than publishing
+      // and retracting.
+      const publish = published ? await mayPublish(`"${doc.title}"`) : false;
       const lesson = await api.createLesson({
         title: doc.title,
         doc,
-        published,
+        published: publish,
       });
       const result = {
         ...lesson,
@@ -835,9 +894,12 @@ export function registerTools(server, ctx) {
           doc,
           summary: `Create "${doc.title}"`,
         }),
-        note: published
+        note: publish
           ? "Published to the public hub."
-          : "Saved as a private draft. Call set_lesson_published to share it.",
+          : published
+            ? "The user was asked about publishing and said no, so the lesson was saved as a PRIVATE DRAFT instead " +
+              "— nothing else about it changed, and no work was lost. Don't publish it unless they ask you to."
+            : "Saved as a private draft. Call set_lesson_published to share it.",
       };
       // Soft warnings: the lesson saved fine, but flag shape issues (e.g. a
       // section with no question) so the assistant can offer to fix them.
@@ -926,14 +988,19 @@ export function registerTools(server, ctx) {
           rawBlocks: inputBlocksFromSections(sections),
           skipValidation,
         });
-        // Read before writing, purely so the version history has a before-picture
-        // to diff against — this tool doesn't otherwise need one. Only the write
-        // below decides whether the call succeeds.
-        const previousDoc = await currentDoc(id);
+        // Read before writing, so the version history has a before-picture to
+        // diff against and so we know whether `published: true` is a change.
+        // Only the write below decides whether the call succeeds.
+        const current = await currentLesson(id);
+        const visibility = await resolveVisibility({
+          published,
+          wasPublished: current?.published === true,
+          named: `"${doc.title}"`,
+        });
         const lesson = await api.updateLesson(id, {
           title: doc.title,
           doc,
-          published,
+          published: visibility.published,
         });
         const result = {
           ...lesson,
@@ -941,10 +1008,11 @@ export function registerTools(server, ctx) {
           history: await recordHistory({
             lessonId: id,
             doc,
-            previousDoc,
+            previousDoc: current?.doc || null,
             summary,
           }),
         };
+        if (visibility.note) result.note = visibility.note;
         if (warnings.length) result.warnings = warnings;
         return text(result);
       },
@@ -1014,10 +1082,15 @@ export function registerTools(server, ctx) {
         skipValidation,
         baselineDoc: current.doc,
       });
+      const visibility = await resolveVisibility({
+        published,
+        wasPublished: current.published === true,
+        named: `"${doc.title || current.title}"`,
+      });
       const lesson = await api.updateLesson(id, {
         title: doc.title || current.title,
         doc,
-        published,
+        published: visibility.published,
       });
       const result = {
         ...lesson,
@@ -1029,6 +1102,7 @@ export function registerTools(server, ctx) {
           summary,
         }),
       };
+      if (visibility.note) result.note = visibility.note;
       if (warnings.length) result.warnings = warnings;
       return text(result);
     }),
@@ -1242,7 +1316,10 @@ export function registerTools(server, ctx) {
       title: "Publish or unpublish a lesson",
       description:
         "Toggle a lesson you authored between a public-hub listing (published: true) and a private draft " +
-        "(published: false), without changing its content.",
+        "(published: false), without changing its content.\n\n" +
+        "Publishing puts the lesson on the public hub under the user's name, where anyone can read, copy and fork " +
+        "it, so on a client that can put a question to the user this asks them to confirm it first and their answer " +
+        "decides. Unpublishing is never confirmed — it only ever makes a lesson less visible.",
       inputSchema: {
         id: z.string().describe("The lesson id."),
         published: z
@@ -1255,6 +1332,19 @@ export function registerTools(server, ctx) {
     tool(async ({ id, published }) => {
       // PUT replaces the whole row, so carry the existing title/doc through.
       const current = await api.getLesson(id);
+      const named = current.title ? `"${current.title}"` : `\`${id}\``;
+
+      if (
+        published &&
+        current.published !== true &&
+        !(await mayPublish(named))
+      ) {
+        return text(
+          `Not published — the user was asked and said no, so ${named} is still a private draft. Its content is ` +
+            "unchanged. Don't call set_lesson_published(true) for it again unless they ask you to.",
+        );
+      }
+
       const lesson = await api.updateLesson(id, {
         title: current.title,
         doc: current.doc,

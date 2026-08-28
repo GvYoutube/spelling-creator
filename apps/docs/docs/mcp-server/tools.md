@@ -64,20 +64,41 @@ Some things worth knowing:
 
 ## Decisions that are the user's
 
-Two things this server does are the user's call rather than the assistant's: **deleting a
-lesson**, which cannot be undone, and **overriding the authoring standard** with
-`skipValidation`, which is meant for a user who deliberately wants what the standard
-forbids.
+Three things this server does are the user's call rather than the assistant's: **deleting a
+lesson**, which cannot be undone; **publishing one**, which puts it in front of strangers
+under their name; and **overriding the authoring standard** with `skipValidation`, which is
+meant for a user who deliberately wants what the standard forbids.
 
-Both were governed only by prose in the tool descriptions — "ask the user first" — which
-is advice the model may or may not follow, and which neither the server nor the user can
-check after the fact. On a client that supports **elicitation**, the server now asks them
-directly, mid-tool-call, and their answer decides it:
+All three were governed only by prose in the tool descriptions — "ask the user first" —
+which is advice the model may or may not follow, and which neither the server nor the user
+can check after the fact. On a client that supports **elicitation**, the server now asks
+them directly, mid-tool-call, and their answer decides it:
 
 - **`delete_lesson`** names the lesson and says what goes with it, and points at
   unpublishing as the reversible alternative. Say no and nothing is deleted.
+- **Publishing** — `set_lesson_published(true)`, or `published: true` on `create_lesson`,
+  `update_lesson` or `patch_lesson`. See below.
 - **`skipValidation`** lists the defects that would be waived before waiving them. See
   [Lesson validation](/mcp-server/lesson-validation#skipvalidation).
+
+### Publishing
+
+Publishing is asked about only **on the way out**, and only when public is a change:
+unpublishing is never confirmed (it only ever makes a lesson less visible), and neither is
+`published: true` on a lesson that is already public.
+
+A refusal never costs the work. On the editing tools `published` rides along with a content
+change, so the content is written either way and only the visibility is held back; on
+`create_lesson` the lesson is created as a private draft rather than not at all. The result
+carries a `note` saying so, because the assistant asked for something it didn't get and
+would otherwise assume the field was ignored:
+
+```json
+{
+  "id": "…",
+  "note": "The content changes were saved, but the user was asked about publishing and said no, so the lesson is still a PRIVATE DRAFT. …"
+}
+```
 
 This is the same principle as the [image picker](./interactive-views.md): where a choice is
 genuinely the user's, an assistant that makes it takes it away from them.
