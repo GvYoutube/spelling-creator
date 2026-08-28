@@ -62,6 +62,35 @@ Some things worth knowing:
   `summary`, which becomes the version's title instead of the mechanical description of
   what changed. See [Building a lesson in passes](#building-a-lesson-in-passes).
 
+## Decisions that are the user's
+
+Two things this server does are the user's call rather than the assistant's: **deleting a
+lesson**, which cannot be undone, and **overriding the authoring standard** with
+`skipValidation`, which is meant for a user who deliberately wants what the standard
+forbids.
+
+Both were governed only by prose in the tool descriptions — "ask the user first" — which
+is advice the model may or may not follow, and which neither the server nor the user can
+check after the fact. On a client that supports **elicitation**, the server now asks them
+directly, mid-tool-call, and their answer decides it:
+
+- **`delete_lesson`** names the lesson and says what goes with it, and points at
+  unpublishing as the reversible alternative. Say no and nothing is deleted.
+- **`skipValidation`** lists the defects that would be waived before waiving them. See
+  [Lesson validation](/mcp-server/lesson-validation#skipvalidation).
+
+This is the same principle as the [image picker](./interactive-views.md): where a choice is
+genuinely the user's, an assistant that makes it takes it away from them.
+
+A refusal is not an error. `delete_lesson` returns a normal result saying the user declined
+and telling the assistant not to ask again unprompted; a refused `skipValidation` fails the
+write, because a write that was never permitted didn't happen.
+
+**On a client that can't ask, both tools behave exactly as they did before** — elicitation
+is optional in the MCP spec and most clients don't implement it, so failing closed would
+make `delete_lesson` unusable for most people. Both tool descriptions say so, and tell the
+assistant to ask in the conversation regardless.
+
 ## Proposing changes instead of making them
 
 An assistant can change a lesson two ways, and which one it should use is a question

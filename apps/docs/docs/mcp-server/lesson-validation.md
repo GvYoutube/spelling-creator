@@ -138,6 +138,34 @@ Every writing tool takes `skipValidation: true`, which turns the **errors** off 
 them the warnings — nothing is checked). It exists for the user who deliberately wants a
 lesson the standard forbids, not as a way around a defect that should be fixed.
 
+That distinction used to live entirely in the flag's description — advice to the model,
+which nobody could audit and which the user never saw. The assistant set the flag, the
+standard was waived, and the only trace was a lesson that quietly broke the rules.
+
+So the findings are now computed even when the flag is set, and on a client that supports
+[elicitation](/mcp-server/tools#decisions-that-are-the-users), the override becomes a
+question put to the user, listing what would be waived:
+
+```text
+The assistant is about to save a lesson that breaks the authoring standard in
+2 ways, by overriding the check:
+
+1. [E_GROUNDING_SINGLE] Section 1 "Reading": the answer "obsidian" does not …
+2. [E_SPELLING_LENGTH] Section 1 "Reading": the spelling word "ash" is 3 …
+
+Save it as it is?
+```
+
+Say no and nothing is saved: the write fails with the findings and an instruction not to
+try the override again unasked. Say yes and it saves exactly as before. Nothing is asked
+when the lesson breaks no rule anyway — the flag is often set defensively, and there is
+nothing to waive.
+
+On a client that can't ask, the flag behaves exactly as it always has. That is a real gap,
+not a temporary one: elicitation is optional in the MCP spec and most clients don't
+implement it. Validation is still the thing that holds without the model's cooperation;
+this only closes the loop on the one escape hatch the model controls.
+
 ## Patching an existing lesson
 
 `patch_lesson` validates the lesson **before** and **after** the edit and holds the caller

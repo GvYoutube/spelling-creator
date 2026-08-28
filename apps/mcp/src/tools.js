@@ -19,6 +19,7 @@ import { searchWikimediaImages, resolveWikimediaImage } from "./wikimedia.js";
 import { LESSON_STANDARDS } from "./standards.js";
 import { IMAGE_PICKER_URI, registerViews, rendersViews } from "./views.js";
 import {
+  formatFindings,
   inputBlocksFromOperations,
   inputBlocksFromSections,
   newFindings,
@@ -320,7 +321,9 @@ const skipValidationSchema = z
   .describe(
     "Save even if the lesson breaks the authoring standard (see this tool's standards text). Only for when " +
       "the user deliberately wants something the standard forbids — a 3-section lesson, a different question " +
-      "order. Never use it to get past a defect you could fix; the rejection message says exactly what to change.",
+      "order. Never use it to get past a defect you could fix; the rejection message says exactly what to change. " +
+      "On a client that can put a question to the user, setting this asks them to approve the override and lists " +
+      "what would be waived, so setting it on a hunch wastes their time and mine.",
   );
 
 // The `summary` input, shared by the tools that edit an existing lesson.
@@ -382,30 +385,6 @@ function standardFindings({ doc, rawBlocks = [], baselineDoc = null }) {
   }
 
   return { failures, flags };
-}
-
-/**
- * Run the authoring standard over a lesson about to be written.
- *
- * Throws when it fails, which the `tool()` wrapper turns into a readable isError
- * result — so a rejected lesson is never saved, and the assistant gets a message
- * naming every defect and its fix. Returns the warnings to ride along with a
- * successful write.
- *
- * @param {{ doc: any, rawBlocks?: any[], skipValidation?: boolean, baselineDoc?: any }} args
- * @returns {Array<{ code: string, section?: number, message: string }>}
- */
-function checkStandard({
-  doc,
-  rawBlocks = [],
-  skipValidation = false,
-  baselineDoc = null,
-}) {
-  if (skipValidation) return [];
-
-  const { failures, flags } = standardFindings({ doc, rawBlocks, baselineDoc });
-  if (failures.length) throw new Error(validationErrorMessage(failures));
-  return toWireWarnings(flags);
 }
 
 /**
@@ -473,6 +452,126 @@ export function registerTools(server, ctx) {
     } catch (err) {
       return errorResult(err);
     }
+  };
+
+  /**
+   * Put a yes/no question to the USER, mid-tool-call, over the same connection.
+   *
+   * This exists for the handful of decisions that are the user's and have until
+   * now been made by the model on their behalf: deleting a lesson for good, and
+   * overriding the authoring standard. Both are cases where the tool
+   * descriptions ask the model to check with the user first — which is prose it
+   * may or may not act on, and neither the server nor the user can tell whether
+   * it did. Asking directly is the difference between a rule and a request.
+   *
+   * The same reasoning as the image picker (see views.js): where a choice is
+   * genuinely the user's, an assistant that makes it takes it away from them.
+   *
+   * Returns true if they said yes, false if they said no or dismissed the
+   * prompt, and **null if they were never asked** — the client doesn't do
+   * elicitation, or the ask itself failed. Null is not consent and it is not
+   * refusal; it means this connection has no way to reach the user, and the
+   * caller decides what to do about it. Elicitation is optional in the MCP spec
+   * and most clients still don't implement it, so null is the common case and
+   * every caller must leave those clients working exactly as they did.
+   *
+   * @param {string} message  The question, as the user will read it.
+   * @param {string} title    The affirmative answer's label.
+   * @returns {Promise<boolean|null>}
+   */
+  const askUser = async (message, title) => {
+    let capable = false;
+    try {
+      capable = Boolean(server.server.getClientCapabilities()?.elicitation);
+    } catch {
+      return null;
+    }
+    if (!capable) return null;
+
+    try {
+      const res = await server.server.elicitInput({
+        message,
+        requestedSchema: {
+          type: "object",
+          properties: {
+            confirm: {
+              type: "boolean",
+              title,
+              description: "Leave this unchecked to stop.",
+            },
+          },
+          required: ["confirm"],
+        },
+      });
+      // "decline" and "cancel" are both a no. Only an explicit accept carrying
+      // an explicit true is a yes — an accept with the box unticked is the user
+      // saying no through the form rather than through the buttons.
+      if (res.action !== "accept") return false;
+      return res.content?.confirm === true;
+    } catch {
+      // The client said it could ask and then couldn't. Treated as "not asked"
+      // rather than as a refusal, so a flaky client doesn't make a tool
+      // impossible to use — the caller falls back to how it behaved before.
+      return null;
+    }
+  };
+
+  /**
+   * Run the authoring standard over a lesson about to be written.
+   *
+   * Throws when it fails, which the `tool()` wrapper turns into a readable
+   * isError result — so a rejected lesson is never saved, and the assistant gets
+   * a message naming every defect and its fix. Returns the warnings to ride
+   * along with a successful write.
+   *
+   * `skipValidation` is the interesting path. It suppresses the check entirely,
+   * and it is meant for a user who deliberately wants something the standard
+   * forbids — but the model is the one that sets it, and nothing ever confirmed
+   * the user had asked for any such thing. So the findings are computed even
+   * when it is set, and where a client can reach the user, the override becomes
+   * a question put to them, naming what would be waived. Where a client cannot,
+   * the flag behaves exactly as it always has.
+   *
+   * @param {{ doc: any, rawBlocks?: any[], skipValidation?: boolean, baselineDoc?: any }} args
+   * @returns {Promise<Array<{ code: string, section?: number, message: string }>>}
+   */
+  const checkStandard = async ({
+    doc,
+    rawBlocks = [],
+    skipValidation = false,
+    baselineDoc = null,
+  }) => {
+    const { failures, flags } = standardFindings({
+      doc,
+      rawBlocks,
+      baselineDoc,
+    });
+
+    if (!skipValidation) {
+      if (failures.length) throw new Error(validationErrorMessage(failures));
+      return toWireWarnings(flags);
+    }
+
+    if (failures.length) {
+      const allowed = await askUser(
+        `The assistant is about to save a lesson that breaks the authoring standard in ` +
+          `${failures.length} way${failures.length === 1 ? "" : "s"}, by overriding the check:\n\n` +
+          `${formatFindings(failures, 5)}\n\n` +
+          "Save it as it is?",
+        "Save it anyway",
+      );
+      if (allowed === false) {
+        throw new Error(
+          "The user was asked whether to save this lesson despite breaking the authoring standard, and said no. " +
+            `Nothing was saved. Fix the ${failures.length} problem${failures.length === 1 ? "" : "s"} instead:\n\n` +
+            `${formatFindings(failures)}\n\n` +
+            "Do not call the tool again with skipValidation until the user asks you to.",
+        );
+      }
+    }
+
+    // Skipping the check skips the warnings with it: nothing was reported.
+    return [];
   };
 
   /**
@@ -716,7 +815,7 @@ export function registerTools(server, ctx) {
     tool(async ({ title, sections, published = false, skipValidation }) => {
       const doc = buildDoc({ title, sections });
       // Throws (and saves nothing) when the lesson breaks the standard.
-      const warnings = checkStandard({
+      const warnings = await checkStandard({
         doc,
         rawBlocks: inputBlocksFromSections(sections),
         skipValidation,
@@ -773,7 +872,7 @@ export function registerTools(server, ctx) {
     },
     tool(async ({ title, sections, skipValidation }) => {
       const doc = buildDoc({ title, sections });
-      const warnings = checkStandard({
+      const warnings = await checkStandard({
         doc,
         rawBlocks: inputBlocksFromSections(sections),
         skipValidation,
@@ -822,7 +921,7 @@ export function registerTools(server, ctx) {
       async ({ id, title, sections, published, summary, skipValidation }) => {
         const doc = buildDoc({ title, sections });
         // A full replace, so the caller owns every defect in the result.
-        const warnings = checkStandard({
+        const warnings = await checkStandard({
           doc,
           rawBlocks: inputBlocksFromSections(sections),
           skipValidation,
@@ -909,7 +1008,7 @@ export function registerTools(server, ctx) {
       const doc = applyPatch(current.doc, operations);
       // Only the defects this patch introduced: a small edit to a lesson written
       // elsewhere shouldn't be blocked by what was already there.
-      const warnings = checkStandard({
+      const warnings = await checkStandard({
         doc,
         rawBlocks: inputBlocksFromOperations(operations),
         skipValidation,
@@ -1170,13 +1269,44 @@ export function registerTools(server, ctx) {
     {
       title: "Delete a lesson",
       description:
-        "Permanently delete a lesson you authored. This cannot be undone. Prefer set_lesson_published(false) if you " +
-        "only want to hide it from the public hub.",
+        "Permanently delete a lesson you authored. This cannot be undone — the content and the whole version " +
+        "history go with it. Prefer set_lesson_published(false) if you only want to hide it from the public hub.\n\n" +
+        "On a client that can put a question to the user, this asks them to confirm before deleting, and their " +
+        "answer decides it. Ask them yourself first regardless: not every client can show that prompt, and on the " +
+        "ones that can't, calling this deletes the lesson outright.",
       inputSchema: { id: z.string().describe("The lesson id to delete.") },
     },
     tool(async ({ id }) => {
+      // The lesson's title, so the user is asked about a lesson rather than
+      // about an opaque id. Tolerant: failing to read it must not stop a
+      // deletion the user asked for, so an unnamed lesson is still deletable.
+      let named = `\`${id}\``;
+      try {
+        const lesson = await api.getLesson(id);
+        if (lesson?.title) named = `"${lesson.title}"`;
+      } catch {
+        // Fall back to the id.
+      }
+
+      const confirmed = await askUser(
+        `Permanently delete the lesson ${named}? This cannot be undone — its content and its whole version ` +
+          "history go with it. To take it off the public hub without deleting it, say no and unpublish it instead.",
+        "Delete it permanently",
+      );
+      if (confirmed === false) {
+        return text(
+          `Not deleted — the user was asked and said no, so ${named} is untouched. Do not call delete_lesson for ` +
+            "it again unless they ask you to. If they only wanted it off the public hub, use " +
+            "set_lesson_published(false).",
+        );
+      }
+
       await api.deleteLesson(id);
-      return text(`Deleted lesson ${id}.`);
+      return text(
+        confirmed === true
+          ? `Deleted lesson ${id}, with the user's confirmation.`
+          : `Deleted lesson ${id}.`,
+      );
     }),
   );
 
@@ -1474,5 +1604,5 @@ export function registerTools(server, ctx) {
 // every client UI and bug report.
 export const SERVER_INFO = {
   name: "spelling-creator-hub",
-  version: "0.12.0",
+  version: "0.13.0",
 };
