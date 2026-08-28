@@ -17,4 +17,4 @@ suggester, just in a different mode. The flow:
    options, answer, etc.) and returns it.
 5. The suggestion is inserted as a new, fully editable question block of that
    type, with option indexes mapped back onto option ids in
-   `src/lib/questions.js`.
+   `packages/core/src/questions.js`.

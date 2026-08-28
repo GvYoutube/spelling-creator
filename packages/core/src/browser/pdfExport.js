@@ -11,8 +11,23 @@ import mammoth from "mammoth";
 import { Packer } from "docx";
 import { buildDocument } from "./docxExport.js";
 import { fitWithin, imageSizeScale } from "../image.js";
-import { DOCX_MAX_IMAGE_WIDTH } from "../lessonLayout.js";
-import { QUESTION_TYPES } from "../questions.js";
+import {
+  DOCX_MAX_IMAGE_WIDTH,
+  LEGEND_SEPARATOR,
+  QUESTION_LINE_CLASS,
+  QUESTION_LINE_STYLE_NAME,
+  TITLE_CLASS,
+  TITLE_LINE_CLASS,
+  TITLE_LINE_STYLE_NAME,
+  TITLE_STYLE_NAME,
+  lessonCopyright,
+} from "../lessonLayout.js";
+import {
+  QUESTION_LEGEND,
+  QUESTION_TYPE_LIST,
+  questionStyleClass,
+  questionStyleMap,
+} from "../questions.js";
 
 // Text destined for an HTML string we build ourselves. The PDF container is
 // filled with innerHTML, so anything interpolated into it has to arrive as text.
@@ -100,64 +115,134 @@ function layoutImageFigures(html, doc) {
   );
 }
 
-// mammoth discards the run colour we set on each question-type label, so the
-// colour coding that survives in the docx is lost in the HTML/PDF path. Each
-// label is emitted as `<strong>[Label] …`, so we re-wrap the bracketed label in
-// a coloured span to restore it (same idea as re-applying image layout above).
-function colorizeQuestionLabels(html) {
-  let result = html;
-  for (const { label, color } of Object.values(QUESTION_TYPES)) {
-    const bracketed = `[${label}]`;
-    const escaped = bracketed.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-    result = result.replace(
-      new RegExp(`(<strong>)\\s*${escaped}`, "g"),
-      `$1<span style="color:${color}">${bracketed}</span>`,
-    );
-  }
-  return result;
-}
+// mammoth drops run colours and paragraph alignment, so neither the question
+// colour coding nor the centred title lines survive the conversion on their own.
+// The docx marks both with named Word styles for exactly this reason; mapping
+// those styles onto classes here lets PRINT_STYLES put the formatting back.
+const STYLE_MAP = [
+  ...questionStyleMap(),
+  `p[style-name='${TITLE_STYLE_NAME}'] => p.${TITLE_CLASS}:fresh`,
+  `p[style-name='${TITLE_LINE_STYLE_NAME}'] => p.${TITLE_LINE_CLASS}:fresh`,
+  `p[style-name='${QUESTION_LINE_STYLE_NAME}'] => p.${QUESTION_LINE_CLASS}:fresh`,
+];
 
 // Build the docx in memory and convert it to HTML with mammoth, so the PDF
 // matches what the docx export produces. Returns an HTML string.
-async function docToHtml(doc) {
-  const document = await buildDocument(doc);
+async function docToHtml(doc, meta) {
+  const document = await buildDocument(doc, meta);
   const blob = await Packer.toBlob(document);
   const arrayBuffer = await blob.arrayBuffer();
   // mammoth inlines images as base64 data URIs by default; layoutImageFigures then
   // restores each image's picked size + alignment (and its caption's placement).
-  const { value: html } = await mammoth.convertToHtml({ arrayBuffer });
-  return colorizeQuestionLabels(layoutImageFigures(html, doc));
+  const { value: html } = await mammoth.convertToHtml(
+    { arrayBuffer },
+    { styleMap: STYLE_MAP },
+  );
+  return layoutImageFigures(html, doc);
 }
 
 // Print styles applied to the mammoth-generated HTML before rendering to PDF.
+// The question-type colours are restored here from the classes STYLE_MAP asked
+// mammoth to emit — the printed lesson has no type labels, so the colour of a
+// prompt is the only thing marking what kind of question it is.
 const PRINT_STYLES = `
   .s2c-pdf-root {
     font-family: 'Roboto', 'Helvetica Neue', Arial, sans-serif;
     color: #1a1a1a;
-    line-height: 1.5;
+    line-height: 1.45;
     font-size: 14px;
   }
-  .s2c-pdf-root h1 {
+  .s2c-pdf-root .${TITLE_CLASS}, .s2c-pdf-root h1 {
     text-align: center;
-    font-size: 26px;
-    margin: 0 0 24px;
+    font-size: 20px;
+    font-weight: 700;
+    margin: 0 0 4px;
     color: #1a1a1a;
   }
-  .s2c-pdf-root h2 {
-    font-size: 19px;
-    color: #3b5bdb;
-    border-bottom: 2px solid #3b5bdb;
-    padding-bottom: 4px;
-    margin: 22px 0 12px;
+  .s2c-pdf-root .${TITLE_LINE_CLASS} {
+    text-align: center;
+    margin: 0 0 2px;
   }
-  .s2c-pdf-root p { margin: 0 0 10px; }
+  .s2c-pdf-root .${TITLE_LINE_CLASS}:last-of-type { margin-bottom: 16px; }
+  .s2c-pdf-root p { margin: 0 0 6px; }
+  /* Questions run tight against one another, the way the printed lesson sets
+     them — the colour, not the spacing, is what separates one from the next. */
+  .s2c-pdf-root .${QUESTION_LINE_CLASS} { margin: 0 0 1px; }
   .s2c-pdf-root figure { margin: 0; }
   .s2c-pdf-root img {
     display: block;
     width: 100%;
     height: auto;
   }
+  ${QUESTION_TYPE_LIST.map(
+    (type) =>
+      `.s2c-pdf-root .${questionStyleClass(type.key)} { color: ${type.color}; }`,
+  ).join("\n  ")}
 `;
+
+// Page geometry, shared by the html2pdf options and the footer drawing below.
+const PAGE_WIDTH = 794; // A4 at 96dpi
+const PAGE_HEIGHT = 1123;
+const MARGIN = 38; // ~10mm
+// The bottom margin is deeper than the others to leave the copyright line and
+// the legend a strip of their own, clear of the body text.
+const FOOTER_MARGIN = 60;
+
+function hexToRgb(color) {
+  const value = parseInt(color.replace("#", ""), 16);
+  return [(value >> 16) & 255, (value >> 8) & 255, value & 255];
+}
+
+// The legend naming every question type in its own colour, centred on `y`.
+// Drawn segment by segment because each entry needs its own colour, so the line
+// has to be measured first to know where to start.
+function drawLegend(pdf, centerX, y) {
+  pdf.setFont("helvetica", "normal");
+  pdf.setFontSize(8);
+
+  const parts = [];
+  QUESTION_LEGEND.forEach((type, i) => {
+    if (i > 0) parts.push({ text: LEGEND_SEPARATOR, rgb: [110, 110, 110] });
+    parts.push({ text: type.label.toUpperCase(), rgb: hexToRgb(type.color) });
+  });
+
+  const total = parts.reduce((sum, p) => sum + pdf.getTextWidth(p.text), 0);
+  let x = centerX - total / 2;
+  for (const part of parts) {
+    pdf.setTextColor(part.rgb[0], part.rgb[1], part.rgb[2]);
+    pdf.text(part.text, x, y);
+    x += pdf.getTextWidth(part.text);
+  }
+}
+
+// The page number (top right) and the footer, on every page — the furniture
+// html2pdf doesn't carry over from the docx's own header and footer, since
+// mammoth converts only the document body.
+function drawPageFurniture(pdf, meta) {
+  const copyright = lessonCopyright(meta);
+  const pageCount = pdf.internal.getNumberOfPages();
+
+  for (let page = 1; page <= pageCount; page += 1) {
+    pdf.setPage(page);
+
+    pdf.setFont("helvetica", "normal");
+    pdf.setFontSize(10);
+    pdf.setTextColor(80, 80, 80);
+    pdf.text(String(page), PAGE_WIDTH - MARGIN, MARGIN - 12, {
+      align: "right",
+    });
+
+    if (copyright) {
+      pdf.setFont("helvetica", "bold");
+      pdf.setFontSize(9);
+      pdf.setTextColor(26, 26, 26);
+      pdf.text(copyright, PAGE_WIDTH / 2, PAGE_HEIGHT - 34, {
+        align: "center",
+      });
+    }
+    drawLegend(pdf, PAGE_WIDTH / 2, PAGE_HEIGHT - 20);
+  }
+}
 
 function safeFileName(title) {
   const base = (title || "lesson")
@@ -167,11 +252,16 @@ function safeFileName(title) {
   return `${base || "lesson"}.pdf`;
 }
 
-// Build the docx, convert to HTML (mammoth), then render to a PDF (html2pdf.js).
-export async function exportPdf(doc) {
+/**
+ * Build the docx, convert to HTML (mammoth), then render to a PDF (html2pdf.js).
+ * @param {object} doc
+ * @param {{author?: string, published?: string|number|Date}} [meta]
+ *   the by-line and copyright metadata — see buildDocument.
+ */
+export async function exportPdf(doc, meta = {}) {
   // docToHtml builds the docx, converts it to HTML via mammoth and re-applies
   // each image's picked size + alignment, so the PDF mirrors the docx output.
-  const html = await docToHtml(doc);
+  const html = await docToHtml(doc, meta);
 
   const container = window.document.createElement("div");
   container.className = "s2c-pdf-root";
@@ -184,7 +274,14 @@ export async function exportPdf(doc) {
   // overlay's `overflow: hidden`, and every line is cut off / shifted right.
   container.style.boxSizing = "border-box";
   container.style.width = "718px";
-  container.style.padding = "40px";
+  // Side padding, plus a few px at the foot. The page margins above already hold
+  // the content clear of the paper edges, so a full 40px band here would sit
+  // *inside* the flowed content and spill past the last page's end — enough on
+  // its own to push out a trailing page carrying nothing but the footer. Drop it
+  // to zero, though, and html2canvas captures the container at exactly its
+  // content height, slicing the descenders off the document's very last line.
+  // 10px clears them while staying well under a line's height.
+  container.style.padding = "0 40px 10px";
   container.style.background = "#ffffff";
 
   // html2pdf renders by cloning the element we pass to `.from()` (cloneNode
@@ -214,14 +311,24 @@ export async function exportPdf(doc) {
         // (794×1123px @96dpi) and integer 38px (~10mm) margins makes both
         // computations use the identical integer inner height (1047px), so the
         // break positions and the slice positions line up exactly.
-        margin: [38, 38, 38, 38],
+        margin: [MARGIN, MARGIN, FOOTER_MARGIN, MARGIN],
         filename: safeFileName(doc.title),
         image: { type: "jpeg", quality: 0.95 },
         html2canvas: { scale: 2, useCORS: true, backgroundColor: "#ffffff" },
-        jsPDF: { unit: "px", format: [794, 1123], orientation: "portrait" },
+        jsPDF: {
+          unit: "px",
+          format: [PAGE_WIDTH, PAGE_HEIGHT],
+          orientation: "portrait",
+        },
         pagebreak: { mode: ["avoid-all", "css", "legacy"] },
       })
       .from(container)
+      // The page number and footer are drawn straight onto the finished pages:
+      // they repeat on every one, so they can't come from the flowed HTML, and
+      // the docx's own header/footer never reach mammoth.
+      .toPdf()
+      .get("pdf")
+      .then((pdf) => drawPageFurniture(pdf, meta))
       .save();
   } finally {
     window.document.body.removeChild(offscreen);

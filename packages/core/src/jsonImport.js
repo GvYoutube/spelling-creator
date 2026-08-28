@@ -179,6 +179,8 @@ function normalizeQuestion(block) {
       if (answers.length === 0) answers.push({ id: newId(), text: "" });
       return { ...base, answers };
     }
+    // Free written responses: no stored answer, so the base block is complete.
+    case "paraphrase":
     case "open":
       return base;
     case "background":

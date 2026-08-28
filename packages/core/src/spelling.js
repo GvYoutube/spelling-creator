@@ -2,9 +2,20 @@
 // the words a lesson is teaching. Imported by the editor (SectionCard /
 // ContentBlock) and the docx exporter so the block shape stays in sync.
 
+import { ANSWER_GAP } from "./questions.js";
+
 // Accent colour for the spelling-words block (chip + docx label + left border).
-// Teal, distinct from the five question-type colours in questions.js.
+// Teal, distinct from the six question-type colours in questions.js.
 export const SPELLING_COLOR = "#0c8599";
+
+// The label a printed lesson puts in front of the words. They print as one
+// running line — "Spell: FIRST SECOND THIRD" — not a numbered list, so the
+// block reads as a single instruction to the speller.
+export const SPELLING_LABEL = "Spell:";
+
+// What separates two words on that line — the same gap a question's several
+// accepted answers are set apart by, so the two read alike on the page.
+export const SPELLING_WORD_SEPARATOR = ANSWER_GAP;
 
 // Build a fresh spelling block. `newId` is injected so this stays decoupled from
 // the id helper (same convention as createQuestionBlock). Words are stored as

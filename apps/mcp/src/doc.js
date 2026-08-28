@@ -24,6 +24,7 @@ export const QUESTION_TYPES = [
   "number",
   "single",
   "multiple",
+  "paraphrase",
   "open",
   "background",
 ];
@@ -115,6 +116,9 @@ function buildQuestionBlock(block, where) {
       return { ...base, answers };
     }
 
+    // Both are free written responses: the speller answers on their own paper,
+    // so neither stores an answer.
+    case "paraphrase":
     case "open":
       return { ...base };
 

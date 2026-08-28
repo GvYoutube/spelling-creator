@@ -136,6 +136,17 @@ astonishing? Defend your answer."
 
 "open" questions carry no answer, answers, or exampleAnswer field at all — just the "prompt".
 
+### `paraphrase` (brown)
+
+A `paraphrase` question asks the speller to restate the section's passage in their own words
+("In your own words, explain why..." / "In your own words, describe..."). It is the one extended
+open whose job is comprehension of the passage itself rather than opinion about it, which is why it
+prints in its own colour. Like `open`, it carries no answer, answers, or exampleAnswer field —
+just the "prompt".
+
+The default section shape above still asks for 3 `open` extended opens; a `paraphrase` may be used
+in place of the first of them where a section wants the distinction drawn explicitly.
+
 ## No prompt gives away another question's answer
 
 Within a section, no question's prompt may contain a word another question expects the speller to

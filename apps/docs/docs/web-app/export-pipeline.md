@@ -15,6 +15,60 @@ title: How the export pipeline works
    direction — `mammoth` again, this time reading a user's file — and **Save to
    Google Docs** uploads the very same `.docx`.
 
+## What a printed lesson looks like
+
+The exported lesson is laid out as a finished worksheet, not as an outline of the
+editor:
+
+- **A centred title block** on the first page — the title, then `By {author}`,
+  then the lesson's age range and release month when it has them. All of it is
+  derived from the lesson (`doc.ageRange`) and the record it was published from;
+  nothing about any particular publisher is baked in, and a lesson with no author
+  or publication date simply prints without those lines.
+- **No section headings.** A section's name is an organising device for the
+  editor; the printed lesson runs straight through from one block to the next.
+- **Questions marked by colour alone** — the prompt in its type's colour,
+  its answer in black on the same line, with no `[Label]` in front of it.
+- **Spelling words on one running line**, `Spell: FIRST SECOND THIRD`.
+- **A footer on every page**: the copyright line above a legend naming each
+  question type in its own colour, which is what makes the colour coding legible.
+- **A page number** in the top right corner.
+
+`lessonTitleLines` and `lessonCopyright` in
+`@spelling-creator/core/lessonLayout` decide the text of the title block and the
+footer once, so the DOCX and the PDF print the same strings.
+
+### Passing the by-line in
+
+The author and publication date live on the lesson _record_, not in the document,
+so both exporters take them as a second argument:
+
+```js
+await exportDocx(doc, { author: lesson.author, published: lesson.createdAt });
+```
+
+Omit it and the by-line and copyright line are left out; the editor passes the
+signed-in user's display name, since a draft has no author of its own yet.
+
+### Colour and alignment have to be smuggled past mammoth
+
+mammoth drops run colours and paragraph alignment, so on the PDF path neither the
+question colour coding nor the centred title lines survive on their own. The docx
+therefore marks both with **named Word styles** — a character style per question
+type and one paragraph style for the title lines — which `pdfExport` maps onto
+CSS classes with a `styleMap` and colours again from `questions.js`.
+
+That is also how **import** recovers a question's type now that nothing in the
+visible text names it: `docxImport` asks mammoth for the same style map and reads
+the type off the `<span class="s2c-q-…">`. Section _divisions_ have nothing left
+to carry them, so a DOCX round trip collapses a lesson into a single section —
+Export/Import **JSON** is the lossless one.
+
+The page number and the footer are drawn straight onto the finished PDF pages
+with jsPDF: they repeat on every page, so they cannot come from the flowed HTML,
+and mammoth converts only the document body, never the docx's own header and
+footer.
+
 ## Building a Word file is for Word files only
 
 Those four are the whole list. Nothing else in the app touches `docx` or
@@ -33,8 +87,12 @@ not the export pipeline.
 surfaces that show one — the public lesson page and the editor's preview mode —
 exactly as [interactive mode](./interactive-mode.md#what-it-looks-like) does.
 It keeps the export's measurements (the `fitWithin` image maths against
-`DOCX_MAX_IMAGE_WIDTH`, the heading sizes, the spacing), so a lesson keeps the
-shape it will print in; only the colours and the typeface are the theme's.
+`DOCX_MAX_IMAGE_WIDTH`, the spacing) and its block layout — no section headings,
+a question's answer inline after its coloured prompt, spelling words on one line
+— so a lesson keeps the shape it will print in; only the colours and the typeface
+are the theme's. What it does _not_ copy is the paper furniture: the title
+block's by-line, the page numbers and the footer legend belong to the printed
+sheet, and the app already shows the author and the legend in its own chrome.
 
 There is no second "paper" rendering to keep in sync. A lesson is read on screen
 far more often than it is printed, and a white sheet glaring out of a dark page
