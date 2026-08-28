@@ -2396,7 +2396,7 @@ export default function EditorPage() {
             <DropdownMenuItem
               onClick={() =>
                 window.open(
-                  "https://github.com/playforge-coding/spelling-creator",
+                  "https://github.com/Spelling-Creator/spelling-creator",
                   "_blank",
                 )
               }

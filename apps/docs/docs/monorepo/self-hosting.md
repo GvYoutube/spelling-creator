@@ -200,7 +200,7 @@ Everything is environment variables.
 | `SUPABASE_ANON_KEY`         | The publishable key the SPA uses for sign-in.                    |
 
 The names are historical: they are the two upstream projects, whoever runs them.
-Apply [`apps/api/schema.sql`](https://github.com/playforge-coding/spelling-creator/blob/main/apps/api/schema.sql)
+Apply [`apps/api/schema.sql`](https://github.com/Spelling-Creator/spelling-creator/blob/main/apps/api/schema.sql)
 once — it creates the hub tables and the `kv_store` table this host needs.
 
 ### Object storage

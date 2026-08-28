@@ -191,7 +191,7 @@ their own draft.
 ## Supabase schema
 
 The canonical, ready-to-run schema lives in the monorepo at
-[`apps/api/schema.sql`](https://github.com/playforge-coding/spelling-creator/blob/main/apps/api/schema.sql).
+[`apps/api/schema.sql`](https://github.com/Spelling-Creator/spelling-creator/blob/main/apps/api/schema.sql).
 Run it once in the Supabase SQL editor. Besides the `lessons` and `comments`
 tables shown below, that file also defines the `ratings` table (1–5 stars, one
 row per `(lesson_id, author_id)`), the `notifications` table (see

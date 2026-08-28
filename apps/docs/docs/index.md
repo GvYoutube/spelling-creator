@@ -13,5 +13,5 @@ hero:
       link: /intro
     - theme: alt
       text: GitHub
-      link: https://github.com/playforge-coding/spelling-creator
+      link: https://github.com/Spelling-Creator/spelling-creator
 ---
