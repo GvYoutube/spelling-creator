@@ -21,7 +21,7 @@
     "@tiptap/core": "^2.27.2",
     "@tiptap/extension-link": "^2.27.2",
     "@tiptap/extension-placeholder": "^2.27.2",
-    "@tiptap/extension-underline": "^2.27.2",
+    "@tiptap/extension-underline": "^3.30.3",
     "@tiptap/pm": "^2.27.2",
     "@tiptap/react": "^2.27.2",
     "@tiptap/starter-kit": "^2.27.2",
