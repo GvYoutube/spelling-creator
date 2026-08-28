@@ -24,7 +24,7 @@
     "@tiptap/extension-underline": "^2.27.2",
     "@tiptap/pm": "^2.27.2",
     "@tiptap/react": "^2.27.2",
-    "@tiptap/starter-kit": "^2.27.2",
+    "@tiptap/starter-kit": "^3.30.3",
     "@tsparticles/engine": "^4.3.2",
     "@tsparticles/plugin-emitters": "^4.3.2",
     "@tsparticles/react": "^4.3.2",
